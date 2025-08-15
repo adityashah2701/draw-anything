@@ -1,0 +1,132 @@
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Calendar, Clock, Eye, ImageIcon, MoreVertical, Trash } from "lucide-react";
+import Link from "next/link";
+
+export const WhiteboardCard = ({ whiteboard , formatDate ,getContentStats , handleDelete }: any) => {
+    const contentStats = getContentStats(whiteboard);
+    
+    return (
+      <div
+        className="group bg-white rounded-2xl p-4 border border-gray-200 shadow-sm hover:shadow-xl hover:border-gray-300 transition-all duration-300 cursor-pointer relative overflow-hidden"
+      >
+        {/* Background Pattern */}
+        <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+        {/* Header */}
+          
+
+          <div className="flex items-center gap-2">
+            {/* Action menu */}
+            <div className="opacity-0 absolute top-5 right-5 group-hover:opacity-100 transition-opacity duration-200 z-50">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-gray-200 shadow-sm cursor-pointer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/whiteboard/${whiteboard.id}`} className="cursor-pointer">
+                      <Eye className="w-4 h-4 mr-2" />
+                      Open
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild variant="destructive">
+                    <button onClick={()=>{handleDelete(whiteboard.id)}} className="w-full cursor-pointer justify-start border-none outline-none p-0">
+                      <Trash className="w-4 h-4 mr-2" />
+                      Delete
+                    </button>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+        {/* Preview Image or Placeholder */}
+        <div className="mb-4">
+          {whiteboard.imageUrl ? (
+            <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden">
+              <img
+                src={whiteboard.imageUrl}
+                alt={whiteboard.title}
+                className="w-full h-56 duration-300"
+              />
+            </div>
+          ) : (
+            <div className="w-full h-32 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-200">
+              <div className="text-center">
+                <ImageIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-xs text-gray-500">No preview</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="space-y-3">
+          <h3 className="font-bold text-gray-900 text-lg leading-tight line-clamp-2">
+            {whiteboard.title}
+          </h3>
+
+          {/* Tags */}
+          {whiteboard.tags && whiteboard.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {whiteboard.tags.slice(0, 3).map((tag:string, index:number) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                >
+                  {tag}
+                </span>
+              ))}
+              {whiteboard.tags.length > 3 && (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
+                  +{whiteboard.tags.length - 3}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Whiteboard stats */}
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            <div className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              <span>{formatDate(whiteboard.createdAt)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              <span>Created {new Date(whiteboard.createdAt).toLocaleDateString()}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
+          <span className="text-xs text-gray-500 font-medium">
+            Whiteboard
+          </span>
+          
+          {contentStats.elementCount > 0 ? (
+            <span className="text-xs text-gray-500 font-medium">
+              {contentStats.elementCount} elements
+            </span>
+          ):(<span className="text-xs text-gray-500 font-medium">
+              0 elements
+            </span>)}
+        </div>
+      </div>
+    );
+  };
