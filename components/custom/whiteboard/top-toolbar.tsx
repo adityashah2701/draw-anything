@@ -1,10 +1,13 @@
-import { Download, FolderOpen, Grid3X3, Redo2, RotateCcw, Save, Share, Trash2, Undo2, Users, ZoomIn, ZoomOut } from "lucide-react";
+import { Download, FolderOpen, Grid3X3, Redo2, RotateCcw, Save, Share, Trash2, Undo2, Users, ZoomIn, ZoomOut, ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface TopToolbarProps {
   historyStep: number;
   historyLength: number;
   zoom: number;
   showGrid: boolean;
+  whiteboardTitle?: string;
+  isLoading?: boolean;
   onUndo: () => void;
   onRedo: () => void;
   onClear: () => void;
@@ -22,6 +25,8 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   historyLength,
   zoom,
   showGrid,
+  whiteboardTitle,
+  isLoading = false,
   onUndo,
   onRedo,
   onClear,
@@ -33,54 +38,90 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   onLoad,
   disabled = false
 }) => {
+  const router = useRouter();
+
+  const handleBackClick = () => {
+    router.back();
+  };
+
   return (
     <div className="bg-white border-b border-gray-200 p-2 sm:p-4 flex items-center justify-between overflow-hidden">
-      {/* Left Actions */}
-      <div className="flex items-center space-x-1 sm:space-x-4 flex-shrink-0">
+      {/* Left Section - Back Button and Title */}
+      <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0 min-w-0">
+        {/* Back Button */}
         <button
-          onClick={onUndo}
-          disabled={historyStep <= 0 || disabled}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          title={disabled ? "Read-only mode" : "Undo"}
+          onClick={handleBackClick}
+          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0"
+          title="Go Back"
         >
-          <Undo2 size={18} className="sm:w-5 sm:h-5" />
+          <ArrowLeft size={18} className="sm:w-5 sm:h-5" />
         </button>
-        <button
-          onClick={onRedo}
-          disabled={historyStep >= historyLength - 1 || disabled}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          title={disabled ? "Read-only mode" : "Redo"}
-        >
-          <Redo2 size={18} className="sm:w-5 sm:h-5" />
-        </button>
-        <div className="w-px h-6 bg-gray-300 hidden sm:block" />
-        <button
-          onClick={onClear}
-          disabled={disabled}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          title={disabled ? "Read-only mode" : "Clear Canvas"}
-        >
-          <Trash2 size={18} className="sm:w-5 sm:h-5" />
-        </button>
-        <div className="w-px h-6 bg-gray-300 hidden sm:block" />
-        <button
-          onClick={onSave}
-          disabled={disabled}
-          className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-          title={disabled ? "Read-only mode" : "Save Whiteboard"}
-        >
-          <Save size={18} className="sm:w-5 sm:h-5" />
-        </button>
-        <button
-          onClick={onLoad}
-          className="p-2 rounded-lg text-green-600 hover:bg-green-50 hidden sm:block"
-          title="Load Whiteboard"
-        >
-          <FolderOpen size={18} className="sm:w-5 sm:h-5" />
-        </button>
+
+        {/* Separator */}
+        <div className="w-px h-6 bg-gray-300 hidden sm:block flex-shrink-0" />
+
+        {/* Whiteboard Title */}
+        <div className="min-w-0 flex-1 max-w-[200px] sm:max-w-[300px]">
+          {isLoading ? (
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-gray-300 rounded animate-pulse"></div>
+              <div className="w-24 h-4 bg-gray-300 rounded animate-pulse"></div>
+            </div>
+          ) : (
+            <h1 className="text-sm sm:text-lg font-medium text-gray-900 truncate">
+              {whiteboardTitle || "Untitled Whiteboard"}
+            </h1>
+          )}
+        </div>
+
+        {/* Separator */}
+        <div className="w-px h-6 bg-gray-300 hidden sm:block flex-shrink-0" />
+
+        {/* Action Buttons */}
+        <div className="flex items-center space-x-1 flex-shrink-0">
+          <button
+            onClick={onUndo}
+            disabled={historyStep <= 0 || disabled}
+            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={disabled ? "Read-only mode" : "Undo"}
+          >
+            <Undo2 size={18} className="sm:w-5 sm:h-5" />
+          </button>
+          <button
+            onClick={onRedo}
+            disabled={historyStep >= historyLength - 1 || disabled}
+            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={disabled ? "Read-only mode" : "Redo"}
+          >
+            <Redo2 size={18} className="sm:w-5 sm:h-5" />
+          </button>
+          <button
+            onClick={onClear}
+            disabled={disabled}
+            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed hidden sm:block"
+            title={disabled ? "Read-only mode" : "Clear Canvas"}
+          >
+            <Trash2 size={18} className="sm:w-5 sm:h-5" />
+          </button>
+          <button
+            onClick={onSave}
+            disabled={disabled}
+            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            title={disabled ? "Read-only mode" : "Save Whiteboard"}
+          >
+            <Save size={18} className="sm:w-5 sm:h-5" />
+          </button>
+          <button
+            onClick={onLoad}
+            className="p-2 rounded-lg text-green-600 hover:bg-green-50 hidden sm:block"
+            title="Load Whiteboard"
+          >
+            <FolderOpen size={18} className="sm:w-5 sm:h-5" />
+          </button>
+        </div>
       </div>
 
-      {/* Center Actions - These remain functional even in read-only mode */}
+      {/* Center Actions - Zoom and Grid Controls */}
       <div className="flex items-center space-x-1 sm:space-x-4 flex-shrink-0">
         <button
           onClick={onZoomOut}

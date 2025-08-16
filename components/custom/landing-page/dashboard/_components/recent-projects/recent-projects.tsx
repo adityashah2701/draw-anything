@@ -7,7 +7,7 @@ import { WhiteboardCard } from "./whiteboard-card";
 
 interface Whiteboard {
   _id: string;
-  createdAt: number;
+  _creationTime: number;
   imageUrl?: string;
   content?: string;
   tags?: string[];

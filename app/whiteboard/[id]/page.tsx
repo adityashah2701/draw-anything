@@ -616,27 +616,27 @@ const WhiteboardCanvas: React.FC = () => {
     setPanOffset({ x: 0, y: 0 });
   };
 
- const handleColorChange = (color: string) => {
-  setCurrentColor(color);
-  setShowOutlineColorPicker(false);
-};
+  const handleColorChange = (color: string) => {
+    setCurrentColor(color);
+    setShowOutlineColorPicker(false);
+  };
 
-// Add new handler for fill color:
-const handleFillColorChange = (color: string) => {
-  setFillColor(color);
-  setShowFillColorPicker(false);
-};
+  // Add new handler for fill color:
+  const handleFillColorChange = (color: string) => {
+    setFillColor(color);
+    setShowFillColorPicker(false);
+  };
 
-// Add handlers for toggling color pickers:
-const handleToggleOutlineColorPicker = () => {
-  setShowFillColorPicker(false); // Close other picker
-  setShowOutlineColorPicker(!showOutlineColorPicker);
-};
+  // Add handlers for toggling color pickers:
+  const handleToggleOutlineColorPicker = () => {
+    setShowFillColorPicker(false); // Close other picker
+    setShowOutlineColorPicker(!showOutlineColorPicker);
+  };
 
-const handleToggleFillColorPicker = () => {
-  setShowOutlineColorPicker(false); // Close other picker
-  setShowFillColorPicker(!showFillColorPicker);
-};
+  const handleToggleFillColorPicker = () => {
+    setShowOutlineColorPicker(false); // Close other picker
+    setShowFillColorPicker(!showFillColorPicker);
+  };
 
   // Drawing event handlers - with edit access checks
   const startDrawing = useCallback(
@@ -1065,6 +1065,7 @@ const handleToggleFillColorPicker = () => {
           historyLength={history.length}
           zoom={zoom}
           showGrid={showGrid}
+          whiteboardTitle={whiteboard?.title || whiteboard?.title}
           onUndo={handleUndo}
           onRedo={handleRedo}
           onClear={handleClear}
@@ -1078,23 +1079,23 @@ const handleToggleFillColorPicker = () => {
         />
 
         <PropertiesPanel
-  currentTool={currentTool}
-  currentColor={currentColor}
-  strokeWidth={strokeWidth}
-  fillColor={fillColor}
-  fontSize={fontSize}
-  showOutlineColorPicker={showOutlineColorPicker}
-  showFillColorPicker={showFillColorPicker}
-  onColorChange={handleColorChange}
-  onFillColorChange={handleFillColorChange}
-  onToggleOutlineColorPicker={handleToggleOutlineColorPicker}
-  onToggleFillColorPicker={handleToggleFillColorPicker}
-  onStrokeWidthChange={setStrokeWidth}
-  onFontSizeChange={setFontSize}
-  disabled={!hasEditAccess}
-  isSaving={isSaving}
-  lastSaved={lastSaved}
-/>
+          currentTool={currentTool}
+          currentColor={currentColor}
+          strokeWidth={strokeWidth}
+          fillColor={fillColor}
+          fontSize={fontSize}
+          showOutlineColorPicker={showOutlineColorPicker}
+          showFillColorPicker={showFillColorPicker}
+          onColorChange={handleColorChange}
+          onFillColorChange={handleFillColorChange}
+          onToggleOutlineColorPicker={handleToggleOutlineColorPicker}
+          onToggleFillColorPicker={handleToggleFillColorPicker}
+          onStrokeWidthChange={setStrokeWidth}
+          onFontSizeChange={setFontSize}
+          disabled={!hasEditAccess}
+          isSaving={isSaving}
+          lastSaved={lastSaved}
+        />
 
         <div className="flex-1 relative overflow-hidden bg-gray-50">
           {/* Access Status Indicator */}

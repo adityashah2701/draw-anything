@@ -61,11 +61,8 @@ const WhiteboardCard = ({ board }: { board: any }) => {
   const handleCopyLink = (e: any, id: string) => {
     e.stopPropagation();
     e.preventDefault();
-    console.log("Clicked 1");
     const link = `${window.location.origin}/whiteboard/${id}`;
-    console.log("Clicked 2");
     navigator.clipboard.writeText(link);
-    console.log("Clicked 3");
     toast.success("Link copied to clipboard!");
   };
 

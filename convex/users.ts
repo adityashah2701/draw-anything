@@ -48,7 +48,6 @@ export const getCurrentUser = query({
     return currentUser || null;
   },
 });
-
 export const getById = query({
   args: {
     id: v.id("users"),
@@ -58,7 +57,6 @@ export const getById = query({
     return user;
   },
 });
-
 export const getByClerkId = query({
   args: {
     clerkId: v.string(),

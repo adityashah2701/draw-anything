@@ -6,12 +6,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, Clock, Eye, ImageIcon, MoreVertical, Trash } from "lucide-react";
+import { Calendar, Clock, Copy, Eye, ImageIcon, MoreVertical, Trash } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 export const WhiteboardCard = ({ whiteboard , formatDate ,getContentStats , handleDelete }: any) => {
     const contentStats = getContentStats(whiteboard);
-    
+      const handleCopyLink = (e: any, id: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const link = `${window.location.origin}/whiteboard/${id}`;
+    navigator.clipboard.writeText(link);
+    toast.success("Link copied to clipboard!");
+  };
     return (
       <div
         className="group bg-white rounded-2xl p-4 border border-gray-200 shadow-sm hover:shadow-xl hover:border-gray-300 transition-all duration-300 cursor-pointer relative overflow-hidden"
@@ -38,14 +45,21 @@ export const WhiteboardCard = ({ whiteboard , formatDate ,getContentStats , hand
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuItem asChild>
-                    <Link href={`/whiteboard/${whiteboard.id}`} className="cursor-pointer">
+                    <Link href={`/whiteboard/${whiteboard._id}`} className="cursor-pointer">
                       <Eye className="w-4 h-4 mr-2" />
                       Open
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
+                 
+                  <DropdownMenuItem asChild>
+                    <button onClick={(e)=>{handleCopyLink(e,whiteboard._id)}} className="w-full cursor-pointer justify-start border-none outline-none p-0">
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Link
+                    </button>
+                  </DropdownMenuItem>
+                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild variant="destructive">
-                    <button onClick={()=>{handleDelete(whiteboard.id)}} className="w-full cursor-pointer justify-start border-none outline-none p-0">
+                    <button onClick={()=>{handleDelete(whiteboard._id)}} className="w-full cursor-pointer justify-start border-none outline-none p-0">
                       <Trash className="w-4 h-4 mr-2" />
                       Delete
                     </button>
@@ -104,11 +118,11 @@ export const WhiteboardCard = ({ whiteboard , formatDate ,getContentStats , hand
           <div className="flex items-center gap-3 text-xs text-gray-500">
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              <span>{formatDate(whiteboard.createdAt)}</span>
+              <span>{formatDate(whiteboard._creationTime)}</span>
             </div>
             <div className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              <span>Created {new Date(whiteboard.createdAt).toLocaleDateString()}</span>
+              <span>Created {new Date(whiteboard._creationTime).toLocaleDateString()}</span>
             </div>
           </div>
         </div>
