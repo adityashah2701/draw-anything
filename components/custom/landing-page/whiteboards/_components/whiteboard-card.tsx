@@ -5,6 +5,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   MoreVertical,
@@ -17,6 +27,18 @@ import {
   Upload,
   Pencil,
 } from "lucide-react";
+
+// Simple loading spinner component
+const LoadingSpinner = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <div
+    className={`${className} border-2 border-current border-t-transparent rounded-full animate-spin`}
+  />
+);
+
+// Simple skeleton loader component
+const SkeletonLoader = ({ className = "" }: { className?: string }) => (
+  <div className={`bg-gray-200 animate-pulse rounded ${className}`} />
+);
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
@@ -24,11 +46,25 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { useApiMutation } from "@/hooks/use-api-mutation";
+import { useState } from "react";
+import RenameDialog from "@/components/custom/dialog/rename-dialog";
+import { Borel } from "next/font/google";
+import DeleteDialog from "@/components/custom/dialog/delete-dialog";
+import { ImageUploadDialog } from "@/components/custom/dialog/image-upload-dialog";
+import WhiteboardDropdown from "@/components/custom/whiteboard-dropdown";
 
 const WhiteboardCard = ({ board }: { board: any }) => {
   const { user } = useUser();
   const creator = useQuery(api.users.getById, { id: board.createdBy });
   const { mutate, isPending } = useApiMutation(api.whiteboard.remove);
+  const { mutate: renameMutate } = useApiMutation(api.whiteboard.update);
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState(board.title);
+  const [isRenameLoading, setIsRenameLoading] = useState(false);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isImageUploadOpen, setIsImageUploadOpen] = useState(false);
+
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -68,14 +104,50 @@ const WhiteboardCard = ({ board }: { board: any }) => {
 
   const handleDelete = async (id: string) => {
     try {
-      const whiteboard = await mutate({id});
+      setIsDeleteLoading(true);
+      const whiteboard = await mutate({ id });
       toast.success("Whiteboard deleted successfully.");
-    } catch (error:any) {
+    } catch (error: any) {
       toast.error(error.message);
+    } finally {
+      setIsDeleteLoading(false);
     }
   };
+
+  const handleRename = async () => {
+    if (newTitle.trim() === "") {
+      toast.error("Whiteboard name cannot be empty");
+      return;
+    }
+    if (newTitle.trim() === board.title) {
+      setIsRenameDialogOpen(false);
+      return;
+    }
+    setIsRenameLoading(true);
+
+    try {
+      await renameMutate({ id: board._id, title: newTitle.trim() });
+      toast.success("Whiteboard renamed successfully!");
+      setIsRenameDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to rename whiteboard");
+    } finally {
+      setIsRenameLoading(false);
+    }
+  };
+
+  const openRenameDialog = () => {
+    setNewTitle(board.title);
+    setIsRenameDialogOpen(true);
+  };
+  const openDeleteDialog = () => {
+    setIsDeleteDialogOpen(true);
+  };
+
   return (
-    <div className="group bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-lg transition-all duration-200 overflow-hidden">
+    <div
+      className={`group bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-lg transition-all duration-200 overflow-hidden ${isPending ? "opacity-50 pointer-events-none" : ""}`}
+    >
       {/* Thumbnail */}
       <div className="relative h-48 bg-gradient-to-br from-blue-50 to-purple-50 border-b border-gray-200">
         {/* Show preview image if available, otherwise show placeholder */}
@@ -95,51 +167,13 @@ const WhiteboardCard = ({ board }: { board: any }) => {
 
         {/* Actions overlay */}
         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 bg-white/90 hover:bg-white"
-              >
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem asChild className="text-sm">
-                <Link href={`/whiteboard/${board._id}`}>
-                  <Folder className="w-4 h-4 mr-2" />
-                  Open
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="text-sm">
-                <button
-                  onClick={(e) => handleCopyLink(e, board?._id)}
-                  className="w-full justify-start px-0"
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  <span className="font-md">Copy Link</span>
-                </button>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="text-sm">
-                <Upload className="w-4 h-4 mr-2" />
-                Edit Thumbnail
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="text-sm">
-                <button className="w-full justify-start px-0">
-                  <Pencil className="w-4 h-4 mr-2" />
-                  <span className="font-md">Rename</span>
-                </button>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" asChild className="text-sm ">
-                <button onClick={() => {handleDelete(board._id)}}  className="w-full justify-start px-0">
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Delete
-                </button>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <WhiteboardDropdown
+            handleCopyLink={handleCopyLink}
+            openDeleteDialog={openDeleteDialog}
+            openRenameDialog={openRenameDialog}
+            setIsImageUploadOpen={setIsImageUploadOpen}
+            whiteboard={board}
+          />
         </div>
       </div>
 
@@ -175,18 +209,27 @@ const WhiteboardCard = ({ board }: { board: any }) => {
 
         {/* Creator info */}
         <div className="flex items-center gap-2 mb-3">
-          <Avatar className="h-6 w-6">
-            <AvatarImage
-              src={creatorAvatar.imageUrl}
-              alt={creator?.name || "User"}
-            />
-            <AvatarFallback className="bg-blue-100 text-blue-700 text-xs">
-              {creatorAvatar.initials}
-            </AvatarFallback>
-          </Avatar>
-          <span className="text-xs capitalize text-gray-500">
-            Created by {getCreatorName()}
-          </span>
+          {isPending ? (
+            <>
+              <SkeletonLoader className="h-6 w-6 rounded-full" />
+              <SkeletonLoader className="h-3 w-24" />
+            </>
+          ) : (
+            <>
+              <Avatar className="h-6 w-6">
+                <AvatarImage
+                  src={creatorAvatar.imageUrl}
+                  alt={creator?.name || "User"}
+                />
+                <AvatarFallback className="bg-blue-100 text-blue-700 text-xs">
+                  {creatorAvatar.initials}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-xs capitalize text-gray-500">
+                Created by {getCreatorName()}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -195,16 +238,45 @@ const WhiteboardCard = ({ board }: { board: any }) => {
             <Clock className="w-3 h-3" />
             {formatDate(board._creationTime)}
           </div>
-          {creator && (
+          {isPending ? (
+            <SkeletonLoader className="h-3 w-16" />
+          ) : creator ? (
             <div className="flex items-center gap-1">
               <User className="w-3 h-3" />
               <span className="truncate max-w-20 capitalize">
                 {isCreatedByCurrentUser ? "You" : creator.name}
               </span>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
+
+      {/* Rename Dialog */}
+      <RenameDialog
+        board={board}
+        handleRename={handleRename}
+        isRenameDialogOpen={isRenameDialogOpen}
+        isRenameLoading={isRenameLoading}
+        newTitle={newTitle}
+        setIsRenameDialogOpen={setIsRenameDialogOpen}
+        setNewTitle={setNewTitle}
+      />
+      <DeleteDialog
+        whiteboard={board}
+        handleDelete={handleDelete}
+        isDeleteDialogOpen={isDeleteDialogOpen}
+        setIsDeleteDialogOpen={setIsDeleteDialogOpen}
+        isDeleteLoading={isDeleteLoading}
+      />
+      <ImageUploadDialog
+        isOpen={isImageUploadOpen}
+        onOpenChange={setIsImageUploadOpen}
+        whiteboardId={board._id}
+        currentImageUrl={board.imageUrl || undefined}
+        onSuccess={() => {
+          toast.success("Image updated successfully.");
+        }}
+      />
     </div>
   );
 };

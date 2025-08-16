@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import { useApiMutation } from "@/hooks/use-api-mutation";
 import { api } from "@/convex/_generated/api";
@@ -21,6 +21,7 @@ interface RecentProjectsProps {
 
 const RecentProjects = ({ projects }:RecentProjectsProps) => {
   const { mutate } = useApiMutation(api.whiteboard.remove);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
 
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -58,10 +59,13 @@ const RecentProjects = ({ projects }:RecentProjectsProps) => {
   };
   const handleDelete = async (id: string) => {
     try {
+      setIsDeleteLoading(true)
       await mutate({ id });
       toast.success("Whiteboard deleted successfully.");
     } catch (error: any) {
       toast.error(error.message);
+    }finally{
+      setIsDeleteLoading(false)
     }
   };
   return (
@@ -84,6 +88,7 @@ const RecentProjects = ({ projects }:RecentProjectsProps) => {
               whiteboard={whiteboard}
               handleDelete={handleDelete}
               formatDate={formatDate}
+              isDeleteLoading={isDeleteLoading}
               getContentStats={getContentStats}
             />
           ))}

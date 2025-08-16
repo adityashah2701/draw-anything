@@ -44,11 +44,6 @@ const Whiteboard = (props: any) => {
     }
   };
 
-  const handleCreateOrganization = () => {
-    // Redirect to Clerk's organization creation page
-    window.location.href = "/organization";
-  };
-
   // Loading state while checking user and organization status
   if (!orgLoaded || !userLoaded) {
     return (
