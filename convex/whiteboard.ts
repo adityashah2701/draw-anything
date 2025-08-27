@@ -88,6 +88,7 @@ export const getAll = query({
     if (!currentUser) {
       throw new Error("Unauthorized");
     }
+    
 
     const whiteboards = await ctx.db
       .query("whiteboards")
@@ -180,12 +181,10 @@ export const update = mutation({
 
     const { id, ...updateFields } = args;
 
-    // Remove undefined fields
     const fieldsToUpdate = Object.fromEntries(
       Object.entries(updateFields).filter(([_, value]) => value !== undefined)
     );
 
-    // Add last modified info
     fieldsToUpdate.lastModifiedBy = currentUser._id;
 
     await ctx.db.patch(args.id, fieldsToUpdate);
@@ -203,9 +202,6 @@ export const getById = query({
   },
 });
 
-// ===== FILE UPLOAD MUTATIONS =====
-
-// Generate upload URL for image
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx, args) => {
@@ -213,12 +209,11 @@ export const generateUploadUrl = mutation({
     if (!identity) {
       throw new Error("Unauthorized");
     }
-    
+
     return await ctx.storage.generateUploadUrl();
   },
 });
 
-// Update whiteboard with uploaded image (Enhanced version of editImage)
 export const updateImage = mutation({
   args: {
     id: v.id("whiteboards"),
@@ -259,7 +254,7 @@ export const updateImage = mutation({
     }
 
     // Get the image URL if imageFileId is provided
-    let imageUrl:any = whiteboard.imageUrl;
+    let imageUrl: any = whiteboard.imageUrl;
     if (args.imageFileId) {
       imageUrl = await ctx.storage.getUrl(args.imageFileId);
     }
@@ -374,21 +369,21 @@ export const editImage = mutation({
     if (!hasAccess) {
       throw new Error("You don't have permission to edit this whiteboard");
     }
-    
+
     const updateData: any = {
       lastModifiedBy: currentUser._id,
     };
-    
+
     if (args.image !== undefined) {
       updateData.imageUrl = args.image;
       // Clear file ID if setting a URL manually
       updateData.imageFileId = undefined;
     }
-    
+
     if (args.tags !== undefined) {
       updateData.tags = args.tags;
     }
-    
+
     await ctx.db.patch(args.id, updateData);
     return { success: true };
   },

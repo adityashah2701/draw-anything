@@ -23,8 +23,6 @@ const LandingPage = () => {
   const { isLoaded, isSignedIn, user } = useUser();
   const [selectedPage, setSelectedPage] = useState<NavigationItem>("Dashboard");
   const { organization, membership } = useOrganization();
-  const { userMemberships } = useOrganizationList();
-  // Show loading screen
   if (!isLoaded) {
     return <CustomLoader />;
   }

@@ -2,30 +2,10 @@ import DeleteDialog from "@/components/custom/dialog/delete-dialog";
 import { ImageUploadDialog } from "@/components/custom/dialog/image-upload-dialog";
 import RenameDialog from "@/components/custom/dialog/rename-dialog";
 import WhiteboardDropdown from "@/components/custom/whiteboard-dropdown";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 import { api } from "@/convex/_generated/api";
 import { useApiMutation } from "@/hooks/use-api-mutation";
-import {
-  Calendar,
-  Clock,
-  Copy,
-  Eye,
-  ImageIcon,
-  Loader,
-  MoreVertical,
-  Pencil,
-  Trash,
-  Upload,
-} from "lucide-react";
-import Link from "next/link";
+import { Calendar, Clock, ImageIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 

@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import WelcomeHeader from "./_components/welcome-header";
 import QuickActions from "./_components/quick-actions";
 import RecentProjects from "./_components/recent-projects/recent-projects";
+import RecentProjectsSkeleton from "./_components/recent-projects/skeleton";
 import { Button } from "@/components/ui/button";
-import CreateWhiteboardDialog from "../../create-whiteboard";
-import { Plus, X, ArrowLeft } from "lucide-react";
+import { Plus, Building2, Users } from "lucide-react";
 import { useApiMutation } from "@/hooks/use-api-mutation";
 import { api } from "@/convex/_generated/api";
-import { OrganizationProfile, useOrganization } from "@clerk/nextjs";
+import { useOrganization } from "@clerk/nextjs";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useApiQuery } from "@/hooks/use-api-query";
+import NoOrganizationState from "./_components/no-organization";
+import ShowOrgProfile from "./_components/show-org-profile";
+import OrganizationLoading from "./_components/organization-loading";
 
 interface DashboardProps {
   user: any;
@@ -18,20 +21,58 @@ interface DashboardProps {
   setSelectedPage: any;
 }
 
+// Statistics Cards Skeleton
+const StatisticsCardsSkeleton = () => {
+  return (
+    <div className="mb-7 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 animate-pulse">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div
+          key={index}
+          className="bg-white rounded-xl p-4 border border-gray-200"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+              <div className="h-8 bg-gray-200 rounded w-16"></div>
+            </div>
+            <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
-  const { organization } = useOrganization();
+  // ✅ ALL HOOKS AT THE TOP - BEFORE ANY CONDITIONAL LOGIC
+  const { organization, isLoaded } = useOrganization();
   const router = useRouter();
   const [showOrgProfile, setShowOrgProfile] = useState(false);
-
   const { mutate, isPending } = useApiMutation(api.whiteboard.create);
+  
+  // ✅ Move useApiQuery here and use "skip" when organization doesn't exist
   const { data: whiteboards = [], isPending: queryPending } = useApiQuery(
     api.whiteboard.getAll,
     organization?.id ? { orgId: organization.id } : "skip"
   );
 
+  // ✅ NOW we can do conditional logic after all hooks are declared
+  if (!isLoaded) {
+    return <OrganizationLoading />;
+  }
+
+  if (!organization) {
+    return <NoOrganizationState />;
+  }
+
+  // Organization Profile View
+  if (showOrgProfile) {
+    return <ShowOrgProfile organization={organization} />;
+  }
+
   const recentBoards = whiteboards
     .sort((a: any, b: any) => b._creationTime - a._creationTime)
-    .slice(0, 8) // Show more recent boards
+    .slice(0, 8)
     .map((board: any) => ({
       _id: board._id,
       title: board.title,
@@ -45,7 +86,7 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
   const handleCreateWhiteboard = async () => {
     try {
       if (!organization) {
-        toast.error("Please select an organization.");
+        toast.error("Please select an organization first.");
         return null;
       }
       const whiteboard = await mutate({
@@ -60,6 +101,10 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
   };
 
   const handleUploadFile = () => {
+    if (!organization) {
+      toast.error("Please select an organization first.");
+      return;
+    }
     console.log("Opening file upload...");
     toast.info("File upload feature coming soon!");
   };
@@ -67,7 +112,7 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
   const handleInviteTeam = () => {
     try {
       if (!organization) {
-        toast.error("Please select an organization.");
+        toast.error("Please select an organization first.");
         return;
       }
       setShowOrgProfile(true);
@@ -81,141 +126,7 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
     setShowOrgProfile(false);
   };
 
-  // If showing organization profile, render it directly
-  if (showOrgProfile) {
-    return (
-      <div className="flex-1 ml-20 lg:ml-0 bg-gray-50 min-h-screen flex flex-col">
-        {/* Header with back button */}
-        <div className="flex-shrink-0 p-4 sm:p-6 bg-white border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <Button
-              variant="ghost"
-              onClick={handleBackToDashboard}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 self-start"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Back to Dashboard</span>
-              <span className="sm:hidden">Back</span>
-            </Button>
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
-                Team Management
-              </h1>
-            </div>
-          </div>
-        </div>
-
-        {/* Organization Profile Container */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {organization && (
-            <div className="flex-1 w-full max-w-none overflow-auto">
-              <div className="min-h-full">
-                <OrganizationProfile
-                  appearance={{
-                    elements: {
-                      rootBox: {
-                        width: "100%",
-                        height: "100%",
-                        minHeight: "100vh",
-                      },
-                      cardBox: {
-                        width: "100%",
-                        maxWidth: "none",
-                        height: "auto",
-                        minHeight: "100%",
-                        boxShadow: "none",
-                        border: "none",
-                        borderRadius: "0",
-                        padding: "1rem",
-                        "@media (min-width: 640px)": {
-                          padding: "1.5rem",
-                        },
-                        "@media (min-width: 1024px)": {
-                          padding: "2rem",
-                        },
-                      },
-                      headerTitle: {
-                        fontSize: "1.25rem",
-                        "@media (min-width: 640px)": {
-                          fontSize: "1.5rem",
-                        },
-                      },
-                      headerSubtitle: {
-                        fontSize: "0.875rem",
-                        "@media (min-width: 640px)": {
-                          fontSize: "1rem",
-                        },
-                      },
-                      navbar: {
-                        flexDirection: "column",
-                      },
-                      navbarButton: {
-                        width: "100%",
-                        justifyContent: "flex-start",
-                        "@media (min-width: 768px)": {
-                          width: "auto",
-                          justifyContent: "center",
-                        },
-                      },
-                      formFieldInput: {
-                        width: "100%",
-                      },
-                      formButtonPrimary: {
-                        width: "100%",
-                        "@media (min-width: 640px)": {
-                          width: "auto",
-                        },
-                      },
-                      table: {
-                        fontSize: "0.875rem",
-                        overflowX: "auto",
-                      },
-                      tableHead: {
-                        fontSize: "0.75rem",
-                        "@media (min-width: 640px)": {
-                          fontSize: "0.875rem",
-                        },
-                      },
-                      tableCell: {
-                        padding: "0.5rem",
-                        "@media (min-width: 640px)": {
-                          padding: "0.75rem",
-                        },
-                      },
-                      memberPreview: {
-                        flexDirection: "column",
-                        "@media (min-width: 640px)": {
-                          flexDirection: "row",
-                        },
-                      },
-                      organizationPreview: {
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        "@media (min-width: 640px)": {
-                          flexDirection: "row",
-                          alignItems: "center",
-                        },
-                      },
-                    },
-                    layout: {
-                      shimmer: false,
-                    },
-                    variables: {
-                      borderRadius: "0.5rem",
-                      spacingUnit: "1rem",
-                    },
-                  }}
-                  routing="hash"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Regular dashboard view
+  // Regular Dashboard View
   return (
     <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-auto bg-gray-50">
       <div className="max-w-7xl mx-auto">
@@ -225,8 +136,10 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
           handleCreateWhiteboard={handleCreateWhiteboard}
         />
 
-        {/* Statistics Cards */}
-        {!queryPending && whiteboards.length > 0 && (
+        {/* Statistics Cards - Show skeleton while loading */}
+        {queryPending ? (
+          <StatisticsCardsSkeleton />
+        ) : whiteboards.length > 0 ? (
           <div className="mb-7 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
             <div className="bg-white rounded-xl p-4 border border-gray-200">
               <div className="flex items-center justify-between">
@@ -259,23 +172,11 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
                 <div>
                   <p className="text-sm text-gray-600">Organization</p>
                   <p className="text-lg font-bold text-gray-900 truncate">
-                    {organization?.name || "No Organization"}
+                    {organization.name}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <svg
-                    className="w-6 h-6 text-purple-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-6m-2-5h4m-4 0V9a1 1 0 011-1h2a1 1 0 011 1v7m-4 0h4"
-                    />
-                  </svg>
+                  <Building2 className="w-6 h-6 text-purple-600" />
                 </div>
               </div>
             </div>
@@ -316,41 +217,65 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
                 <div>
                   <p className="text-sm text-gray-600">Team Members</p>
                   <p className="text-2xl font-bold text-orange-600">
-                    {organization?.membersCount || 1}
+                    {organization.membersCount || 1}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <svg
-                    className="w-6 h-6 text-orange-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
-                    />
-                  </svg>
+                  <Users className="w-6 h-6 text-orange-600" />
                 </div>
               </div>
             </div>
           </div>
+        ) : null}
+
+        {/* Empty State for No Whiteboards */}
+        {!queryPending && whiteboards.length === 0 && (
+          <div className="bg-white rounded-xl p-8 border border-gray-200 text-center mb-8">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg
+                className="w-8 h-8 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              No whiteboards yet
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Get started by creating your first whiteboard for{" "}
+              {organization.name}
+            </p>
+            <Button onClick={handleCreateWhiteboard} disabled={isPending}>
+              <Plus className="w-4 h-4 mr-2" />
+              {isPending ? "Creating..." : "Create Your First Whiteboard"}
+            </Button>
+          </div>
         )}
 
-        {/* Quick Actions */}
-        <QuickActions
-          onCreateWhiteboard={handleCreateWhiteboard}
-          onUploadFile={handleUploadFile}
-          onInviteTeam={handleInviteTeam}
-        />
+        {!queryPending && (
+          <QuickActions
+            onCreateWhiteboard={handleCreateWhiteboard}
+            onUploadFile={handleUploadFile}
+            onInviteTeam={handleInviteTeam}
+          />
+        )}
 
-        {/* Main Content Grid */}
+        {/* Main Content Grid - Show skeleton while loading */}
         <div className="grid w-full grid-cols-1 xl:grid-cols-2 gap-8">
-          {/* Recent Projects - Takes 2 columns */}
           <div className="xl:col-span-2">
-            <RecentProjects projects={recentBoards} />
+            {queryPending ? (
+              <RecentProjectsSkeleton />
+            ) : whiteboards.length > 0 ? (
+              <RecentProjects projects={recentBoards} />
+            ) : null}
           </div>
         </div>
       </div>

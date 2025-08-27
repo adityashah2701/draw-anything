@@ -123,7 +123,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   size="md"
                 />
               </div>
-              
+
               {/* Fill Color Picker - Only for fillable shapes or select mode */}
               {showFillControls && (
                 <div className="flex items-center space-x-2 flex-shrink-0">
@@ -269,6 +269,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     <option value={24}>24px</option>
                     <option value={32}>32px</option>
                     <option value={48}>48px</option>
+                    <option value={60}>60px</option>
+                    <option value={72}>70px</option>
+                    <option value={84}>84px</option>
+                    <option value={96}>96px</option>
+                    <option value={108}>108px</option>
+                    <option value={120}>120px</option>
                   </select>
                 </div>
               )}

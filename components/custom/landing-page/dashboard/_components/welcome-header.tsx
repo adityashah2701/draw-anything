@@ -1,7 +1,5 @@
-import React from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Calendar, Bell } from "lucide-react";
-import CreateWhiteboardDialog from "@/components/custom/create-whiteboard";
 
 interface WelcomeHeaderProps {
   user: any;
