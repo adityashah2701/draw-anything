@@ -1,13 +1,13 @@
 "use client";
 import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
 import React, { useState } from "react";
-import Dashboard from "@/components/custom/landing-page/dashboard/dashboard";
-import Whiteboards from "@/components/custom/landing-page/whiteboards/whiteboard";
-import Members from "@/components/custom/landing-page/member/member";
-import CustomLoader from "@/components/custom/loader";
-import Page from "@/components/custom/landing-page/unauthenticated-page";
-import CleanNavbar from "@/app/(main-page)/_components/_navbar/navbar";
-import MainSideBar from "@/app/(main-page)/_components/_main-sidebar/main-sidebar";
+import Dashboard from "@/features/dashboard/components/dashboard/dashboard";
+import Whiteboards from "@/features/dashboard/components/whiteboards/whiteboard";
+import Members from "@/features/dashboard/components/member/member";
+import CustomLoader from "@/components/shared/loader";
+import Page from "@/features/dashboard/components/unauthenticated-page";
+import CleanNavbar from "@/components/layout/navbar/navbar";
+import MainSideBar from "@/components/layout/sidebar/main-sidebar";
 
 // Type for navigation items
 type NavigationItem =

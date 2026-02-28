@@ -1,6 +1,47 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+export const storeUser = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Called storeUser without authentication present");
+    }
+
+    // Check if user already exists
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+
+    if (user !== null) {
+      if (
+        user.name !== identity.name ||
+        user.imageUrl !== identity.pictureUrl ||
+        user.email !== identity.email
+      ) {
+        await ctx.db.patch(user._id, {
+          name: identity.name || user.name,
+          imageUrl: identity.pictureUrl || user.imageUrl,
+          email: identity.email || user.email,
+        });
+      }
+      return user._id;
+    }
+
+    // If it's a new identity, create a new User
+    const newUserId = await ctx.db.insert("users", {
+      clerkId: identity.subject,
+      name: identity.name!,
+      email: identity.email!,
+      imageUrl: identity.pictureUrl!,
+    });
+
+    return newUserId;
+  },
+});
+
 export const createUser = mutation({
   args: {
     clerkId: v.string(),
@@ -69,4 +110,3 @@ export const getByClerkId = query({
     return user;
   },
 });
-
