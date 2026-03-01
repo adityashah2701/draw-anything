@@ -15,12 +15,19 @@ export interface Bounds {
 
 export interface DrawingElement {
   id: string;
-  type: "freehand" | "rectangle" | "circle" | "line" | "text" | "arrow";
+  type:
+    | "freehand"
+    | "rectangle"
+    | "circle"
+    | "diamond"
+    | "line"
+    | "text"
+    | "arrow";
   points: Point[];
   color: string;
   strokeWidth: number;
   fill?: string;
-  /** Embedded label rendered centered inside rectangle and circle shapes */
+  /** Embedded label rendered centered inside shape nodes */
   label?: string;
   text?: string;
   fontSize?: number;
@@ -54,6 +61,7 @@ export type Tool =
   | "pen"
   | "rectangle"
   | "circle"
+  | "diamond"
   | "line"
   | "text"
   | "eraser"

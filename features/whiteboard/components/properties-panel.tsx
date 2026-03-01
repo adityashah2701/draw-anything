@@ -47,6 +47,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     "pen",
     "rectangle",
     "circle",
+    "diamond",
     "line",
     "arrow",
     "text",
@@ -55,12 +56,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const showColorControls = colorTools.includes(currentTool);
 
   // Tools that support fill
-  const fillableTools = ["rectangle", "circle"];
+  const fillableTools = ["rectangle", "circle", "diamond"];
   const showFillControls =
     fillableTools.includes(currentTool) || currentTool === "select";
 
   // Tools that need stroke width
-  const strokeTools = ["pen", "rectangle", "circle", "line", "arrow", "text"];
+  const strokeTools = [
+    "pen",
+    "rectangle",
+    "circle",
+    "diamond",
+    "line",
+    "arrow",
+    "text",
+  ];
   const showStrokeControls =
     strokeTools.includes(currentTool) || currentTool === "select";
 

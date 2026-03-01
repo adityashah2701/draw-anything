@@ -161,6 +161,9 @@ export function CanvasTextBlock({
     else if (fmt.heading === "h3") size = Math.max(base, 20);
     return size * zoom;
   })();
+  const lineHeightPx = effectiveSize * 1.2;
+  // Compensate for CSS line-box leading so editing text anchors like canvas-rendered text.
+  const topLeadingCompensation = (lineHeightPx - effectiveSize) / 2;
 
   // ── Focus immediately on mount ────────────────────────────────────────────
   useLayoutEffect(() => {
@@ -354,18 +357,15 @@ export function CanvasTextBlock({
   if (disabled) return null;
 
   // ── Styles ────────────────────────────────────────────────────────────────
-  const glowColor = element.color || "#3b82f6";
-
   const wrapperStyle: CSSProperties = {
     padding: 0, // Zero padding for pixel-perfect alignment with canvas startX/startY
     background: "transparent",
-    borderRadius: 4,
+    borderRadius: 0,
     border: "none",
-    outline: focused ? `1.5px solid ${glowColor}40` : "none",
-    outlineOffset: "2px",
-    transition: "outline 120ms ease",
+    outline: "none",
+    boxShadow: "none",
     cursor: focused ? "text" : "move",
-    minWidth: 40,
+    minWidth: 1,
     position: "relative",
   };
 
@@ -375,9 +375,8 @@ export function CanvasTextBlock({
     border: "none",
     padding: 0,
     margin: 0,
-    minWidth: 180,
+    minWidth: draft.trim().length > 0 ? 1 : 48,
     maxWidth: "90vw",
-    transform: "translateY(-0.08em)", // Compensate for line-height leading to match canvas top baseline
     fontFamily:
       "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     fontSize: effectiveSize,
@@ -392,15 +391,10 @@ export function CanvasTextBlock({
               ? "600"
               : "400",
     fontStyle: fmt.italic ? "italic" : "normal",
-    letterSpacing:
-      fmt.heading === "h1"
-        ? "-0.04em"
-        : fmt.heading === "h2"
-          ? "-0.03em"
-          : "-0.01em",
+    letterSpacing: "0",
     color: element.color || "#111",
     caretColor: element.color || "#111",
-    lineHeight: 1.2,
+    lineHeight: `${lineHeightPx}px`,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
     display: "block",
@@ -500,7 +494,7 @@ export function CanvasTextBlock({
         style={{
           position: "absolute",
           left: sx,
-          top: sy,
+          top: sy - topLeadingCompensation,
           zIndex: 100,
           display: "flex",
           flexDirection: "column",

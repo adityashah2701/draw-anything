@@ -35,6 +35,8 @@ interface CanvasEngineProps {
   hoveredElementId?: string | null;
   /** Active connection being dragged from a port */
   connectionDraft?: ConnectionDraft | null;
+  /** Shape label currently being edited inline */
+  editingShapeLabelId?: string | null;
 }
 
 const useCanvasEngine = ({
@@ -56,6 +58,7 @@ const useCanvasEngine = ({
   getElementBounds,
   hoveredElementId,
   connectionDraft,
+  editingShapeLabelId,
 }: CanvasEngineProps & {
   getElementBounds: (
     element: DrawingElement,
@@ -114,7 +117,15 @@ const useCanvasEngine = ({
         return;
       }
       const isSelected = selectedElements.includes(element.id);
-      drawElement(ctx, element, isSelected, renderCtx);
+      const renderElement =
+        editingShapeLabelId &&
+        element.id === editingShapeLabelId &&
+        (element.type === "rectangle" ||
+          element.type === "circle" ||
+          element.type === "diamond")
+          ? { ...element, label: undefined }
+          : element;
+      drawElement(ctx, renderElement, isSelected, renderCtx);
     });
 
     // Draw current element
@@ -243,6 +254,7 @@ const useCanvasEngine = ({
     hoveredElementId,
     connectionDraft,
     canvasSize,
+    editingShapeLabelId,
   ]);
 
   // Render canvas

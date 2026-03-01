@@ -23,6 +23,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { LiveList, LiveObject } from "@liveblocks/client";
+import { Eye, EyeOff } from "lucide-react";
 
 // Import all custom hooks
 import {
@@ -73,6 +74,7 @@ const WhiteboardCanvas: React.FC = () => {
   const [showOutlineColorPicker, setShowOutlineColorPicker] = useState(false);
   const [showFillColorPicker, setShowFillColorPicker] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
+  const [hideCanvasUi, setHideCanvasUi] = useState(false);
   const seededRef = useRef(false);
 
   // Inline text editing state
@@ -85,6 +87,13 @@ const WhiteboardCanvas: React.FC = () => {
     null,
   );
   const [editingShapeLabelDraft, setEditingShapeLabelDraft] = useState("");
+  const [editingShapeLabelFontSize, setEditingShapeLabelFontSize] =
+    useState(20);
+  const [editingShapeLabelFontWeight, setEditingShapeLabelFontWeight] =
+    useState<string | number>("600");
+  const [editingShapeLabelFontStyle, setEditingShapeLabelFontStyle] =
+    useState("normal");
+  const shapeLabelEditorRef = useRef<HTMLDivElement | null>(null);
   const currentColorRef = useRef(currentColor);
   const strokeWidthRef = useRef(strokeWidth);
   const fontSizeRef = useRef(fontSize);
@@ -97,6 +106,25 @@ const WhiteboardCanvas: React.FC = () => {
   useEffect(() => {
     fontSizeRef.current = fontSize;
   }, [fontSize]);
+
+  useEffect(() => {
+    if (!editingShapeLabelId || !shapeLabelEditorRef.current) return;
+    const editor = shapeLabelEditorRef.current;
+    editor.innerText = editingShapeLabelDraft;
+    editor.focus();
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    } catch {
+      // ignore selection failures
+    }
+    // Intentionally only run when edit session starts; running on each draft
+    // update would reset caret and cause reverse typing behavior.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingShapeLabelId]);
 
   // Liveblocks presence
   const updateMyPresence = useUpdateMyPresence();
@@ -502,6 +530,7 @@ const WhiteboardCanvas: React.FC = () => {
     currentTool: currentTool,
     hoveredElementId: whiteboardDrawing.hoveredElementId,
     connectionDraft: whiteboardDrawing.connectionDraft,
+    editingShapeLabelId,
   });
 
   // Load whiteboard data (simulated)
@@ -590,69 +619,90 @@ const WhiteboardCanvas: React.FC = () => {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[radial-gradient(ellipse_at_top,#f7f8fa_0%,#f2f4f7_45%,#eceff3_100%)]">
-      {/* Floating Top Toolbar */}
-      <div className="pointer-events-none absolute top-4 left-1/2 z-50 w-[min(1440px,calc(100%-2rem))] -translate-x-1/2 px-1">
-        <div className="pointer-events-auto">
-        <TopToolbar
-          canUndo={canUndo}
-          canRedo={canRedo}
-          zoom={canvasViewport.zoom}
-          showGrid={canvasViewport.showGrid}
-          whiteboardTitle={whiteboard?.title}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
-          onClear={handleClear}
-          onZoomIn={canvasViewport.handleZoomIn}
-          onZoomOut={canvasViewport.handleZoomOut}
-          onResetZoom={canvasViewport.handleResetZoom}
-          onFitToScreen={handleFitToScreen}
-          onToggleGrid={canvasViewport.toggleGrid}
-          onSave={whiteboardAutoSave.saveWhiteboard}
-          onLoad={loadWhiteboard}
-          onRename={(title) => {
-            if (whiteboard?._id) {
-              updateWhiteboard({ id: whiteboard._id, title });
-              toast.success("Whiteboard renamed");
-            }
-          }}
-          onGenerateDiagram={() => setShowAIModal(true)}
-          disabled={!whiteboardAccess.hasEditAccess}
-        />
-        </div>
+      <div
+        className={`absolute right-4 z-[70] transition-all ${
+          hideCanvasUi ? "top-4" : "top-24"
+        }`}
+      >
+        <button
+          onClick={() => setHideCanvasUi((prev) => !prev)}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-white"
+          title={hideCanvasUi ? "Show toolbars" : "Hide toolbars"}
+        >
+          {hideCanvasUi ? <Eye size={14} /> : <EyeOff size={14} />}
+          {hideCanvasUi ? "Show UI" : "Hide UI"}
+        </button>
       </div>
+
+      {/* Floating Top Toolbar */}
+      {!hideCanvasUi && (
+        <div className="pointer-events-none absolute top-4 left-1/2 z-50 w-[min(1440px,calc(100%-2rem))] -translate-x-1/2 px-1">
+          <div className="pointer-events-auto">
+            <TopToolbar
+              canUndo={canUndo}
+              canRedo={canRedo}
+              zoom={canvasViewport.zoom}
+              showGrid={canvasViewport.showGrid}
+              whiteboardTitle={whiteboard?.title}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onClear={handleClear}
+              onZoomIn={canvasViewport.handleZoomIn}
+              onZoomOut={canvasViewport.handleZoomOut}
+              onResetZoom={canvasViewport.handleResetZoom}
+              onFitToScreen={handleFitToScreen}
+              onToggleGrid={canvasViewport.toggleGrid}
+              onSave={whiteboardAutoSave.saveWhiteboard}
+              onLoad={loadWhiteboard}
+              onRename={(title) => {
+                if (whiteboard?._id) {
+                  updateWhiteboard({ id: whiteboard._id, title });
+                  toast.success("Whiteboard renamed");
+                }
+              }}
+              onGenerateDiagram={() => setShowAIModal(true)}
+              disabled={!whiteboardAccess.hasEditAccess}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Floating Properties Panel */}
-      <div className="pointer-events-none absolute bottom-24 left-1/2 z-40 w-[min(1280px,calc(100%-1rem))] -translate-x-1/2 px-1">
-        <div className="pointer-events-auto">
-        <PropertiesPanel
-          currentTool={currentTool}
-          currentColor={currentColor}
-          strokeWidth={strokeWidth}
-          fillColor={fillColor}
-          fontSize={fontSize}
-          showOutlineColorPicker={showOutlineColorPicker}
-          showFillColorPicker={showFillColorPicker}
-          onColorChange={handleColorChange}
-          onFillColorChange={handleFillColorChange}
-          onToggleOutlineColorPicker={handleToggleOutlineColorPicker}
-          onToggleFillColorPicker={handleToggleFillColorPicker}
-          onStrokeWidthChange={handleStrokeWidthChange}
-          onFontSizeChange={handleFontSizeChange}
-          disabled={!whiteboardAccess.hasEditAccess}
-          isSaving={whiteboardAutoSave.isSaving}
-          lastSaved={whiteboardAutoSave.lastSaved}
-        />
+      {!hideCanvasUi && (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-40 w-[min(1280px,calc(100%-1rem))] -translate-x-1/2 px-1">
+          <div className="pointer-events-auto">
+            <PropertiesPanel
+              currentTool={currentTool}
+              currentColor={currentColor}
+              strokeWidth={strokeWidth}
+              fillColor={fillColor}
+              fontSize={fontSize}
+              showOutlineColorPicker={showOutlineColorPicker}
+              showFillColorPicker={showFillColorPicker}
+              onColorChange={handleColorChange}
+              onFillColorChange={handleFillColorChange}
+              onToggleOutlineColorPicker={handleToggleOutlineColorPicker}
+              onToggleFillColorPicker={handleToggleFillColorPicker}
+              onStrokeWidthChange={handleStrokeWidthChange}
+              onFontSizeChange={handleFontSizeChange}
+              disabled={!whiteboardAccess.hasEditAccess}
+              isSaving={whiteboardAutoSave.isSaving}
+              lastSaved={whiteboardAutoSave.lastSaved}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Floating Sidebar */}
-      <div className="absolute bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full">
-        <Sidebar
-          currentTool={currentTool}
-          onToolChange={setCurrentTool}
-          disabled={!whiteboardAccess.hasEditAccess}
-        />
-      </div>
+      {!hideCanvasUi && (
+        <div className="absolute bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full">
+          <Sidebar
+            currentTool={currentTool}
+            onToolChange={setCurrentTool}
+            disabled={!whiteboardAccess.hasEditAccess}
+          />
+        </div>
+      )}
 
       {/* Main Interactive Canvas Area */}
       <div
@@ -746,9 +796,16 @@ const WhiteboardCanvas: React.FC = () => {
               return;
             }
 
-            if (topEl.type === "rectangle" || topEl.type === "circle") {
+            if (
+              topEl.type === "rectangle" ||
+              topEl.type === "circle" ||
+              topEl.type === "diamond"
+            ) {
               setEditingShapeLabelId(topEl.id);
               setEditingShapeLabelDraft(topEl.label?.trim() || "TEXT");
+              setEditingShapeLabelFontSize(topEl.fontSize || 20);
+              setEditingShapeLabelFontWeight(topEl.fontWeight || "600");
+              setEditingShapeLabelFontStyle(topEl.fontStyle || "normal");
               setSelectedElements([topEl.id]);
               setCurrentTool("select");
             }
@@ -756,6 +813,7 @@ const WhiteboardCanvas: React.FC = () => {
           onMouseMove={(e) => {
             whiteboardDrawing.draw(e);
           }}
+          onWheel={canvasViewport.handleWheelZoom}
           onMouseUp={whiteboardDrawing.stopDrawing}
           onMouseLeave={whiteboardDrawing.stopDrawing}
           onMouseEnter={() => {}}
@@ -788,17 +846,19 @@ const WhiteboardCanvas: React.FC = () => {
           onClose={() => setShowAIModal(false)}
           disabled={!whiteboardAccess.hasEditAccess}
           onGenerate={(newElements) => {
-            // Place elements in the center of the current viewport
-            const offsetX = canvasViewport.panOffset.x / canvasViewport.zoom;
-            const offsetY = canvasViewport.panOffset.y / canvasViewport.zoom;
-            // Find bounding box of generated elements
+            // Place new AI graph near current viewport origin, then auto-fit to center it.
+            const viewWorldMinX = -canvasViewport.panOffset.x / canvasViewport.zoom;
+            const viewWorldMinY = -canvasViewport.panOffset.y / canvasViewport.zoom;
+
             const allX = newElements.flatMap((el) => el.points.map((p) => p.x));
             const allY = newElements.flatMap((el) => el.points.map((p) => p.y));
             const minX = Math.min(...allX);
             const minY = Math.min(...allY);
-            // Shift so the diagram starts where the viewport is
-            const shiftX = -minX - offsetX + 80;
-            const shiftY = -minY - offsetY + 80;
+            const maxX = Math.max(...allX);
+            const maxY = Math.max(...allY);
+
+            const shiftX = viewWorldMinX + 80 - minX;
+            const shiftY = viewWorldMinY + 80 - minY;
 
             newElements.forEach((el) => {
               const shifted = {
@@ -814,6 +874,17 @@ const WhiteboardCanvas: React.FC = () => {
             toast.success(
               `✨ AI added ${newElements.length} elements to the canvas!`,
             );
+
+            // Auto fit and center the generated diagram immediately.
+            const shiftedBounds = {
+              minX: minX + shiftX,
+              minY: minY + shiftY,
+              maxX: maxX + shiftX,
+              maxY: maxY + shiftY,
+            };
+            setTimeout(() => {
+              canvasViewport.fitToBounds(shiftedBounds);
+            }, 0);
           }}
         />
 
@@ -975,50 +1046,185 @@ const WhiteboardCanvas: React.FC = () => {
                 (bounds.maxX - bounds.minX) * canvasViewport.zoom * 0.9,
               ),
             );
+            const editorFontSize = Math.max(
+              9,
+              editingShapeLabelFontSize * canvasViewport.zoom,
+            );
+            const editorLineHeight = editorFontSize * 1.2;
+            const lineCount = Math.max(
+              1,
+              (editingShapeLabelDraft || "TEXT").split("\n").length,
+            );
+            const editorBlockHeight = editorLineHeight * lineCount;
 
             return (
-              <input
-                autoFocus
-                value={editingShapeLabelDraft}
-                onChange={(ev) => setEditingShapeLabelDraft(ev.target.value)}
-                onMouseDown={(ev) => ev.stopPropagation()}
-                onKeyDown={(ev) => {
-                  if (ev.key === "Escape") {
-                    setEditingShapeLabelId(null);
-                    setEditingShapeLabelDraft("");
-                    return;
-                  }
-                  if (ev.key === "Enter") {
-                    ev.preventDefault();
-                    const nextLabel = editingShapeLabelDraft.trim() || "TEXT";
+              <>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: sx,
+                    top: sy - 36,
+                    transform: "translate(-50%, -50%)",
+                    zIndex: 111,
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1 py-1 shadow-sm backdrop-blur"
+                >
+                  <button
+                    onMouseDown={(ev) => ev.preventDefault()}
+                    onClick={() =>
+                      setEditingShapeLabelFontWeight((prev) =>
+                        prev === "700" ? "500" : "700",
+                      )
+                    }
+                    className={`h-7 w-7 rounded text-xs font-bold ${
+                      editingShapeLabelFontWeight === "700"
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-700 hover:bg-slate-200"
+                    }`}
+                    title="Bold"
+                  >
+                    B
+                  </button>
+                  <button
+                    onMouseDown={(ev) => ev.preventDefault()}
+                    onClick={() =>
+                      setEditingShapeLabelFontStyle((prev) =>
+                        prev === "italic" ? "normal" : "italic",
+                      )
+                    }
+                    className={`h-7 w-7 rounded text-xs italic ${
+                      editingShapeLabelFontStyle === "italic"
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-700 hover:bg-slate-200"
+                    }`}
+                    title="Italic"
+                  >
+                    I
+                  </button>
+                  <button
+                    onMouseDown={(ev) => ev.preventDefault()}
+                    onClick={() =>
+                      setEditingShapeLabelFontSize((s) => Math.max(12, s - 2))
+                    }
+                    className="h-7 w-7 rounded text-slate-700 hover:bg-slate-200"
+                    title="Decrease size"
+                  >
+                    -
+                  </button>
+                  <span className="w-10 text-center text-xs font-medium text-slate-600">
+                    {editingShapeLabelFontSize}
+                  </span>
+                  <button
+                    onMouseDown={(ev) => ev.preventDefault()}
+                    onClick={() =>
+                      setEditingShapeLabelFontSize((s) => Math.min(96, s + 2))
+                    }
+                    className="h-7 w-7 rounded text-slate-700 hover:bg-slate-200"
+                    title="Increase size"
+                  >
+                    +
+                  </button>
+                </div>
+                <div
+                  ref={shapeLabelEditorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onMouseDown={(ev) => ev.stopPropagation()}
+                  onInput={(ev) => {
+                    const next = (ev.currentTarget as HTMLDivElement).innerText;
+                    setEditingShapeLabelDraft(next);
+                  }}
+                  onKeyDown={(ev) => {
+                    const mod = ev.metaKey || ev.ctrlKey;
+                    if (mod && ev.key.toLowerCase() === "b") {
+                      ev.preventDefault();
+                      setEditingShapeLabelFontWeight((prev) =>
+                        prev === "700" ? "500" : "700",
+                      );
+                      return;
+                    }
+                    if (mod && ev.key.toLowerCase() === "i") {
+                      ev.preventDefault();
+                      setEditingShapeLabelFontStyle((prev) =>
+                        prev === "italic" ? "normal" : "italic",
+                      );
+                      return;
+                    }
+                    if (mod && (ev.key === "+" || ev.key === "=")) {
+                      ev.preventDefault();
+                      setEditingShapeLabelFontSize((s) => Math.min(96, s + 2));
+                      return;
+                    }
+                    if (mod && ev.key === "-") {
+                      ev.preventDefault();
+                      setEditingShapeLabelFontSize((s) => Math.max(12, s - 2));
+                      return;
+                    }
+                    if (ev.key === "Escape") {
+                      setEditingShapeLabelId(null);
+                      setEditingShapeLabelDraft("");
+                      return;
+                    }
+                    if (ev.key === "Enter") {
+                      ev.preventDefault();
+                      const nextLabel =
+                        (shapeLabelEditorRef.current?.innerText || editingShapeLabelDraft).trim() ||
+                        "TEXT";
+                      updateElement({
+                        ...shape,
+                        label: nextLabel,
+                        fontSize: editingShapeLabelFontSize,
+                        fontWeight: editingShapeLabelFontWeight,
+                        fontStyle: editingShapeLabelFontStyle,
+                      } as unknown as DrawingElementJson);
+                      setEditingShapeLabelId(null);
+                      setEditingShapeLabelDraft("");
+                    }
+                  }}
+                  onBlur={() => {
+                    const nextLabel =
+                      (shapeLabelEditorRef.current?.innerText || editingShapeLabelDraft).trim() ||
+                      "TEXT";
                     updateElement({
                       ...shape,
                       label: nextLabel,
+                      fontSize: editingShapeLabelFontSize,
+                      fontWeight: editingShapeLabelFontWeight,
+                      fontStyle: editingShapeLabelFontStyle,
                     } as unknown as DrawingElementJson);
                     setEditingShapeLabelId(null);
                     setEditingShapeLabelDraft("");
-                  }
-                }}
-                onBlur={() => {
-                  const nextLabel = editingShapeLabelDraft.trim() || "TEXT";
-                  updateElement({
-                    ...shape,
-                    label: nextLabel,
-                  } as unknown as DrawingElementJson);
-                  setEditingShapeLabelId(null);
-                  setEditingShapeLabelDraft("");
-                }}
-                style={{
-                  position: "absolute",
-                  left: sx,
-                  top: sy,
-                  transform: "translate(-50%, -50%)",
-                  width: inputWidth,
-                  zIndex: 110,
-                  textAlign: "center",
-                }}
-                className="h-9 rounded-md border border-blue-300 bg-white/95 px-2 text-sm font-semibold text-slate-800 shadow-sm outline-none ring-2 ring-blue-200"
-              />
+                  }}
+                  style={{
+                    position: "absolute",
+                    left: sx,
+                    // Match canvas render math (top baseline + centered block)
+                    // to remove edit-mode vertical jump.
+                    top: sy - editorBlockHeight / 2,
+                    transform: "translateX(-50%)",
+                    width: inputWidth,
+                    zIndex: 110,
+                    textAlign: "center",
+                    fontSize: editorFontSize,
+                    fontWeight: editingShapeLabelFontWeight,
+                    fontStyle: editingShapeLabelFontStyle as
+                      | "normal"
+                      | "italic",
+                    lineHeight: `${editorLineHeight}px`,
+                    letterSpacing: 0,
+                    padding: 0,
+                    minHeight: `${editorLineHeight}px`,
+                    margin: 0,
+                    direction: "ltr",
+                    unicodeBidi: "plaintext",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    fontFamily:
+                      "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                  }}
+                  className="bg-transparent text-slate-800 outline-none"
+                />
+              </>
             );
           })()}
       </div>

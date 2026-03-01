@@ -2,6 +2,7 @@ import { Tool } from "@/features/whiteboard/types/whiteboard.types";
 import {
   ArrowRight,
   Circle,
+  Diamond,
   Eraser,
   Hand,
   Minus,
@@ -37,6 +38,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       allowInReadOnly: false,
     },
     { name: "circle", icon: Circle, label: "Circle", allowInReadOnly: false },
+    {
+      name: "diamond",
+      icon: Diamond,
+      label: "Decision",
+      allowInReadOnly: false,
+    },
     { name: "line", icon: Minus, label: "Line", allowInReadOnly: false },
     { name: "arrow", icon: ArrowRight, label: "Arrow", allowInReadOnly: false },
     { name: "text", icon: Type, label: "Text", allowInReadOnly: false },

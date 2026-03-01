@@ -115,6 +115,9 @@ export const useWhiteboardKeyboard = ({
         case "c":
           if (hasEditAccess) setCurrentTool("circle");
           break;
+        case "d":
+          if (hasEditAccess) setCurrentTool("diamond");
+          break;
         case "l":
           if (hasEditAccess) setCurrentTool("line");
           break;

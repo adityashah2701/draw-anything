@@ -245,6 +245,8 @@ export const useWhiteboardDrawing = ({
               ? "rectangle"
               : currentTool === "circle"
                 ? "circle"
+                : currentTool === "diamond"
+                  ? "diamond"
                 : currentTool === "line"
                   ? "line"
                   : currentTool === "arrow"
@@ -255,7 +257,9 @@ export const useWhiteboardDrawing = ({
         strokeWidth,
         fill: fillColor !== "#transparent" ? fillColor : undefined,
         label:
-          currentTool === "rectangle" || currentTool === "circle"
+          currentTool === "rectangle" ||
+          currentTool === "circle" ||
+          currentTool === "diamond"
             ? "TEXT"
             : undefined,
       };
@@ -305,11 +309,16 @@ export const useWhiteboardDrawing = ({
           return;
         }
 
-        // Update hovered element (only rect/circle expose handles)
+        // Update hovered element (shape nodes expose connection handles)
         const atPoint = getElementsAtPoint(point);
         const connectable = [...atPoint]
           .reverse()
-          .find((el) => el.type === "rectangle" || el.type === "circle");
+          .find(
+            (el) =>
+              el.type === "rectangle" ||
+              el.type === "circle" ||
+              el.type === "diamond",
+          );
         setHoveredElementId(connectable?.id ?? null);
       } else {
         // Clear hover when not on select tool
@@ -429,7 +438,9 @@ export const useWhiteboardDrawing = ({
         .reverse()
         .find(
           (el) =>
-            (el.type === "rectangle" || el.type === "circle") &&
+            (el.type === "rectangle" ||
+              el.type === "circle" ||
+              el.type === "diamond") &&
             el.id !== connectionDraft.fromElementId,
         );
 

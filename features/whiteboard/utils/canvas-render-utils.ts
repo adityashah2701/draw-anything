@@ -12,13 +12,19 @@ export interface RenderContext {
   hoveredElementId?: string | null;
 }
 
-/** Returns the 4 edge-midpoint connection handles for a rect/circle in world coords */
+/** Returns the 4 edge-midpoint connection handles for shape nodes in world coords */
 export const getConnectionHandles = (
   element: DrawingElement,
   bounds: { minX: number; minY: number; maxX: number; maxY: number } | null,
 ): { name: string; x: number; y: number }[] => {
   if (!bounds) return [];
-  if (element.type !== "rectangle" && element.type !== "circle") return [];
+  if (
+    element.type !== "rectangle" &&
+    element.type !== "circle" &&
+    element.type !== "diamond"
+  ) {
+    return [];
+  }
   const { minX, minY, maxX, maxY } = bounds;
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
@@ -80,9 +86,18 @@ const drawShapeLabel = (
   color: string,
   maxWidth: number,
   maxHeight: number,
+  preferredFontSize?: number,
+  preferredFontWeight?: string | number,
+  preferredFontStyle?: string,
 ) => {
+  const baseWeight =
+    (preferredFontWeight?.toString() as string) ||
+    (preferredFontSize && preferredFontSize >= 20 ? "600" : "500");
+  const baseStyle =
+    preferredFontStyle === "italic" ? "italic" : "normal";
+
   const measureWithFont = (fontSize: number, text: string) => {
-    ctx.font = `600 ${fontSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    ctx.font = `${baseStyle} ${baseWeight} ${fontSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
     return ctx.measureText(text).width;
   };
 
@@ -129,7 +144,8 @@ const drawShapeLabel = (
   const availableHeight = Math.max(16, maxHeight);
   const maxLines = 3;
 
-  let fittedSize = Math.max(9, Math.min(16 * zoom, 18));
+  const targetSize = (preferredFontSize || 14) * zoom;
+  let fittedSize = Math.max(9, Math.min(targetSize, 64));
   let fittedLines = [label];
 
   for (let size = fittedSize; size >= 9; size -= 1) {
@@ -159,7 +175,7 @@ const drawShapeLabel = (
   ctx.save();
   clipPath();
   ctx.clip();
-  ctx.font = `600 ${fittedSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  ctx.font = `${baseStyle} ${baseWeight} ${fittedSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
   ctx.fillStyle = color || "#1e293b";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
@@ -254,6 +270,9 @@ export const drawElement = (
             element.color,
             Math.max(20, Math.abs(width) - 16),
             Math.max(14, Math.abs(height) - 12),
+            element.fontSize,
+            element.fontWeight,
+            element.fontStyle,
           );
         }
       }
@@ -292,6 +311,61 @@ export const drawElement = (
             element.color,
             Math.max(20, radius * 1.32),
             Math.max(14, radius * 1.25),
+            element.fontSize,
+            element.fontWeight,
+            element.fontStyle,
+          );
+        }
+      }
+      break;
+
+    case "diamond":
+      if (element.points.length === 2) {
+        const startX = element.points[0].x * zoom + panOffset.x;
+        const startY = element.points[0].y * zoom + panOffset.y;
+        const endX = element.points[1].x * zoom + panOffset.x;
+        const endY = element.points[1].y * zoom + panOffset.y;
+
+        const left = Math.min(startX, endX);
+        const right = Math.max(startX, endX);
+        const top = Math.min(startY, endY);
+        const bottom = Math.max(startY, endY);
+        const cx = (left + right) / 2;
+        const cy = (top + bottom) / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, top);
+        ctx.lineTo(right, cy);
+        ctx.lineTo(cx, bottom);
+        ctx.lineTo(left, cy);
+        ctx.closePath();
+
+        if (element.fill) {
+          ctx.fill();
+        }
+        ctx.stroke();
+
+        if (element.label) {
+          drawShapeLabel(
+            ctx,
+            element.label,
+            cx,
+            cy,
+            () => {
+              ctx.beginPath();
+              ctx.moveTo(cx, top + 6);
+              ctx.lineTo(right - 6, cy);
+              ctx.lineTo(cx, bottom - 6);
+              ctx.lineTo(left + 6, cy);
+              ctx.closePath();
+            },
+            zoom,
+            element.color,
+            Math.max(20, (right - left) * 0.62),
+            Math.max(14, (bottom - top) * 0.62),
+            element.fontSize,
+            element.fontWeight,
+            element.fontStyle,
           );
         }
       }
@@ -416,11 +490,12 @@ export const drawElement = (
         ctx.setLineDash([]);
         ctx.strokeStyle = "rgba(0, 123, 255, 0.25)";
         ctx.lineWidth = 1;
+        const pad = 1;
         ctx.strokeRect(
-          minX * zoom + panOffset.x - 4,
-          minY * zoom + panOffset.y - 4,
-          (maxX - minX) * zoom + 8,
-          (maxY - minY) * zoom + 8,
+          minX * zoom + panOffset.x - pad,
+          minY * zoom + panOffset.y - pad,
+          (maxX - minX) * zoom + pad * 2,
+          (maxY - minY) * zoom + pad * 2,
         );
       } else if (element.type !== "line" && element.type !== "arrow") {
         const padding = (element.strokeWidth || 2) / 2;
@@ -553,7 +628,9 @@ export const drawElement = (
   // ── Connection handles (shown when this shape is hovered) ─────────────────
   if (
     hoveredElementId === element.id &&
-    (element.type === "rectangle" || element.type === "circle")
+    (element.type === "rectangle" ||
+      element.type === "circle" ||
+      element.type === "diamond")
   ) {
     const bounds = getElementBounds(element);
     const handles = getConnectionHandles(element, bounds);

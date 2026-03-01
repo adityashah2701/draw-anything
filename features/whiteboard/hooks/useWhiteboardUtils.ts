@@ -10,6 +10,11 @@ export const useWhiteboardUtils = (
   elements: DrawingElement[],
 ) => {
   const SPATIAL_CELL_SIZE = 220;
+  const textMeasureCtx = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    return canvas.getContext("2d");
+  }, []);
 
   const getBoundsStatic = useCallback((element: DrawingElement) => {
     if (element.points.length === 0) return null;
@@ -33,6 +38,16 @@ export const useWhiteboardUtils = (
       minY = centerY - radius;
       maxX = centerX + radius;
       maxY = centerY + radius;
+    } else if (
+      element.type === "rectangle" ||
+      element.type === "diamond"
+    ) {
+      element.points.forEach((point) => {
+        minX = Math.min(minX, point.x);
+        minY = Math.min(minY, point.y);
+        maxX = Math.max(maxX, point.x);
+        maxY = Math.max(maxY, point.y);
+      });
     } else if (element.type === "text" && element.text && element.fontSize) {
       const textX = element.points[0].x;
       const textY = element.points[0].y;
@@ -54,12 +69,25 @@ export const useWhiteboardUtils = (
         effectiveSize = Math.max(baseSize, 20);
 
       const lines = element.text.split("\n");
-      const maxChars = Math.max(...lines.map((l) => l.length));
-      const textWidth = maxChars * effectiveSize * 0.62 + 8;
-      const textHeight = lines.length * effectiveSize * 1.2 + 8;
+      const style = element.fontStyle || "normal";
+      const lineHeight = effectiveSize * 1.2;
 
-      minX = textX - 4;
-      minY = textY - 4;
+      let textWidth = Math.max(1, ...lines.map((l) => l.length)) * effectiveSize * 0.62;
+      if (textMeasureCtx) {
+        textMeasureCtx.font = `${style} ${weight} ${effectiveSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+        textWidth = Math.max(
+          ...lines.map((line) => textMeasureCtx.measureText(line || " ").width),
+          1,
+        );
+      }
+      // Match canvas draw model: first line occupies glyph height, extra lines add lineHeight step.
+      const textHeight = Math.max(
+        effectiveSize,
+        effectiveSize + Math.max(0, lines.length - 1) * lineHeight,
+      );
+
+      minX = textX;
+      minY = textY;
       maxX = textX + textWidth;
       maxY = textY + textHeight;
     } else {
@@ -72,7 +100,7 @@ export const useWhiteboardUtils = (
     }
 
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
-  }, []);
+  }, [textMeasureCtx]);
 
   const boundsById = useMemo(() => {
     const map = new Map<string, Bounds>();
@@ -170,6 +198,25 @@ export const useWhiteboardUtils = (
               point.y >= minY &&
               point.y <= maxY
             );
+          }
+          break;
+
+        case "diamond":
+          if (element.points.length === 2) {
+            const [p1, p2] = element.points;
+            const left = Math.min(p1.x, p2.x);
+            const right = Math.max(p1.x, p2.x);
+            const top = Math.min(p1.y, p2.y);
+            const bottom = Math.max(p1.y, p2.y);
+            const cx = (left + right) / 2;
+            const cy = (top + bottom) / 2;
+            const halfW = Math.max(1, (right - left) / 2);
+            const halfH = Math.max(1, (bottom - top) / 2);
+
+            // Diamond equation in normalized space: |dx| + |dy| <= 1
+            const nx = Math.abs((point.x - cx) / halfW);
+            const ny = Math.abs((point.y - cy) / halfH);
+            return nx + ny <= 1;
           }
           break;
 
@@ -412,7 +459,11 @@ export const useWhiteboardUtils = (
       let newPoints = [...element.points];
       let newFontSize = element.fontSize;
 
-      if (element.type === "rectangle" || element.type === "circle") {
+      if (
+        element.type === "rectangle" ||
+        element.type === "circle" ||
+        element.type === "diamond"
+      ) {
         const padding = (element.strokeWidth || 2) / 2;
         let pMinX = bounds.minX - padding;
         let pMinY = bounds.minY - padding;
@@ -460,7 +511,7 @@ export const useWhiteboardUtils = (
         const maxX = pMaxX - padding;
         const maxY = pMaxY - padding;
 
-        if (element.type === "rectangle") {
+        if (element.type === "rectangle" || element.type === "diamond") {
           newPoints = [
             { x: minX, y: minY },
             { x: maxX, y: maxY },
@@ -516,7 +567,11 @@ export const useWhiteboardUtils = (
           const lines = element.text!.split("\n");
           const maxChars = Math.max(...lines.map((l) => l.length), 1);
           const width = maxChars * effectiveSize * 0.62 + 8;
-          const height = lines.length * effectiveSize * 1.2 + 8;
+          const lineHeight = effectiveSize * 1.2;
+          const height = Math.max(
+            effectiveSize,
+            effectiveSize + Math.max(0, lines.length - 1) * lineHeight,
+          );
           return { width, height };
         };
 

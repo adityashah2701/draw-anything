@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   ArrowRight,
   Circle,
+  Diamond,
   Eraser,
   Hand,
   Minus,
@@ -96,6 +97,13 @@ export function CommandMenu({
             <Circle className="mr-2 h-4 w-4" />
             <span>Circle</span>
             <CommandShortcut>C</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => runCommand(() => onToolChange("diamond"))}
+          >
+            <Diamond className="mr-2 h-4 w-4" />
+            <span>Decision</span>
+            <CommandShortcut>D</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onToolChange("line"))}>
             <Minus className="mr-2 h-4 w-4" />

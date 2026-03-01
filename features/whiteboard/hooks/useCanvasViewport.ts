@@ -34,6 +34,31 @@ export const useCanvasViewport = () => {
     [zoom, panOffset]
   );
 
+  const handleWheelZoom = useCallback(
+    (e: React.WheelEvent<HTMLCanvasElement>) => {
+      e.preventDefault();
+
+      const canvas = e.currentTarget;
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Zoom around cursor position for precise navigation.
+      const worldX = (mouseX - panOffset.x) / zoom;
+      const worldY = (mouseY - panOffset.y) / zoom;
+
+      const zoomFactor = Math.exp(-e.deltaY * 0.0015);
+      const nextZoom = Math.max(0.1, Math.min(5, zoom * zoomFactor));
+
+      setZoom(nextZoom);
+      setPanOffset({
+        x: mouseX - worldX * nextZoom,
+        y: mouseY - worldY * nextZoom,
+      });
+    },
+    [zoom, panOffset],
+  );
+
   // Zoom operations
   const handleZoomIn = useCallback(() => {
     setZoom(prev => Math.min(prev * 1.2, 5));
@@ -124,6 +149,7 @@ export const useCanvasViewport = () => {
     handleZoomOut,
     handleResetZoom,
     fitToBounds,
+    handleWheelZoom,
     startPanning,
     handlePan,
     stopPanning,
