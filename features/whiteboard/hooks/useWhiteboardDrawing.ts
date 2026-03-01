@@ -3,7 +3,15 @@ import {
   DrawingElement,
   Point,
   Tool,
+  Bounds,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { getConnectionHandles } from "@/features/whiteboard/utils/canvas-render-utils";
+
+interface ConnectionDraft {
+  fromElementId: string;
+  fromHandle: string;
+  currentPoint: Point;
+}
 
 interface UseWhiteboardDrawingProps {
   currentTool: Tool;
@@ -26,20 +34,24 @@ interface UseWhiteboardDrawingProps {
     elementId: string,
     handle: string,
     point: Point,
-    originalBounds: any,
+    originalBounds: Bounds,
   ) => DrawingElement | null;
   updateElement: (element: DrawingElement) => void;
-  getElementBounds: (element: DrawingElement) => any;
+  getElementBounds: (element: DrawingElement) => Bounds | null;
   getElementsOnPath: (p1: Point, p2: Point, radius: number) => DrawingElement[];
   eraserSize: number;
   // State management
   currentElement: DrawingElement | null;
-  setCurrentElement: any;
+  setCurrentElement: (element: DrawingElement | null) => void;
   selectedElements: string[];
-  setSelectedElements: any;
+  setSelectedElements: (
+    elements: string[] | ((prev: string[]) => string[]),
+  ) => void;
   elements: DrawingElement[];
   completeCurrentElement: () => void;
   saveToHistory: () => void;
+  /** Called to directly add a completed arrow element (used for connection drops) */
+  addElementDirect?: (element: DrawingElement) => void;
   // Viewport
   startPanning: (point: Point) => void;
   handlePan: (point: Point) => void;
@@ -71,6 +83,7 @@ export const useWhiteboardDrawing = ({
   elements,
   completeCurrentElement,
   saveToHistory,
+  addElementDirect,
   startPanning,
   handlePan,
   stopPanning,
@@ -84,6 +97,12 @@ export const useWhiteboardDrawing = ({
   const [textPosition, setTextPosition] = useState<Point | null>(null);
   const [cursorPosition, setCursorPosition] = useState<Point | null>(null);
   const lastPointRef = useRef<Point | null>(null);
+  const resizeInitialBoundsRef = useRef<Bounds | null>(null);
+
+  // Connection handle state
+  const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
+  const [connectionDraft, setConnectionDraft] =
+    useState<ConnectionDraft | null>(null);
 
   // Multi-selection state
   const [isSelectingArea, setIsSelectingArea] = useState(false);
@@ -91,6 +110,15 @@ export const useWhiteboardDrawing = ({
     start: Point;
     end: Point;
   } | null>(null);
+
+  /** Get the 4 connection handle positions for an element (world coords) */
+  const getElementConnectionHandles = useCallback(
+    (element: DrawingElement) => {
+      const bounds = getElementBounds(element);
+      return getConnectionHandles(element, bounds);
+    },
+    [getElementBounds],
+  );
 
   // Mouse event handlers
   const startDrawing = useCallback(
@@ -112,11 +140,31 @@ export const useWhiteboardDrawing = ({
 
       if (currentTool === "text") {
         // Text is completely handled at the page level now.
-        // We do nothing here to prevent conflicting state and avoid capturing mouse events.
         return;
       }
 
       if (currentTool === "select") {
+        // ── Connection handle check (takes priority over resize/select) ──────
+        if (hasEditAccess && hoveredElementId) {
+          const hoveredEl = elements.find((el) => el.id === hoveredElementId);
+          if (hoveredEl) {
+            const handles = getElementConnectionHandles(hoveredEl);
+            const HANDLE_RADIUS = 12; // px in world space
+            for (const handle of handles) {
+              const dist = Math.hypot(point.x - handle.x, point.y - handle.y);
+              if (dist <= HANDLE_RADIUS) {
+                setConnectionDraft({
+                  fromElementId: hoveredElementId,
+                  fromHandle: handle.name,
+                  currentPoint: point,
+                });
+                return;
+              }
+            }
+          }
+        }
+
+        // ── Existing resize / select / drag logic ─────────────────────────
         let foundResizeHandle = false;
         for (const elementId of selectedElements) {
           const element = elements.find((el) => el.id === elementId);
@@ -126,6 +174,7 @@ export const useWhiteboardDrawing = ({
               setIsResizing(true);
               setResizeHandle(handle);
               setDragStart(point);
+              resizeInitialBoundsRef.current = getElementBounds(element);
               foundResizeHandle = true;
               break;
             }
@@ -147,7 +196,7 @@ export const useWhiteboardDrawing = ({
               setDragStart(point);
             }
           } else {
-            setSelectedElements((prev: any) =>
+            setSelectedElements((prev) =>
               e.ctrlKey || e.metaKey
                 ? prev.includes(topElement.id)
                   ? prev.filter((id: string) => id !== topElement.id)
@@ -225,6 +274,10 @@ export const useWhiteboardDrawing = ({
       setSelectedElements,
       setCurrentElement,
       startPanning,
+      eraserSize,
+      getElementBounds,
+      hoveredElementId,
+      getElementConnectionHandles,
     ],
   );
 
@@ -238,6 +291,27 @@ export const useWhiteboardDrawing = ({
         return;
       }
 
+      // ── Track hovered shape for connection handles ───────────────────────
+      if (currentTool === "select") {
+        // If dragging a connection, just update its endpoint
+        if (connectionDraft) {
+          setConnectionDraft((prev) =>
+            prev ? { ...prev, currentPoint: point } : null,
+          );
+          return;
+        }
+
+        // Update hovered element (only rect/circle expose handles)
+        const atPoint = getElementsAtPoint(point);
+        const connectable = [...atPoint]
+          .reverse()
+          .find((el) => el.type === "rectangle" || el.type === "circle");
+        setHoveredElementId(connectable?.id ?? null);
+      } else {
+        // Clear hover when not on select tool
+        setHoveredElementId(null);
+      }
+
       if (currentTool === "select" && hasEditAccess) {
         if (isSelectingArea && selectionBox) {
           setSelectionBox({
@@ -248,17 +322,21 @@ export const useWhiteboardDrawing = ({
         }
 
         if (dragStart) {
-          if (isResizing && resizeHandle && selectedElements.length === 1) {
+          if (
+            isResizing &&
+            resizeHandle &&
+            selectedElements.length === 1 &&
+            resizeInitialBoundsRef.current
+          ) {
             const selectedElement = elements.find(
               (el) => el.id === selectedElements[0],
             );
             if (selectedElement) {
-              const originalBounds = getElementBounds(selectedElement);
               const updated = resizeElement(
                 selectedElement.id,
                 resizeHandle,
                 point,
-                originalBounds,
+                resizeInitialBoundsRef.current,
               );
               if (updated) {
                 updateElement(updated);
@@ -317,8 +395,10 @@ export const useWhiteboardDrawing = ({
       currentElement,
       getMousePosition,
       currentTool,
-      getElementsAtPoint,
-      deleteElements,
+      setCurrentElement,
+      handlePan,
+      eraserSize,
+      getElementsOnPath,
       dragStart,
       isDragging,
       isResizing,
@@ -327,17 +407,79 @@ export const useWhiteboardDrawing = ({
       resizeHandle,
       selectedElements,
       elements,
-      getElementBounds,
       resizeElement,
       updateElement,
       moveElements,
       hasEditAccess,
-      setCurrentElement,
-      handlePan,
+      deleteElements,
+      connectionDraft,
+      getElementsAtPoint,
     ],
   );
 
   const stopDrawing = useCallback(() => {
+    // ── Complete a connection drag ────────────────────────────────────────
+    if (connectionDraft) {
+      const targetElements = getElementsAtPoint(connectionDraft.currentPoint);
+      const target = [...targetElements]
+        .reverse()
+        .find(
+          (el) =>
+            (el.type === "rectangle" || el.type === "circle") &&
+            el.id !== connectionDraft.fromElementId,
+        );
+
+      if (target && addElementDirect) {
+        const fromEl = elements.find(
+          (el) => el.id === connectionDraft.fromElementId,
+        );
+        if (fromEl) {
+          const fromHandles = getElementConnectionHandles(fromEl);
+          const fromHandle = fromHandles.find(
+            (h) => h.name === connectionDraft.fromHandle,
+          );
+          const toHandles = getElementConnectionHandles(target);
+
+          // Find nearest target handle to the cursor
+          let nearestToHandle = toHandles[0];
+          let minDist = Infinity;
+          for (const h of toHandles) {
+            const d = Math.hypot(
+              connectionDraft.currentPoint.x - h.x,
+              connectionDraft.currentPoint.y - h.y,
+            );
+            if (d < minDist) {
+              minDist = d;
+              nearestToHandle = h;
+            }
+          }
+
+          if (fromHandle && nearestToHandle) {
+            addElementDirect({
+              id: generateId(),
+              type: "arrow",
+              points: [
+                { x: fromHandle.x, y: fromHandle.y },
+                { x: nearestToHandle.x, y: nearestToHandle.y },
+              ],
+              color: "#475569",
+              strokeWidth: 2,
+              startConnection: {
+                elementId: fromEl.id,
+                handle: fromHandle.name,
+              },
+              endConnection: {
+                elementId: target.id,
+                handle: nearestToHandle.name,
+              },
+            });
+          }
+        }
+      }
+      setConnectionDraft(null);
+      return;
+    }
+
     if (isSelectingArea && selectionBox) {
       if (
         Math.abs(selectionBox.start.x - selectionBox.end.x) > 5 ||
@@ -391,6 +533,12 @@ export const useWhiteboardDrawing = ({
     setCurrentElement,
     setSelectedElements,
     stopPanning,
+    connectionDraft,
+    getElementsAtPoint,
+    addElementDirect,
+    elements,
+    getElementConnectionHandles,
+    generateId,
   ]);
 
   // Text handling
@@ -442,10 +590,15 @@ export const useWhiteboardDrawing = ({
     selectionBox,
     textPosition,
 
+    // Connection state
+    hoveredElementId,
+    connectionDraft,
+
     // Actions
     startDrawing,
     draw,
     stopDrawing,
+    handleTextSubmit,
     handleTextCancel,
     cursorPosition,
     setCursorPosition,

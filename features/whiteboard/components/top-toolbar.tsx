@@ -6,13 +6,13 @@ import {
   Redo2,
   RotateCcw,
   Save,
-  Share,
   Trash2,
   Undo2,
   Users,
   ZoomIn,
   ZoomOut,
   ArrowLeft,
+  Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -33,6 +33,7 @@ interface TopToolbarProps {
   onSave: () => void;
   onLoad: () => void;
   onRename?: (title: string) => void;
+  onGenerateDiagram?: () => void;
   disabled?: boolean;
 }
 
@@ -53,6 +54,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   onSave,
   onLoad,
   onRename,
+  onGenerateDiagram,
   disabled = false,
 }) => {
   const router = useRouter();
@@ -220,6 +222,18 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             </span>
           </div>
         )}
+
+        {/* AI Generate Button */}
+        <button
+          onClick={onGenerateDiagram}
+          disabled={disabled || !onGenerateDiagram}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-xs font-semibold hover:from-violet-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md active:scale-95"
+          title="Generate diagram with AI"
+        >
+          <Sparkles size={14} />
+          <span className="hidden sm:inline">AI Generate</span>
+        </button>
+
         <button
           className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
           title="Collaborators"

@@ -50,6 +50,7 @@
     "convex": "^1.25.4",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+    "groq-sdk": "^0.37.0",
     "gsap": "^3.13.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.539.0",

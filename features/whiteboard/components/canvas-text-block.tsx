@@ -53,12 +53,7 @@ function ensureStyles() {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Fmt {
-  bold: boolean;
-  italic: boolean;
-  heading: "none" | "h1" | "h2" | "h3";
-  size: number;
-}
+import { TextFormat, TextToolbar } from "./text-toolbar";
 
 export interface CanvasTextBlockProps {
   element: DrawingElement;
@@ -89,160 +84,6 @@ export interface CanvasTextBlockProps {
 
 // ─── Formatting Toolbar ───────────────────────────────────────────────────────
 
-const H_LABELS = { none: "¶", h1: "H1", h2: "H2", h3: "H3" } as const;
-const HEADINGS: Fmt["heading"][] = ["none", "h1", "h2", "h3"];
-
-function Toolbar({
-  fmt,
-  color,
-  ax,
-  ay,
-  onBold,
-  onItalic,
-  onHeading,
-  onSize,
-}: {
-  fmt: Fmt;
-  color: string;
-  ax: number;
-  ay: number;
-  onBold: () => void;
-  onItalic: () => void;
-  onHeading: (h: Fmt["heading"]) => void;
-  onSize: (d: number) => void;
-}) {
-  return (
-    <div
-      className="ctb-bar"
-      onMouseDown={(e) => e.preventDefault()} // keep editor focused
-      style={{
-        position: "fixed",
-        top: ay - 52,
-        left: ax,
-        zIndex: 9999,
-        display: "flex",
-        alignItems: "center",
-        gap: 2,
-        padding: "4px 6px",
-        background: "rgba(24,24,27,0.8)",
-        backdropFilter: "blur(20px) saturate(180%)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 8,
-        boxShadow: "0 4px 15px rgba(0,0,0,0.25)",
-        userSelect: "none",
-        animation: "ctb-bar 0.12s cubic-bezier(.16,1,.3,1) forwards",
-      }}
-    >
-      <Btn active={fmt.bold} fw="bold" onClick={onBold} tip="Bold ⌘B">
-        B
-      </Btn>
-      <Btn active={fmt.italic} fi="italic" onClick={onItalic} tip="Italic ⌘I">
-        I
-      </Btn>
-      <Sep />
-      {HEADINGS.map((h) => (
-        <Btn
-          key={h}
-          active={fmt.heading === h}
-          fw="600"
-          fs={h === "none" ? 15 : 11}
-          w={h === "none" ? 24 : 30}
-          onClick={() => onHeading(h)}
-          tip={h === "none" ? "Body" : `H${h[1]}`}
-        >
-          {H_LABELS[h]}
-        </Btn>
-      ))}
-      <Sep />
-      <Btn
-        active={false}
-        fs={11}
-        w={28}
-        onClick={() => onSize(-2)}
-        tip="Smaller"
-      >
-        A−
-      </Btn>
-      <span
-        style={{
-          color: "rgba(255,255,255,0.4)",
-          fontSize: 10,
-          width: 22,
-          textAlign: "center",
-          fontFamily: "monospace",
-        }}
-      >
-        {fmt.size}
-      </span>
-      <Btn active={false} fs={11} w={28} onClick={() => onSize(2)} tip="Larger">
-        A+
-      </Btn>
-    </div>
-  );
-}
-
-function Btn({
-  active,
-  fw,
-  fi,
-  fs = 13,
-  w = 28,
-  onClick,
-  tip,
-  children,
-}: {
-  active: boolean;
-  fw?: string;
-  fi?: string;
-  fs?: number;
-  w?: number;
-  onClick: () => void;
-  tip?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      title={tip}
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onClick();
-      }}
-      style={{
-        background: active ? "rgba(255,255,255,0.18)" : "transparent",
-        border: "none",
-        borderRadius: 6,
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: w,
-        height: 28,
-        fontSize: fs,
-        fontFamily: "system-ui,sans-serif",
-        fontWeight: fw,
-        fontStyle: fi,
-        color: active ? "#fff" : "rgba(255,255,255,0.6)",
-        transition: "background 0.1s, color 0.1s",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Sep() {
-  return (
-    <div
-      style={{
-        width: 1,
-        height: 18,
-        background: "rgba(255,255,255,0.13)",
-        margin: "0 4px",
-      }}
-    />
-  );
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function CanvasTextBlock({
@@ -268,12 +109,12 @@ export function CanvasTextBlock({
   const [draft, setDraft] = useState(element.text || "");
 
   // ── Format ────────────────────────────────────────────────────────────────
-  const [fmt, setFmt] = useState<Fmt>(() => {
+  const [fmt, setFmt] = useState<TextFormat>(() => {
     const fw = element.fontWeight?.toString() || "400";
     const fs = element.fontStyle || "normal";
     const baseSize = element.fontSize || 18;
 
-    let heading: Fmt["heading"] = "none";
+    let heading: TextFormat["heading"] = "none";
     if (fw === "800") heading = "h1";
     else if (fw === "700") heading = "h2";
     else if (fw === "600" && baseSize >= 20) heading = "h3";
@@ -297,7 +138,7 @@ export function CanvasTextBlock({
   const [localPos, setLocalPos] = useState<{ x: number; y: number } | null>(
     null,
   );
-  const [dragging, setDragging] = useState(false);
+
   const dragRef = useRef<{
     mx: number;
     my: number;
@@ -475,7 +316,6 @@ export function CanvasTextBlock({
         cx: canvasPos.x,
         cy: canvasPos.y,
       };
-      setDragging(true);
 
       const handleMouseMove = (me: MouseEvent) => {
         if (!dragRef.current) return;
@@ -491,7 +331,6 @@ export function CanvasTextBlock({
           y: dragRef.current.cy + (me.clientY - dragRef.current.my) / zoom,
         };
         dragRef.current = null;
-        setDragging(false);
         setLocalPos(pos);
         onMove?.(pos);
         setTimeout(() => editorRef.current?.focus(), 40);
@@ -503,7 +342,6 @@ export function CanvasTextBlock({
         () => window.removeEventListener("mousemove", handleMouseMove),
         { once: true },
       );
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [canvasPos, zoom, disabled, onMove],
   );
@@ -566,9 +404,8 @@ export function CanvasTextBlock({
   return (
     <>
       {focused && toolbarAnchor && (
-        <Toolbar
+        <TextToolbar
           fmt={fmt}
-          color={element.color}
           ax={toolbarAnchor.x}
           ay={toolbarAnchor.y}
           onBold={() => {
@@ -679,7 +516,6 @@ export function CanvasTextBlock({
             contentEditable
             suppressContentEditableWarning
             spellCheck={false}
-            data-ph="Type..."
             className="ctb-editor"
             onFocus={handleFocus}
             onBlur={handleBlur}

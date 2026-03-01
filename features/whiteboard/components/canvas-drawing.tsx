@@ -1,5 +1,16 @@
-import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { useCallback, useEffect } from "react";
+import {
+  drawGrid,
+  drawElement,
+  getConnectionHandles,
+} from "../utils/canvas-render-utils";
+import { DrawingElement, Point } from "../types/whiteboard.types";
+
+interface ConnectionDraft {
+  fromElementId: string;
+  fromHandle: string;
+  currentPoint: Point;
+}
 
 interface CanvasEngineProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -17,10 +28,13 @@ interface CanvasEngineProps {
   editingTextId?: string | null;
   otherUsersDrafts?: DrawingElement[];
   otherUsersSelections?: Record<string, string>;
-  onElementSelect: (elementId: string) => void;
   cursorPosition?: { x: number; y: number } | null;
   eraserSize?: number;
   currentTool?: string;
+  /** ID of the shape that shows connection port handles */
+  hoveredElementId?: string | null;
+  /** Active connection being dragged from a port */
+  connectionDraft?: ConnectionDraft | null;
 }
 
 const useCanvasEngine = ({
@@ -36,354 +50,17 @@ const useCanvasEngine = ({
   editingTextId,
   otherUsersDrafts = [],
   otherUsersSelections = {},
-  onElementSelect,
   cursorPosition,
   eraserSize = 20,
   currentTool,
   getElementBounds,
+  hoveredElementId,
+  connectionDraft,
 }: CanvasEngineProps & {
-  getElementBounds: (element: DrawingElement) => any;
+  getElementBounds: (
+    element: DrawingElement,
+  ) => { minX: number; minY: number; maxX: number; maxY: number } | null;
 }) => {
-  const drawGrid = useCallback(
-    (ctx: CanvasRenderingContext2D) => {
-      if (!showGrid) return;
-
-      const gridSize = 20 * zoom;
-      const majorGridSize = gridSize * 5;
-      const width = ctx.canvas.width;
-      const height = ctx.canvas.height;
-
-      // Start from the visible top-left corner
-      const offsetX = panOffset.x % gridSize;
-      const offsetY = panOffset.y % gridSize;
-
-      for (let x = offsetX; x < width; x += gridSize) {
-        for (let y = offsetY; y < height; y += gridSize) {
-          const worldX = (x - panOffset.x) / zoom;
-          const worldY = (y - panOffset.y) / zoom;
-
-          // Check if it's a major grid point (every 100 world units)
-          const isMajor =
-            Math.abs(Math.round(worldX) % 100) < 1 &&
-            Math.abs(Math.round(worldY) % 100) < 1;
-
-          ctx.beginPath();
-          if (isMajor) {
-            ctx.fillStyle = "#cbd5e1"; // Darker for major
-            ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-          } else {
-            ctx.fillStyle = "#e2e8f0"; // Lighter for minor
-            ctx.arc(x, y, 1, 0, Math.PI * 2);
-          }
-          ctx.fill();
-        }
-      }
-    },
-    [showGrid, zoom, panOffset],
-  );
-
-  const drawElement = useCallback(
-    (
-      ctx: CanvasRenderingContext2D,
-      element: DrawingElement,
-      isSelected = false,
-    ) => {
-      // Save context state
-      ctx.save();
-
-      ctx.strokeStyle = element.color;
-      ctx.lineWidth = element.strokeWidth;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.globalAlpha = isSelected ? 1 : 1;
-
-      if (element.fill) {
-        ctx.fillStyle = element.fill;
-      }
-
-      switch (element.type) {
-        case "freehand":
-          if (element.points.length > 1) {
-            ctx.beginPath();
-            ctx.moveTo(
-              element.points[0].x * zoom + panOffset.x,
-              element.points[0].y * zoom + panOffset.y,
-            );
-            for (let i = 1; i < element.points.length; i++) {
-              ctx.lineTo(
-                element.points[i].x * zoom + panOffset.x,
-                element.points[i].y * zoom + panOffset.y,
-              );
-            }
-            ctx.stroke();
-          }
-          break;
-
-        case "rectangle":
-          if (element.points.length === 2) {
-            const startX = element.points[0].x * zoom + panOffset.x;
-            const startY = element.points[0].y * zoom + panOffset.y;
-            const endX = element.points[1].x * zoom + panOffset.x;
-            const endY = element.points[1].y * zoom + panOffset.y;
-
-            const width = endX - startX;
-            const height = endY - startY;
-
-            if (element.fill) {
-              ctx.fillRect(startX, startY, width, height);
-            }
-            ctx.strokeRect(startX, startY, width, height);
-          }
-          break;
-
-        case "circle":
-          if (element.points.length === 2) {
-            const centerX = element.points[0].x * zoom + panOffset.x;
-            const centerY = element.points[0].y * zoom + panOffset.y;
-            const endX = element.points[1].x * zoom + panOffset.x;
-            const endY = element.points[1].y * zoom + panOffset.y;
-
-            const radius = Math.sqrt(
-              Math.pow(endX - centerX, 2) + Math.pow(endY - centerY, 2),
-            );
-
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-            if (element.fill) {
-              ctx.fill();
-            }
-            ctx.stroke();
-          }
-          break;
-
-        case "line":
-          if (element.points.length === 2) {
-            ctx.beginPath();
-            ctx.moveTo(
-              element.points[0].x * zoom + panOffset.x,
-              element.points[0].y * zoom + panOffset.y,
-            );
-            ctx.lineTo(
-              element.points[1].x * zoom + panOffset.x,
-              element.points[1].y * zoom + panOffset.y,
-            );
-            ctx.stroke();
-          }
-          break;
-
-        case "arrow":
-          if (element.points.length === 2) {
-            const startX = element.points[0].x * zoom + panOffset.x;
-            const startY = element.points[0].y * zoom + panOffset.y;
-            const endX = element.points[1].x * zoom + panOffset.x;
-            const endY = element.points[1].y * zoom + panOffset.y;
-
-            // Draw line
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(endX, endY);
-            ctx.stroke();
-
-            // Draw arrowhead
-            const angle = Math.atan2(endY - startY, endX - startX);
-            const arrowLength = 15;
-            const arrowAngle = Math.PI / 6;
-
-            ctx.beginPath();
-            ctx.moveTo(endX, endY);
-            ctx.lineTo(
-              endX - arrowLength * Math.cos(angle - arrowAngle),
-              endY - arrowLength * Math.sin(angle - arrowAngle),
-            );
-            ctx.moveTo(endX, endY);
-            ctx.lineTo(
-              endX - arrowLength * Math.cos(angle + arrowAngle),
-              endY - arrowLength * Math.sin(angle + arrowAngle),
-            );
-            ctx.stroke();
-          }
-          break;
-
-        case "text":
-          if (
-            element.text &&
-            element.fontSize &&
-            element.id !== editingTextId
-          ) {
-            ctx.textBaseline = "top";
-            const weight =
-              element.fontWeight ||
-              (element.fontSize >= 36
-                ? "800"
-                : element.fontSize >= 26
-                  ? "700"
-                  : element.fontSize >= 20
-                    ? "600"
-                    : "400");
-            const style = element.fontStyle || "normal";
-
-            // Sync scaling logic with CanvasTextBlock
-            const baseSize = element.fontSize;
-            let effectiveSize = baseSize;
-            if (weight === "800") effectiveSize = Math.max(baseSize, 36);
-            else if (weight === "700") effectiveSize = Math.max(baseSize, 26);
-            else if (weight === "600" && baseSize >= 20)
-              effectiveSize = Math.max(baseSize, 20);
-
-            // Enhanced font stack for premium look
-            ctx.font = `${style} ${weight} ${effectiveSize * zoom}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
-            ctx.fillStyle = element.color;
-
-            const lines = element.text.split("\n");
-            const lineHeight = effectiveSize * zoom * 1.2;
-            const startX = element.points[0].x * zoom + panOffset.x;
-            const startY = element.points[0].y * zoom + panOffset.y;
-
-            lines.forEach((line, i) => {
-              ctx.fillText(line, startX, startY + i * lineHeight);
-            });
-          }
-          break;
-      }
-
-      // Draw selection box and resize handles
-      if (isSelected) {
-        const bounds = getElementBounds(element);
-        if (bounds) {
-          const { minX, minY, maxX, maxY } = bounds;
-
-          // Reset any transformations and line styles
-          ctx.restore();
-          ctx.save();
-
-          // Selection box
-          ctx.strokeStyle = "#007bff";
-          ctx.lineWidth = 1;
-
-          if (element.type === "text") {
-            // Text selection: Solid, ultra-thin, low-opacity (Eraser-style)
-            ctx.setLineDash([]);
-            ctx.strokeStyle = "rgba(0, 123, 255, 0.25)";
-            ctx.lineWidth = 1;
-            ctx.strokeRect(
-              minX * zoom + panOffset.x - 4,
-              minY * zoom + panOffset.y - 4,
-              (maxX - minX) * zoom + 8,
-              (maxY - minY) * zoom + 8,
-            );
-          } else if (element.type !== "line" && element.type !== "arrow") {
-            ctx.setLineDash([5, 5]);
-            ctx.strokeStyle = "#007bff";
-            ctx.strokeRect(
-              minX * zoom + panOffset.x - 5,
-              minY * zoom + panOffset.y - 5,
-              (maxX - minX) * zoom + 10,
-              (maxY - minY) * zoom + 10,
-            );
-          } else if (element.points.length >= 2) {
-            // For lines, just subtly highlight the segment itself
-            ctx.setLineDash([]);
-            ctx.beginPath();
-            ctx.moveTo(
-              element.points[0].x * zoom + panOffset.x,
-              element.points[0].y * zoom + panOffset.y,
-            );
-            ctx.lineTo(
-              element.points[1].x * zoom + panOffset.x,
-              element.points[1].y * zoom + panOffset.y,
-            );
-            ctx.lineWidth = (element.strokeWidth || 2) + 4;
-            ctx.strokeStyle = "rgba(0, 123, 255, 0.3)";
-            ctx.stroke();
-          }
-
-          // Resize handles
-          ctx.setLineDash([]); // Reset line dash
-          ctx.fillStyle = "#ffffff";
-          ctx.strokeStyle = "#007bff";
-          ctx.lineWidth = 1.5;
-
-          const handleSize = 8;
-          let handles: { x: number; y: number }[] = [];
-
-          if (element.type === "line" || element.type === "arrow") {
-            // Lines and arrows only have 2 endpoints
-            if (element.points.length >= 2) {
-              handles = [
-                {
-                  x: element.points[0].x * zoom + panOffset.x,
-                  y: element.points[0].y * zoom + panOffset.y,
-                },
-                {
-                  x: element.points[1].x * zoom + panOffset.x,
-                  y: element.points[1].y * zoom + panOffset.y,
-                },
-              ];
-            }
-          } else {
-            // Full 8-point bounding box for other shapes
-            handles = [
-              { x: minX * zoom + panOffset.x, y: minY * zoom + panOffset.y }, // nw
-              {
-                x: ((minX + maxX) / 2) * zoom + panOffset.x,
-                y: minY * zoom + panOffset.y,
-              }, // n
-              { x: maxX * zoom + panOffset.x, y: minY * zoom + panOffset.y }, // ne
-              {
-                x: maxX * zoom + panOffset.x,
-                y: ((minY + maxY) / 2) * zoom + panOffset.y,
-              }, // e
-              { x: maxX * zoom + panOffset.x, y: maxY * zoom + panOffset.y }, // se
-              {
-                x: ((minX + maxX) / 2) * zoom + panOffset.x,
-                y: maxY * zoom + panOffset.y,
-              }, // s
-              { x: minX * zoom + panOffset.x, y: maxY * zoom + panOffset.y }, // sw
-              {
-                x: minX * zoom + panOffset.x,
-                y: ((minY + maxY) / 2) * zoom + panOffset.y,
-              }, // w
-            ];
-          }
-
-          // Text elements in Eraser don't have 8 resize handles — keep it clean
-          if (element.type !== "text") {
-            handles.forEach((h) => {
-              ctx.beginPath();
-              ctx.arc(h.x, h.y, handleSize / 1.5, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
-            });
-          }
-        }
-      }
-
-      // Restore context state
-      ctx.restore();
-
-      // Draw remote selection highlights *after* restoring so we don't mess up the shape's context,
-      // but only if it's NOT selected locally (local selection takes visual priority)
-      if (!isSelected && otherUsersSelections[element.id]) {
-        const bounds = getElementBounds(element);
-        if (bounds) {
-          const { minX, minY, maxX, maxY } = bounds;
-          ctx.save();
-          ctx.strokeStyle = "rgba(255, 100, 100, 0.8)"; // red tint for remote
-          ctx.lineWidth = 1;
-          ctx.setLineDash([5, 5]);
-          ctx.strokeRect(
-            minX * zoom + panOffset.x - 5,
-            minY * zoom + panOffset.y - 5,
-            (maxX - minX) * zoom + 10,
-            (maxY - minY) * zoom + 10,
-          );
-          ctx.restore();
-        }
-      }
-    },
-    [zoom, panOffset, getElementBounds, otherUsersSelections],
-  );
-
   // Force re-render when selection changes
   const forceRender = useCallback(() => {
     const canvas = canvasRef.current;
@@ -401,24 +78,34 @@ const useCanvasEngine = ({
     ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
     // Draw grid
-    drawGrid(ctx);
+    drawGrid(ctx, showGrid, zoom, panOffset);
+
+    // Construct render context mapping
+    const renderCtx = {
+      zoom,
+      panOffset,
+      getElementBounds,
+      otherUsersSelections,
+      editingTextId,
+      hoveredElementId,
+    };
 
     // Draw all elements with selection state
     elements.forEach((element) => {
       const isSelected = selectedElements.includes(element.id);
-      drawElement(ctx, element, isSelected);
+      drawElement(ctx, element, isSelected, renderCtx);
     });
 
     // Draw current element
     if (currentElement) {
-      drawElement(ctx, currentElement);
+      drawElement(ctx, currentElement, false, renderCtx);
     }
 
     // Draw other users' active drafts
     otherUsersDrafts.forEach((draft) => {
       ctx.save();
       ctx.globalAlpha = 0.5; // Draw others' drafts semi-transparently
-      drawElement(ctx, draft);
+      drawElement(ctx, draft, false, renderCtx);
       ctx.restore();
     });
 
@@ -467,11 +154,58 @@ const useCanvasEngine = ({
       );
       ctx.restore();
     }
+
+    // ── Connection draft preview ─────────────────────────────────────────
+    if (connectionDraft) {
+      const fromEl = elements.find(
+        (el) => el.id === connectionDraft.fromElementId,
+      );
+      if (fromEl) {
+        const fromBounds = getElementBounds(fromEl);
+        const fromHandles = getConnectionHandles(fromEl, fromBounds);
+        const fromHandle = fromHandles.find(
+          (h) => h.name === connectionDraft.fromHandle,
+        );
+        if (fromHandle) {
+          const sx = fromHandle.x * zoom + panOffset.x;
+          const sy = fromHandle.y * zoom + panOffset.y;
+          const ex = connectionDraft.currentPoint.x * zoom + panOffset.x;
+          const ey = connectionDraft.currentPoint.y * zoom + panOffset.y;
+
+          ctx.save();
+          ctx.setLineDash([6, 4]);
+          ctx.strokeStyle = "#38bdf8";
+          ctx.lineWidth = 2;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+
+          // Arrowhead at cursor
+          const angle = Math.atan2(ey - sy, ex - sx);
+          const arrowLen = 12;
+          ctx.setLineDash([]);
+          ctx.fillStyle = "#38bdf8";
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(
+            ex - arrowLen * Math.cos(angle - Math.PI / 6),
+            ey - arrowLen * Math.sin(angle - Math.PI / 6),
+          );
+          ctx.lineTo(
+            ex - arrowLen * Math.cos(angle + Math.PI / 6),
+            ey - arrowLen * Math.sin(angle + Math.PI / 6),
+          );
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
   }, [
     elements,
     currentElement,
-    drawGrid,
-    drawElement,
     selectedElements,
     otherUsersDrafts,
     selectionBox,
@@ -480,6 +214,13 @@ const useCanvasEngine = ({
     cursorPosition,
     eraserSize,
     currentTool,
+    canvasRef,
+    editingTextId,
+    getElementBounds,
+    otherUsersSelections,
+    showGrid,
+    hoveredElementId,
+    connectionDraft,
   ]);
 
   // Render canvas

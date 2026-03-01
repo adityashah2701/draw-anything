@@ -1,19 +1,12 @@
-"use client";
+import React, { useState } from "react";
+import { CreateOrgForm } from "@/features/organizations/components/create-org-form";
 import { ClerkDialog } from "@/features/dashboard/dialogs/custom-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { CreateOrganization } from "@clerk/nextjs";
-import { Building2, Plus, X } from "lucide-react";
-import React, { useState } from "react";
+import { Building2, Plus } from "lucide-react";
+import { User } from "@clerk/nextjs/server";
 
-const NoOrganization = ({ user }: any) => {
+const NoOrganization = ({ user }: { user: User }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (
@@ -24,7 +17,7 @@ const NoOrganization = ({ user }: any) => {
             Team Members
           </h1>
           <p className="text-gray-600">
-            You're currently working as an individual user
+            You&apos;re currently working as an individual user
           </p>
         </div>
 
@@ -50,23 +43,13 @@ const NoOrganization = ({ user }: any) => {
                 </Button>
               }
             >
-              <CreateOrganization
-                appearance={{
-                  elements: {
-                    cardBox: {
-                      height: "100%",
-                      width: "100%",
-                      overflow: "hidden",
-                    },
-                    rootBox: {
-                      height: "100%",
-                      width: "100%",
-                    },
-                  },
-                }}
-              />
+              <div className="p-4 w-[400px]">
+                <h2 className="text-xl font-semibold mb-4 text-left">
+                  Create Organization
+                </h2>
+                <CreateOrgForm onSuccess={() => setIsDialogOpen(false)} />
+              </div>
             </ClerkDialog>
-           
           </div>
         </div>
 
@@ -76,7 +59,7 @@ const NoOrganization = ({ user }: any) => {
           </h3>
           <div className="flex items-center gap-4">
             <Avatar className="h-12 w-12">
-              <AvatarImage src={user?.imageUrl} alt={user?.fullName} />
+              <AvatarImage src={user?.imageUrl} alt={user?.fullName || "Name"} />
               <AvatarFallback className="bg-blue-100 text-blue-700 font-medium">
                 {user?.fullName
                   ?.split(" ")

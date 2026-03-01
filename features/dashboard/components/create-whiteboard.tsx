@@ -18,18 +18,14 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus,
   X,
-  FileText,
   Globe,
   Lock,
   Users,
   Tag,
   Sparkles,
-  Brain,
-  Layers,
-  BarChart3,
-  MessageSquare,
   Loader2,
 } from "lucide-react";
+import { TEMPLATE_TYPES, SUGGESTED_TAGS } from "../constants/templates";
 
 interface CreateWhiteboardDialogProps {
   isOpen: boolean;
@@ -48,57 +44,10 @@ interface WhiteboardData {
   templateType?: string;
 }
 
-const TEMPLATE_TYPES = [
-  {
-    id: "blank",
-    name: "Blank Canvas",
-    description: "Start from scratch with a clean whiteboard",
-    icon: <FileText className="w-5 h-5" />,
-  },
-  {
-    id: "brainstorm",
-    name: "Brainstorming Session",
-    description: "Perfect for ideation and creative thinking",
-    icon: <Brain className="w-5 h-5" />,
-  },
-  {
-    id: "project-planning",
-    name: "Project Planning",
-    description: "Organize tasks, timelines, and resources",
-    icon: <Layers className="w-5 h-5" />,
-  },
-  {
-    id: "data-analysis",
-    name: "Data Analysis",
-    description: "Visualize data and create insights",
-    icon: <BarChart3 className="w-5 h-5" />,
-  },
-  {
-    id: "meeting-notes",
-    name: "Meeting Notes",
-    description: "Capture meeting discussions and action items",
-    icon: <MessageSquare className="w-5 h-5" />,
-  },
-];
-
-const SUGGESTED_TAGS = [
-  "brainstorming",
-  "planning",
-  "design",
-  "strategy",
-  "research",
-  "meeting",
-  "prototype",
-  "workflow",
-  "analysis",
-  "presentation",
-];
-
 const CreateWhiteboardDialog = ({
   isOpen,
   onOpenChange,
   trigger,
-  organizationId,
   onCreateWhiteboard,
 }: CreateWhiteboardDialogProps) => {
   const [formData, setFormData] = useState<WhiteboardData>({
@@ -113,7 +62,10 @@ const CreateWhiteboardDialog = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(TEMPLATE_TYPES[0]);
 
-  const handleInputChange = (field: keyof WhiteboardData, value: any) => {
+  const handleInputChange = (
+    field: keyof WhiteboardData,
+    value: string | boolean | string[],
+  ) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -131,7 +83,7 @@ const CreateWhiteboardDialog = ({
   const removeTag = (tagToRemove: string) => {
     handleInputChange(
       "tags",
-      formData.tags.filter((tag) => tag !== tagToRemove)
+      formData.tags.filter((tag) => tag !== tagToRemove),
     );
   };
 

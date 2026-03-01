@@ -8,11 +8,13 @@ import PropertiesPanel from "@/features/whiteboard/components/properties-panel";
 import Sidebar from "@/features/whiteboard/components/sidebar";
 import CanvasTextBlock from "@/features/whiteboard/components/canvas-text-block";
 import TopToolbar from "@/features/whiteboard/components/top-toolbar";
+import AIDiagramModal from "@/features/whiteboard/components/ai-diagram-modal";
 import { CommandMenu } from "@/features/whiteboard/components/command-menu";
 import {
   DrawingElement,
   Tool,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { getConnectionHandles } from "@/features/whiteboard/utils/canvas-render-utils";
 import { DrawingElementJson } from "@/liveblocks.config";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -63,13 +65,14 @@ const WhiteboardCanvas: React.FC = () => {
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [fillColor, setFillColor] = useState("#transparent");
   const [fontSize, setFontSize] = useState(16);
-  const [eraserSize, setEraserSize] = useState(20);
+  const [eraserSize] = useState(20);
 
   // UI state
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [showOutlineColorPicker, setShowOutlineColorPicker] = useState(false);
   const [showFillColorPicker, setShowFillColorPicker] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
   const seededRef = useRef(false);
 
   // Inline text editing state
@@ -98,11 +101,13 @@ const WhiteboardCanvas: React.FC = () => {
   // Read elements from shared LiveList (real-time, all users)
   const liveElements = useStorage((root) => root.elements);
   // Derived plain array for canvas rendering
-  const elements: DrawingElement[] = liveElements
-    ? liveElements.map(
-        (el: DrawingElementJson) => el as unknown as DrawingElement,
-      )
-    : [];
+  const elements = React.useMemo(
+    () =>
+      (liveElements || [])
+        .filter(Boolean)
+        .map((el: DrawingElementJson) => el as unknown as DrawingElement),
+    [liveElements],
+  );
 
   // Mutation: add a single completed element
   const addElement = useLiveblocksM(
@@ -201,6 +206,73 @@ const WhiteboardCanvas: React.FC = () => {
     getElementsOnPath,
   } = useWhiteboardUtils(canvasViewport.zoom, elements);
 
+  // Helper to re-evaluate arrow positions when connected shapes move/resize
+  const updateConnectedArrows = useCallback(
+    (changedElements: DrawingElement[], allElements: DrawingElement[]) => {
+      const changedIds = changedElements.map((el) => el.id);
+      const arrowsToUpdate: DrawingElement[] = [];
+
+      allElements.forEach((el) => {
+        if (el.type === "arrow" && (el.startConnection || el.endConnection)) {
+          let needsUpdate = false;
+          const newPoints = [...el.points];
+
+          // Check if start is connected to a changed shape
+          if (
+            el.startConnection &&
+            changedIds.includes(el.startConnection.elementId)
+          ) {
+            const tgt = changedElements.find(
+              (c) => c.id === el.startConnection!.elementId,
+            );
+            if (tgt) {
+              const bounds = getElementBounds(tgt);
+              const handles = getConnectionHandles(tgt, bounds);
+              const h = handles.find(
+                (h) => h.name === el.startConnection!.handle,
+              );
+              if (h) {
+                newPoints[0] = { x: h.x, y: h.y };
+                needsUpdate = true;
+              }
+            }
+          } else if (el.startConnection) {
+            // Recalculate from the existing shape to ensure it stays anchored if canvas shifts or parent is also in allElements but not changedElements (though changedElements should capture the dragging one)
+            // But usually we only need to update the end that moved.
+          }
+
+          // Check if end is connected to a changed shape
+          if (
+            el.endConnection &&
+            changedIds.includes(el.endConnection.elementId)
+          ) {
+            const tgt = changedElements.find(
+              (c) => c.id === el.endConnection!.elementId,
+            );
+            if (tgt) {
+              const bounds = getElementBounds(tgt);
+              const handles = getConnectionHandles(tgt, bounds);
+              const h = handles.find(
+                (h) => h.name === el.endConnection!.handle,
+              );
+              if (h) {
+                newPoints[1] = { x: h.x, y: h.y };
+                needsUpdate = true;
+              }
+            }
+          }
+
+          if (needsUpdate) {
+            arrowsToUpdate.push({ ...el, points: newPoints });
+          }
+        }
+      });
+
+      return arrowsToUpdate;
+    },
+    [getElementBounds],
+  );
+
   const whiteboardDrawing = useWhiteboardDrawing({
     currentTool,
     currentColor,
@@ -213,8 +285,23 @@ const WhiteboardCanvas: React.FC = () => {
     getElementsInBounds,
     getResizeHandle,
     deleteElements: (ids) => deleteElementsLive(ids),
-    moveElements,
-    resizeElement,
+    moveElements: (ids, dx, dy) => {
+      const moved = moveElements(ids, dx, dy);
+      // Trigger connected arrow updates
+      const arrows = updateConnectedArrows(moved, elements);
+      arrows.forEach((a) => updateElement(a as unknown as DrawingElementJson));
+      return moved;
+    },
+    resizeElement: (id, handle, pt, bounds) => {
+      const resized = resizeElement(id, handle, pt, bounds);
+      if (resized) {
+        const arrows = updateConnectedArrows([resized], elements);
+        arrows.forEach((a) =>
+          updateElement(a as unknown as DrawingElementJson),
+        );
+      }
+      return resized;
+    },
     updateElement: (el) => updateElement(el as unknown as DrawingElementJson),
     getElementBounds,
     getElementsOnPath,
@@ -232,6 +319,8 @@ const WhiteboardCanvas: React.FC = () => {
       }
     },
     saveToHistory: () => {},
+    // Directly add an arrow element created by connection drag
+    addElementDirect: (el) => addElement(el as unknown as DrawingElementJson),
     startPanning: canvasViewport.startPanning,
     handlePan: canvasViewport.handlePan,
     stopPanning: canvasViewport.stopPanning,
@@ -297,6 +386,30 @@ const WhiteboardCanvas: React.FC = () => {
     });
   }, [currentElement, updateMyPresence]);
 
+  // Sync properties panel with selected element
+  useEffect(() => {
+    if (selectedElements.length === 1) {
+      const selected = elements.find((el) => el.id === selectedElements[0]);
+      if (selected) {
+        if (selected.color && selected.color !== currentColor)
+          setCurrentColor(selected.color);
+        if (selected.strokeWidth && selected.strokeWidth !== strokeWidth)
+          setStrokeWidth(selected.strokeWidth);
+        const fillValue = selected.fill || "#transparent";
+        if (fillValue !== fillColor) setFillColor(fillValue);
+        if (selected.fontSize && selected.fontSize !== fontSize)
+          setFontSize(selected.fontSize);
+      }
+    }
+  }, [
+    selectedElements,
+    elements,
+    currentColor,
+    strokeWidth,
+    fillColor,
+    fontSize,
+  ]);
+
   const others = useOthers();
   const otherUsersDrafts = others
     .map((o) => o.presence.pencilDraft as unknown as DrawingElement)
@@ -328,17 +441,12 @@ const WhiteboardCanvas: React.FC = () => {
     selectedElements,
     selectionBox: whiteboardDrawing.selectionBox,
     editingTextId: editingTextElement?.id || null,
-    onElementSelect: (elementId: string) => {
-      setSelectedElements((prev) =>
-        prev.includes(elementId)
-          ? prev.filter((id) => id !== elementId)
-          : [elementId],
-      );
-    },
-    getElementBounds: getElementBounds,
+    getElementBounds,
     cursorPosition: whiteboardDrawing.cursorPosition,
     eraserSize: eraserSize,
     currentTool: currentTool,
+    hoveredElementId: whiteboardDrawing.hoveredElementId,
+    connectionDraft: whiteboardDrawing.connectionDraft,
   });
 
   // Load whiteboard data (simulated)
@@ -355,11 +463,62 @@ const WhiteboardCanvas: React.FC = () => {
   const handleColorChange = (color: string) => {
     setCurrentColor(color);
     setShowOutlineColorPicker(false);
+
+    if (selectedElements.length > 0 && whiteboardAccess.hasEditAccess) {
+      selectedElements.forEach((id) => {
+        const el = elements.find((e) => e.id === id);
+        if (el) {
+          updateElement({ ...el, color } as unknown as DrawingElementJson);
+        }
+      });
+    }
   };
 
   const handleFillColorChange = (color: string) => {
     setFillColor(color);
     setShowFillColorPicker(false);
+
+    if (selectedElements.length > 0 && whiteboardAccess.hasEditAccess) {
+      selectedElements.forEach((id) => {
+        const el = elements.find((e) => e.id === id);
+        if (el) {
+          updateElement({
+            ...el,
+            fill: color,
+          } as unknown as DrawingElementJson);
+        }
+      });
+    }
+  };
+
+  const handleStrokeWidthChange = (width: number) => {
+    setStrokeWidth(width);
+    if (selectedElements.length > 0 && whiteboardAccess.hasEditAccess) {
+      selectedElements.forEach((id) => {
+        const el = elements.find((e) => e.id === id);
+        if (el) {
+          updateElement({
+            ...el,
+            strokeWidth: width,
+          } as unknown as DrawingElementJson);
+        }
+      });
+    }
+  };
+
+  const handleFontSizeChange = (size: number) => {
+    setFontSize(size);
+    if (selectedElements.length > 0 && whiteboardAccess.hasEditAccess) {
+      selectedElements.forEach((id) => {
+        const el = elements.find((e) => e.id === id);
+        if (el) {
+          updateElement({
+            ...el,
+            fontSize: size,
+          } as unknown as DrawingElementJson);
+        }
+      });
+    }
   };
 
   const handleToggleOutlineColorPicker = () => {
@@ -399,6 +558,7 @@ const WhiteboardCanvas: React.FC = () => {
               toast.success("Whiteboard renamed");
             }
           }}
+          onGenerateDiagram={() => setShowAIModal(true)}
           disabled={!whiteboardAccess.hasEditAccess}
         />
       </div>
@@ -417,8 +577,8 @@ const WhiteboardCanvas: React.FC = () => {
           onFillColorChange={handleFillColorChange}
           onToggleOutlineColorPicker={handleToggleOutlineColorPicker}
           onToggleFillColorPicker={handleToggleFillColorPicker}
-          onStrokeWidthChange={setStrokeWidth}
-          onFontSizeChange={setFontSize}
+          onStrokeWidthChange={handleStrokeWidthChange}
+          onFontSizeChange={handleFontSizeChange}
           disabled={!whiteboardAccess.hasEditAccess}
           isSaving={whiteboardAutoSave.isSaving}
           lastSaved={whiteboardAutoSave.lastSaved}
@@ -455,31 +615,9 @@ const WhiteboardCanvas: React.FC = () => {
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0"></div>
               <span className="text-sm text-yellow-800 truncate">
-                Read-only mode - You don't have edit access to this whiteboard
+                Read-only mode - You don&apos;t have edit access to this
+                whiteboard
               </span>
-            </div>
-          </div>
-        )}
-
-        {/* Selection Info */}
-        {selectedElements.length > 0 && (
-          <div className="absolute bottom-24 left-4 bg-blue-100 border border-blue-300 rounded-lg p-2 z-40 max-w-[300px]">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-blue-800 flex-shrink-0">
-                {selectedElements.length} element
-                {selectedElements.length > 1 ? "s" : ""} selected
-              </span>
-              {whiteboardAccess.hasEditAccess && (
-                <button
-                  onClick={() => {
-                    deleteElementsLive(selectedElements);
-                    setSelectedElements([]);
-                  }}
-                  className="ml-2 px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 flex-shrink-0"
-                >
-                  Delete
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -549,7 +687,7 @@ const WhiteboardCanvas: React.FC = () => {
           }}
           onMouseUp={whiteboardDrawing.stopDrawing}
           onMouseLeave={whiteboardDrawing.stopDrawing}
-          onMouseEnter={(e) => {}}
+          onMouseEnter={() => {}}
           className="cursor-crosshair"
           style={{
             width: canvasViewport.canvasSize.width,
@@ -571,6 +709,41 @@ const WhiteboardCanvas: React.FC = () => {
         <KeyboardShortcuts
           isOpen={showShortcuts}
           onClose={() => setShowShortcuts(false)}
+        />
+
+        {/* AI Diagram Modal */}
+        <AIDiagramModal
+          isOpen={showAIModal}
+          onClose={() => setShowAIModal(false)}
+          disabled={!whiteboardAccess.hasEditAccess}
+          onGenerate={(newElements) => {
+            // Place elements in the center of the current viewport
+            const offsetX = canvasViewport.panOffset.x / canvasViewport.zoom;
+            const offsetY = canvasViewport.panOffset.y / canvasViewport.zoom;
+            // Find bounding box of generated elements
+            const allX = newElements.flatMap((el) => el.points.map((p) => p.x));
+            const allY = newElements.flatMap((el) => el.points.map((p) => p.y));
+            const minX = Math.min(...allX);
+            const minY = Math.min(...allY);
+            // Shift so the diagram starts where the viewport is
+            const shiftX = -minX - offsetX + 80;
+            const shiftY = -minY - offsetY + 80;
+
+            newElements.forEach((el) => {
+              const shifted = {
+                ...el,
+                points: el.points.map((p) => ({
+                  x: p.x + shiftX,
+                  y: p.y + shiftY,
+                })),
+              };
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              addElement(shifted as any);
+            });
+            toast.success(
+              `✨ AI added ${newElements.length} elements to the canvas!`,
+            );
+          }}
         />
 
         <CommandMenu

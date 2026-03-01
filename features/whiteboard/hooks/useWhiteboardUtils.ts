@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import {
   DrawingElement,
   Point,
+  Bounds,
 } from "@/features/whiteboard/types/whiteboard.types";
 
 export const useWhiteboardUtils = (
@@ -140,22 +141,6 @@ export const useWhiteboardUtils = (
 
         case "text":
           if (element.text && element.fontSize) {
-            const weight =
-              element.fontWeight ||
-              (element.fontSize >= 36
-                ? "800"
-                : element.fontSize >= 26
-                  ? "700"
-                  : element.fontSize >= 20
-                    ? "600"
-                    : "400");
-            const baseSize = element.fontSize;
-            let effectiveSize = baseSize;
-            if (weight === "800") effectiveSize = Math.max(baseSize, 36);
-            else if (weight === "700") effectiveSize = Math.max(baseSize, 26);
-            else if (weight === "600" && baseSize >= 20)
-              effectiveSize = Math.max(baseSize, 20);
-
             // Re-use logic from getElementBounds for consistency
             const bounds = getElementBounds(element);
             if (!bounds) return false;
@@ -250,7 +235,20 @@ export const useWhiteboardUtils = (
       if (!bounds) return null;
 
       const handleSize = 8 / zoom;
-      const { minX, minY, maxX, maxY } = bounds;
+      let { minX, minY, maxX, maxY } = bounds;
+
+      // Add padding for stroke width so handles are on the outer edge
+      if (
+        element.type !== "text" &&
+        element.type !== "line" &&
+        element.type !== "arrow"
+      ) {
+        const padding = (element.strokeWidth || 2) / 2;
+        minX -= padding;
+        minY -= padding;
+        maxX += padding;
+        maxY += padding;
+      }
 
       let handles: { name: string; x: number; y: number }[] = [];
 
@@ -314,7 +312,7 @@ export const useWhiteboardUtils = (
       elementId: string,
       handle: string,
       point: Point,
-      originalBounds: any,
+      originalBounds: Bounds,
     ): DrawingElement | null => {
       const element = elements.find((e) => e.id === elementId);
       if (!element) return null;
@@ -324,39 +322,68 @@ export const useWhiteboardUtils = (
       let newFontSize = element.fontSize;
 
       if (element.type === "rectangle" || element.type === "circle") {
-        if (element.points.length === 2) {
-          let [start, end] = element.points;
+        const padding = (element.strokeWidth || 2) / 2;
+        let pMinX = bounds.minX - padding;
+        let pMinY = bounds.minY - padding;
+        let pMaxX = bounds.maxX + padding;
+        let pMaxY = bounds.maxY + padding;
 
-          switch (handle) {
-            case "nw":
-              start = { x: point.x, y: point.y };
-              break;
-            case "ne":
-              start = { x: start.x, y: point.y };
-              end = { x: point.x, y: end.y };
-              break;
-            case "se":
-              end = { x: point.x, y: point.y };
-              break;
-            case "sw":
-              start = { x: point.x, y: start.y };
-              end = { x: end.x, y: point.y };
-              break;
-            case "n":
-              start = { x: start.x, y: point.y };
-              break;
-            case "s":
-              end = { x: end.x, y: point.y };
-              break;
-            case "e":
-              end = { x: point.x, y: end.y };
-              break;
-            case "w":
-              start = { x: point.x, y: start.y };
-              break;
-          }
+        switch (handle) {
+          case "nw":
+            pMinX = point.x;
+            pMinY = point.y;
+            break;
+          case "ne":
+            pMaxX = point.x;
+            pMinY = point.y;
+            break;
+          case "se":
+            pMaxX = point.x;
+            pMaxY = point.y;
+            break;
+          case "sw":
+            pMinX = point.x;
+            pMaxY = point.y;
+            break;
+          case "n":
+            pMinY = point.y;
+            break;
+          case "s":
+            pMaxY = point.y;
+            break;
+          case "e":
+            pMaxX = point.x;
+            break;
+          case "w":
+            pMinX = point.x;
+            break;
+        }
 
-          newPoints = [start, end];
+        // Prevent negative dimensions by enforcing minimum size
+        if (pMaxX - pMinX < 10) pMaxX = pMinX + 10;
+        if (pMaxY - pMinY < 10) pMaxY = pMinY + 10;
+
+        // Unpad to get the inner mathematical bounds
+        const minX = pMinX + padding;
+        const minY = pMinY + padding;
+        const maxX = pMaxX - padding;
+        const maxY = pMaxY - padding;
+
+        if (element.type === "rectangle") {
+          newPoints = [
+            { x: minX, y: minY },
+            { x: maxX, y: maxY },
+          ];
+        } else if (element.type === "circle") {
+          const centerX = (minX + maxX) / 2;
+          const centerY = (minY + maxY) / 2;
+          // Radius is half of either width or height (we can constrain to a perfect circle)
+          const radius = Math.max(1, Math.min(maxX - minX, maxY - minY) / 2);
+
+          newPoints = [
+            { x: centerX, y: centerY },
+            { x: centerX + radius, y: centerY },
+          ];
         }
       } else if (element.type === "line" || element.type === "arrow") {
         if (element.points.length === 2) {

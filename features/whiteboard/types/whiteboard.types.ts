@@ -4,6 +4,15 @@ export interface Point {
   y: number;
 }
 
+export interface Bounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  width: number;
+  height: number;
+}
+
 export interface DrawingElement {
   id: string;
   type: "freehand" | "rectangle" | "circle" | "line" | "text" | "arrow";
@@ -11,10 +20,14 @@ export interface DrawingElement {
   color: string;
   strokeWidth: number;
   fill?: string;
+  /** Embedded label rendered centered inside rectangle and circle shapes */
+  label?: string;
   text?: string;
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
+  startConnection?: { elementId: string; handle: string };
+  endConnection?: { elementId: string; handle: string };
 }
 
 export interface CanvasState {

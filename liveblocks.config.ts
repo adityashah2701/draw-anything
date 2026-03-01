@@ -27,10 +27,13 @@ export type DrawingElementJson = JsonObject & {
   color: string;
   strokeWidth: number;
   fill?: string;
+  label?: string;
   text?: string;
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
+  startConnection?: { elementId: string; handle: string };
+  endConnection?: { elementId: string; handle: string };
 };
 
 // Storage: the shared document — all connected users read/write to this
@@ -47,9 +50,7 @@ type UserMeta = {
   };
 };
 
-type RoomEvent = {
-  // Custom broadcast events (if needed)
-};
+type RoomEvent = {};
 
 export const {
   RoomProvider,

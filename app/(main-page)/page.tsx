@@ -1,5 +1,5 @@
 "use client";
-import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
+import { useOrganization, useUser } from "@clerk/nextjs";
 import React, { useState } from "react";
 import Dashboard from "@/features/dashboard/components/dashboard/dashboard";
 import Whiteboards from "@/features/dashboard/components/whiteboards/whiteboard";
@@ -7,7 +7,13 @@ import Members from "@/features/dashboard/components/member/member";
 import CustomLoader from "@/components/shared/loader";
 import Page from "@/features/dashboard/components/unauthenticated-page";
 import CleanNavbar from "@/components/layout/navbar/navbar";
-import MainSideBar from "@/components/layout/sidebar/main-sidebar";
+import { AppSidebar } from "@/components/layout/sidebar/app-sidebar";
+import { BillingPage } from "@/features/billing/components/billing-page";
+import {
+  SidebarProvider,
+  SidebarInset,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 
 // Type for navigation items
 type NavigationItem =
@@ -49,26 +55,33 @@ const LandingPage = () => {
         return <Whiteboards {...commonProps} />;
       case "Members":
         return <Members {...commonProps} />;
+      case "Billing":
+        return <BillingPage />;
       default:
         return <Dashboard {...commonProps} />;
     }
   };
 
   return (
-    <main className="w-full min-h-screen relative overflow-hidden bg-gray-50">
-      {/* Navbar */}
-      <div className="h-20 w-full flex sticky top-0 z-50 items-center bg-white border-b border-gray-200">
-        <CleanNavbar />
-      </div>
-      <div className="h-[calc(100vh-5rem)] w-full flex relative">
-        <MainSideBar
-          selectedPage={selectedPage}
-          setSelectedPage={setSelectedPage}
-          user={user}
-        />
-        {renderSelectedPage()}
-      </div>
-    </main>
+    <SidebarProvider>
+      <AppSidebar
+        selectedPage={selectedPage}
+        setSelectedPage={(page: string) =>
+          setSelectedPage(page as NavigationItem)
+        }
+      />
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-white px-4 sticky top-0 z-50">
+          <SidebarTrigger className="-ml-1" />
+          <div className="flex-1">
+            <CleanNavbar isSidebarIntegrated={true} />
+          </div>
+        </header>
+        <main className="flex-1 overflow-auto bg-gray-50">
+          {renderSelectedPage()}
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 };
 

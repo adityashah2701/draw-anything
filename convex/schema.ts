@@ -7,6 +7,8 @@ export default defineSchema({
     email: v.string(),
     name: v.string(),
     imageUrl: v.string(),
+    plan: v.optional(v.union(v.literal("free"), v.literal("pro"))),
+    clerkSubscriptionId: v.optional(v.string()),
   })
     .index("by_clerkId", ["clerkId"])
     .index("by_email", ["email"]),
@@ -19,7 +21,7 @@ export default defineSchema({
     createdBy: v.id("users"),
     orgId: v.string(),
     tags: v.optional(v.array(v.string())),
-    lastModifiedBy: v.optional(v.id("users"))
+    lastModifiedBy: v.optional(v.id("users")),
   })
     .index("by_createdBy", ["createdBy"])
     .index("by_organizationId", ["orgId"])

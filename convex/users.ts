@@ -36,6 +36,7 @@ export const storeUser = mutation({
       name: identity.name!,
       email: identity.email!,
       imageUrl: identity.pictureUrl!,
+      plan: "free",
     });
 
     return newUserId;
@@ -48,6 +49,7 @@ export const createUser = mutation({
     email: v.string(),
     name: v.string(),
     imageUrl: v.string(),
+    plan: v.optional(v.union(v.literal("free"), v.literal("pro"))),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert("users", {
@@ -55,6 +57,7 @@ export const createUser = mutation({
       email: args.email,
       name: args.name,
       imageUrl: args.imageUrl,
+      plan: args.plan || "free",
     });
   },
 });
@@ -108,5 +111,33 @@ export const getByClerkId = query({
       .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
       .unique();
     return user;
+  },
+});
+
+export const updateSubscription = mutation({
+  args: {
+    clerkId: v.string(),
+    plan: v.union(v.literal("free"), v.literal("pro")),
+    clerkSubscriptionId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+
+    if (user) {
+      await ctx.db.patch(user._id, {
+        plan: args.plan,
+        clerkSubscriptionId: args.clerkSubscriptionId,
+      });
+    }
+  },
+});
+
+export const getAll = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("users").collect();
   },
 });
