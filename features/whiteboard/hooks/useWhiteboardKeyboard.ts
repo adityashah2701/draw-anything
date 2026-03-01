@@ -18,6 +18,7 @@ interface UseWhiteboardKeyboardProps {
   handleZoomIn: () => void;
   handleZoomOut: () => void;
   handleResetZoom: () => void;
+  handleFitToScreen: () => void;
   toggleGrid: () => void;
 
   // UI State
@@ -37,6 +38,7 @@ export const useWhiteboardKeyboard = ({
   handleZoomIn,
   handleZoomOut,
   handleResetZoom,
+  handleFitToScreen,
   toggleGrid,
   setShowCommandMenu,
 }: UseWhiteboardKeyboardProps) => {
@@ -134,6 +136,10 @@ export const useWhiteboardKeyboard = ({
           e.preventDefault();
           toggleGrid();
           break;
+        case "f":
+          e.preventDefault();
+          handleFitToScreen();
+          break;
         case "delete":
         case "backspace":
           e.preventDefault();
@@ -164,6 +170,7 @@ export const useWhiteboardKeyboard = ({
       handleZoomIn,
       handleZoomOut,
       handleResetZoom,
+      handleFitToScreen,
       toggleGrid,
       setShowCommandMenu,
     ],

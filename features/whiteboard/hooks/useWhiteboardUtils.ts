@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import {
   DrawingElement,
   Point,
@@ -9,13 +9,9 @@ export const useWhiteboardUtils = (
   zoom: number,
   elements: DrawingElement[],
 ) => {
-  // Generate unique ID for elements
-  const generateId = useCallback(() => {
-    return Math.random().toString(36).substr(2, 9);
-  }, []);
+  const SPATIAL_CELL_SIZE = 220;
 
-  // Get element bounds
-  const getElementBounds = useCallback((element: DrawingElement) => {
+  const getBoundsStatic = useCallback((element: DrawingElement) => {
     if (element.points.length === 0) return null;
 
     let minX = element.points[0].x;
@@ -59,7 +55,6 @@ export const useWhiteboardUtils = (
 
       const lines = element.text.split("\n");
       const maxChars = Math.max(...lines.map((l) => l.length));
-      // Use a more accurate width multiplier for Inter (approx 0.62)
       const textWidth = maxChars * effectiveSize * 0.62 + 8;
       const textHeight = lines.length * effectiveSize * 1.2 + 8;
 
@@ -78,6 +73,77 @@ export const useWhiteboardUtils = (
 
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
   }, []);
+
+  const boundsById = useMemo(() => {
+    const map = new Map<string, Bounds>();
+    elements.forEach((el) => {
+      const bounds = getBoundsStatic(el);
+      if (bounds) {
+        map.set(el.id, bounds);
+      }
+    });
+    return map;
+  }, [elements, getBoundsStatic]);
+
+  const spatialIndex = useMemo(() => {
+    const grid = new Map<string, string[]>();
+
+    elements.forEach((el) => {
+      const b = boundsById.get(el.id);
+      if (!b) return;
+
+      const minCellX = Math.floor(b.minX / SPATIAL_CELL_SIZE);
+      const maxCellX = Math.floor(b.maxX / SPATIAL_CELL_SIZE);
+      const minCellY = Math.floor(b.minY / SPATIAL_CELL_SIZE);
+      const maxCellY = Math.floor(b.maxY / SPATIAL_CELL_SIZE);
+
+      for (let cx = minCellX; cx <= maxCellX; cx += 1) {
+        for (let cy = minCellY; cy <= maxCellY; cy += 1) {
+          const key = `${cx}:${cy}`;
+          if (!grid.has(key)) grid.set(key, []);
+          grid.get(key)!.push(el.id);
+        }
+      }
+    });
+
+    return { grid };
+  }, [elements, boundsById]);
+
+  const queryCandidatesInRect = useCallback(
+    (minX: number, minY: number, maxX: number, maxY: number): DrawingElement[] => {
+      const minCellX = Math.floor(minX / SPATIAL_CELL_SIZE);
+      const maxCellX = Math.floor(maxX / SPATIAL_CELL_SIZE);
+      const minCellY = Math.floor(minY / SPATIAL_CELL_SIZE);
+      const maxCellY = Math.floor(maxY / SPATIAL_CELL_SIZE);
+
+      const seen = new Set<string>();
+
+      for (let cx = minCellX; cx <= maxCellX; cx += 1) {
+        for (let cy = minCellY; cy <= maxCellY; cy += 1) {
+          const key = `${cx}:${cy}`;
+          const cell = spatialIndex.grid.get(key);
+          if (!cell) continue;
+          for (const id of cell) {
+            seen.add(id);
+          }
+        }
+      }
+
+      // Preserve drawing order for "top-most wins" behavior.
+      return elements.filter((el) => seen.has(el.id));
+    },
+    [elements, spatialIndex.grid],
+  );
+
+  // Generate unique ID for elements
+  const generateId = useCallback(() => {
+    return Math.random().toString(36).substr(2, 9);
+  }, []);
+
+  // Get element bounds
+  const getElementBounds = useCallback((element: DrawingElement) => {
+    return boundsById.get(element.id) ?? getBoundsStatic(element);
+  }, [boundsById, getBoundsStatic]);
 
   const isPointInElement = useCallback(
     (point: Point, element: DrawingElement, radius = 0): boolean => {
@@ -122,20 +188,27 @@ export const useWhiteboardUtils = (
 
         case "line":
         case "arrow":
-          if (element.points.length === 2) {
-            const [start, end] = element.points;
-            const lineLength = Math.sqrt(
-              Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2),
-            );
-            const distanceToStart = Math.sqrt(
-              Math.pow(point.x - start.x, 2) + Math.pow(point.y - start.y, 2),
-            );
-            const distanceToEnd = Math.sqrt(
-              Math.pow(point.x - end.x, 2) + Math.pow(point.y - end.y, 2),
-            );
-            return (
-              Math.abs(distanceToStart + distanceToEnd - lineLength) < tolerance
-            );
+          if (element.points.length >= 2) {
+            for (let i = 0; i < element.points.length - 1; i += 1) {
+              const start = element.points[i];
+              const end = element.points[i + 1];
+              const lineLength = Math.sqrt(
+                Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2),
+              );
+              const distanceToStart = Math.sqrt(
+                Math.pow(point.x - start.x, 2) + Math.pow(point.y - start.y, 2),
+              );
+              const distanceToEnd = Math.sqrt(
+                Math.pow(point.x - end.x, 2) + Math.pow(point.y - end.y, 2),
+              );
+
+              if (
+                Math.abs(distanceToStart + distanceToEnd - lineLength) <
+                tolerance
+              ) {
+                return true;
+              }
+            }
           }
           break;
 
@@ -187,21 +260,33 @@ export const useWhiteboardUtils = (
   // Get all elements at a specific point or within a radius
   const getElementsAtPoint = useCallback(
     (point: Point, radius = 0): DrawingElement[] => {
-      return elements.filter((element) =>
+      const minX = point.x - radius;
+      const minY = point.y - radius;
+      const maxX = point.x + radius;
+      const maxY = point.y + radius;
+
+      const candidates = queryCandidatesInRect(minX, minY, maxX, maxY);
+      return candidates.filter((element) =>
         isPointInElement(point, element, radius),
       );
     },
-    [elements, isPointInElement],
+    [isPointInElement, queryCandidatesInRect],
   );
 
   // Get all elements intersected by a path
   const getElementsOnPath = useCallback(
     (p1: Point, p2: Point, radius = 0): DrawingElement[] => {
-      return elements.filter((element) =>
+      const minX = Math.min(p1.x, p2.x) - radius;
+      const maxX = Math.max(p1.x, p2.x) + radius;
+      const minY = Math.min(p1.y, p2.y) - radius;
+      const maxY = Math.max(p1.y, p2.y) + radius;
+
+      const candidates = queryCandidatesInRect(minX, minY, maxX, maxY);
+      return candidates.filter((element) =>
         isPathIntersectingElement(p1, p2, element, radius),
       );
     },
-    [elements, isPathIntersectingElement],
+    [isPathIntersectingElement, queryCandidatesInRect],
   );
 
   // Get all elements completely or partially inside a bounding box
@@ -212,7 +297,8 @@ export const useWhiteboardUtils = (
       const boxMinY = Math.min(boxStart.y, boxEnd.y);
       const boxMaxY = Math.max(boxStart.y, boxEnd.y);
 
-      return elements.filter((element) => {
+      const candidates = queryCandidatesInRect(boxMinX, boxMinY, boxMaxX, boxMaxY);
+      return candidates.filter((element) => {
         const bounds = getElementBounds(element);
         if (!bounds) return false;
 
@@ -225,7 +311,7 @@ export const useWhiteboardUtils = (
         );
       });
     },
-    [elements, getElementBounds],
+    [getElementBounds, queryCandidatesInRect],
   );
 
   // Check if point is on resize handle
@@ -254,9 +340,14 @@ export const useWhiteboardUtils = (
 
       if (element.type === "line" || element.type === "arrow") {
         if (element.points.length >= 2) {
+          const endIndex = element.points.length - 1;
           handles = [
             { name: "start", x: element.points[0].x, y: element.points[0].y },
-            { name: "end", x: element.points[1].x, y: element.points[1].y },
+            {
+              name: "end",
+              x: element.points[endIndex].x,
+              y: element.points[endIndex].y,
+            },
           ];
         }
       } else {
@@ -386,74 +477,103 @@ export const useWhiteboardUtils = (
           ];
         }
       } else if (element.type === "line" || element.type === "arrow") {
-        if (element.points.length === 2) {
-          let [start, end] = element.points;
+        if (element.points.length >= 2) {
+          const nextPoints = [...element.points];
+          let start = nextPoints[0];
+          let end = nextPoints[nextPoints.length - 1];
+
           if (handle === "start") {
             start = { x: point.x, y: point.y };
           } else if (handle === "end") {
             end = { x: point.x, y: point.y };
           } else {
-            // Fallback if somehow using old handles
             end = { x: point.x, y: point.y };
           }
-          newPoints = [start, end];
+
+          nextPoints[0] = start;
+          nextPoints[nextPoints.length - 1] = end;
+          newPoints = nextPoints;
         }
       } else if (element.type === "text" && element.text && element.fontSize) {
-        // For text elements, scaling dragging SE/NW etc scales the font size.
-        // We use the change in distance to scale the text
-        const currentWidth = bounds.maxX - bounds.minX;
-        let scaleFactor = 1;
+        const weight =
+          element.fontWeight ||
+          (element.fontSize >= 36
+            ? "800"
+            : element.fontSize >= 26
+              ? "700"
+              : element.fontSize >= 20
+                ? "600"
+                : "400");
 
-        switch (handle) {
-          case "se":
-          case "e":
-            scaleFactor = Math.max(0.1, (point.x - bounds.minX) / currentWidth);
-            break;
-          case "sw":
-          case "w":
-            scaleFactor = Math.max(0.1, (bounds.maxX - point.x) / currentWidth);
-            // Move origin left when dragging left handles
-            newPoints[0] = { x: point.x, y: element.points[0].y };
-            break;
-          case "nw":
-            scaleFactor = Math.max(0.1, (bounds.maxX - point.x) / currentWidth);
-            // Move origin left/up when dragging top-left
-            newPoints[0] = {
-              x: point.x,
-              y: point.y + bounds.height * scaleFactor,
-            };
-            break;
-          case "ne":
-            scaleFactor = Math.max(0.1, (point.x - bounds.minX) / currentWidth);
-            // Move origin up when dragging top-right
-            newPoints[0] = {
-              x: element.points[0].x,
-              y: point.y + bounds.height * scaleFactor,
-            };
-            break;
-          case "n":
-            scaleFactor = Math.max(
-              0.1,
-              (bounds.maxY - point.y) / bounds.height,
-            );
-            newPoints[0] = {
-              x: element.points[0].x,
-              y: point.y + bounds.height * scaleFactor,
-            };
-            break;
-          case "s":
-            scaleFactor = Math.max(
-              0.1,
-              (point.y - bounds.minY) / bounds.height,
-            );
-            break;
+        const estimateTextSize = (size: number) => {
+          const baseSize = size;
+          let effectiveSize = baseSize;
+          if (weight === "800") effectiveSize = Math.max(baseSize, 36);
+          else if (weight === "700") effectiveSize = Math.max(baseSize, 26);
+          else if (weight === "600" && baseSize >= 20)
+            effectiveSize = Math.max(baseSize, 20);
+
+          const lines = element.text!.split("\n");
+          const maxChars = Math.max(...lines.map((l) => l.length), 1);
+          const width = maxChars * effectiveSize * 0.62 + 8;
+          const height = lines.length * effectiveSize * 1.2 + 8;
+          return { width, height };
+        };
+
+        const originalSize = estimateTextSize(element.fontSize);
+        const left = element.points[0].x;
+        const top = element.points[0].y;
+        const right = left + originalSize.width;
+        const bottom = top + originalSize.height;
+
+        const hasEast = handle.includes("e");
+        const hasWest = handle.includes("w");
+        const hasNorth = handle.includes("n");
+        const hasSouth = handle.includes("s");
+
+        const scaleXFromEast = (point.x - left) / Math.max(1, originalSize.width);
+        const scaleXFromWest = (right - point.x) / Math.max(1, originalSize.width);
+        const scaleYFromNorth =
+          (bottom - point.y) / Math.max(1, originalSize.height);
+        const scaleYFromSouth =
+          (point.y - top) / Math.max(1, originalSize.height);
+
+        let scaleX = 1;
+        let scaleY = 1;
+
+        if (hasEast) scaleX = scaleXFromEast;
+        if (hasWest) scaleX = scaleXFromWest;
+        if (hasNorth) scaleY = scaleYFromNorth;
+        if (hasSouth) scaleY = scaleYFromSouth;
+
+        let scaleFactor = 1;
+        if ((hasEast || hasWest) && (hasNorth || hasSouth)) {
+          scaleFactor = Math.max(scaleX, scaleY);
+        } else if (hasEast || hasWest) {
+          scaleFactor = scaleX;
+        } else if (hasNorth || hasSouth) {
+          scaleFactor = scaleY;
         }
 
-        // Apply proportional scaling to the font size
+        scaleFactor = Math.max(0.25, Math.min(6, scaleFactor));
         newFontSize = Math.max(
           12,
           Math.min(200, Math.round(element.fontSize * scaleFactor)),
         );
+
+        const resizedSize = estimateTextSize(newFontSize);
+        let newX = element.points[0].x;
+        let newY = element.points[0].y;
+
+        // Keep opposite side anchored for north/west handles to prevent jumpy behavior.
+        if (hasWest) {
+          newX = right - resizedSize.width;
+        }
+        if (hasNorth) {
+          newY = bottom - resizedSize.height;
+        }
+
+        newPoints[0] = { x: newX, y: newY };
       }
 
       return { ...element, points: newPoints, fontSize: newFontSize };

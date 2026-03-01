@@ -13,6 +13,7 @@ import {
   ZoomOut,
   ArrowLeft,
   Sparkles,
+  Maximize,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -29,6 +30,7 @@ interface TopToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
+  onFitToScreen: () => void;
   onToggleGrid: () => void;
   onSave: () => void;
   onLoad: () => void;
@@ -50,6 +52,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   onZoomIn,
   onZoomOut,
   onResetZoom,
+  onFitToScreen,
   onToggleGrid,
   onSave,
   onLoad,
@@ -157,14 +160,14 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             onClick={onSave}
             disabled={disabled}
-            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            className="p-2 rounded-lg text-slate-700 hover:bg-slate-100 disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed"
             title={disabled ? "Read-only mode" : "Save Whiteboard"}
           >
             <Save size={18} className="sm:w-5 sm:h-5" />
           </button>
           <button
             onClick={onLoad}
-            className="p-2 rounded-lg text-green-600 hover:bg-green-50 hidden sm:block"
+            className="p-2 rounded-lg text-slate-700 hover:bg-slate-100 hidden sm:block"
             title="Load Whiteboard"
           >
             <FolderOpen size={18} className="sm:w-5 sm:h-5" />
@@ -199,10 +202,17 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           <RotateCcw size={18} className="sm:w-5 sm:h-5" />
         </button>
         <button
+          onClick={onFitToScreen}
+          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+          title="Fit to Screen"
+        >
+          <Maximize size={18} className="sm:w-5 sm:h-5" />
+        </button>
+        <button
           onClick={onToggleGrid}
           className={`p-2 rounded-lg transition-colors ${
             showGrid
-              ? "bg-blue-500 text-white"
+              ? "bg-slate-700 text-white"
               : "text-gray-600 hover:bg-gray-100"
           }`}
           title="Toggle Grid"
@@ -227,7 +237,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         <button
           onClick={onGenerateDiagram}
           disabled={disabled || !onGenerateDiagram}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-xs font-semibold hover:from-violet-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md active:scale-95"
+          className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
           title="Generate diagram with AI"
         >
           <Sparkles size={14} />

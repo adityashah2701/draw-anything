@@ -78,16 +78,101 @@ const drawShapeLabel = (
   clipPath: () => void,
   zoom: number,
   color: string,
+  maxWidth: number,
+  maxHeight: number,
 ) => {
+  const measureWithFont = (fontSize: number, text: string) => {
+    ctx.font = `600 ${fontSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    return ctx.measureText(text).width;
+  };
+
+  const buildLines = (text: string, fontSize: number, width: number) => {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [""];
+
+    const splitLongWord = (word: string) => {
+      if (measureWithFont(fontSize, word) <= width) return [word];
+      const chunks: string[] = [];
+      let current = "";
+      for (const ch of word) {
+        const candidate = current + ch;
+        if (current && measureWithFont(fontSize, candidate) > width) {
+          chunks.push(current);
+          current = ch;
+        } else {
+          current = candidate;
+        }
+      }
+      if (current) chunks.push(current);
+      return chunks;
+    };
+
+    const normalizedWords = words.flatMap((w) => splitLongWord(w));
+    const lines: string[] = [];
+    let current = normalizedWords[0];
+
+    for (let i = 1; i < normalizedWords.length; i += 1) {
+      const candidate = `${current} ${normalizedWords[i]}`;
+      if (measureWithFont(fontSize, candidate) <= width) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = normalizedWords[i];
+      }
+    }
+    lines.push(current);
+
+    return lines;
+  };
+
+  const availableWidth = Math.max(24, maxWidth);
+  const availableHeight = Math.max(16, maxHeight);
+  const maxLines = 3;
+
+  let fittedSize = Math.max(9, Math.min(16 * zoom, 18));
+  let fittedLines = [label];
+
+  for (let size = fittedSize; size >= 9; size -= 1) {
+    const lines = buildLines(label, size, availableWidth);
+    if (lines.length > maxLines) continue;
+    const widestLine = Math.max(
+      ...lines.map((line) => measureWithFont(size, line || "")),
+      0,
+    );
+    if (widestLine > availableWidth) continue;
+
+    const lineHeight = size * 1.2;
+    if (lines.length * lineHeight <= availableHeight) {
+      fittedSize = size;
+      fittedLines = lines;
+      break;
+    }
+  }
+
+  if (fittedLines.length > maxLines) {
+    fittedLines = fittedLines.slice(0, maxLines);
+    const last = fittedLines[maxLines - 1];
+    fittedLines[maxLines - 1] =
+      last.length > 1 ? `${last.slice(0, Math.max(1, last.length - 1))}…` : "…";
+  }
+
   ctx.save();
   clipPath();
   ctx.clip();
-  const fontSize = Math.max(10, Math.min(14 * zoom, 18));
-  ctx.font = `600 ${fontSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  ctx.font = `600 ${fittedSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
   ctx.fillStyle = color || "#1e293b";
   ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, cx, cy);
+  ctx.textBaseline = "top";
+
+  const lineHeight = fittedSize * 1.2;
+  const blockHeight = fittedLines.length * lineHeight;
+  let y = cy - blockHeight / 2;
+
+  for (const line of fittedLines) {
+    ctx.fillText(line, cx, y);
+    y += lineHeight;
+  }
+
   ctx.restore();
 };
 
@@ -167,6 +252,8 @@ export const drawElement = (
             },
             zoom,
             element.color,
+            Math.max(20, Math.abs(width) - 16),
+            Math.max(14, Math.abs(height) - 12),
           );
         }
       }
@@ -203,6 +290,8 @@ export const drawElement = (
             },
             zoom,
             element.color,
+            Math.max(20, radius * 1.32),
+            Math.max(14, radius * 1.25),
           );
         }
       }
@@ -224,33 +313,47 @@ export const drawElement = (
       break;
 
     case "arrow":
-      if (element.points.length === 2) {
-        const startX = element.points[0].x * zoom + panOffset.x;
-        const startY = element.points[0].y * zoom + panOffset.y;
-        const endX = element.points[1].x * zoom + panOffset.x;
-        const endY = element.points[1].y * zoom + panOffset.y;
+      if (element.points.length >= 2) {
+        const transformed = element.points.map((p) => ({
+          x: p.x * zoom + panOffset.x,
+          y: p.y * zoom + panOffset.y,
+        }));
 
-        // Draw line
+        // Draw routed polyline.
         ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
+        ctx.moveTo(transformed[0].x, transformed[0].y);
+        for (let i = 1; i < transformed.length; i++) {
+          ctx.lineTo(transformed[i].x, transformed[i].y);
+        }
         ctx.stroke();
 
-        // Draw arrowhead
-        const angle = Math.atan2(endY - startY, endX - startX);
+        // Arrowhead follows the direction of the final segment.
+        const end = transformed[transformed.length - 1];
+        let prev = transformed[transformed.length - 2];
+        for (let i = transformed.length - 2; i >= 0; i -= 1) {
+          if (
+            transformed[i].x !== end.x ||
+            transformed[i].y !== end.y
+          ) {
+            prev = transformed[i];
+            break;
+          }
+        }
+
+        const angle = Math.atan2(end.y - prev.y, end.x - prev.x);
         const arrowLength = 15;
         const arrowAngle = Math.PI / 6;
 
         ctx.beginPath();
-        ctx.moveTo(endX, endY);
+        ctx.moveTo(end.x, end.y);
         ctx.lineTo(
-          endX - arrowLength * Math.cos(angle - arrowAngle),
-          endY - arrowLength * Math.sin(angle - arrowAngle),
+          end.x - arrowLength * Math.cos(angle - arrowAngle),
+          end.y - arrowLength * Math.sin(angle - arrowAngle),
         );
-        ctx.moveTo(endX, endY);
+        ctx.moveTo(end.x, end.y);
         ctx.lineTo(
-          endX - arrowLength * Math.cos(angle + arrowAngle),
-          endY - arrowLength * Math.sin(angle + arrowAngle),
+          end.x - arrowLength * Math.cos(angle + arrowAngle),
+          end.y - arrowLength * Math.sin(angle + arrowAngle),
         );
         ctx.stroke();
       }
@@ -337,10 +440,20 @@ export const drawElement = (
           element.points[0].x * zoom + panOffset.x,
           element.points[0].y * zoom + panOffset.y,
         );
-        ctx.lineTo(
-          element.points[1].x * zoom + panOffset.x,
-          element.points[1].y * zoom + panOffset.y,
-        );
+        const endIndex = element.points.length - 1;
+        if (element.type === "arrow") {
+          for (let i = 1; i <= endIndex; i += 1) {
+            ctx.lineTo(
+              element.points[i].x * zoom + panOffset.x,
+              element.points[i].y * zoom + panOffset.y,
+            );
+          }
+        } else {
+          ctx.lineTo(
+            element.points[1].x * zoom + panOffset.x,
+            element.points[1].y * zoom + panOffset.y,
+          );
+        }
         ctx.lineWidth = (element.strokeWidth || 2) + 4;
         ctx.strokeStyle = "rgba(0, 123, 255, 0.3)";
         ctx.stroke();
@@ -358,14 +471,15 @@ export const drawElement = (
       if (element.type === "line" || element.type === "arrow") {
         // Lines and arrows only have 2 endpoints
         if (element.points.length >= 2) {
+          const endIndex = element.points.length - 1;
           handles = [
             {
               x: element.points[0].x * zoom + panOffset.x,
               y: element.points[0].y * zoom + panOffset.y,
             },
             {
-              x: element.points[1].x * zoom + panOffset.x,
-              y: element.points[1].y * zoom + panOffset.y,
+              x: element.points[endIndex].x * zoom + panOffset.x,
+              y: element.points[endIndex].y * zoom + panOffset.y,
             },
           ];
         }

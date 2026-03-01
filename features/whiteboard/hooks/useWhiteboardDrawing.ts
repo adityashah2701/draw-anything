@@ -254,6 +254,10 @@ export const useWhiteboardDrawing = ({
         color: currentColor,
         strokeWidth,
         fill: fillColor !== "#transparent" ? fillColor : undefined,
+        label:
+          currentTool === "rectangle" || currentTool === "circle"
+            ? "TEXT"
+            : undefined,
       };
 
       setCurrentElement(newElement);

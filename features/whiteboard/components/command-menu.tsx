@@ -157,6 +157,13 @@ export function CommandMenu({
             <CommandShortcut>⌘0</CommandShortcut>
           </CommandItem>
           <CommandItem
+            onSelect={() => runCommand(() => onAction?.("fit-screen"))}
+          >
+            <Maximize className="mr-2 h-4 w-4" />
+            <span>Fit to Screen</span>
+            <CommandShortcut>F</CommandShortcut>
+          </CommandItem>
+          <CommandItem
             onSelect={() => runCommand(() => onAction?.("toggle-grid"))}
           >
             <Grid3X3 className="mr-2 h-4 w-4" />

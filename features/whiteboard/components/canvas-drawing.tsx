@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   drawGrid,
   drawElement,
@@ -61,6 +61,8 @@ const useCanvasEngine = ({
     element: DrawingElement,
   ) => { minX: number; minY: number; maxX: number; maxY: number } | null;
 }) => {
+  const rafRef = useRef<number | null>(null);
+
   // Force re-render when selection changes
   const forceRender = useCallback(() => {
     const canvas = canvasRef.current;
@@ -90,8 +92,27 @@ const useCanvasEngine = ({
       hoveredElementId,
     };
 
+    const viewMinX = (-panOffset.x) / zoom;
+    const viewMinY = (-panOffset.y) / zoom;
+    const viewMaxX = viewMinX + canvasSize.width / zoom;
+    const viewMaxY = viewMinY + canvasSize.height / zoom;
+    const viewPadding = 120 / zoom;
+    const isVisible = (element: DrawingElement) => {
+      const b = getElementBounds(element);
+      if (!b) return false;
+      return !(
+        b.maxX < viewMinX - viewPadding ||
+        b.minX > viewMaxX + viewPadding ||
+        b.maxY < viewMinY - viewPadding ||
+        b.minY > viewMaxY + viewPadding
+      );
+    };
+
     // Draw all elements with selection state
     elements.forEach((element) => {
+      if (!isVisible(element) && !selectedElements.includes(element.id)) {
+        return;
+      }
       const isSelected = selectedElements.includes(element.id);
       drawElement(ctx, element, isSelected, renderCtx);
     });
@@ -221,17 +242,26 @@ const useCanvasEngine = ({
     showGrid,
     hoveredElementId,
     connectionDraft,
+    canvasSize,
   ]);
 
   // Render canvas
   useEffect(() => {
-    forceRender();
-  }, [forceRender, canvasSize]);
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+    }
+    rafRef.current = requestAnimationFrame(() => {
+      forceRender();
+      rafRef.current = null;
+    });
 
-  // Force re-render when selection changes
-  useEffect(() => {
-    forceRender();
-  }, [selectedElements, forceRender]);
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [forceRender]);
 };
 
 export default useCanvasEngine;

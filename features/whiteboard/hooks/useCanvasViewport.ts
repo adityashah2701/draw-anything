@@ -48,6 +48,30 @@ export const useCanvasViewport = () => {
     setPanOffset({ x: 0, y: 0 });
   }, []);
 
+  const fitToBounds = useCallback(
+    (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
+      const width = Math.max(1, bounds.maxX - bounds.minX);
+      const height = Math.max(1, bounds.maxY - bounds.minY);
+
+      if (canvasSize.width <= 0 || canvasSize.height <= 0) return;
+
+      const padding = 80;
+      const fitZoomX = (canvasSize.width - padding * 2) / width;
+      const fitZoomY = (canvasSize.height - padding * 2) / height;
+      const nextZoom = Math.max(0.1, Math.min(5, Math.min(fitZoomX, fitZoomY)));
+
+      const centerX = (bounds.minX + bounds.maxX) / 2;
+      const centerY = (bounds.minY + bounds.maxY) / 2;
+
+      setZoom(nextZoom);
+      setPanOffset({
+        x: canvasSize.width / 2 - centerX * nextZoom,
+        y: canvasSize.height / 2 - centerY * nextZoom,
+      });
+    },
+    [canvasSize],
+  );
+
   // Pan operations
   const startPanning = useCallback((point: Point) => {
     setStartPan(point);
@@ -99,6 +123,7 @@ export const useCanvasViewport = () => {
     handleZoomIn,
     handleZoomOut,
     handleResetZoom,
+    fitToBounds,
     startPanning,
     handlePan,
     stopPanning,

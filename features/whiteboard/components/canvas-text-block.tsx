@@ -59,6 +59,7 @@ export interface CanvasTextBlockProps {
   element: DrawingElement;
   zoom: number;
   panOffset: { x: number; y: number };
+  selectAllOnMount?: boolean;
   /** Called with final text and format when user commits (Enter / Escape). Empty string = discard. */
   onCommit: (
     text: string,
@@ -90,6 +91,7 @@ export function CanvasTextBlock({
   element,
   zoom,
   panOffset,
+  selectAllOnMount = false,
   onCommit,
   onChange,
   onMove,
@@ -167,11 +169,14 @@ export function CanvasTextBlock({
     if (!el) return;
     el.innerText = element.text || "";
     el.focus();
-    // Caret to end
+
     try {
       const r = document.createRange();
       r.selectNodeContents(el);
-      r.collapse(false);
+      if (!selectAllOnMount) {
+        // Caret to end for standard edit mode
+        r.collapse(false);
+      }
       const sel = window.getSelection();
       sel?.removeAllRanges();
       sel?.addRange(r);
@@ -370,7 +375,7 @@ export function CanvasTextBlock({
     border: "none",
     padding: 0,
     margin: 0,
-    minWidth: 120,
+    minWidth: 180,
     maxWidth: "90vw",
     transform: "translateY(-0.08em)", // Compensate for line-height leading to match canvas top baseline
     fontFamily:

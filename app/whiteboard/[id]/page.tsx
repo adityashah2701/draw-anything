@@ -64,7 +64,7 @@ const WhiteboardCanvas: React.FC = () => {
   const [currentColor, setCurrentColor] = useState("#000000");
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [fillColor, setFillColor] = useState("#transparent");
-  const [fontSize, setFontSize] = useState(16);
+  const [fontSize, setFontSize] = useState(20);
   const [eraserSize] = useState(20);
 
   // UI state
@@ -81,6 +81,10 @@ const WhiteboardCanvas: React.FC = () => {
   const [editingTextElement, setEditingTextElement] =
     useState<DrawingElement | null>(null);
   const [isNewTextElement, setIsNewTextElement] = useState(false);
+  const [editingShapeLabelId, setEditingShapeLabelId] = useState<string | null>(
+    null,
+  );
+  const [editingShapeLabelDraft, setEditingShapeLabelDraft] = useState("");
   const currentColorRef = useRef(currentColor);
   const strokeWidthRef = useRef(strokeWidth);
   const fontSizeRef = useRef(fontSize);
@@ -126,6 +130,26 @@ const WhiteboardCanvas: React.FC = () => {
       }
     }
   }, []);
+
+  const deleteElementsWithConnectedArrows = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const selected = new Set(ids);
+      const toDelete = new Set(ids);
+
+      elements.forEach((el) => {
+        if (el.type !== "arrow") return;
+        const startId = el.startConnection?.elementId;
+        const endId = el.endConnection?.elementId;
+        if ((startId && selected.has(startId)) || (endId && selected.has(endId))) {
+          toDelete.add(el.id);
+        }
+      });
+
+      deleteElementsLive(Array.from(toDelete));
+    },
+    [elements, deleteElementsLive],
+  );
 
   // Mutation: update element properties (move/resize)
   const updateElement = useLiveblocksM(
@@ -206,25 +230,56 @@ const WhiteboardCanvas: React.FC = () => {
     getElementsOnPath,
   } = useWhiteboardUtils(canvasViewport.zoom, elements);
 
+  const handleFitToScreen = useCallback(() => {
+    if (elements.length === 0) {
+      canvasViewport.handleResetZoom();
+      return;
+    }
+
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    elements.forEach((el) => {
+      const bounds = getElementBounds(el);
+      if (!bounds) return;
+      minX = Math.min(minX, bounds.minX);
+      minY = Math.min(minY, bounds.minY);
+      maxX = Math.max(maxX, bounds.maxX);
+      maxY = Math.max(maxY, bounds.maxY);
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+      canvasViewport.handleResetZoom();
+      return;
+    }
+
+    canvasViewport.fitToBounds({ minX, minY, maxX, maxY });
+  }, [elements, getElementBounds, canvasViewport]);
+
   // Helper to re-evaluate arrow positions when connected shapes move/resize
   const updateConnectedArrows = useCallback(
     (changedElements: DrawingElement[], allElements: DrawingElement[]) => {
-      const changedIds = changedElements.map((el) => el.id);
+      const changedIds = new Set(changedElements.map((el) => el.id));
+      const changedById = new Map(changedElements.map((el) => [el.id, el]));
       const arrowsToUpdate: DrawingElement[] = [];
 
       allElements.forEach((el) => {
         if (el.type === "arrow" && (el.startConnection || el.endConnection)) {
+          const isStartChanged =
+            !!el.startConnection && changedIds.has(el.startConnection.elementId);
+          const isEndChanged =
+            !!el.endConnection && changedIds.has(el.endConnection.elementId);
+          if (!isStartChanged && !isEndChanged) return;
+
           let needsUpdate = false;
           const newPoints = [...el.points];
+          const endPointIndex = Math.max(1, newPoints.length - 1);
 
           // Check if start is connected to a changed shape
-          if (
-            el.startConnection &&
-            changedIds.includes(el.startConnection.elementId)
-          ) {
-            const tgt = changedElements.find(
-              (c) => c.id === el.startConnection!.elementId,
-            );
+          if (isStartChanged && el.startConnection) {
+            const tgt = changedById.get(el.startConnection.elementId);
             if (tgt) {
               const bounds = getElementBounds(tgt);
               const handles = getConnectionHandles(tgt, bounds);
@@ -232,23 +287,17 @@ const WhiteboardCanvas: React.FC = () => {
                 (h) => h.name === el.startConnection!.handle,
               );
               if (h) {
-                newPoints[0] = { x: h.x, y: h.y };
-                needsUpdate = true;
+                if (newPoints[0]?.x !== h.x || newPoints[0]?.y !== h.y) {
+                  newPoints[0] = { x: h.x, y: h.y };
+                  needsUpdate = true;
+                }
               }
             }
-          } else if (el.startConnection) {
-            // Recalculate from the existing shape to ensure it stays anchored if canvas shifts or parent is also in allElements but not changedElements (though changedElements should capture the dragging one)
-            // But usually we only need to update the end that moved.
           }
 
           // Check if end is connected to a changed shape
-          if (
-            el.endConnection &&
-            changedIds.includes(el.endConnection.elementId)
-          ) {
-            const tgt = changedElements.find(
-              (c) => c.id === el.endConnection!.elementId,
-            );
+          if (isEndChanged && el.endConnection) {
+            const tgt = changedById.get(el.endConnection.elementId);
             if (tgt) {
               const bounds = getElementBounds(tgt);
               const handles = getConnectionHandles(tgt, bounds);
@@ -256,8 +305,13 @@ const WhiteboardCanvas: React.FC = () => {
                 (h) => h.name === el.endConnection!.handle,
               );
               if (h) {
-                newPoints[1] = { x: h.x, y: h.y };
-                needsUpdate = true;
+                if (
+                  newPoints[endPointIndex]?.x !== h.x ||
+                  newPoints[endPointIndex]?.y !== h.y
+                ) {
+                  newPoints[endPointIndex] = { x: h.x, y: h.y };
+                  needsUpdate = true;
+                }
               }
             }
           }
@@ -284,7 +338,7 @@ const WhiteboardCanvas: React.FC = () => {
     getElementsAtPoint,
     getElementsInBounds,
     getResizeHandle,
-    deleteElements: (ids) => deleteElementsLive(ids),
+    deleteElements: (ids) => deleteElementsWithConnectedArrows(ids),
     moveElements: (ids, dx, dy) => {
       const moved = moveElements(ids, dx, dy);
       // Trigger connected arrow updates
@@ -349,14 +403,15 @@ const WhiteboardCanvas: React.FC = () => {
     selectAllElements: () => setSelectedElements(elements.map((el) => el.id)),
     deleteSelectedElements: useCallback(() => {
       if (selectedElements.length > 0) {
-        deleteElementsLive(selectedElements);
+        deleteElementsWithConnectedArrows(selectedElements);
         setSelectedElements([]);
       }
-    }, [selectedElements, deleteElementsLive]),
+    }, [selectedElements, deleteElementsWithConnectedArrows]),
     clearSelection: () => setSelectedElements([]),
     handleZoomIn: canvasViewport.handleZoomIn,
     handleZoomOut: canvasViewport.handleZoomOut,
     handleResetZoom: canvasViewport.handleResetZoom,
+    handleFitToScreen,
     toggleGrid: canvasViewport.toggleGrid,
     setShowCommandMenu,
   });
@@ -534,9 +589,10 @@ const WhiteboardCanvas: React.FC = () => {
   // Text commits are handled inside CanvasTextBlock directly.
 
   return (
-    <div className="relative w-screen h-screen bg-[#f8f9fa] overflow-hidden">
+    <div className="relative h-screen w-screen overflow-hidden bg-[radial-gradient(ellipse_at_top,#f7f8fa_0%,#f2f4f7_45%,#eceff3_100%)]">
       {/* Floating Top Toolbar */}
-      <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-[95%] sm:max-w-[90%]">
+      <div className="pointer-events-none absolute top-4 left-1/2 z-50 w-[min(1440px,calc(100%-2rem))] -translate-x-1/2 px-1">
+        <div className="pointer-events-auto">
         <TopToolbar
           canUndo={canUndo}
           canRedo={canRedo}
@@ -549,6 +605,7 @@ const WhiteboardCanvas: React.FC = () => {
           onZoomIn={canvasViewport.handleZoomIn}
           onZoomOut={canvasViewport.handleZoomOut}
           onResetZoom={canvasViewport.handleResetZoom}
+          onFitToScreen={handleFitToScreen}
           onToggleGrid={canvasViewport.toggleGrid}
           onSave={whiteboardAutoSave.saveWhiteboard}
           onLoad={loadWhiteboard}
@@ -561,10 +618,12 @@ const WhiteboardCanvas: React.FC = () => {
           onGenerateDiagram={() => setShowAIModal(true)}
           disabled={!whiteboardAccess.hasEditAccess}
         />
+        </div>
       </div>
 
       {/* Floating Properties Panel */}
-      <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-40">
+      <div className="pointer-events-none absolute bottom-24 left-1/2 z-40 w-[min(1280px,calc(100%-1rem))] -translate-x-1/2 px-1">
+        <div className="pointer-events-auto">
         <PropertiesPanel
           currentTool={currentTool}
           currentColor={currentColor}
@@ -583,10 +642,11 @@ const WhiteboardCanvas: React.FC = () => {
           isSaving={whiteboardAutoSave.isSaving}
           lastSaved={whiteboardAutoSave.lastSaved}
         />
+        </div>
       </div>
 
       {/* Floating Sidebar */}
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 rounded-full">
+      <div className="absolute bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full">
         <Sidebar
           currentTool={currentTool}
           onToolChange={setCurrentTool}
@@ -611,7 +671,7 @@ const WhiteboardCanvas: React.FC = () => {
         <Cursors />
         {/* Access Status Indicator */}
         {!whiteboardAccess.hasEditAccess && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-yellow-100 border border-yellow-300 rounded-lg p-2 z-20 max-w-[90vw]">
+          <div className="absolute left-1/2 top-20 z-20 max-w-[90vw] -translate-x-1/2 rounded-lg border border-yellow-300 bg-yellow-100 p-2">
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0"></div>
               <span className="text-sm text-yellow-800 truncate">
@@ -643,6 +703,9 @@ const WhiteboardCanvas: React.FC = () => {
             (typeof window !== "undefined" ? window.devicePixelRatio : 1)
           }
           onMouseDown={(e) => {
+            if (editingShapeLabelId) {
+              return;
+            }
             // Text tool: create a LOCAL draft element — do NOT push to Liveblocks yet
             if (currentTool === "text" && whiteboardAccess.hasEditAccess) {
               const pos = canvasViewport.getMousePosition(e);
@@ -652,7 +715,7 @@ const WhiteboardCanvas: React.FC = () => {
                 points: [pos],
                 color: currentColorRef.current,
                 strokeWidth: strokeWidthRef.current,
-                text: "",
+                text: "TEXT",
                 fontSize: fontSizeRef.current,
                 fontWeight: "400",
                 fontStyle: "normal",
@@ -674,11 +737,19 @@ const WhiteboardCanvas: React.FC = () => {
             if (!whiteboardAccess.hasEditAccess) return;
             const pos = canvasViewport.getMousePosition(e);
             const clickedElements = getElementsAtPoint(pos) || [];
-            const textEl = clickedElements.find(
-              (el: DrawingElement) => el.type === "text",
-            );
-            if (textEl) {
-              setEditingTextElement(textEl);
+            const topEl = [...clickedElements].reverse()[0];
+            if (!topEl) return;
+
+            if (topEl.type === "text") {
+              setEditingTextElement(topEl);
+              setCurrentTool("select");
+              return;
+            }
+
+            if (topEl.type === "rectangle" || topEl.type === "circle") {
+              setEditingShapeLabelId(topEl.id);
+              setEditingShapeLabelDraft(topEl.label?.trim() || "TEXT");
+              setSelectedElements([topEl.id]);
               setCurrentTool("select");
             }
           }}
@@ -775,6 +846,9 @@ const WhiteboardCanvas: React.FC = () => {
               case "zoom-reset":
                 canvasViewport.handleResetZoom();
                 break;
+              case "fit-screen":
+                handleFitToScreen();
+                break;
               case "toggle-grid":
                 canvasViewport.toggleGrid();
                 break;
@@ -812,32 +886,21 @@ const WhiteboardCanvas: React.FC = () => {
             element={editingTextElement}
             zoom={canvasViewport.zoom}
             panOffset={canvasViewport.panOffset}
+            selectAllOnMount={isNewTextElement}
             onChange={(text, format) => {
-              if (isNewTextElement) {
-                if (text.trim()) {
-                  // Promote new element to storage on first non-empty input
-                  addElement({
-                    ...editingTextElement,
-                    text: text, // Draft might have leading/trailing spaces while typing
-                    fontSize: format.fontSize,
-                    fontWeight: format.fontWeight,
-                    fontStyle: format.fontStyle,
-                  } as unknown as DrawingElementJson);
-                  setIsNewTextElement(false);
-                }
-              } else {
-                // Update existing element
-                const base =
-                  elements.find((e) => e.id === editingTextElement.id) ||
-                  editingTextElement;
-                updateElement({
-                  ...base,
-                  text: text,
-                  fontSize: format.fontSize,
-                  fontWeight: format.fontWeight,
-                  fontStyle: format.fontStyle,
-                } as unknown as DrawingElementJson);
-              }
+              // Keep typing local to make text editing feel canvas-native.
+              // Persist only on commit to avoid per-keystroke storage churn.
+              setEditingTextElement((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      text,
+                      fontSize: format.fontSize,
+                      fontWeight: format.fontWeight,
+                      fontStyle: format.fontStyle,
+                    }
+                  : prev,
+              );
             }}
             onCommit={(
               text: string,
@@ -893,6 +956,71 @@ const WhiteboardCanvas: React.FC = () => {
             disabled={!whiteboardAccess.hasEditAccess}
           />
         )}
+
+        {editingShapeLabelId &&
+          (() => {
+            const shape = elements.find((el) => el.id === editingShapeLabelId);
+            if (!shape) return null;
+            const bounds = getElementBounds(shape);
+            if (!bounds) return null;
+
+            const cx = (bounds.minX + bounds.maxX) / 2;
+            const cy = (bounds.minY + bounds.maxY) / 2;
+            const sx = cx * canvasViewport.zoom + canvasViewport.panOffset.x;
+            const sy = cy * canvasViewport.zoom + canvasViewport.panOffset.y;
+            const inputWidth = Math.max(
+              120,
+              Math.min(
+                260,
+                (bounds.maxX - bounds.minX) * canvasViewport.zoom * 0.9,
+              ),
+            );
+
+            return (
+              <input
+                autoFocus
+                value={editingShapeLabelDraft}
+                onChange={(ev) => setEditingShapeLabelDraft(ev.target.value)}
+                onMouseDown={(ev) => ev.stopPropagation()}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Escape") {
+                    setEditingShapeLabelId(null);
+                    setEditingShapeLabelDraft("");
+                    return;
+                  }
+                  if (ev.key === "Enter") {
+                    ev.preventDefault();
+                    const nextLabel = editingShapeLabelDraft.trim() || "TEXT";
+                    updateElement({
+                      ...shape,
+                      label: nextLabel,
+                    } as unknown as DrawingElementJson);
+                    setEditingShapeLabelId(null);
+                    setEditingShapeLabelDraft("");
+                  }
+                }}
+                onBlur={() => {
+                  const nextLabel = editingShapeLabelDraft.trim() || "TEXT";
+                  updateElement({
+                    ...shape,
+                    label: nextLabel,
+                  } as unknown as DrawingElementJson);
+                  setEditingShapeLabelId(null);
+                  setEditingShapeLabelDraft("");
+                }}
+                style={{
+                  position: "absolute",
+                  left: sx,
+                  top: sy,
+                  transform: "translate(-50%, -50%)",
+                  width: inputWidth,
+                  zIndex: 110,
+                  textAlign: "center",
+                }}
+                className="h-9 rounded-md border border-blue-300 bg-white/95 px-2 text-sm font-semibold text-slate-800 shadow-sm outline-none ring-2 ring-blue-200"
+              />
+            );
+          })()}
       </div>
     </div>
   );
