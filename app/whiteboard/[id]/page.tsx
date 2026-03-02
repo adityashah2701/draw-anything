@@ -169,7 +169,10 @@ const WhiteboardCanvas: React.FC = () => {
         if (el.type !== "arrow") return;
         const startId = el.startConnection?.elementId;
         const endId = el.endConnection?.elementId;
-        if ((startId && selected.has(startId)) || (endId && selected.has(endId))) {
+        if (
+          (startId && selected.has(startId)) ||
+          (endId && selected.has(endId))
+        ) {
           toDelete.add(el.id);
         }
       });
@@ -296,7 +299,8 @@ const WhiteboardCanvas: React.FC = () => {
       allElements.forEach((el) => {
         if (el.type === "arrow" && (el.startConnection || el.endConnection)) {
           const isStartChanged =
-            !!el.startConnection && changedIds.has(el.startConnection.elementId);
+            !!el.startConnection &&
+            changedIds.has(el.startConnection.elementId);
           const isEndChanged =
             !!el.endConnection && changedIds.has(el.endConnection.elementId);
           if (!isStartChanged && !isEndChanged) return;
@@ -456,7 +460,7 @@ const WhiteboardCanvas: React.FC = () => {
         // ignore
       }
     }
-  }, [whiteboard?.content]);
+  }, [whiteboard?.content, canvasViewport]);
 
   // Broadcast local selection and drafts to Presence
   useEffect(() => {
@@ -847,8 +851,10 @@ const WhiteboardCanvas: React.FC = () => {
           disabled={!whiteboardAccess.hasEditAccess}
           onGenerate={(newElements) => {
             // Place new AI graph near current viewport origin, then auto-fit to center it.
-            const viewWorldMinX = -canvasViewport.panOffset.x / canvasViewport.zoom;
-            const viewWorldMinY = -canvasViewport.panOffset.y / canvasViewport.zoom;
+            const viewWorldMinX =
+              -canvasViewport.panOffset.x / canvasViewport.zoom;
+            const viewWorldMinY =
+              -canvasViewport.panOffset.y / canvasViewport.zoom;
 
             const allX = newElements.flatMap((el) => el.points.map((p) => p.x));
             const allY = newElements.flatMap((el) => el.points.map((p) => p.y));
@@ -1168,8 +1174,10 @@ const WhiteboardCanvas: React.FC = () => {
                     if (ev.key === "Enter") {
                       ev.preventDefault();
                       const nextLabel =
-                        (shapeLabelEditorRef.current?.innerText || editingShapeLabelDraft).trim() ||
-                        "TEXT";
+                        (
+                          shapeLabelEditorRef.current?.innerText ||
+                          editingShapeLabelDraft
+                        ).trim() || "TEXT";
                       updateElement({
                         ...shape,
                         label: nextLabel,
@@ -1183,8 +1191,10 @@ const WhiteboardCanvas: React.FC = () => {
                   }}
                   onBlur={() => {
                     const nextLabel =
-                      (shapeLabelEditorRef.current?.innerText || editingShapeLabelDraft).trim() ||
-                      "TEXT";
+                      (
+                        shapeLabelEditorRef.current?.innerText ||
+                        editingShapeLabelDraft
+                      ).trim() || "TEXT";
                     updateElement({
                       ...shape,
                       label: nextLabel,

@@ -6,7 +6,15 @@ import {
 } from "@clerk/nextjs";
 import React from "react";
 
-const MobileNavbar = ({ isSignedIn, setIsMobileMenuOpen }: any) => {
+interface MobileNavbarProps {
+  isSignedIn: boolean | undefined;
+  setIsMobileMenuOpen: (open: boolean) => void;
+}
+
+const MobileNavbar = ({
+  isSignedIn,
+  setIsMobileMenuOpen,
+}: MobileNavbarProps) => {
   return (
     <div
       className="md:hidden transition-all fixed inset-0 z-50 bg-black/50"

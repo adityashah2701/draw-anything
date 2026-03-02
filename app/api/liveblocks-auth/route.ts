@@ -1,5 +1,5 @@
 import { Liveblocks } from "@liveblocks/node";
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { currentUser } from "@clerk/nextjs/server";
 
 // Verify secret key exist
 const authSecret = process.env.LIVEBLOCKS_SECRET_KEY as string;
