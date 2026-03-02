@@ -2,115 +2,126 @@ import { Button } from "@/components/ui/button";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import {
   ArrowRight,
-  CheckCircle,
-  Play,
+  Dot,
+  MoveRight,
   Shield,
-  Star,
-  Users,
-  Zap,
+  Sparkles,
 } from "lucide-react";
 import Image from "next/image";
 import React from "react";
 
 export const HeroSection = () => {
   return (
-    <section className="relative py-20 lg:py-5 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-gray-50 to-white">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
-          <div className="space-y-8">
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full border border-gray-200">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-medium text-gray-700">
-                Trusted by 50,000+ teams
-              </span>
-            </div>
-
-            {/* Main headline */}
-            <div className="space-y-6">
-              <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-tight">
-                Visual
-                <br />
-                <span className="text-gray-600">Collaboration</span>
-                <br />
-                <span className="text-blue-600">Reimagined</span>
-              </h1>
-
-              <p className="text-xl lg:text-2xl text-gray-600 leading-relaxed max-w-lg">
-                The professional whiteboard platform that transforms how teams
-                ideate, plan, and execute together.
-              </p>
-            </div>
-
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4">
-              <SignUpButton mode="modal">
-                <Button
-                  size="lg"
-                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg rounded-xl shadow-sm transition-all duration-200"
-                >
-                  Start Free Trial
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </SignUpButton>
-
-              <SignInButton mode="modal">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="px-8 py-4 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold text-lg rounded-xl transition-all duration-200"
-                >
-                  <Play className="w-5 h-5 mr-2" />
-                  Watch Demo
-                </Button>
-              </SignInButton>
-            </div>
-
-            {/* Trust indicators */}
-            <div className="flex flex-wrap items-center gap-6 pt-4 text-sm text-gray-500">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span>14-day free trial</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Shield className="w-4 h-4 text-green-500" />
-                <span>Enterprise security</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Star className="w-4 h-4 text-yellow-500" />
-                <span>4.8/5 customer rating</span>
-              </div>
-            </div>
+    <section className="bg-slate-50 px-4 py-24 sm:px-6 lg:px-8 lg:py-28">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-16 text-center">
+          <div className="mb-7 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700">
+            <Sparkles className="h-4 w-4 text-blue-600" />
+            <span>Built for product, design, and engineering teams</span>
           </div>
 
-          {/* Hero Visual */}
-          <div className="relative">
-            <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-200 p-8">
-              <div className="aspect-video bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-center relative overflow-hidden">
-                {/* Simulated whiteboard elements */}
-                <div className="absolute top-6 left-6 w-16 h-12 bg-blue-100 border-2 border-blue-300 rounded-lg"></div>
-                <div className="absolute top-6 right-6 w-12 h-12 bg-green-100 border-2 border-green-300 rounded-full"></div>
-                <div className="absolute bottom-6 left-8 w-24 h-2 bg-gray-300 rounded-full"></div>
-                <div className="absolute bottom-12 left-8 w-16 h-2 bg-gray-300 rounded-full"></div>
-                <div className="absolute bottom-6 right-6 w-8 h-8 bg-yellow-100 border-2 border-yellow-300 rounded"></div>
+          <h1 className="text-balance text-5xl font-bold tracking-tight text-slate-900 md:text-6xl lg:text-7xl">
+            Visual Collaboration
+            <br />
+            Built for Serious Teams
+          </h1>
+          <p className="mx-auto mt-6 max-w-3xl text-lg leading-relaxed text-slate-600 md:text-xl">
+            Plan architecture, map workflows, and align execution in one shared
+            workspace designed for precision and scale.
+          </p>
 
-                {/* Center focus */}
-                <div className="text-center flex justify-center flex-col items-center">
-                  <Image src={"/logo.svg"} alt="Logo" height={40} width={40} />
+          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <SignUpButton mode="modal">
+              <Button
+                size="lg"
+                className="h-12 rounded-md bg-blue-600 px-7 text-base font-semibold text-white hover:bg-blue-700"
+              >
+                Start Free Trial
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </SignUpButton>
+            <SignInButton mode="modal">
+              <Button
+                variant="outline"
+                size="lg"
+                className="h-12 rounded-md border-slate-300 bg-white px-7 text-base font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Open Workspace
+                <MoveRight className="ml-2 h-4 w-4" />
+              </Button>
+            </SignInButton>
+          </div>
 
-                  <p className="text-gray-600 font-medium">
-                    Interactive Workspace
-                  </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3 text-sm text-slate-500">
+            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+              <Shield className="mr-1.5 h-4 w-4 text-slate-700" />
+              Enterprise-ready security
+            </span>
+            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+              <Dot className="h-4 w-4 text-blue-600" />
+              14-day free trial
+            </span>
+            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+              <Dot className="h-4 w-4 text-blue-600" />
+              Real-time collaboration
+            </span>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="h-2.5 w-2.5 rounded-full bg-slate-400" />
+              <div className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+              <div className="h-2.5 w-2.5 rounded-full bg-slate-200" />
+            </div>
+            <div className="text-xs font-medium text-slate-600">
+              Draw Anything Workspace
+            </div>
+            <Image src="/logo.svg" alt="Logo" height={20} width={20} />
+          </div>
+
+          <div className="grid min-h-[360px] grid-cols-1 gap-0 bg-white lg:grid-cols-[240px_1fr]">
+            <aside className="border-b border-slate-200 bg-slate-50 p-4 lg:border-r lg:border-b-0">
+              <div className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Boards
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="rounded-md border border-slate-300 bg-white px-3 py-2 font-medium text-slate-800">
+                  Checkout Flow
+                </div>
+                <div className="rounded-md px-3 py-2 text-slate-600">
+                  System Design
+                </div>
+                <div className="rounded-md px-3 py-2 text-slate-600">
+                  Sprint Mapping
                 </div>
               </div>
-            </div>
+            </aside>
 
-            {/* Floating elements */}
-            <div className="absolute -top-4 -right-4 w-12 h-12 bg-white rounded-xl shadow-lg border border-gray-200 flex items-center justify-center">
-              <Users className="w-6 h-6 text-gray-600" />
-            </div>
-            <div className="absolute -bottom-4 -left-4 w-12 h-12 bg-white rounded-xl shadow-lg border border-gray-200 flex items-center justify-center">
-              <Zap className="w-6 h-6 text-gray-600" />
+            <div className="relative bg-slate-50 p-6">
+              <div className="relative mx-auto mt-4 max-w-2xl space-y-6">
+                <div className="mx-auto h-16 w-48 rounded-md border-2 border-slate-700 bg-blue-50 px-3 py-4 text-center text-lg font-semibold text-slate-800">
+                  API Gateway
+                </div>
+                <div className="mx-auto h-8 w-0.5 bg-slate-500" />
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="h-14 rounded-md border-2 border-slate-700 bg-white px-3 py-3 text-center font-medium text-slate-800">
+                    Auth Service
+                  </div>
+                  <div className="h-14 rounded-md border-2 border-slate-700 bg-white px-3 py-3 text-center font-medium text-slate-800">
+                    Order Service
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="h-14 rounded-full border-2 border-slate-700 bg-amber-100 px-3 py-3 text-center font-medium text-slate-800">
+                    Session Store
+                  </div>
+                  <div className="h-14 rounded-full border-2 border-slate-700 bg-amber-100 px-3 py-3 text-center font-medium text-slate-800">
+                    Inventory DB
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
