@@ -26,10 +26,24 @@ export interface ObstacleAwareRouteInput {
   ignoreObstacleIds?: string[];
   obstaclePadding?: number;
   stubDistance?: number;
+  candidatePenalty?: (points: Point[]) => number;
+  pathRanking?: PathRankingConfig;
+}
+
+export interface PathRankingConfig {
+  bendPenalty?: number;
+  lengthPenalty?: number;
+  detourPenalty?: number;
+  preferencePenalty?: number;
+  crossingPenalty?: number;
 }
 
 const DEFAULT_STUB_DISTANCE = 24;
 const DEFAULT_OBSTACLE_PADDING = 12;
+const DEFAULT_BEND_PENALTY = 1000;
+const DEFAULT_LENGTH_PENALTY = 1;
+const DEFAULT_DETOUR_PENALTY = 0.15;
+const DEFAULT_PREFERENCE_PENALTY = 48;
 
 const samePoint = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
 
@@ -193,15 +207,25 @@ const scoreCandidate = (
   start: Point,
   end: Point,
   preferred: ArrowRoutePreference,
+  pathRanking: PathRankingConfig,
+  candidatePenalty?: (points: Point[]) => number,
 ): number => {
   const firstLeg: ArrowRoutePreference =
     points.length > 1 && points[0].x === points[1].x ? "vh" : "hv";
-  const preferencePenalty = firstLeg === preferred ? 0 : 48;
+  const bendPenalty = pathRanking.bendPenalty ?? DEFAULT_BEND_PENALTY;
+  const lengthPenalty = pathRanking.lengthPenalty ?? DEFAULT_LENGTH_PENALTY;
+  const detourPenalty = pathRanking.detourPenalty ?? DEFAULT_DETOUR_PENALTY;
+  const preferencePenaltyWeight =
+    pathRanking.preferencePenalty ?? DEFAULT_PREFERENCE_PENALTY;
+  const preferencePenalty =
+    firstLeg === preferred ? 0 : preferencePenaltyWeight;
+  const dynamicPenalty = candidatePenalty ? candidatePenalty(points) : 0;
   return (
-    getBendCount(points) * 1000 +
-    getPathLength(points) +
-    getDetourPenalty(points, start, end) * 0.15 +
-    preferencePenalty
+    getBendCount(points) * bendPenalty +
+    getPathLength(points) * lengthPenalty +
+    getDetourPenalty(points, start, end) * detourPenalty +
+    preferencePenalty +
+    dynamicPenalty
   );
 };
 
@@ -231,13 +255,17 @@ const wrapWithHandles = (
   startExit: Point,
   endEntry: Point,
   spine: Point[],
-): Point[] => compressOrthogonalPath([start, startExit, ...spine, endEntry, end]);
+): Point[] =>
+  compressOrthogonalPath([start, startExit, ...spine, endEntry, end]);
 
 const getSpine = (
   startExit: Point,
   endEntry: Point,
   preference: ArrowRoutePreference,
-): Point[] => [startExit, ...connectOrthogonally(startExit, endEntry, preference)];
+): Point[] => [
+  startExit,
+  ...connectOrthogonally(startExit, endEntry, preference),
+];
 
 export const getObstacleAwareOrthogonalPath = ({
   start,
@@ -249,11 +277,15 @@ export const getObstacleAwareOrthogonalPath = ({
   ignoreObstacleIds = [],
   obstaclePadding = DEFAULT_OBSTACLE_PADDING,
   stubDistance = DEFAULT_STUB_DISTANCE,
+  candidatePenalty,
+  pathRanking = {},
 }: ObstacleAwareRouteInput): Point[] => {
   const startExit = startHandle
     ? offsetByHandle(start, startHandle, stubDistance)
     : start;
-  const endEntry = endHandle ? offsetByHandle(end, endHandle, stubDistance) : end;
+  const endEntry = endHandle
+    ? offsetByHandle(end, endHandle, stubDistance)
+    : end;
 
   const preferred =
     routePreference ?? getDefaultPreference(start, end, startHandle, endHandle);
@@ -287,12 +319,24 @@ export const getObstacleAwareOrthogonalPath = ({
     const lanes = collectCandidateLanes(blockers, obstaclePadding);
     lanes.xLanes.forEach((xLane) => {
       baseCandidates.push(
-        wrapWithHandles(start, end, startExit, endEntry, routeViaX(startExit, endEntry, xLane)),
+        wrapWithHandles(
+          start,
+          end,
+          startExit,
+          endEntry,
+          routeViaX(startExit, endEntry, xLane),
+        ),
       );
     });
     lanes.yLanes.forEach((yLane) => {
       baseCandidates.push(
-        wrapWithHandles(start, end, startExit, endEntry, routeViaY(startExit, endEntry, yLane)),
+        wrapWithHandles(
+          start,
+          end,
+          startExit,
+          endEntry,
+          routeViaY(startExit, endEntry, yLane),
+        ),
       );
     });
   }
@@ -301,10 +345,19 @@ export const getObstacleAwareOrthogonalPath = ({
   let bestScore = Number.POSITIVE_INFINITY;
   baseCandidates.forEach((candidate) => {
     if (candidate.length < 2) return;
-    if (pathIntersectsObstacles(candidate, obstacles, ignoreIds, obstaclePadding)) {
+    if (
+      pathIntersectsObstacles(candidate, obstacles, ignoreIds, obstaclePadding)
+    ) {
       return;
     }
-    const score = scoreCandidate(candidate, start, end, preferred);
+    const score = scoreCandidate(
+      candidate,
+      start,
+      end,
+      preferred,
+      pathRanking,
+      candidatePenalty,
+    );
     if (score < bestScore) {
       bestScore = score;
       best = candidate;
@@ -314,12 +367,18 @@ export const getObstacleAwareOrthogonalPath = ({
   // Fallback if every candidate intersects after expansion:
   // pick the least-cost candidate so routing still remains deterministic.
   if (bestScore === Number.POSITIVE_INFINITY) {
-    best = [...baseCandidates]
-      .sort(
-        (a, b) =>
-          scoreCandidate(a, start, end, preferred) -
-          scoreCandidate(b, start, end, preferred),
-      )[0];
+    best = [...baseCandidates].sort(
+      (a, b) =>
+        scoreCandidate(
+          a,
+          start,
+          end,
+          preferred,
+          pathRanking,
+          candidatePenalty,
+        ) -
+        scoreCandidate(b, start, end, preferred, pathRanking, candidatePenalty),
+    )[0];
   }
 
   return compressOrthogonalPath(best);

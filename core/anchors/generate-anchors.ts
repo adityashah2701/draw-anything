@@ -36,6 +36,9 @@ export const generateAnchorsForElement = (
   element: DrawingElement,
   bounds: BoundsLike | null,
 ): Anchor[] => {
+  if ((element as DrawingElement & { isGuide?: boolean }).isGuide) {
+    return [];
+  }
   if (!bounds) return [];
   return getShapeAnchors(element, {
     minX: bounds.minX,

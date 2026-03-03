@@ -1,4 +1,5 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
+import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { DiamondShape } from "@/core/shapes/diamond/types";
 
 export const renderDiamondToCanvas = (
@@ -31,13 +32,30 @@ export const renderDiamondToCanvas = (
   ctx.stroke();
 
   if (shape.label) {
-    ctx.save();
-    ctx.fillStyle = shape.color || "#1f2937";
-    ctx.font = `${Math.max(12, (shape.fontSize ?? 16) * zoom)}px Inter, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(shape.label, cx, cy);
-    ctx.restore();
+    const width = right - left;
+    const height = bottom - top;
+    renderShapeLabel({
+      ctx,
+      label: shape.label,
+      centerX: cx,
+      centerY: cy,
+      maxWidth: width * 0.66,
+      maxHeight: height * 0.66,
+      zoom,
+      clipPath: (canvasContext) => {
+        canvasContext.beginPath();
+        canvasContext.moveTo(cx, top);
+        canvasContext.lineTo(right, cy);
+        canvasContext.lineTo(cx, bottom);
+        canvasContext.lineTo(left, cy);
+        canvasContext.closePath();
+      },
+      preferredColor: shape.color,
+      fillColor: shape.fill,
+      preferredFontSize: shape.fontSize,
+      preferredFontWeight: shape.fontWeight,
+      preferredFontStyle: shape.fontStyle,
+      maxLines: 3,
+    });
   }
 };
-

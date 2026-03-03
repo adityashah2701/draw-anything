@@ -12,11 +12,13 @@ import {
   ObstacleAwareRouteInput,
   compressOrthogonalPath,
   getObstacleAwareOrthogonalPath,
+  PathRankingConfig,
   RoutingObstacle,
 } from "@/core/routing/obstacle-avoidance";
 import {
   addPathToSegmentSpatialIndex,
   buildSegmentSpatialIndex,
+  countPathCrossingsWithSpatialIndex,
   resolvePathSegmentConflicts,
   SegmentConflictOptions,
   SegmentSpatialIndex,
@@ -213,6 +215,7 @@ export interface RouteArrowInput
   parallelOffset?: number;
   occupiedSegments?: SegmentSpatialIndex | null;
   conflictOptions?: SegmentConflictOptions;
+  pathRanking?: PathRankingWeights;
 }
 
 export interface RouteArrowDescriptor {
@@ -237,6 +240,11 @@ export interface RouteArrowBatchInput {
   obstaclePadding?: number;
   parallelSpacing?: number;
   conflictOptions?: SegmentConflictOptions;
+  pathRanking?: PathRankingWeights;
+}
+
+export interface PathRankingWeights extends PathRankingConfig {
+  crossingPenalty?: number;
 }
 
 export const routeArrowPoints = ({
@@ -257,6 +265,7 @@ export const routeArrowPoints = ({
   parallelOffset = 0,
   occupiedSegments = null,
   conflictOptions,
+  pathRanking,
 }: RouteArrowInput): Point[] => {
   if (routingMode === "straight") {
     return [start, end];
@@ -268,6 +277,13 @@ export const routeArrowPoints = ({
 
   const ignoreIds = new Set<string>(ignoreObstacleIds ?? []);
   const lockEndpointStubs = Boolean(startHandle || endHandle);
+  const crossingPenalty = pathRanking?.crossingPenalty ?? 0;
+  const candidatePenalty =
+    occupiedSegments && crossingPenalty > 0
+      ? (candidate: Point[]) =>
+          countPathCrossingsWithSpatialIndex(arrowId, candidate, occupiedSegments) *
+          crossingPenalty
+      : undefined;
 
   let points = getObstacleAwareOrthogonalPath({
     start,
@@ -278,6 +294,8 @@ export const routeArrowPoints = ({
     obstacles,
     ignoreObstacleIds: Array.from(ignoreIds),
     obstaclePadding,
+    candidatePenalty,
+    pathRanking,
   });
   points = orthogonalizePath(
     points,
@@ -322,6 +340,7 @@ export const routeArrowBatch = ({
   obstaclePadding = 12,
   parallelSpacing = 12,
   conflictOptions,
+  pathRanking,
 }: RouteArrowBatchInput): Map<string, Point[]> => {
   if (arrows.length === 0) return new Map<string, Point[]>();
 
@@ -360,6 +379,7 @@ export const routeArrowBatch = ({
       parallelOffset: offsets.get(arrow.arrowId) ?? 0,
       occupiedSegments: occupied,
       conflictOptions,
+      pathRanking,
     });
     routed.set(arrow.arrowId, points);
     addPathToSegmentSpatialIndex(occupied, arrow.arrowId, points);

@@ -1,4 +1,5 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
+import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { CircleShape } from "@/core/shapes/circle/types";
 import { getCircleRadius } from "@/core/shapes/circle/geometry";
 
@@ -22,13 +23,27 @@ export const renderCircleToCanvas = (
   ctx.stroke();
 
   if (shape.label) {
-    ctx.save();
-    ctx.fillStyle = shape.color || "#1f2937";
-    ctx.font = `${Math.max(12, (shape.fontSize ?? 16) * zoom)}px Inter, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(shape.label, centerX, centerY);
-    ctx.restore();
+    const diameter = radius * 2;
+    const labelBox = diameter * 0.72;
+    renderShapeLabel({
+      ctx,
+      label: shape.label,
+      centerX,
+      centerY,
+      maxWidth: labelBox,
+      maxHeight: labelBox,
+      zoom,
+      clipPath: (canvasContext) => {
+        canvasContext.beginPath();
+        canvasContext.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        canvasContext.closePath();
+      },
+      preferredColor: shape.color,
+      fillColor: shape.fill,
+      preferredFontSize: shape.fontSize,
+      preferredFontWeight: shape.fontWeight,
+      preferredFontStyle: shape.fontStyle,
+      maxLines: 3,
+    });
   }
 };
-

@@ -1,4 +1,9 @@
-import { Aabb, expandAabb, intersectsAabb, segmentBounds } from "@/core/collision/aabb";
+import {
+  Aabb,
+  expandAabb,
+  intersectsAabb,
+  segmentBounds,
+} from "@/core/collision/aabb";
 import {
   compressOrthogonalPath,
   pathIntersectsObstacles,
@@ -42,10 +47,11 @@ const DEFAULT_MAX_SHIFT_STEPS = 2;
 const DEFAULT_MIN_OVERLAP = 6;
 const DEFAULT_COLLISION_PADDING = 1;
 
-const getCellKey = (x: number, y: number, cellSize: number) =>
-  `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`;
-
-const toSegment = (arrowId: string, points: Point[], index: number): RoutedSegment | null => {
+const toSegment = (
+  arrowId: string,
+  points: Point[],
+  index: number,
+): RoutedSegment | null => {
   if (index < 0 || index >= points.length - 1) return null;
   const from = points[index];
   const to = points[index + 1];
@@ -118,7 +124,7 @@ const querySegments = (
 
   for (let cx = minCellX; cx <= maxCellX; cx += 1) {
     for (let cy = minCellY; cy <= maxCellY; cy += 1) {
-      const bucket = index.cells.get(getCellKey(cx * index.cellSize, cy * index.cellSize, index.cellSize));
+      const bucket = index.cells.get(`${cx}:${cy}`);
       if (!bucket) continue;
       bucket.forEach((entry) => {
         const key = `${entry.segment.arrowId}:${entry.segment.index}`;
@@ -136,6 +142,33 @@ const overlapLength = (a: RoutedSegment, b: RoutedSegment): number => {
   const start = Math.max(a.rangeStart, b.rangeStart);
   const end = Math.min(a.rangeEnd, b.rangeEnd);
   return Math.max(0, end - start);
+};
+
+const isEndpoint = (segment: RoutedSegment, point: Point) =>
+  (segment.from.x === point.x && segment.from.y === point.y) ||
+  (segment.to.x === point.x && segment.to.y === point.y);
+
+const countSegmentCrossing = (a: RoutedSegment, b: RoutedSegment): number => {
+  if (a.orientation === b.orientation) return 0;
+
+  const horizontal = a.orientation === "horizontal" ? a : b;
+  const vertical = a.orientation === "vertical" ? a : b;
+  const intersection = { x: vertical.fixedCoord, y: horizontal.fixedCoord };
+  const withinHorizontal =
+    intersection.x >= horizontal.rangeStart &&
+    intersection.x <= horizontal.rangeEnd;
+  const withinVertical =
+    intersection.y >= vertical.rangeStart &&
+    intersection.y <= vertical.rangeEnd;
+
+  if (!withinHorizontal || !withinVertical) return 0;
+  if (
+    isEndpoint(horizontal, intersection) ||
+    isEndpoint(vertical, intersection)
+  ) {
+    return 0;
+  }
+  return 1;
 };
 
 const countConflicts = (
@@ -206,8 +239,43 @@ export const buildSegmentSpatialIndex = (
   cellSize = DEFAULT_CELL_SIZE,
 ): SegmentSpatialIndex => {
   const index = createSegmentSpatialIndex(cellSize);
-  routes.forEach((route) => addPathToSegmentSpatialIndex(index, route.arrowId, route.points));
+  routes.forEach((route) =>
+    addPathToSegmentSpatialIndex(index, route.arrowId, route.points),
+  );
   return index;
+};
+
+export const countPathCrossingsWithSpatialIndex = (
+  arrowId: string,
+  path: Point[],
+  index: SegmentSpatialIndex | null,
+): number => {
+  if (!index || path.length < 2) return 0;
+
+  let crossings = 0;
+  const seen = new Set<string>();
+
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const segment = toSegment(arrowId, path, i);
+    if (!segment) continue;
+
+    const queryBounds = expandAabb(segmentBounds(segment.from, segment.to), 1);
+    const nearby = querySegments(index, queryBounds);
+
+    nearby.forEach((entry) => {
+      const other = entry.segment;
+      if (other.arrowId === arrowId) return;
+      if (other.orientation === segment.orientation) return;
+      if (!intersectsAabb(entry.bounds, queryBounds)) return;
+
+      const key = `${segment.index}:${other.arrowId}:${other.index}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      crossings += countSegmentCrossing(segment, other);
+    });
+  }
+
+  return crossings;
 };
 
 export const resolvePathSegmentConflicts = ({
@@ -252,10 +320,21 @@ export const resolvePathSegmentConflicts = ({
       let bestConflicts = baseConflicts;
       for (let step = 1; step <= maxShiftSteps; step += 1) {
         for (const direction of [-1, 1] as const) {
-          const shifted = moveSegmentBy(nextPath, i, spacing * step * direction);
+          const shifted = moveSegmentBy(
+            nextPath,
+            i,
+            spacing * step * direction,
+          );
           const shiftedSegment = toSegment(arrowId, shifted, i);
           if (!shiftedSegment) continue;
-          if (pathIntersectsObstacles(shifted, obstacles, ignoreIds, obstaclePadding)) {
+          if (
+            pathIntersectsObstacles(
+              shifted,
+              obstacles,
+              ignoreIds,
+              obstaclePadding,
+            )
+          ) {
             continue;
           }
           const shiftedConflicts = countConflicts(

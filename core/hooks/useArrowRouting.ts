@@ -57,6 +57,9 @@ export const useArrowRouting = ({
       Array<{ name: "top" | "right" | "bottom" | "left"; x: number; y: number; id: string }>
     >();
     elements.forEach((element) => {
+      if ((element as DrawingElement & { isGuide?: boolean }).isGuide) {
+        return;
+      }
       const bounds = getElementBounds(element);
       if (!bounds) return;
 

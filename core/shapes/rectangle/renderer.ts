@@ -1,4 +1,5 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
+import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { RectangleShape } from "@/core/shapes/rectangle/types";
 
 export const renderRectangleToCanvas = (
@@ -21,13 +22,24 @@ export const renderRectangleToCanvas = (
   ctx.strokeRect(startX, startY, width, height);
 
   if (shape.label) {
-    ctx.save();
-    ctx.fillStyle = shape.color || "#1f2937";
-    ctx.font = `${Math.max(12, (shape.fontSize ?? 16) * zoom)}px Inter, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(shape.label, startX + width / 2, startY + height / 2);
-    ctx.restore();
+    renderShapeLabel({
+      ctx,
+      label: shape.label,
+      centerX: startX + width / 2,
+      centerY: startY + height / 2,
+      maxWidth: Math.abs(width),
+      maxHeight: Math.abs(height),
+      zoom,
+      clipPath: (canvasContext) => {
+        canvasContext.beginPath();
+        canvasContext.rect(startX, startY, width, height);
+        canvasContext.closePath();
+      },
+      preferredColor: shape.color,
+      fillColor: shape.fill,
+      preferredFontSize: shape.fontSize,
+      preferredFontWeight: shape.fontWeight,
+      preferredFontStyle: shape.fontStyle,
+    });
   }
 };
-

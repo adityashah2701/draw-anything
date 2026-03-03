@@ -6,6 +6,11 @@ import {
   routeArrowBatch,
 } from "@/core/routing/orthogonal-router";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
+import { computeArchitectureLayeredLayout } from "@/core/layout/layered-layout";
+import {
+  ArchitectureLayerName,
+  parseArchitectureLayerName,
+} from "@/core/layout/layer-constraint";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
@@ -49,13 +54,16 @@ Hard rules:
 - Do not emit any visual coordinates.
 - Keep graph small and readable (3-14 nodes).
 - Avoid unnecessary cycles.
+- Optimize for human readability over completeness.
 - Return one coherent diagram only. Do not mix unrelated sub-diagrams.
 
 Node format:
 {
   "id": "string",
   "label": "string",
-  "type": "rectangle" | "circle" | "diamond"
+  "type": "rectangle" | "circle" | "diamond",
+  "layer"?: "edge" | "application" | "data" | "observability",
+  "column"?: number
 }
 
 Edge format:
@@ -67,6 +75,10 @@ Edge format:
 }
 
 Use "bidirectional": true only when relationship is explicitly two-way.
+Readability constraints:
+- Model primary relationships only (avoid dense all-to-all edges).
+- Prefer hierarchical flow and minimal edge crossings.
+- If a relationship is secondary, omit it unless essential.
 `;
 
   if (intent === "architecture") {
@@ -77,7 +89,22 @@ Intent rules (architecture):
 - Prefer rectangle for app/service components.
 - Use circle for databases, caches, queues, or external systems.
 - If direction is not explicit, default left-to-right dependency/data flow:
-  client/frontend -> api/backend/services -> data stores/infrastructure.`;
+  client/frontend -> api/backend/services -> data stores/infrastructure.
+- Enforce strict top-to-bottom layers:
+  edge (top) -> application -> data -> observability (bottom).
+- Every node must include "layer" and "column".
+- Keep dependency graph sparse and layered.
+- Avoid direct edges that skip obvious middle layers.
+- Avoid connecting one node to too many distant nodes unless explicitly requested.
+
+Layout constraints:
+- Maximum 4-5 nodes per layer for readability.
+- Column indices must be sequential within each layer (0, 1, 2, ...).
+- Keep total columns per layer under 6 to prevent horizontal sprawl.
+- Cluster related services into adjacent columns.
+- Prefer vertical edges between layers; minimize same-layer horizontal edges.
+- Never create edges that skip more than 1 layer unless absolutely essential.
+- Group domain-related nodes (e.g. order/payment, auth/user) in adjacent columns.`;
   }
 
   if (intent === "flowchart") {
@@ -96,12 +123,30 @@ Intent rules (concept):
 }
 
 function buildUserPrompt(prompt: string, intent: DiagramIntent): string {
-  return [
+  const lines = [
     `User request: ${prompt}`,
     `Detected diagram intent: ${intent}`,
     "Return strictly valid JSON with keys: nodes, edges.",
     "Use only entities from the request (or very strongly implied ones).",
-  ].join("\n");
+  ];
+
+  if (intent === "architecture") {
+    lines.push(
+      "Architecture constraints:",
+      '- Assign every node a "layer" in: edge, application, data, observability.',
+      '- Assign every node a numeric "column" starting at 0 within its layer.',
+      "- Keep each layer to at most 5 columns (0-4). Use fewer columns when possible.",
+      "- Minimize horizontal sprawl and keep total width compact.",
+      "- Prefer vertical dependencies between layers; keep same-layer links minimal.",
+      "- Avoid random lateral links and avoid cross-layer skipping.",
+      "- Cluster related services (e.g. order/payment/observability) in adjacent columns.",
+      "- Every edge should connect nodes in adjacent layers when possible.",
+      "- Penalize any edge that crosses more than 1 layer boundary.",
+      "- Keep the total node count under 14 for clarity.",
+    );
+  }
+
+  return lines.join("\n");
 }
 
 type ShapeType = "rectangle" | "circle" | "diamond";
@@ -111,6 +156,8 @@ interface NodeJson {
   id: string;
   label: string;
   type?: ShapeType;
+  layer?: string;
+  column?: number;
 }
 
 interface EdgeJson {
@@ -129,6 +176,8 @@ interface LogicalNode {
   id: string;
   label: string;
   shape: ShapeType;
+  layer?: ArchitectureLayerName;
+  column?: number;
 }
 
 interface LogicalEdge {
@@ -184,13 +233,19 @@ type CanvasElement = {
     | "rectangle"
     | "circle"
     | "diamond"
+    | "text"
+    | "line"
     | "arrow"
     | "arrow-bidirectional";
   label?: string;
+  text?: string;
   points: { x: number; y: number }[];
   fill?: string;
   color: string;
   strokeWidth: number;
+  fontSize?: number;
+  fontWeight?: string | number;
+  fontStyle?: string;
   dashed?: boolean;
   arrowHeadStart?: boolean;
   arrowHeadEnd?: boolean;
@@ -199,6 +254,7 @@ type CanvasElement = {
   isManuallyRouted?: boolean;
   startConnection?: { elementId: string; anchorId: string };
   endConnection?: { elementId: string; anchorId: string };
+  isGuide?: boolean;
 };
 
 function generateShortId(index: number) {
@@ -227,6 +283,18 @@ function toShapeType(node: NodeJson, intent: DiagramIntent): ShapeType {
     return "circle";
   }
   return "rectangle";
+}
+
+function toArchitectureLayerHint(
+  layer: string | undefined,
+): ArchitectureLayerName | undefined {
+  const parsed = parseArchitectureLayerName(layer);
+  return parsed ?? undefined;
+}
+
+function toColumnHint(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.floor(value));
 }
 
 function escapeRegExp(value: string): string {
@@ -259,12 +327,20 @@ function stripSyntheticTerminalNodes(
 
     if (mentioned) continue;
 
-    if (/^(start|begin|entry|source)$/.test(label) && indegree === 0 && outdegree <= 1) {
+    if (
+      /^(start|begin|entry|source)$/.test(label) &&
+      indegree === 0 &&
+      outdegree <= 1
+    ) {
       removable.add(node.id);
       continue;
     }
 
-    if (/^(end|finish|stop|exit|done|complete)$/.test(label) && outdegree === 0 && indegree <= 1) {
+    if (
+      /^(end|finish|stop|exit|done|complete)$/.test(label) &&
+      outdegree === 0 &&
+      indegree <= 1
+    ) {
       removable.add(node.id);
     }
   }
@@ -303,6 +379,11 @@ function sanitizeGraph(
       id,
       label: label.slice(0, 48),
       shape: toShapeType(node, intent),
+      layer:
+        intent === "architecture"
+          ? toArchitectureLayerHint(node.layer)
+          : undefined,
+      column: intent === "architecture" ? toColumnHint(node.column) : undefined,
     });
   }
 
@@ -335,6 +416,84 @@ function sanitizeGraph(
   };
 
   return stripSyntheticTerminalNodes(graph, prompt, intent);
+}
+
+function canReachTarget(
+  graph: LogicalGraph,
+  sourceId: string,
+  targetId: string,
+  excludedEdgeIndex: number,
+): boolean {
+  const queue = [sourceId];
+  const visited = new Set<string>([sourceId]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (let i = 0; i < graph.edges.length; i += 1) {
+      if (i === excludedEdgeIndex) continue;
+      const edge = graph.edges[i];
+      if (edge.from !== current) continue;
+      if (edge.to === targetId) return true;
+      if (visited.has(edge.to)) continue;
+      visited.add(edge.to);
+      queue.push(edge.to);
+    }
+  }
+
+  return false;
+}
+
+function reduceTransitiveEdges(graph: LogicalGraph): LogicalGraph {
+  if (graph.edges.length <= 2) return graph;
+
+  const kept: LogicalEdge[] = [];
+  const candidateGraph: LogicalGraph = {
+    nodes: graph.nodes,
+    edges: [...graph.edges],
+  };
+
+  for (let i = 0; i < graph.edges.length; i += 1) {
+    const edge = graph.edges[i];
+
+    // Preserve explicit styling/semantics.
+    if (edge.bidirectional || edge.dashed) {
+      kept.push(edge);
+      continue;
+    }
+
+    const removable = canReachTarget(candidateGraph, edge.from, edge.to, i);
+
+    if (!removable) {
+      kept.push(edge);
+    }
+  }
+
+  return {
+    nodes: graph.nodes,
+    edges: kept,
+  };
+}
+
+function simplifyGraphForReadability(
+  graph: LogicalGraph,
+  intent: DiagramIntent,
+): LogicalGraph {
+  let simplified = graph;
+
+  // For dense graphs, remove redundant direct edges that already have an alternate route.
+  if (simplified.edges.length > simplified.nodes.length + 2) {
+    simplified = reduceTransitiveEdges(simplified);
+  }
+
+  // Architecture diagrams are most affected by edge noise; run a second pass.
+  if (
+    intent === "architecture" &&
+    simplified.edges.length > simplified.nodes.length + 1
+  ) {
+    simplified = reduceTransitiveEdges(simplified);
+  }
+
+  return simplified;
 }
 
 const STOP_WORDS = new Set([
@@ -541,6 +700,77 @@ function computeNodeDepths(graph: LogicalGraph): Map<string, number> {
   return depth;
 }
 
+function inferArchitectureBand(node: LogicalNode): number {
+  const label = node.label.toLowerCase();
+
+  // Edge/entry layer.
+  if (
+    /(user|users|client|browser|mobile|web app|frontend|cdn|waf|gateway|ingress|edge)/.test(
+      label,
+    )
+  ) {
+    return 0;
+  }
+
+  // Core app/service layer.
+  if (
+    /(api|service|backend|app|auth|product|order|cart|search|payment|notification)/.test(
+      label,
+    )
+  ) {
+    return 1;
+  }
+
+  // Async/worker layer.
+  if (/(queue|broker|kafka|event|worker|consumer|job)/.test(label)) {
+    return 2;
+  }
+
+  // Data/storage layer.
+  if (
+    /(db|database|postgres|mysql|redis|cache|storage|blob|s3|bucket|object)/.test(
+      label,
+    )
+  ) {
+    return 3;
+  }
+
+  // Observability/support layer.
+  if (/(monitor|metrics|logging|analytics|trace|audit)/.test(label)) {
+    return 4;
+  }
+
+  return node.shape === "circle" ? 3 : 1;
+}
+
+function applyDepthBiasByIntent(
+  graph: LogicalGraph,
+  depth: Map<string, number>,
+  intent: DiagramIntent,
+): Map<string, number> {
+  if (intent !== "architecture") return depth;
+
+  const adjusted = new Map<string, number>();
+  graph.nodes.forEach((node) => {
+    const baseDepth = depth.get(node.id) ?? 0;
+    const preferredBand = inferArchitectureBand(node);
+    adjusted.set(node.id, Math.max(baseDepth, preferredBand));
+  });
+
+  const orderedLevels = Array.from(new Set(adjusted.values())).sort(
+    (a, b) => a - b,
+  );
+  const levelToDense = new Map<number, number>();
+  orderedLevels.forEach((level, idx) => levelToDense.set(level, idx));
+
+  const denseDepth = new Map<string, number>();
+  adjusted.forEach((level, nodeId) => {
+    denseDepth.set(nodeId, levelToDense.get(level) ?? level);
+  });
+
+  return denseDepth;
+}
+
 function pickPrimaryParents(
   graph: LogicalGraph,
   depth: Map<string, number>,
@@ -581,18 +811,28 @@ function pickPrimaryParents(
 function createLayoutConfig(
   graph: LogicalGraph,
   maxDepth: number,
+  intent: DiagramIntent,
 ): LayoutConfig {
   const nodeCount = graph.nodes.length;
   const depthSpan = Math.max(1, maxDepth + 1);
+  const architecture = intent === "architecture";
 
   return {
     canvasPaddingX: 130,
     canvasPaddingY: 96,
-    minSiblingGap: clamp(150 - nodeCount * 1.2, 72, 132),
-    componentGap: clamp(360 - nodeCount * 1.3, 220, 340),
+    minSiblingGap: architecture
+      ? clamp(170 - nodeCount * 0.9, 96, 156)
+      : clamp(150 - nodeCount * 1.2, 72, 132),
+    componentGap: architecture
+      ? clamp(380 - nodeCount * 1.1, 260, 360)
+      : clamp(360 - nodeCount * 1.3, 220, 340),
     // Tighter vertical rhythm so AI flowchart arrows are shorter and cleaner.
-    layerGap: clamp(136 - depthSpan * 3, 72, 120),
-    rectangleWidth: clamp(200 + Math.floor(nodeCount / 18) * 8, 200, 252),
+    layerGap: architecture
+      ? clamp(150 - depthSpan * 2, 96, 140)
+      : clamp(136 - depthSpan * 3, 72, 120),
+    rectangleWidth: architecture
+      ? clamp(212 + Math.floor(nodeCount / 16) * 8, 212, 268)
+      : clamp(200 + Math.floor(nodeCount / 18) * 8, 200, 252),
     rectangleHeight: 76,
     circleDiameter: 92,
     diamondSize: 128,
@@ -607,6 +847,18 @@ function estimateCircleDiameter(label: string, base: number) {
   const byLongest = base + Math.max(0, longestWord - 6) * 7;
   const byTotal = base + Math.max(0, totalChars - 10) * 3;
   return clamp(Math.max(byLongest, byTotal), base, 164);
+}
+
+function estimateRectangleWidth(label: string, base: number) {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  const longestWord = words.reduce(
+    (acc, word) => Math.max(acc, word.length),
+    0,
+  );
+  const totalChars = label.replace(/\s+/g, "").length;
+  const byLongest = base + Math.max(0, longestWord - 10) * 6;
+  const byTotal = base + Math.max(0, totalChars - 18) * 3;
+  return clamp(Math.max(byLongest, byTotal), base, 320);
 }
 
 function estimateDiamondSize(label: string, base: number) {
@@ -634,6 +886,8 @@ function createInitialLayoutNodes(
     } else if (node.shape === "diamond") {
       width = estimateDiamondSize(node.label, config.diamondSize);
       height = width;
+    } else {
+      width = estimateRectangleWidth(node.label, config.rectangleWidth);
     }
 
     const incomingCount = incoming.get(node.id)?.length ?? 0;
@@ -848,6 +1102,106 @@ function placeForest(
     const width = computeSubtreeWidth(root.id);
     placeNode(root.id, cursorX);
     cursorX += width + config.componentGap;
+  }
+}
+
+function optimizeLayerOrdering(
+  layoutNodes: Map<string, LayoutNode>,
+  incoming: Map<string, string[]>,
+  outgoing: Map<string, string[]>,
+  config: LayoutConfig,
+) {
+  const byDepth = new Map<number, LayoutNode[]>();
+  for (const node of layoutNodes.values()) {
+    if (!byDepth.has(node.depth)) byDepth.set(node.depth, []);
+    byDepth.get(node.depth)!.push(node);
+  }
+  const depths = Array.from(byDepth.keys()).sort((a, b) => a - b);
+
+  const enforceSpacing = (nodes: LayoutNode[]) => {
+    const sorted = [...nodes].sort((a, b) => a.x - b.x);
+    for (let i = 1; i < sorted.length; i += 1) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      const minX =
+        prev.x + prev.width / 2 + config.minSiblingGap + curr.width / 2;
+      if (curr.x < minX) {
+        curr.x = minX;
+      }
+    }
+  };
+
+  const orderByBarycenter = (
+    nodes: LayoutNode[],
+    resolveNeighbors: (node: LayoutNode) => LayoutNode[],
+  ) => {
+    const originalCenter =
+      nodes.reduce((sum, node) => sum + node.x, 0) / Math.max(nodes.length, 1);
+
+    const ranked = nodes
+      .map((node) => {
+        const neighbors = resolveNeighbors(node);
+        const barycenter =
+          neighbors.length > 0
+            ? neighbors.reduce((sum, neighbor) => sum + neighbor.x, 0) /
+              neighbors.length
+            : node.x;
+        return { node, barycenter };
+      })
+      .sort((a, b) => {
+        if (a.barycenter !== b.barycenter) return a.barycenter - b.barycenter;
+        return a.node.label.localeCompare(b.node.label);
+      });
+
+    let cursor = Number.NEGATIVE_INFINITY;
+    ranked.forEach(({ node, barycenter }) => {
+      if (!Number.isFinite(cursor)) {
+        node.x = barycenter;
+      } else {
+        const minX = cursor + config.minSiblingGap + node.width / 2;
+        node.x = Math.max(barycenter, minX);
+      }
+      cursor = node.x + node.width / 2;
+    });
+
+    const nextCenter =
+      ranked.reduce((sum, entry) => sum + entry.node.x, 0) /
+      Math.max(ranked.length, 1);
+    const centerShift = originalCenter - nextCenter;
+    ranked.forEach(({ node }) => {
+      node.x += centerShift;
+    });
+
+    enforceSpacing(nodes);
+  };
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    for (const depth of depths) {
+      if (depth === depths[0]) continue;
+      const nodes = byDepth.get(depth) ?? [];
+      if (nodes.length <= 1) continue;
+      orderByBarycenter(
+        nodes,
+        (node) =>
+          (incoming.get(node.id) ?? [])
+            .map((id) => layoutNodes.get(id))
+            .filter(Boolean) as LayoutNode[],
+      );
+    }
+
+    for (let i = depths.length - 1; i >= 0; i -= 1) {
+      const depth = depths[i];
+      if (depth === depths[depths.length - 1]) continue;
+      const nodes = byDepth.get(depth) ?? [];
+      if (nodes.length <= 1) continue;
+      orderByBarycenter(
+        nodes,
+        (node) =>
+          (outgoing.get(node.id) ?? [])
+            .map((id) => layoutNodes.get(id))
+            .filter(Boolean) as LayoutNode[],
+      );
+    }
   }
 }
 
@@ -1067,8 +1421,38 @@ function chooseHandles(
     return { from: "bottom", to: "top" };
   }
 
+  if (
+    source.depth === target.depth &&
+    Math.abs(source.x - target.x) > (source.width + target.width) * 1.3
+  ) {
+    return { from: "bottom", to: "bottom" };
+  }
+
   if (source.depth < target.depth) return { from: "bottom", to: "top" };
   if (source.depth > target.depth) return { from: "top", to: "bottom" };
+  if (source.x <= target.x) return { from: "right", to: "left" };
+  return { from: "left", to: "right" };
+}
+
+function chooseArchitectureHandles(
+  source: LayoutNode,
+  target: LayoutNode,
+): { from: Handle; to: Handle } {
+  if (source.depth < target.depth) {
+    return { from: "bottom", to: "top" };
+  }
+
+  if (source.depth > target.depth) {
+    return { from: "top", to: "bottom" };
+  }
+
+  // For top-layer peers, route downward so edge band stays readable.
+  if (source.depth === 0) {
+    return source.x <= target.x
+      ? { from: "bottom", to: "bottom" }
+      : { from: "bottom", to: "bottom" };
+  }
+
   if (source.x <= target.x) return { from: "right", to: "left" };
   return { from: "left", to: "right" };
 }
@@ -1194,6 +1578,7 @@ function mapNodeToElement(node: LayoutNode, index: number): CanvasElement {
 }
 
 function toRoutingObstacle(element: CanvasElement): RoutingObstacle | null {
+  if (element.isGuide) return null;
   if (element.type === "arrow" || element.type === "arrow-bidirectional") {
     return null;
   }
@@ -1296,38 +1681,155 @@ function getNodeVisualStyle(node: LayoutNode): NodeVisualStyle {
   };
 }
 
-function buildElements(graph: LogicalGraph): CanvasElement[] {
-  if (graph.nodes.length === 0) return [];
-
-  const { incoming, outgoing } = buildAdjacency(graph);
-  const depth = computeNodeDepths(graph);
-  const maxDepth = Math.max(...Array.from(depth.values(), (v) => v ?? 0), 0);
-  const parentOf = pickPrimaryParents(graph, depth, incoming);
-  const config = createLayoutConfig(graph, maxDepth);
-
-  const layoutNodes = createInitialLayoutNodes(
-    graph,
-    depth,
-    parentOf,
-    incoming,
-    outgoing,
-    config,
+function isArchitectureLayoutInvalid(
+  metrics: {
+    edgeCrossingRatio: number;
+    hierarchyViolations: number;
+    nodeOverlapCount: number;
+    diagramWidth: number;
+  },
+  strict = true,
+) {
+  if (strict) {
+    return (
+      metrics.nodeOverlapCount > 0 ||
+      metrics.hierarchyViolations > 0 ||
+      metrics.edgeCrossingRatio > 0.3 ||
+      metrics.diagramWidth > 2000
+    );
+  }
+  // Relaxed thresholds — allow minor imperfections rather than rejecting entirely.
+  return (
+    metrics.nodeOverlapCount > 2 ||
+    metrics.hierarchyViolations > 1 ||
+    metrics.edgeCrossingRatio > 0.45 ||
+    metrics.diagramWidth > 2800
   );
+}
 
-  placeForest(layoutNodes, config);
-  applyDecisionAndMergeAlignment(
-    layoutNodes,
-    outgoing,
-    incoming,
-    depth,
-    config,
-  );
-  recenterParents(layoutNodes);
-  resolveHorizontalCollisions(layoutNodes, config);
-  recenterParents(layoutNodes);
-  assignY(layoutNodes, config);
-  normalizeLayout(layoutNodes, config);
+function createArchitectureGuides(
+  layerBands: Array<{
+    index: number;
+    name: string;
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+  }>,
+  layoutNodes: Map<string, LayoutNode>,
+  startIndex: number,
+) {
+  let index = startIndex;
+  const guides: CanvasElement[] = [];
 
+  const layerBackgroundColors = [
+    "#f0f4ff", // edge - light blue
+    "#f5f3ff", // application - light purple
+    "#fffbeb", // data - light amber
+    "#f0fdf4", // observability - light green
+  ];
+
+  layerBands.forEach((band) => {
+    // Light background strip per layer for visual grouping.
+    guides.push({
+      id: generateShortId(index++),
+      type: "rectangle",
+      points: [
+        { x: band.left - 16, y: band.top - 4 },
+        { x: band.right + 16, y: band.bottom + 4 },
+      ],
+      fill: layerBackgroundColors[band.index % layerBackgroundColors.length],
+      color: "#e2e8f0",
+      strokeWidth: 1,
+      isGuide: true,
+    });
+
+    guides.push({
+      id: generateShortId(index++),
+      type: "line",
+      points: [
+        { x: band.left, y: band.top + 2 },
+        { x: band.right, y: band.top + 2 },
+      ],
+      color: "#dbe4f0",
+      strokeWidth: 1,
+      isGuide: true,
+    });
+
+    guides.push({
+      id: generateShortId(index++),
+      type: "text",
+      text: band.name[0].toUpperCase() + band.name.slice(1),
+      points: [{ x: band.left + 12, y: band.top + 10 }],
+      color: "#475569",
+      strokeWidth: 1,
+      fontSize: 18,
+      fontWeight: "700",
+      isGuide: true,
+    });
+  });
+
+  const clusters: Array<{
+    label: string;
+    match: (node: LayoutNode) => boolean;
+  }> = [
+    {
+      label: "Order Domain",
+      match: (node) =>
+        /(order|cart|catalog|inventory|product)/i.test(node.label),
+    },
+    {
+      label: "Payment Domain",
+      match: (node) => /(payment|billing|invoice|checkout)/i.test(node.label),
+    },
+    {
+      label: "Observability Cluster",
+      match: (node) =>
+        /(monitor|metrics|logging|trace|alert|analytics|audit)/i.test(
+          node.label,
+        ),
+    },
+  ];
+
+  clusters.forEach((cluster) => {
+    const members = Array.from(layoutNodes.values()).filter(cluster.match);
+    if (members.length < 2) return;
+    const minX = Math.min(...members.map((node) => node.x - node.width / 2));
+    const minY = Math.min(...members.map((node) => node.y));
+
+    guides.push({
+      id: generateShortId(index++),
+      type: "text",
+      text: cluster.label,
+      points: [{ x: minX - 8, y: minY - 20 }],
+      color: "#64748b",
+      strokeWidth: 1,
+      fontSize: 14,
+      fontWeight: "600",
+      isGuide: true,
+    });
+  });
+
+  return { guides, nextIndex: index };
+}
+
+function buildNodeAndArrowElementsFromLayout(
+  graph: LogicalGraph,
+  layoutNodes: Map<string, LayoutNode>,
+  depth: Map<string, number>,
+  handleChooser: (
+    source: LayoutNode,
+    target: LayoutNode,
+  ) => {
+    from: Handle;
+    to: Handle;
+  },
+  options?: {
+    verticalBias?: boolean;
+    obstaclePadding?: number;
+    parallelSpacing?: number;
+  },
+): { elements: CanvasElement[]; nextIndex: number } {
   const elements: CanvasElement[] = [];
   const nodeElementByLogicalId = new Map<string, CanvasElement>();
 
@@ -1371,9 +1873,9 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
     }
   > = [];
 
-  for (const edge of graph.edges) {
+  graph.edges.forEach((edge) => {
     edgesByKey.set(`${edge.from}->${edge.to}`, edge);
-  }
+  });
 
   for (const edge of graph.edges) {
     const forwardKey = `${edge.from}->${edge.to}`;
@@ -1414,10 +1916,11 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
     const targetLayout = layoutNodes.get(renderTo);
     const sourceElement = nodeElementByLogicalId.get(renderFrom);
     const targetElement = nodeElementByLogicalId.get(renderTo);
-    if (!sourceLayout || !targetLayout || !sourceElement || !targetElement)
+    if (!sourceLayout || !targetLayout || !sourceElement || !targetElement) {
       continue;
+    }
 
-    const baseHandles = chooseHandles(sourceLayout, targetLayout);
+    const baseHandles = handleChooser(sourceLayout, targetLayout);
     const sourceUsage =
       sourceHandleUsageByNodeId.get(renderFrom) ?? createHandleUsage();
     const targetUsage =
@@ -1440,6 +1943,13 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
     sourceUsage[fromHandle] += 1;
     targetUsage[toHandle] += 1;
 
+    const routePreference =
+      options?.verticalBias && sourceLayout.depth !== targetLayout.depth
+        ? "vh"
+        : fromHandle === "left" || fromHandle === "right"
+          ? "hv"
+          : "vh";
+
     const arrowId = generateShortId(index++);
     arrowDrafts.push({
       id: arrowId,
@@ -1456,8 +1966,7 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
         startHandle: fromHandle,
         endHandle: toHandle,
         routingMode: "orthogonal",
-        routePreference:
-          fromHandle === "left" || fromHandle === "right" ? "hv" : "vh",
+        routePreference,
         sourceId: sourceElement.id,
         targetId: targetElement.id,
       },
@@ -1470,16 +1979,22 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
   const routedArrowPoints = routeArrowBatch({
     arrows: arrowDrafts.map((draft) => draft.routingDescriptor),
     obstacles,
-    obstaclePadding: 18,
-    parallelSpacing: 14,
+    obstaclePadding: options?.obstaclePadding ?? 18,
+    parallelSpacing: options?.parallelSpacing ?? 14,
+    pathRanking: {
+      bendPenalty: 960,
+      lengthPenalty: 1,
+      detourPenalty: 0.18,
+      preferencePenalty: 56,
+      crossingPenalty: 1700,
+    },
   });
 
   arrowDrafts.forEach((draft) => {
-    const points =
-      routedArrowPoints.get(draft.id) ?? [
-        draft.routingDescriptor.start,
-        draft.routingDescriptor.end,
-      ];
+    const points = routedArrowPoints.get(draft.id) ?? [
+      draft.routingDescriptor.start,
+      draft.routingDescriptor.end,
+    ];
     elements.push({
       id: draft.id,
       type: draft.isBidirectional ? "arrow-bidirectional" : "arrow",
@@ -1503,7 +2018,189 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
     });
   });
 
-  return elements;
+  return { elements, nextIndex: index };
+}
+
+function buildArchitectureElements(graph: LogicalGraph): CanvasElement[] {
+  if (graph.nodes.length === 0) return [];
+
+  const sizingConfig = createLayoutConfig(graph, 3, "architecture");
+  const layoutInputNodes = graph.nodes.map((node) => {
+    let width = estimateRectangleWidth(node.label, sizingConfig.rectangleWidth);
+    let height = sizingConfig.rectangleHeight;
+    if (node.shape === "circle") {
+      width = estimateCircleDiameter(node.label, sizingConfig.circleDiameter);
+      height = width;
+    } else if (node.shape === "diamond") {
+      width = estimateDiamondSize(node.label, sizingConfig.diamondSize);
+      height = width;
+    }
+    return {
+      id: node.id,
+      label: node.label,
+      shape: node.shape,
+      width,
+      height,
+      layerHint: node.layer,
+      columnHint: node.column,
+    };
+  });
+
+  const layoutEdges = graph.edges.map((edge) => ({
+    from: edge.from,
+    to: edge.to,
+  }));
+  let layout = computeArchitectureLayeredLayout({
+    nodes: layoutInputNodes,
+    edges: layoutEdges,
+    options: {
+      centerX: 980,
+      topY: 180,
+      layerGap: clamp(210 - graph.nodes.length, 150, 210),
+      maxDiagramWidth: 1500,
+      minHorizontalGap: 96,
+      maxHorizontalGap: 188,
+      orderingPasses: 4,
+    },
+  });
+
+  // Pass 2: Slightly relaxed parameters.
+  if (isArchitectureLayoutInvalid(layout.metrics)) {
+    layout = computeArchitectureLayeredLayout({
+      nodes: layoutInputNodes,
+      edges: layoutEdges,
+      options: {
+        centerX: 980,
+        topY: 180,
+        layerGap: 220,
+        maxDiagramWidth: 1680,
+        minHorizontalGap: 108,
+        maxHorizontalGap: 204,
+        orderingPasses: 5,
+      },
+    });
+  }
+
+  // Pass 3: Even more relaxed — wider canvas, more passes.
+  if (isArchitectureLayoutInvalid(layout.metrics)) {
+    layout = computeArchitectureLayeredLayout({
+      nodes: layoutInputNodes,
+      edges: layoutEdges,
+      options: {
+        centerX: 980,
+        topY: 180,
+        layerGap: 240,
+        maxDiagramWidth: 2200,
+        minHorizontalGap: 120,
+        maxHorizontalGap: 240,
+        orderingPasses: 6,
+      },
+    });
+  }
+
+  // Pass 4: Apply relaxed quality gates — accept minor imperfections.
+  if (isArchitectureLayoutInvalid(layout.metrics, false)) {
+    console.warn(
+      `Architecture layout has imperfections (overlap=${layout.metrics.nodeOverlapCount}, hierarchy=${layout.metrics.hierarchyViolations}, crossingRatio=${layout.metrics.edgeCrossingRatio.toFixed(2)}, width=${layout.metrics.diagramWidth.toFixed(0)}) — proceeding with best effort.`,
+    );
+  }
+
+  const { incoming, outgoing } = buildAdjacency(graph);
+  const depth = new Map<string, number>();
+  const layoutNodes = new Map<string, LayoutNode>();
+
+  layoutInputNodes.forEach((node) => {
+    const positioned = layout.nodes.get(node.id);
+    if (!positioned) return;
+    depth.set(node.id, positioned.layer);
+    layoutNodes.set(node.id, {
+      id: node.id,
+      label: node.label,
+      shape: node.shape,
+      width: node.width,
+      height: node.height,
+      depth: positioned.layer,
+      x: positioned.x,
+      y: positioned.y,
+      parentId: null,
+      children: [],
+      incomingCount: incoming.get(node.id)?.length ?? 0,
+      outgoingCount: outgoing.get(node.id)?.length ?? 0,
+      isDecision: node.shape === "diamond",
+      isMerge: (incoming.get(node.id)?.length ?? 0) > 1,
+    });
+  });
+
+  const rendered = buildNodeAndArrowElementsFromLayout(
+    graph,
+    layoutNodes,
+    depth,
+    chooseArchitectureHandles,
+    {
+      verticalBias: true,
+      obstaclePadding: 22,
+      parallelSpacing: 14,
+    },
+  );
+
+  const { guides } = createArchitectureGuides(
+    layout.layers,
+    layoutNodes,
+    rendered.nextIndex,
+  );
+  return [...guides, ...rendered.elements];
+}
+
+function buildElements(
+  graph: LogicalGraph,
+  intent: DiagramIntent,
+): CanvasElement[] {
+  if (graph.nodes.length === 0) return [];
+  if (intent === "architecture") {
+    return buildArchitectureElements(graph);
+  }
+
+  const { incoming, outgoing } = buildAdjacency(graph);
+  const depth = applyDepthBiasByIntent(graph, computeNodeDepths(graph), intent);
+  const maxDepth = Math.max(...Array.from(depth.values(), (v) => v ?? 0), 0);
+  const parentOf = pickPrimaryParents(graph, depth, incoming);
+  const config = createLayoutConfig(graph, maxDepth, intent);
+
+  const layoutNodes = createInitialLayoutNodes(
+    graph,
+    depth,
+    parentOf,
+    incoming,
+    outgoing,
+    config,
+  );
+
+  placeForest(layoutNodes, config);
+  optimizeLayerOrdering(layoutNodes, incoming, outgoing, config);
+  applyDecisionAndMergeAlignment(
+    layoutNodes,
+    outgoing,
+    incoming,
+    depth,
+    config,
+  );
+  recenterParents(layoutNodes);
+  resolveHorizontalCollisions(layoutNodes, config);
+  recenterParents(layoutNodes);
+  assignY(layoutNodes, config);
+  normalizeLayout(layoutNodes, config);
+
+  return buildNodeAndArrowElementsFromLayout(
+    graph,
+    layoutNodes,
+    depth,
+    chooseHandles,
+    {
+      verticalBias: false,
+      obstaclePadding: 18,
+      parallelSpacing: 14,
+    },
+  ).elements;
 }
 
 export async function POST(req: NextRequest) {
@@ -1553,15 +2250,27 @@ export async function POST(req: NextRequest) {
       throw new Error("Invalid nodes/edges format");
     }
 
-    const logicalGraph = keepMostRelevantComponent(
-      sanitizeGraph(parsed, intent, prompt),
-      prompt,
+    const logicalGraph = simplifyGraphForReadability(
+      keepMostRelevantComponent(sanitizeGraph(parsed, intent, prompt), prompt),
+      intent,
     );
-    const elements = buildElements(logicalGraph);
+    const elements = buildElements(logicalGraph, intent);
 
     return NextResponse.json({ elements });
   } catch (error) {
     console.error("generate-diagram error:", error);
+    if (
+      error instanceof Error &&
+      error.message.includes("rejected by quality gates")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Generated diagram was rejected by layout quality gates. Try a narrower scope or fewer cross-domain links.",
+        },
+        { status: 422 },
+      );
+    }
     return NextResponse.json(
       { error: "Failed to generate diagram." },
       { status: 500 },
