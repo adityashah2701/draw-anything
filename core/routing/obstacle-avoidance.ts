@@ -1,8 +1,9 @@
 import {
   ArrowRoutePreference,
   ConnectionHandle,
-  Point,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { compressOrthogonalPath } from "@/core/routing/routing-utils";
 import {
   Aabb,
   expandAabb,
@@ -44,36 +45,6 @@ const DEFAULT_BEND_PENALTY = 1000;
 const DEFAULT_LENGTH_PENALTY = 1;
 const DEFAULT_DETOUR_PENALTY = 0.15;
 const DEFAULT_PREFERENCE_PENALTY = 48;
-
-const samePoint = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
-
-const areCollinear = (a: Point, b: Point, c: Point) =>
-  (a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y);
-
-export const compressOrthogonalPath = (points: Point[]): Point[] => {
-  if (points.length <= 2) return points;
-
-  const deduped: Point[] = [];
-  points.forEach((point) => {
-    const last = deduped[deduped.length - 1];
-    if (!last || !samePoint(last, point)) {
-      deduped.push(point);
-    }
-  });
-
-  if (deduped.length <= 2) return deduped;
-  const compact: Point[] = [deduped[0]];
-  for (let i = 1; i < deduped.length - 1; i += 1) {
-    const prev = compact[compact.length - 1];
-    const current = deduped[i];
-    const next = deduped[i + 1];
-    if (!areCollinear(prev, current, next)) {
-      compact.push(current);
-    }
-  }
-  compact.push(deduped[deduped.length - 1]);
-  return compact;
-};
 
 const isVerticalHandle = (handle?: ConnectionHandle) =>
   handle === "top" || handle === "bottom";
