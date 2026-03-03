@@ -8,6 +8,7 @@ import {
   getConnectionHandlesForBounds,
   ConnectionHandle,
 } from "@/core/routing/connectionHandles";
+import { buildAnchorId } from "@/core/anchors/generate-anchors";
 
 export interface RenderContext {
   zoom: number;
@@ -25,7 +26,7 @@ export interface RenderContext {
 export const getConnectionHandles = (
   element: DrawingElement,
   bounds: { minX: number; minY: number; maxX: number; maxY: number } | null,
-): { name: ConnectionHandle; x: number; y: number }[] => {
+): { id: string; name: ConnectionHandle; x: number; y: number }[] => {
   if (!bounds) return [];
   if (
     element.type !== "rectangle" &&
@@ -34,7 +35,10 @@ export const getConnectionHandles = (
   ) {
     return [];
   }
-  return getConnectionHandlesForBounds(bounds);
+  return getConnectionHandlesForBounds(bounds).map((handle) => ({
+    ...handle,
+    id: buildAnchorId(element.id, handle.name),
+  }));
 };
 
 export const drawGrid = (

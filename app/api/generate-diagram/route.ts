@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import { buildAnchorId } from "@/core/anchors/generate-anchors";
+import {
+  RouteArrowDescriptor,
+  routeArrowBatch,
+} from "@/core/routing/orthogonal-router";
+import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
@@ -11,23 +17,39 @@ const groq = new Groq({
  * Layout engine: computes visual positions + route handles
  * Renderer mapping: converts positioned nodes + edges into canvas elements
  */
-const SYSTEM_PROMPT = `
-You are an expert flowchart architect.
+type DiagramIntent = "architecture" | "flowchart" | "concept";
+
+const ARCHITECTURE_HINT_RE =
+  /\b(architecture|system|frontend|backend|database|microservice|api|client|server|service|queue|cache|infra)\b/i;
+const FLOWCHART_HINT_RE =
+  /\b(flowchart|workflow|process|steps?|decision|approval|algorithm|state\s*machine|pipeline|procedure)\b/i;
+
+function detectDiagramIntent(prompt: string): DiagramIntent {
+  if (FLOWCHART_HINT_RE.test(prompt)) return "flowchart";
+  if (ARCHITECTURE_HINT_RE.test(prompt)) return "architecture";
+  return "concept";
+}
+
+function buildSystemPrompt(intent: DiagramIntent): string {
+  const common = `
+You are an expert diagram architect.
 Generate ONLY a logical graph as valid JSON:
 {
   "nodes": [...],
   "edges": [...]
 }
 
-Rules:
+Hard rules:
 - No markdown.
 - No explanations.
 - Unique node ids.
 - Labels must be concise (1-4 words).
 - Node type must be "rectangle", "circle", or "diamond".
-- Use "diamond" ONLY for decisions/branching questions.
-- Use "circle" for start/end/database-style terminals.
+- Use "diamond" ONLY for explicit branching/decision logic.
 - Do not emit any visual coordinates.
+- Keep graph small and readable (3-14 nodes).
+- Avoid unnecessary cycles.
+- Return one coherent diagram only. Do not mix unrelated sub-diagrams.
 
 Node format:
 {
@@ -44,8 +66,43 @@ Edge format:
   "dashed"?: boolean
 }
 
-Use "bidirectional": true when the relationship is explicitly two-way.
+Use "bidirectional": true only when relationship is explicitly two-way.
 `;
+
+  if (intent === "architecture") {
+    return `${common}
+Intent rules (architecture):
+- Model components/services/stores, not process steps.
+- Do NOT invent generic nodes like "Start" or "End" unless user explicitly asked.
+- Prefer rectangle for app/service components.
+- Use circle for databases, caches, queues, or external systems.
+- If direction is not explicit, default left-to-right dependency/data flow:
+  client/frontend -> api/backend/services -> data stores/infrastructure.`;
+  }
+
+  if (intent === "flowchart") {
+    return `${common}
+Intent rules (flowchart):
+- Model process steps in sequence.
+- Include Start/End only when they improve clarity or are explicitly requested.
+- Use diamond for conditional branches.
+- Keep decision fan-out minimal and coherent.`;
+  }
+
+  return `${common}
+Intent rules (concept):
+- Model entities and relationships as a concept map.
+- Do NOT invent generic process nodes (e.g., Start/End) unless explicitly requested.`;
+}
+
+function buildUserPrompt(prompt: string, intent: DiagramIntent): string {
+  return [
+    `User request: ${prompt}`,
+    `Detected diagram intent: ${intent}`,
+    "Return strictly valid JSON with keys: nodes, edges.",
+    "Use only entities from the request (or very strongly implied ones).",
+  ].join("\n");
+}
 
 type ShapeType = "rectangle" | "circle" | "diamond";
 type Handle = "top" | "right" | "bottom" | "left";
@@ -140,8 +197,8 @@ type CanvasElement = {
   routingMode?: "straight" | "orthogonal";
   routePreference?: "vh" | "hv";
   isManuallyRouted?: boolean;
-  startConnection?: { elementId: string; handle: string };
-  endConnection?: { elementId: string; handle: string };
+  startConnection?: { elementId: string; anchorId: string };
+  endConnection?: { elementId: string; anchorId: string };
 };
 
 function generateShortId(index: number) {
@@ -152,7 +209,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function toShapeType(node: NodeJson): ShapeType {
+function toShapeType(node: NodeJson, intent: DiagramIntent): ShapeType {
   if (node.type === "diamond") return "diamond";
   if (node.type === "circle") return "circle";
   if (node.type === "rectangle") return "rectangle";
@@ -161,15 +218,72 @@ function toShapeType(node: NodeJson): ShapeType {
   if (/\?|decision|if|approved|valid|success|fail|eligible/.test(label)) {
     return "diamond";
   }
-  if (
-    /(db|database|start|end|terminal|cache|redis|postgres|mysql)/.test(label)
-  ) {
+  const storageRegex =
+    /(db|database|terminal|cache|redis|postgres|mysql|queue|broker|kafka|s3|blob|storage)/;
+  if (storageRegex.test(label)) {
+    return "circle";
+  }
+  if (intent === "flowchart" && /(start|end|begin|finish|stop)/.test(label)) {
     return "circle";
   }
   return "rectangle";
 }
 
-function sanitizeGraph(raw: DiagramJson): LogicalGraph {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isLabelMentionedInPrompt(prompt: string, label: string): boolean {
+  const normalized = label.trim().toLowerCase();
+  if (!normalized) return false;
+  const escaped = escapeRegExp(normalized).replace(/\s+/g, "\\s+");
+  const regex = new RegExp(`\\b${escaped}\\b`, "i");
+  return regex.test(prompt);
+}
+
+function stripSyntheticTerminalNodes(
+  graph: LogicalGraph,
+  prompt: string,
+  intent: DiagramIntent,
+): LogicalGraph {
+  if (intent === "flowchart") return graph;
+
+  const { incoming, outgoing } = buildAdjacency(graph);
+  const removable = new Set<string>();
+
+  for (const node of graph.nodes) {
+    const label = node.label.trim().toLowerCase();
+    const indegree = incoming.get(node.id)?.length ?? 0;
+    const outdegree = outgoing.get(node.id)?.length ?? 0;
+    const mentioned = isLabelMentionedInPrompt(prompt.toLowerCase(), label);
+
+    if (mentioned) continue;
+
+    if (/^(start|begin|entry|source)$/.test(label) && indegree === 0 && outdegree <= 1) {
+      removable.add(node.id);
+      continue;
+    }
+
+    if (/^(end|finish|stop|exit|done|complete)$/.test(label) && outdegree === 0 && indegree <= 1) {
+      removable.add(node.id);
+    }
+  }
+
+  if (removable.size === 0) return graph;
+
+  return {
+    nodes: graph.nodes.filter((node) => !removable.has(node.id)),
+    edges: graph.edges.filter(
+      (edge) => !removable.has(edge.from) && !removable.has(edge.to),
+    ),
+  };
+}
+
+function sanitizeGraph(
+  raw: DiagramJson,
+  intent: DiagramIntent,
+  prompt: string,
+): LogicalGraph {
   const nodesById = new Map<string, LogicalNode>();
 
   for (const node of raw.nodes ?? []) {
@@ -188,7 +302,7 @@ function sanitizeGraph(raw: DiagramJson): LogicalGraph {
     nodesById.set(id, {
       id,
       label: label.slice(0, 48),
-      shape: toShapeType(node),
+      shape: toShapeType(node, intent),
     });
   }
 
@@ -215,10 +329,142 @@ function sanitizeGraph(raw: DiagramJson): LogicalGraph {
     });
   }
 
-  return {
+  const graph = {
     nodes: Array.from(nodesById.values()),
     edges,
   };
+
+  return stripSyntheticTerminalNodes(graph, prompt, intent);
+}
+
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "the",
+  "to",
+  "for",
+  "of",
+  "in",
+  "on",
+  "with",
+  "from",
+  "by",
+  "is",
+  "are",
+  "be",
+  "or",
+  "as",
+  "at",
+  "it",
+  "this",
+  "that",
+  "diagram",
+  "system",
+  "process",
+  "flow",
+  "chart",
+]);
+
+function tokenizeTerms(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !STOP_WORDS.has(token));
+}
+
+function buildConnectedComponents(graph: LogicalGraph): string[][] {
+  const neighbors = new Map<string, Set<string>>();
+  graph.nodes.forEach((node) => neighbors.set(node.id, new Set<string>()));
+  graph.edges.forEach((edge) => {
+    neighbors.get(edge.from)?.add(edge.to);
+    neighbors.get(edge.to)?.add(edge.from);
+  });
+
+  const components: string[][] = [];
+  const visited = new Set<string>();
+
+  graph.nodes.forEach((node) => {
+    if (visited.has(node.id)) return;
+    const queue = [node.id];
+    const component: string[] = [];
+    visited.add(node.id);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      component.push(current);
+      const nextNodes = neighbors.get(current);
+      if (!nextNodes) continue;
+      nextNodes.forEach((candidate) => {
+        if (visited.has(candidate)) return;
+        visited.add(candidate);
+        queue.push(candidate);
+      });
+    }
+    components.push(component);
+  });
+
+  return components;
+}
+
+function scoreComponent(
+  nodeIds: string[],
+  graph: LogicalGraph,
+  promptTerms: Set<string>,
+): number {
+  const nodeIdSet = new Set(nodeIds);
+  const nodes = graph.nodes.filter((node) => nodeIdSet.has(node.id));
+  const edges = graph.edges.filter(
+    (edge) => nodeIdSet.has(edge.from) && nodeIdSet.has(edge.to),
+  );
+
+  const labelTerms = new Set<string>();
+  nodes.forEach((node) => {
+    tokenizeTerms(node.label).forEach((term) => labelTerms.add(term));
+  });
+
+  let overlap = 0;
+  labelTerms.forEach((term) => {
+    if (promptTerms.has(term)) overlap += 1;
+  });
+
+  return overlap * 12 + edges.length * 1.5 + nodes.length * 0.75;
+}
+
+function shouldPreserveMultiComponent(prompt: string): boolean {
+  return /\b(compare|versus|vs\.?|multiple|two diagrams|three diagrams|side[-\s]?by[-\s]?side|alternatives?)\b/i.test(
+    prompt,
+  );
+}
+
+function keepMostRelevantComponent(
+  graph: LogicalGraph,
+  prompt: string,
+): LogicalGraph {
+  const components = buildConnectedComponents(graph);
+  if (components.length <= 1) return graph;
+  if (shouldPreserveMultiComponent(prompt)) return graph;
+
+  const promptTerms = new Set(tokenizeTerms(prompt));
+  const ranked = components
+    .map((component) => ({
+      component,
+      score: scoreComponent(component, graph, promptTerms),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  if (!best || best.component.length === 0) return graph;
+
+  const keepIds = new Set(best.component);
+  const nextNodes = graph.nodes.filter((node) => keepIds.has(node.id));
+  const nextEdges = graph.edges.filter(
+    (edge) => keepIds.has(edge.from) && keepIds.has(edge.to),
+  );
+
+  if (nextNodes.length < 2) return graph;
+  return { nodes: nextNodes, edges: nextEdges };
 }
 
 function buildAdjacency(graph: LogicalGraph) {
@@ -802,44 +1048,6 @@ function getHandlePoint(node: LayoutNode, handle: Handle) {
   }
 }
 
-function directionForHandle(handle: Handle) {
-  switch (handle) {
-    case "top":
-      return { dx: 0, dy: -1 };
-    case "right":
-      return { dx: 1, dy: 0 };
-    case "bottom":
-      return { dx: 0, dy: 1 };
-    case "left":
-      return { dx: -1, dy: 0 };
-  }
-}
-
-function compressOrthogonalPoints(points: { x: number; y: number }[]) {
-  if (points.length <= 2) return points;
-
-  const deduped: { x: number; y: number }[] = [];
-  for (const p of points) {
-    const prev = deduped[deduped.length - 1];
-    if (!prev || prev.x !== p.x || prev.y !== p.y) deduped.push(p);
-  }
-
-  if (deduped.length <= 2) return deduped;
-
-  const compacted = [deduped[0]];
-  for (let i = 1; i < deduped.length - 1; i += 1) {
-    const a = compacted[compacted.length - 1];
-    const b = deduped[i];
-    const c = deduped[i + 1];
-    const collinear =
-      (a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y);
-    if (!collinear) compacted.push(b);
-  }
-  compacted.push(deduped[deduped.length - 1]);
-
-  return compacted;
-}
-
 function chooseHandles(
   source: LayoutNode,
   target: LayoutNode,
@@ -865,54 +1073,88 @@ function chooseHandles(
   return { from: "left", to: "right" };
 }
 
-function routeEdgePoints(
+interface HandleUsage {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+function createHandleUsage(): HandleUsage {
+  return { top: 0, right: 0, bottom: 0, left: 0 };
+}
+
+function pickLeastUsedHandle(
+  candidates: Handle[],
+  usage: HandleUsage,
+  fallback: Handle,
+): Handle {
+  let best = fallback;
+  let bestScore = Number.POSITIVE_INFINITY;
+  candidates.forEach((candidate, idx) => {
+    const score = usage[candidate] * 10 + idx;
+    if (score < bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  });
+  return best;
+}
+
+function spreadSourceHandle(
   source: LayoutNode,
   target: LayoutNode,
-  fromHandle: Handle,
-  toHandle: Handle,
-  laneOffset: number,
-) {
-  const start = getHandlePoint(source, fromHandle);
-  const end = getHandlePoint(target, toHandle);
+  preferred: Handle,
+  usage: HandleUsage,
+): Handle {
+  if (source.outgoingCount <= 1) return preferred;
+  if (usage[preferred] === 0) return preferred;
 
-  // Shorter orthogonal stubs reduce perceived arrow length/clutter.
-  const stub = 10;
-  const fromDir = directionForHandle(fromHandle);
-  const toDir = directionForHandle(toHandle);
-
-  const startStub = {
-    x: start.x + fromDir.dx * stub,
-    y: start.y + fromDir.dy * stub,
-  };
-  const endStub = {
-    x: end.x - toDir.dx * stub,
-    y: end.y - toDir.dy * stub,
-  };
-
-  const points: { x: number; y: number }[] = [start, startStub];
-
-  if (startStub.x === endStub.x || startStub.y === endStub.y) {
-    points.push(endStub);
-  } else {
-    const verticalPreferred =
-      fromHandle === "top" ||
-      fromHandle === "bottom" ||
-      toHandle === "top" ||
-      toHandle === "bottom";
-
-    if (verticalPreferred) {
-      const midY = Math.round((startStub.y + endStub.y) / 2 + laneOffset);
-      points.push({ x: startStub.x, y: midY });
-      points.push({ x: endStub.x, y: midY });
-    } else {
-      const midX = Math.round((startStub.x + endStub.x) / 2 + laneOffset);
-      points.push({ x: midX, y: startStub.y });
-      points.push({ x: midX, y: endStub.y });
-    }
+  if (preferred === "bottom" || preferred === "top") {
+    const lateralFirst: Handle[] =
+      target.x < source.x
+        ? ["left", "right", preferred]
+        : target.x > source.x
+          ? ["right", "left", preferred]
+          : [preferred, "left", "right"];
+    return pickLeastUsedHandle(lateralFirst, usage, preferred);
   }
 
-  points.push(endStub, end);
-  return compressOrthogonalPoints(points);
+  const verticalFirst: Handle[] =
+    target.depth > source.depth
+      ? ["bottom", preferred, "top"]
+      : target.depth < source.depth
+        ? ["top", preferred, "bottom"]
+        : [preferred, "top", "bottom"];
+  return pickLeastUsedHandle(verticalFirst, usage, preferred);
+}
+
+function spreadTargetHandle(
+  source: LayoutNode,
+  target: LayoutNode,
+  preferred: Handle,
+  usage: HandleUsage,
+): Handle {
+  if (target.incomingCount <= 1) return preferred;
+  if (usage[preferred] === 0) return preferred;
+
+  if (preferred === "top" || preferred === "bottom") {
+    const lateralFirst: Handle[] =
+      source.x < target.x
+        ? ["left", "right", preferred]
+        : source.x > target.x
+          ? ["right", "left", preferred]
+          : [preferred, "left", "right"];
+    return pickLeastUsedHandle(lateralFirst, usage, preferred);
+  }
+
+  const verticalFirst: Handle[] =
+    source.depth < target.depth
+      ? ["top", preferred, "bottom"]
+      : source.depth > target.depth
+        ? ["bottom", preferred, "top"]
+        : [preferred, "top", "bottom"];
+  return pickLeastUsedHandle(verticalFirst, usage, preferred);
 }
 
 function mapNodeToElement(node: LayoutNode, index: number): CanvasElement {
@@ -949,6 +1191,49 @@ function mapNodeToElement(node: LayoutNode, index: number): CanvasElement {
     color: style.color,
     strokeWidth: 2,
   };
+}
+
+function toRoutingObstacle(element: CanvasElement): RoutingObstacle | null {
+  if (element.type === "arrow" || element.type === "arrow-bidirectional") {
+    return null;
+  }
+
+  if (element.type === "circle") {
+    if (element.points.length < 2) return null;
+    const center = element.points[0];
+    const edge = element.points[1];
+    const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+    return {
+      id: element.id,
+      bounds: {
+        minX: center.x - radius,
+        minY: center.y - radius,
+        maxX: center.x + radius,
+        maxY: center.y + radius,
+      },
+    };
+  }
+
+  if (
+    element.type === "rectangle" ||
+    element.type === "diamond" ||
+    element.type === "text"
+  ) {
+    if (element.points.length < 2) return null;
+    const first = element.points[0];
+    const second = element.points[1];
+    return {
+      id: element.id,
+      bounds: {
+        minX: Math.min(first.x, second.x),
+        minY: Math.min(first.y, second.y),
+        maxX: Math.max(first.x, second.x),
+        maxY: Math.max(first.y, second.y),
+      },
+    };
+  }
+
+  return null;
 }
 
 function getNodeVisualStyle(node: LayoutNode): NodeVisualStyle {
@@ -1011,12 +1296,6 @@ function getNodeVisualStyle(node: LayoutNode): NodeVisualStyle {
   };
 }
 
-function staggerLaneOffset(index: number) {
-  if (index === 0) return 0;
-  const magnitude = Math.ceil(index / 2) * 12;
-  return index % 2 === 1 ? magnitude : -magnitude;
-}
-
 function buildElements(graph: LogicalGraph): CanvasElement[] {
   if (graph.nodes.length === 0) return [];
 
@@ -1061,10 +1340,36 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
     nodeElementByLogicalId.set(node.id, element);
   }
 
-  const sourceFanout = new Map<string, number>();
-  const targetFanin = new Map<string, number>();
   const edgesByKey = new Map<string, LogicalEdge>();
   const consumedDirectionalEdges = new Set<string>();
+  const sourceHandleUsageByNodeId = new Map<string, HandleUsage>();
+  const targetHandleUsageByNodeId = new Map<string, HandleUsage>();
+  const arrowDrafts: Array<
+    Omit<
+      CanvasElement,
+      | "type"
+      | "points"
+      | "color"
+      | "strokeWidth"
+      | "routingMode"
+      | "routePreference"
+      | "isManuallyRouted"
+      | "arrowHeadStart"
+      | "arrowHeadEnd"
+      | "dashed"
+      | "startConnection"
+      | "endConnection"
+    > & {
+      id: string;
+      isBidirectional: boolean;
+      isDashed: boolean;
+      sourceElement: CanvasElement;
+      targetElement: CanvasElement;
+      fromHandle: Handle;
+      toHandle: Handle;
+      routingDescriptor: RouteArrowDescriptor;
+    }
+  > = [];
 
   for (const edge of graph.edges) {
     edgesByKey.set(`${edge.from}->${edge.to}`, edge);
@@ -1112,48 +1417,91 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
     if (!sourceLayout || !targetLayout || !sourceElement || !targetElement)
       continue;
 
-    const handles = chooseHandles(sourceLayout, targetLayout);
-    const outKey = `${renderFrom}:${handles.from}`;
-    const inKey = `${renderTo}:${handles.to}`;
+    const baseHandles = chooseHandles(sourceLayout, targetLayout);
+    const sourceUsage =
+      sourceHandleUsageByNodeId.get(renderFrom) ?? createHandleUsage();
+    const targetUsage =
+      targetHandleUsageByNodeId.get(renderTo) ?? createHandleUsage();
+    sourceHandleUsageByNodeId.set(renderFrom, sourceUsage);
+    targetHandleUsageByNodeId.set(renderTo, targetUsage);
 
-    const outIndex = sourceFanout.get(outKey) ?? 0;
-    const inIndex = targetFanin.get(inKey) ?? 0;
-    sourceFanout.set(outKey, outIndex + 1);
-    targetFanin.set(inKey, inIndex + 1);
-
-    const laneOffset =
-      staggerLaneOffset(outIndex) + Math.trunc(staggerLaneOffset(inIndex) / 2);
-    const points = routeEdgePoints(
+    const fromHandle = spreadSourceHandle(
       sourceLayout,
       targetLayout,
-      handles.from,
-      handles.to,
-      laneOffset,
+      baseHandles.from,
+      sourceUsage,
     );
+    const toHandle = spreadTargetHandle(
+      sourceLayout,
+      targetLayout,
+      baseHandles.to,
+      targetUsage,
+    );
+    sourceUsage[fromHandle] += 1;
+    targetUsage[toHandle] += 1;
 
-    elements.push({
-      id: generateShortId(index++),
-      type: isBidirectional ? "arrow-bidirectional" : "arrow",
-      points,
-      color: "#64748b",
-      strokeWidth: 2,
-      dashed: isDashed,
-      arrowHeadStart: isBidirectional,
-      arrowHeadEnd: true,
-      routingMode: "orthogonal",
-      routePreference:
-        handles.from === "left" || handles.from === "right" ? "hv" : "vh",
-      isManuallyRouted: false,
-      startConnection: {
-        elementId: sourceElement.id,
-        handle: handles.from,
-      },
-      endConnection: {
-        elementId: targetElement.id,
-        handle: handles.to,
+    const arrowId = generateShortId(index++);
+    arrowDrafts.push({
+      id: arrowId,
+      isBidirectional,
+      isDashed,
+      sourceElement,
+      targetElement,
+      fromHandle,
+      toHandle,
+      routingDescriptor: {
+        arrowId,
+        start: getHandlePoint(sourceLayout, fromHandle),
+        end: getHandlePoint(targetLayout, toHandle),
+        startHandle: fromHandle,
+        endHandle: toHandle,
+        routingMode: "orthogonal",
+        routePreference:
+          fromHandle === "left" || fromHandle === "right" ? "hv" : "vh",
+        sourceId: sourceElement.id,
+        targetId: targetElement.id,
       },
     });
   }
+
+  const obstacles = elements
+    .map((element) => toRoutingObstacle(element))
+    .filter((obstacle): obstacle is RoutingObstacle => obstacle !== null);
+  const routedArrowPoints = routeArrowBatch({
+    arrows: arrowDrafts.map((draft) => draft.routingDescriptor),
+    obstacles,
+    obstaclePadding: 18,
+    parallelSpacing: 14,
+  });
+
+  arrowDrafts.forEach((draft) => {
+    const points =
+      routedArrowPoints.get(draft.id) ?? [
+        draft.routingDescriptor.start,
+        draft.routingDescriptor.end,
+      ];
+    elements.push({
+      id: draft.id,
+      type: draft.isBidirectional ? "arrow-bidirectional" : "arrow",
+      points,
+      color: "#64748b",
+      strokeWidth: 2,
+      dashed: draft.isDashed,
+      arrowHeadStart: draft.isBidirectional,
+      arrowHeadEnd: true,
+      routingMode: "orthogonal",
+      routePreference: draft.routingDescriptor.routePreference,
+      isManuallyRouted: false,
+      startConnection: {
+        elementId: draft.sourceElement.id,
+        anchorId: buildAnchorId(draft.sourceElement.id, draft.fromHandle),
+      },
+      endConnection: {
+        elementId: draft.targetElement.id,
+        anchorId: buildAnchorId(draft.targetElement.id, draft.toHandle),
+      },
+    });
+  });
 
   return elements;
 }
@@ -1170,16 +1518,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const intent = detectDiagramIntent(prompt);
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       temperature: 0,
       max_tokens: 4096,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: buildSystemPrompt(intent) },
         {
           role: "user",
-          content: `Generate a logical architecture graph for: ${prompt}`,
+          content: buildUserPrompt(prompt, intent),
         },
       ],
     });
@@ -1204,7 +1553,10 @@ export async function POST(req: NextRequest) {
       throw new Error("Invalid nodes/edges format");
     }
 
-    const logicalGraph = sanitizeGraph(parsed);
+    const logicalGraph = keepMostRelevantComponent(
+      sanitizeGraph(parsed, intent, prompt),
+      prompt,
+    );
     const elements = buildElements(logicalGraph);
 
     return NextResponse.json({ elements });

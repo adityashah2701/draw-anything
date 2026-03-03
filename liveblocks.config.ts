@@ -9,7 +9,7 @@ import { createRoomContext } from "@liveblocks/react";
 import {
   ArrowRoutePreference,
   ArrowRoutingMode,
-  ConnectionHandle,
+  ArrowConnection,
 } from "@/features/whiteboard/types/whiteboard.types";
 
 const client = createClient({
@@ -44,8 +44,8 @@ export type DrawingElementJson = JsonObject & {
   routingMode?: ArrowRoutingMode;
   routePreference?: ArrowRoutePreference;
   isManuallyRouted?: boolean;
-  startConnection?: { elementId: string; handle: ConnectionHandle };
-  endConnection?: { elementId: string; handle: ConnectionHandle };
+  startConnection?: ArrowConnection;
+  endConnection?: ArrowConnection;
 };
 
 // Storage: the shared document — all connected users read/write to this

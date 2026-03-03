@@ -6,11 +6,19 @@ import {
 } from "../utils/canvas-render-utils";
 import { DrawingElement, Point } from "../types/whiteboard.types";
 import { routeArrowPoints } from "@/core/routing/orthogonalRouter";
+import { Anchor } from "@/features/whiteboard/types/whiteboard.types";
 
 interface ConnectionDraft {
   fromElementId: string;
+  fromAnchorId: string;
   fromHandle: string;
   currentPoint: Point;
+}
+
+interface MagneticSnapPreview {
+  endpoint: "start" | "end";
+  pointer: Point;
+  anchor: Anchor;
 }
 
 interface CanvasEngineProps {
@@ -36,6 +44,7 @@ interface CanvasEngineProps {
   hoveredElementId?: string | null;
   /** Active connection being dragged from a port */
   connectionDraft?: ConnectionDraft | null;
+  magneticSnapPreview?: MagneticSnapPreview | null;
   /** Shape label currently being edited inline */
   editingShapeLabelId?: string | null;
 }
@@ -59,6 +68,7 @@ const useCanvasEngine = ({
   getElementBounds,
   hoveredElementId,
   connectionDraft,
+  magneticSnapPreview,
   editingShapeLabelId,
 }: CanvasEngineProps & {
   getElementBounds: (
@@ -252,6 +262,38 @@ const useCanvasEngine = ({
         }
       }
     }
+
+    if (magneticSnapPreview) {
+      const pointerX = magneticSnapPreview.pointer.x * zoom + panOffset.x;
+      const pointerY = magneticSnapPreview.pointer.y * zoom + panOffset.y;
+      const anchorX = magneticSnapPreview.anchor.x * zoom + panOffset.x;
+      const anchorY = magneticSnapPreview.anchor.y * zoom + panOffset.y;
+      const pulse = 1 + Math.sin(performance.now() / 120) * 0.12;
+
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.8)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(pointerX, pointerY);
+      ctx.lineTo(anchorX, anchorY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.arc(anchorX, anchorY, 10 * pulse, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(14, 165, 233, 0.2)";
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(anchorX, anchorY, 6 * pulse, 0, Math.PI * 2);
+      ctx.fillStyle = "#0ea5e9";
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
   }, [
     elements,
     currentElement,
@@ -270,6 +312,7 @@ const useCanvasEngine = ({
     showGrid,
     hoveredElementId,
     connectionDraft,
+    magneticSnapPreview,
     canvasSize,
     editingShapeLabelId,
   ]);

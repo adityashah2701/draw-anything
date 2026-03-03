@@ -13,11 +13,13 @@ import { CommandMenu } from "@/features/whiteboard/components/command-menu";
 import {
   ArrowRoutingMode,
   ArrowType,
+  Anchor,
   DrawingElement,
   Tool,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { getArrowHeadVisibility, isArrowElement } from "@/core/shapes/Arrow";
-import { useArrowRouting } from "@/core/hooks/useArrowRouting";
+import { useMagneticSnap } from "@/core/snap/use-magnetic-snap";
+import { useArrowConnections } from "@/core/arrow/use-arrow-connections";
 import {
   insertBendPoint,
   removeBendPoint,
@@ -54,6 +56,12 @@ import {
 import { ClientSideSuspense } from "@liveblocks/react";
 import { Cursors } from "@/features/whiteboard/components/cursors";
 
+interface ArrowSnapPreviewState {
+  endpoint: "start" | "end";
+  pointer: { x: number; y: number };
+  anchor: Anchor;
+}
+
 const WhiteboardCanvas: React.FC = () => {
   const params = useParams();
   const whiteboardId = params.id as string;
@@ -82,6 +90,9 @@ const WhiteboardCanvas: React.FC = () => {
   const [showFillColorPicker, setShowFillColorPicker] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [hideCanvasUi, setHideCanvasUi] = useState(false);
+  const [arrowSnapPreview, setArrowSnapPreview] =
+    useState<ArrowSnapPreviewState | null>(null);
+  const arrowSnapPreviewRef = useRef<ArrowSnapPreviewState | null>(null);
   const seededRef = useRef(false);
   const viewportLoadedRef = useRef(false);
 
@@ -114,6 +125,41 @@ const WhiteboardCanvas: React.FC = () => {
   useEffect(() => {
     fontSizeRef.current = fontSize;
   }, [fontSize]);
+
+  const handleArrowSnapPreviewChange = useCallback(
+    (
+      preview: {
+        endpoint: "start" | "end";
+        pointer: { x: number; y: number };
+        match: { anchor: Anchor };
+      } | null,
+    ) => {
+      const next = preview
+        ? {
+            endpoint: preview.endpoint,
+            pointer: preview.pointer,
+            anchor: preview.match.anchor,
+          }
+        : null;
+      const current = arrowSnapPreviewRef.current;
+      const isSame =
+        !!current &&
+        !!next &&
+        current.endpoint === next.endpoint &&
+        current.anchor.id === next.anchor.id &&
+        Math.abs(current.pointer.x - next.pointer.x) < 1 &&
+        Math.abs(current.pointer.y - next.pointer.y) < 1;
+
+      if (isSame) {
+        return;
+      }
+
+      if (!current && !next) return;
+      arrowSnapPreviewRef.current = next;
+      setArrowSnapPreview(next);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!editingShapeLabelId || !shapeLabelEditorRef.current) return;
@@ -301,8 +347,19 @@ const WhiteboardCanvas: React.FC = () => {
     canvasViewport,
   ]);
 
-  const { rerouteArrowsForChanges, routeArrow } = useArrowRouting({
+  const magneticSnap = useMagneticSnap({
     elements,
+    getElementBounds,
+    snapRadius: 20,
+  });
+
+  const {
+    bindArrowEndpoint,
+    routeArrowByConnections,
+    rerouteConnectedArrowsForChanges,
+  } = useArrowConnections({
+    elements,
+    anchorIndex: magneticSnap.anchorIndex,
     getElementBounds,
   });
 
@@ -320,14 +377,14 @@ const WhiteboardCanvas: React.FC = () => {
     deleteElements: (ids) => deleteElementsWithConnectedArrows(ids),
     moveElements: (ids, dx, dy) => {
       const moved = moveElements(ids, dx, dy);
-      const arrows = rerouteArrowsForChanges(moved);
+      const arrows = rerouteConnectedArrowsForChanges(moved);
       arrows.forEach((a) => updateElement(a as unknown as DrawingElementJson));
       return moved;
     },
     resizeElement: (id, handle, pt, bounds) => {
       const resized = resizeElement(id, handle, pt, bounds);
       if (resized) {
-        const arrows = rerouteArrowsForChanges([resized]);
+        const arrows = rerouteConnectedArrowsForChanges([resized]);
         arrows.forEach((a) =>
           updateElement(a as unknown as DrawingElementJson),
         );
@@ -351,6 +408,16 @@ const WhiteboardCanvas: React.FC = () => {
       }
     },
     saveToHistory: () => {},
+    findNearestAnchorSnap: magneticSnap.findNearestSnap,
+    bindArrowEndpoint: (arrow, endpoint, point, snap) => {
+      if (!isArrowElement(arrow)) return arrow;
+      return bindArrowEndpoint(arrow, endpoint, point, snap);
+    },
+    routeConnectedArrow: (arrow) => {
+      if (!isArrowElement(arrow)) return arrow;
+      return routeArrowByConnections(arrow);
+    },
+    onArrowSnapPreviewChange: handleArrowSnapPreviewChange,
     // Directly add an arrow element created by connection drag
     addElementDirect: (el) => addElement(el as unknown as DrawingElementJson),
     startPanning: canvasViewport.startPanning,
@@ -512,15 +579,17 @@ const WhiteboardCanvas: React.FC = () => {
         patch.routingMode === "orthogonal" &&
         isArrowElement(next)
       ) {
-        next = routeArrow(next, {
-          routingMode: "orthogonal",
-          preserveManualBends: Boolean(next.isManuallyRouted),
-        });
+        next = routeArrowByConnections(next);
       }
 
       updateElement(next as unknown as DrawingElementJson);
     },
-    [routeArrow, selectedElement, updateElement, whiteboardAccess.hasEditAccess],
+    [
+      routeArrowByConnections,
+      selectedElement,
+      updateElement,
+      whiteboardAccess.hasEditAccess,
+    ],
   );
 
   const others = useOthers();
@@ -560,6 +629,7 @@ const WhiteboardCanvas: React.FC = () => {
     currentTool: currentTool,
     hoveredElementId: whiteboardDrawing.hoveredElementId,
     connectionDraft: whiteboardDrawing.connectionDraft,
+    magneticSnapPreview: arrowSnapPreview,
     editingShapeLabelId,
   });
 
