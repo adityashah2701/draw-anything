@@ -12,8 +12,8 @@ export const FontSizeSection: React.FC<FontSizeSectionProps> = ({
   disabled,
 }) => {
   return (
-    <div className="flex items-center space-x-2 flex-shrink-0">
-      <span className="text-xs text-gray-600 hidden sm:inline font-medium">
+    <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         Size:
       </span>
       <select
@@ -22,10 +22,10 @@ export const FontSizeSection: React.FC<FontSizeSectionProps> = ({
         value={fontSize}
         onChange={(e) => onFontSizeChange(Number(e.target.value))}
         disabled={disabled}
-        className={`border rounded-lg px-3 py-1.5 text-xs ${
+        className={`h-8 rounded-md border px-2 text-xs ${
           disabled
-            ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
-            : "border-gray-300 bg-white text-gray-900 hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+            : "border-slate-300 bg-white text-slate-900 hover:border-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
         }`}
         title="Select font size"
       >
@@ -36,7 +36,7 @@ export const FontSizeSection: React.FC<FontSizeSectionProps> = ({
         <option value={32}>32px</option>
         <option value={48}>48px</option>
         <option value={60}>60px</option>
-        <option value={72}>70px</option>
+        <option value={72}>72px</option>
         <option value={84}>84px</option>
         <option value={96}>96px</option>
         <option value={108}>108px</option>

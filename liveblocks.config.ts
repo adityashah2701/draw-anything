@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 import {
   createClient,
   JsonObject,
@@ -5,6 +6,11 @@ import {
   LiveObject,
 } from "@liveblocks/client";
 import { createRoomContext } from "@liveblocks/react";
+import {
+  ArrowRoutePreference,
+  ArrowRoutingMode,
+  ConnectionHandle,
+} from "@/features/whiteboard/types/whiteboard.types";
 
 const client = createClient({
   authEndpoint: "/api/liveblocks-auth",
@@ -32,8 +38,14 @@ export type DrawingElementJson = JsonObject & {
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
-  startConnection?: { elementId: string; handle: string };
-  endConnection?: { elementId: string; handle: string };
+  dashed?: boolean;
+  arrowHeadStart?: boolean;
+  arrowHeadEnd?: boolean;
+  routingMode?: ArrowRoutingMode;
+  routePreference?: ArrowRoutePreference;
+  isManuallyRouted?: boolean;
+  startConnection?: { elementId: string; handle: ConnectionHandle };
+  endConnection?: { elementId: string; handle: ConnectionHandle };
 };
 
 // Storage: the shared document — all connected users read/write to this

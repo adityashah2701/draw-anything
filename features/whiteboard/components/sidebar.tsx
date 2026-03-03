@@ -1,6 +1,7 @@
 import { Tool } from "@/features/whiteboard/types/whiteboard.types";
 import {
   ArrowRight,
+  ArrowLeftRight,
   Circle,
   Diamond,
   Eraser,
@@ -46,6 +47,12 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
     { name: "line", icon: Minus, label: "Line", allowInReadOnly: false },
     { name: "arrow", icon: ArrowRight, label: "Arrow", allowInReadOnly: false },
+    {
+      name: "arrow-bidirectional",
+      icon: ArrowLeftRight,
+      label: "Bi Arrow",
+      allowInReadOnly: false,
+    },
     { name: "text", icon: Type, label: "Text", allowInReadOnly: false },
     { name: "eraser", icon: Eraser, label: "Eraser", allowInReadOnly: false },
     { name: "hand", icon: Hand, label: "Pan", allowInReadOnly: true },

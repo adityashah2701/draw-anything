@@ -9,54 +9,25 @@ interface StatusSectionProps {
 }
 
 export const StatusSection: React.FC<StatusSectionProps> = ({
-  currentTool,
+  currentTool: _currentTool,
   isSaving,
   lastSaved,
   disabled,
 }) => {
   return (
-    <div className="flex items-center space-x-2 flex-shrink-0">
-      {/* Current tool display */}
-      <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
-        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-        <span className="text-xs text-gray-700 capitalize font-medium">
-          {currentTool === "pen"
-            ? "Pen"
-            : currentTool === "rectangle"
-              ? "Rectangle"
-            : currentTool === "circle"
-              ? "Circle"
-              : currentTool === "diamond"
-                ? "Decision"
-                : currentTool === "line"
-                  ? "Line"
-                  : currentTool === "arrow"
-                    ? "Arrow"
-                    : currentTool === "text"
-                      ? "Text"
-                      : currentTool === "eraser"
-                        ? "Eraser"
-                        : currentTool === "select"
-                          ? "Select"
-                          : currentTool === "hand"
-                            ? "Pan"
-                            : currentTool}
-        </span>
-      </div>
-
-      {/* Save Status */}
-      <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+    <div className="inline-flex items-center gap-2">
+      <div className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2">
         {isSaving ? (
           <>
-            <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-            <span className="text-xs text-gray-700 font-medium hidden sm:inline">
+            <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+            <span className="text-[11px] font-medium text-slate-700">
               Saving...
             </span>
           </>
         ) : lastSaved ? (
           <>
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-xs text-gray-700 hidden sm:inline">
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="text-[11px] text-slate-700">
               {lastSaved.toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -65,8 +36,8 @@ export const StatusSection: React.FC<StatusSectionProps> = ({
           </>
         ) : (
           <>
-            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-            <span className="text-xs text-gray-700 hidden sm:inline">
+            <div className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+            <span className="text-[11px] text-slate-700">
               {disabled ? "Read-only" : "Not saved"}
             </span>
           </>

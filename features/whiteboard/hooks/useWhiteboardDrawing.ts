@@ -4,12 +4,15 @@ import {
   Point,
   Tool,
   Bounds,
+  ConnectionHandle,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { getConnectionHandles } from "@/features/whiteboard/utils/canvas-render-utils";
+import { routeArrowPoints } from "@/core/routing/orthogonalRouter";
+import { isArrowElement } from "@/core/shapes/Arrow";
 
 interface ConnectionDraft {
   fromElementId: string;
-  fromHandle: string;
+  fromHandle: ConnectionHandle;
   currentPoint: Point;
 }
 
@@ -251,11 +254,21 @@ export const useWhiteboardDrawing = ({
                   ? "line"
                   : currentTool === "arrow"
                     ? "arrow"
+                    : currentTool === "arrow-bidirectional"
+                      ? "arrow-bidirectional"
                     : "freehand",
         points: [point],
         color: currentColor,
         strokeWidth,
         fill: fillColor !== "#transparent" ? fillColor : undefined,
+        dashed: false,
+        arrowHeadStart: currentTool === "arrow-bidirectional",
+        arrowHeadEnd: currentTool === "arrow" || currentTool === "arrow-bidirectional",
+        routingMode:
+          currentTool === "arrow" || currentTool === "arrow-bidirectional"
+            ? "orthogonal"
+            : undefined,
+        isManuallyRouted: false,
         label:
           currentTool === "rectangle" ||
           currentTool === "circle" ||
@@ -396,6 +409,18 @@ export const useWhiteboardDrawing = ({
           ...currentElement,
           points: [...currentElement.points, point],
         });
+      } else if (isArrowElement(currentElement)) {
+        const start = currentElement.points[0];
+        const points = routeArrowPoints({
+          start,
+          end: point,
+          routingMode: currentElement.routingMode ?? "orthogonal",
+          routePreference: currentElement.routePreference,
+        });
+        setCurrentElement({
+          ...currentElement,
+          points,
+        });
       } else {
         setCurrentElement({
           ...currentElement,
@@ -473,12 +498,19 @@ export const useWhiteboardDrawing = ({
             addElementDirect({
               id: generateId(),
               type: "arrow",
-              points: [
-                { x: fromHandle.x, y: fromHandle.y },
-                { x: nearestToHandle.x, y: nearestToHandle.y },
-              ],
+              points: routeArrowPoints({
+                start: { x: fromHandle.x, y: fromHandle.y },
+                end: { x: nearestToHandle.x, y: nearestToHandle.y },
+                startHandle: fromHandle.name,
+                endHandle: nearestToHandle.name,
+                routingMode: "orthogonal",
+              }),
               color: "#475569",
               strokeWidth: 2,
+              routingMode: "orthogonal",
+              isManuallyRouted: false,
+              arrowHeadStart: false,
+              arrowHeadEnd: true,
               startConnection: {
                 elementId: fromEl.id,
                 handle: fromHandle.name,
