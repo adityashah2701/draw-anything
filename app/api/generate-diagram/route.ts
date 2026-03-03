@@ -1828,6 +1828,7 @@ function buildNodeAndArrowElementsFromLayout(
     verticalBias?: boolean;
     obstaclePadding?: number;
     parallelSpacing?: number;
+    layerBoundaryYs?: number[];
   },
 ): { elements: CanvasElement[]; nextIndex: number } {
   const elements: CanvasElement[] = [];
@@ -1988,6 +1989,7 @@ function buildNodeAndArrowElementsFromLayout(
       preferencePenalty: 56,
       crossingPenalty: 1700,
     },
+    layerBoundaryYs: options?.layerBoundaryYs,
   });
 
   arrowDrafts.forEach((draft) => {
@@ -2131,6 +2133,9 @@ function buildArchitectureElements(graph: LogicalGraph): CanvasElement[] {
     });
   });
 
+  // Extract layer boundary Y-coordinates for layer-aware routing.
+  const layerBoundaryYs = layout.layers.map((layer) => layer.top);
+
   const rendered = buildNodeAndArrowElementsFromLayout(
     graph,
     layoutNodes,
@@ -2140,6 +2145,7 @@ function buildArchitectureElements(graph: LogicalGraph): CanvasElement[] {
       verticalBias: true,
       obstaclePadding: 22,
       parallelSpacing: 14,
+      layerBoundaryYs,
     },
   );
 

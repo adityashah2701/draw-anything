@@ -442,7 +442,12 @@ export const useWhiteboardDrawing = ({
                 ) {
                   const endpoint = resizeHandle;
                   if (bindArrowEndpoint) {
-                    updated = bindArrowEndpoint(updated, endpoint, point, snapMatch);
+                    updated = bindArrowEndpoint(
+                      updated,
+                      endpoint,
+                      point,
+                      snapMatch,
+                    );
                   }
                   if (routeConnectedArrow) {
                     updated = routeConnectedArrow(updated);
@@ -495,15 +500,13 @@ export const useWhiteboardDrawing = ({
         });
       } else if (isArrowElement(currentElement)) {
         const start = currentElement.points[0];
-        const points = routeArrowPoints({
-          start,
-          end: point,
-          routingMode: currentElement.routingMode ?? "orthogonal",
-          routePreference: currentElement.routePreference,
-        });
+        // ── Drag preview: straight line only ──────────────────────────────
+        // Full orthogonal routing runs only when the arrow is committed
+        // (stopDrawing). Calling routeArrowPoints mid-drag can crash because
+        // sourceId/targetId/connection handles are not yet resolved.
         setCurrentElement({
           ...currentElement,
-          points,
+          points: [start, point],
         });
       } else {
         setCurrentElement({

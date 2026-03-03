@@ -42,9 +42,9 @@ export interface SegmentSpatialIndex {
 }
 
 const DEFAULT_CELL_SIZE = 128;
-const DEFAULT_CONFLICT_SPACING = 10;
-const DEFAULT_MAX_SHIFT_STEPS = 2;
-const DEFAULT_MIN_OVERLAP = 6;
+const DEFAULT_CONFLICT_SPACING = 14;
+const DEFAULT_MAX_SHIFT_STEPS = 4;
+const DEFAULT_MIN_OVERLAP = 8;
 const DEFAULT_COLLISION_PADDING = 1;
 
 const toSegment = (
@@ -198,9 +198,22 @@ const moveSegmentBy = (
   segmentIndex: number,
   offset: number,
 ): Point[] => {
-  // Keep endpoint-adjacent geometry stable to avoid pulling paths into node boxes.
+  // Allow limited shifting for endpoint-adjacent segments (1 step only).
   if (segmentIndex <= 1 || segmentIndex >= points.length - 3) {
-    return points;
+    if (segmentIndex === 0 || segmentIndex >= points.length - 2) return points;
+    // For near-endpoint segments, shift at most 1 step with reduced offset.
+    const next = points.map((point) => ({ ...point }));
+    const from = next[segmentIndex];
+    const to = next[segmentIndex + 1];
+    const reduced = offset * 0.6;
+    if (from.y === to.y) {
+      next[segmentIndex] = { ...from, y: from.y + reduced };
+      next[segmentIndex + 1] = { ...to, y: to.y + reduced };
+    } else if (from.x === to.x) {
+      next[segmentIndex] = { ...from, x: from.x + reduced };
+      next[segmentIndex + 1] = { ...to, x: to.x + reduced };
+    }
+    return compressOrthogonalPath(next);
   }
   const next = points.map((point) => ({ ...point }));
   const from = next[segmentIndex];
@@ -303,7 +316,7 @@ export const resolvePathSegmentConflicts = ({
   const ignoreIds = new Set(ignoreObstacleIds);
 
   let nextPath = compressOrthogonalPath(path);
-  for (let pass = 0; pass < 2; pass += 1) {
+  for (let pass = 0; pass < 3; pass += 1) {
     let changed = false;
     for (let i = 1; i < nextPath.length - 2; i += 1) {
       const currentSegment = toSegment(arrowId, nextPath, i);
