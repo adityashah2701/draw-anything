@@ -5,10 +5,14 @@ import {
   segmentBounds,
 } from "@/core/collision/aabb";
 import {
-  compressOrthogonalPath,
-  pathIntersectsObstacles,
   RoutingObstacle,
+  pathIntersectsObstacles,
 } from "@/core/routing/obstacle-avoidance";
+import {
+  compressOrthogonalPath,
+  orthogonalizePath,
+  EPSILON,
+} from "@/core/routing/routing-utils";
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
 
 type SegmentOrientation = "horizontal" | "vertical";
@@ -57,7 +61,7 @@ const toSegment = (
   const to = points[index + 1];
   if (from.x === to.x && from.y === to.y) return null;
 
-  if (from.y === to.y) {
+  if (Math.abs(from.y - to.y) < EPSILON) {
     const rangeStart = Math.min(from.x, to.x);
     const rangeEnd = Math.max(from.x, to.x);
     return {
@@ -72,7 +76,7 @@ const toSegment = (
     };
   }
 
-  if (from.x === to.x) {
+  if (Math.abs(from.x - to.x) < EPSILON) {
     const rangeStart = Math.min(from.y, to.y);
     const rangeEnd = Math.max(from.y, to.y);
     return {
@@ -206,26 +210,26 @@ const moveSegmentBy = (
     const from = next[segmentIndex];
     const to = next[segmentIndex + 1];
     const reduced = offset * 0.6;
-    if (from.y === to.y) {
+    if (Math.abs(from.y - to.y) < EPSILON) {
       next[segmentIndex] = { ...from, y: from.y + reduced };
       next[segmentIndex + 1] = { ...to, y: to.y + reduced };
-    } else if (from.x === to.x) {
+    } else if (Math.abs(from.x - to.x) < EPSILON) {
       next[segmentIndex] = { ...from, x: from.x + reduced };
       next[segmentIndex + 1] = { ...to, x: to.x + reduced };
     }
-    return compressOrthogonalPath(next);
+    return orthogonalizePath(next);
   }
   const next = points.map((point) => ({ ...point }));
   const from = next[segmentIndex];
   const to = next[segmentIndex + 1];
-  if (from.y === to.y) {
+  if (Math.abs(from.y - to.y) < EPSILON) {
     next[segmentIndex] = { ...from, y: from.y + offset };
     next[segmentIndex + 1] = { ...to, y: to.y + offset };
-  } else if (from.x === to.x) {
+  } else if (Math.abs(from.x - to.x) < EPSILON) {
     next[segmentIndex] = { ...from, x: from.x + offset };
     next[segmentIndex + 1] = { ...to, x: to.x + offset };
   }
-  return compressOrthogonalPath(next);
+  return orthogonalizePath(next);
 };
 
 export const createSegmentSpatialIndex = (

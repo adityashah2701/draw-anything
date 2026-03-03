@@ -1,4 +1,5 @@
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { EPSILON, orthogonalizePath } from "@/core/routing/routing-utils";
 
 /**
  * Lane manager for systematic lane allocation.
@@ -55,9 +56,7 @@ const extractSegment = (
   if (index < 0 || index >= points.length - 1) return null;
   const from = points[index];
   const to = points[index + 1];
-  if (from.x === to.x && from.y === to.y) return null;
-
-  if (from.y === to.y) {
+  if (Math.abs(from.y - to.y) < EPSILON) {
     return {
       arrowId,
       segmentIndex: index,
@@ -68,7 +67,7 @@ const extractSegment = (
     };
   }
 
-  if (from.x === to.x) {
+  if (Math.abs(from.x - to.x) < EPSILON) {
     return {
       arrowId,
       segmentIndex: index,
@@ -226,11 +225,13 @@ export const applyLaneOffsets = (
 
     // Determine dominant axis and shift inner segments.
     const shifted = points.map((p) => ({ ...p }));
-    const dx = Math.abs(points[points.length - 1].x - points[0].x);
-    const dy = Math.abs(points[points.length - 1].y - points[0].y);
+    const start = shifted[0];
+    const end = shifted[shifted.length - 1];
+    const dx = Math.abs(end.x - start.x);
+    const dy = Math.abs(end.y - start.y);
     const isHorizontalDominant = dx >= dy;
 
-    // Shift only interior segments (preserve first 2 and last 2 points).
+    // Shift only interior segments (preserve endpoint stubs).
     for (let i = 2; i < shifted.length - 2; i += 1) {
       if (isHorizontalDominant) {
         shifted[i] = { ...shifted[i], y: shifted[i].y + offset };
@@ -239,7 +240,8 @@ export const applyLaneOffsets = (
       }
     }
 
-    result.set(arrowId, shifted);
+    // Crucially re-orthogonalize after the shift to fix the boundary segments (1-2 and end-3).
+    result.set(arrowId, orthogonalizePath(shifted));
   });
 
   return result;

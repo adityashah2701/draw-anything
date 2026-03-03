@@ -12,10 +12,10 @@
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
 import { expandAabb, segmentBounds } from "@/core/collision/aabb";
 import {
-  compressOrthogonalPath,
   RoutingObstacle,
   pathIntersectsObstacles,
 } from "@/core/routing/obstacle-avoidance";
+import { orthogonalizePath, EPSILON } from "@/core/routing/routing-utils";
 
 // ─────────────────── Types ───────────────────
 
@@ -132,7 +132,7 @@ const toIndexedSegment = (
   const from = points[index];
   const to = points[index + 1];
 
-  if (from.y === to.y) {
+  if (Math.abs(from.y - to.y) < EPSILON) {
     return {
       arrowId,
       segmentIndex: index,
@@ -145,7 +145,7 @@ const toIndexedSegment = (
     };
   }
 
-  if (from.x === to.x) {
+  if (Math.abs(from.x - to.x) < EPSILON) {
     return {
       arrowId,
       segmentIndex: index,
@@ -197,11 +197,11 @@ const shiftSegment = (
   const from = next[segmentIndex];
   const to = next[segmentIndex + 1];
 
-  if (from.y === to.y) {
+  if (Math.abs(from.y - to.y) < EPSILON) {
     // Horizontal segment: shift vertically
     next[segmentIndex] = { ...from, y: from.y + offset };
     next[segmentIndex + 1] = { ...to, y: to.y + offset };
-  } else if (from.x === to.x) {
+  } else if (Math.abs(from.x - to.x) < EPSILON) {
     // Vertical segment: shift horizontally
     next[segmentIndex] = { ...from, x: from.x + offset };
     next[segmentIndex + 1] = { ...to, x: to.x + offset };
@@ -209,7 +209,7 @@ const shiftSegment = (
     return null;
   }
 
-  return compressOrthogonalPath(next);
+  return orthogonalizePath(next);
 };
 
 // ─────────────────── Public API ───────────────────

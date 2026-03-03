@@ -14,10 +14,14 @@
 
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
 import {
-  compressOrthogonalPath,
   RoutingObstacle,
   pathIntersectsObstacles,
 } from "@/core/routing/obstacle-avoidance";
+import {
+  compressOrthogonalPath,
+  orthogonalizePath,
+  EPSILON,
+} from "@/core/routing/routing-utils";
 import { countTotalCrossings } from "@/core/routing/crossing-minimizer";
 
 // ─────────────────── Types ───────────────────
@@ -45,8 +49,7 @@ const DEFAULT_GRID_SIZE = 16;
 const DEFAULT_CORRIDOR_TOLERANCE = 2;
 const DEFAULT_MIN_STUB_LENGTH = 24;
 const DEFAULT_OBSTACLE_PADDING = 12;
-const MANHATTAN_SNAP_THRESHOLD = 1;
-const CORRIDOR_CELL_SIZE = 128;
+const MANHATTAN_SNAP_THRESHOLD = 2;
 
 // ─────────────────── 1. Manhattan Enforcement ───────────────────
 
@@ -76,8 +79,12 @@ const enforceManhattan = (points: Point[]): Point[] => {
       curr.y = prev.y;
     }
 
-    // Skip zero-length segments
-    if (curr.x === prev.x && curr.y === prev.y) continue;
+    // Skip effectively zero-length segments
+    if (
+      Math.abs(curr.x - prev.x) < EPSILON &&
+      Math.abs(curr.y - prev.y) < EPSILON
+    )
+      continue;
 
     result.push(curr);
   }
@@ -330,8 +337,10 @@ const getSegmentDirection = (
   a: Point,
   b: Point,
 ): "horizontal" | "vertical" | "none" => {
-  if (a.y === b.y && a.x !== b.x) return "horizontal";
-  if (a.x === b.x && a.y !== b.y) return "vertical";
+  if (Math.abs(a.y - b.y) < EPSILON && Math.abs(a.x - b.x) >= EPSILON)
+    return "horizontal";
+  if (Math.abs(a.x - b.x) < EPSILON && Math.abs(a.y - b.y) >= EPSILON)
+    return "vertical";
   return "none";
 };
 
@@ -409,6 +418,13 @@ const isSafeTransform = (
  * 7. Unify shared corridors
  * 8. Re-validate all modified arrows
  */
+const normalizeStepOrthogonalize = (points: Point[]): Point[] => {
+  // First attempt to fix minor drifts with Manhattan snap logic
+  // Then force strict orthogonality
+  const stepped = enforceManhattan(points);
+  return orthogonalizePath(stepped);
+};
+
 export const normalizeRoutes = (
   routes: Map<string, Point[]>,
   options: PathNormalizerOptions = {},
@@ -441,8 +457,8 @@ export const normalizeRoutes = (
     // Step 3: Stub straightening
     path = straightenStubs(path, minStubLength);
 
-    // Step 4: Recompress
-    path = compressOrthogonalPath(path);
+    // Step 4: Re-orthogonalize and compress
+    path = normalizeStepOrthogonalize(path);
 
     // Step 5: Safety check
     if (

@@ -11,11 +11,16 @@ import {
 } from "@/core/routing/parallel-edge-manager";
 import {
   ObstacleAwareRouteInput,
-  compressOrthogonalPath,
-  getObstacleAwareOrthogonalPath,
   PathRankingConfig,
   RoutingObstacle,
 } from "@/core/routing/obstacle-avoidance";
+import {
+  compressOrthogonalPath,
+  isOrthogonalSegment,
+  arePointsEqual as samePoint,
+  orthogonalizePath,
+  EPSILON,
+} from "@/core/routing/routing-utils";
 import {
   addPathToSegmentSpatialIndex,
   buildSegmentSpatialIndex,
@@ -32,17 +37,14 @@ import {
   normalizeRoutes,
   PathNormalizerOptions,
 } from "@/core/routing/path-normalizer";
+import { getObstacleAwareOrthogonalPath } from "@/core/routing/obstacle-avoidance";
 import { isValidPoint } from "@/core/routing/routing-guards";
-
-const isOrthogonalSegment = (a: Point, b: Point) => a.x === b.x || a.y === b.y;
-
-const samePoint = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
 
 const getDominantAxis = (
   start: Point,
   end: Point,
 ): "horizontal" | "vertical" =>
-  Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
+  Math.abs(end.x - start.x) >= Math.abs(end.y - start.y) - EPSILON
     ? "horizontal"
     : "vertical";
 
@@ -52,8 +54,9 @@ const applyParallelOffset = (
   end: Point,
   offset: number,
   lockEndpointStubs: boolean,
+  preference: "hv" | "vh" = "hv",
 ): Point[] => {
-  if (Math.abs(offset) < 0.001 || points.length <= 2) return points;
+  if (Math.abs(offset) < EPSILON || points.length <= 2) return points;
 
   const dominantAxis = getDominantAxis(start, end);
   const shifted = points.map((point) => ({ ...point }));
@@ -70,7 +73,8 @@ const applyParallelOffset = (
     }
   }
 
-  return compressOrthogonalPath(shifted);
+  // Re-orthogonalize after shifting points to fix any diagonals at the shift boundaries.
+  return orthogonalizePath(shifted, preference);
 };
 
 const isOrthogonalPathInternal = (points: Point[]): boolean => {
@@ -92,29 +96,6 @@ const getFallbackOrthogonalPath = (
     return [start, { x: start.x, y: end.y }, end];
   }
   return [start, { x: end.x, y: start.y }, end];
-};
-
-const orthogonalizePath = (
-  points: Point[],
-  preference: ArrowRoutePreference = "hv",
-): Point[] => {
-  if (points.length < 2) return points;
-  const result: Point[] = [{ ...points[0] }];
-
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = result[result.length - 1];
-    const next = points[i];
-    if (prev.x === next.x || prev.y === next.y) {
-      result.push({ ...next });
-      continue;
-    }
-
-    const elbow =
-      preference === "vh" ? { x: prev.x, y: next.y } : { x: next.x, y: prev.y };
-    result.push(elbow, { ...next });
-  }
-
-  return compressOrthogonalPath(result);
 };
 
 const getHandleDirection = (handle: ConnectionHandle): Point => {
@@ -316,7 +297,7 @@ export const routeArrowPoints = ({
         err,
       );
     }
-    return [start, end];
+    return getFallbackOrthogonalPath(start, end, routePreference);
   }
 };
 
@@ -327,6 +308,8 @@ const routeArrowPointsInternal = ({
   startHandle,
   endHandle,
   routePreference,
+  sourceId,
+  targetId,
   routingMode = "orthogonal",
   existingPoints,
   preserveManualBends = false,
@@ -383,9 +366,6 @@ const routeArrowPointsInternal = ({
     end,
     parallelOffset,
     lockEndpointStubs,
-  );
-  points = orthogonalizePath(
-    points,
     routePreference ??
       (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
   );
@@ -399,14 +379,34 @@ const routeArrowPointsInternal = ({
     obstaclePadding,
     options: conflictOptions,
   });
-  points = pinPathEndpointStubs(points, start, end, startHandle, endHandle);
+  // Final orthogonalization and pinning sequence
   points = orthogonalizePath(
     points,
     routePreference ??
       (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
   );
+  points = pinPathEndpointStubs(points, start, end, startHandle, endHandle);
 
-  return compressOrthogonalPath(points);
+  const finalPoints = compressOrthogonalPath(points);
+
+  // ── Single-edge Normalization ──
+  // Ensure even single-arrow routes benefit from Manhattan enforcement and grid snapping.
+  const routes = new Map<string, Point[]>([[arrowId, finalPoints]]);
+  const ignoreIdsSet = new Set<string>();
+  if (sourceId) ignoreIdsSet.add(sourceId);
+  if (targetId) ignoreIdsSet.add(targetId);
+
+  const normalized = normalizeRoutes(routes, {
+    gridSize: 16,
+    snapToGrid: true,
+    corridorTolerance: 2,
+    minStubLength: 24,
+    obstacles,
+    ignoreObstacleIdsByArrow: new Map([[arrowId, ignoreIdsSet]]),
+    obstaclePadding,
+  });
+
+  return normalized.get(arrowId) || finalPoints;
 };
 
 export const routeArrowBatch = ({
