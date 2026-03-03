@@ -5,9 +5,17 @@ export interface Point {
 }
 
 export type ConnectionHandle = "top" | "right" | "bottom" | "left";
+export type AnchorSide = ConnectionHandle;
 export type ArrowType = "arrow" | "arrow-bidirectional";
 export type ArrowRoutingMode = "straight" | "orthogonal";
 export type ArrowRoutePreference = "vh" | "hv";
+
+export interface Anchor {
+  id: string;
+  x: number;
+  y: number;
+  side: AnchorSide;
+}
 
 export interface ArrowStyle {
   strokeWidth: number;
@@ -19,7 +27,9 @@ export interface ArrowStyle {
 
 export interface ArrowConnection {
   elementId: string;
-  handle: ConnectionHandle;
+  anchorId?: string;
+  /** Backward compatibility for older documents. */
+  handle?: ConnectionHandle;
 }
 
 export interface Bounds {

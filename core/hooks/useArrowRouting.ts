@@ -10,6 +10,10 @@ import {
 } from "@/core/routing/connectionHandles";
 import { ArrowElement, isArrowElement } from "@/core/shapes/Arrow";
 import { routeArrowPoints } from "@/core/routing/orthogonalRouter";
+import {
+  buildAnchorId,
+  parseAnchorSide,
+} from "@/core/anchors/generate-anchors";
 
 interface BoundsLike {
   minX: number;
@@ -48,7 +52,10 @@ export const useArrowRouting = ({
   }, [elements]);
 
   const handlesByElementId = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof getConnectionHandlesForBounds>>();
+    const map = new Map<
+      string,
+      Array<ReturnType<typeof getConnectionHandlesForBounds>[number] & { id: string }>
+    >();
     elements.forEach((element) => {
       if (
         element.type !== "rectangle" &&
@@ -59,7 +66,13 @@ export const useArrowRouting = ({
       }
       const bounds = getElementBounds(element);
       if (!bounds) return;
-      map.set(element.id, getConnectionHandlesForBounds(bounds));
+      map.set(
+        element.id,
+        getConnectionHandlesForBounds(bounds).map((handle) => ({
+          ...handle,
+          id: buildAnchorId(element.id, handle.name),
+        })),
+      );
     });
     return map;
   }, [elements, getElementBounds]);
@@ -71,7 +84,23 @@ export const useArrowRouting = ({
       if (!connection) return null;
       const handles = handlesByElementId.get(connection.elementId);
       if (handles) {
-        const matched = handles.find((handle) => handle.name === connection.handle);
+        const connectionSide =
+          connection.handle ??
+          (connection.anchorId ? parseAnchorSide(connection.anchorId) ?? undefined : undefined);
+        const anchorId =
+          connection.anchorId ??
+          (connectionSide ? buildAnchorId(connection.elementId, connectionSide) : undefined);
+        const matched =
+          handles.find((handle) =>
+            anchorId
+              ? handle.id === anchorId
+              : connectionSide
+                ? handle.name === connectionSide
+                : false,
+          ) ??
+          (connectionSide
+            ? handles.find((handle) => handle.name === connectionSide)
+            : undefined);
         if (matched) {
           return { x: matched.x, y: matched.y };
         }
@@ -81,7 +110,11 @@ export const useArrowRouting = ({
       if (!connected) return null;
       const bounds = getElementBounds(connected);
       if (!bounds) return null;
-      const point = getConnectionHandlePoint(bounds, connection.handle);
+      const fallbackSide =
+        connection.handle ??
+        (connection.anchorId ? parseAnchorSide(connection.anchorId) ?? undefined : undefined);
+      if (!fallbackSide) return null;
+      const point = getConnectionHandlePoint(bounds, fallbackSide);
       return { x: point.x, y: point.y };
     },
     [elementsById, getElementBounds, handlesByElementId],
@@ -101,8 +134,16 @@ export const useArrowRouting = ({
       const points = routeArrowPoints({
         start,
         end,
-        startHandle: arrow.startConnection?.handle,
-        endHandle: arrow.endConnection?.handle,
+        startHandle:
+          arrow.startConnection?.handle ??
+          (arrow.startConnection?.anchorId
+            ? parseAnchorSide(arrow.startConnection.anchorId) ?? undefined
+            : undefined),
+        endHandle:
+          arrow.endConnection?.handle ??
+          (arrow.endConnection?.anchorId
+            ? parseAnchorSide(arrow.endConnection.anchorId) ?? undefined
+            : undefined),
         routePreference: arrow.routePreference,
         routingMode: options?.routingMode ?? arrow.routingMode ?? "orthogonal",
         existingPoints: arrow.points,
@@ -151,4 +192,3 @@ export const useArrowRouting = ({
     resolveConnectionPoint,
   };
 };
-

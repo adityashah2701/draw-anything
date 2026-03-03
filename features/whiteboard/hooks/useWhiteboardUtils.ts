@@ -10,11 +10,22 @@ import {
   moveOrthogonalSegment,
   routeArrowPoints,
 } from "@/core/routing/orthogonalRouter";
+import { parseAnchorSide } from "@/core/anchors/generate-anchors";
 
 export const useWhiteboardUtils = (
   zoom: number,
   elements: DrawingElement[],
 ) => {
+  const getConnectionSide = useCallback(
+    (connection?: DrawingElement["startConnection"]) => {
+      if (!connection) return undefined;
+      if (connection.handle) return connection.handle;
+      if (connection.anchorId) return parseAnchorSide(connection.anchorId) ?? undefined;
+      return undefined;
+    },
+    [],
+  );
+
   const SPATIAL_CELL_SIZE = 220;
   const textMeasureCtx = useMemo(() => {
     if (typeof document === "undefined") return null;
@@ -577,8 +588,8 @@ export const useWhiteboardUtils = (
             newPoints = routeArrowPoints({
               start: nextPoints[0],
               end: nextPoints[lastPointIndex],
-              startHandle: element.startConnection?.handle,
-              endHandle: element.endConnection?.handle,
+              startHandle: getConnectionSide(element.startConnection),
+              endHandle: getConnectionSide(element.endConnection),
               routePreference: element.routePreference,
               routingMode: element.routingMode ?? "orthogonal",
               existingPoints: nextPoints,
@@ -775,7 +786,7 @@ export const useWhiteboardUtils = (
           : {}),
       };
     },
-    [elements],
+    [elements, getConnectionSide],
   );
 
   return {
