@@ -58,9 +58,15 @@ export const useArrowConnections = ({
   getElementBounds,
 }: UseArrowConnectionsOptions) => {
   const isRoutingObstacleElement = useCallback(
-    (element: DrawingElement) =>
-      (anchorIndex.anchorsByElementId.get(element.id)?.length ?? 0) > 0 ||
-      element.type === "text",
+    (element: DrawingElement) => {
+      if ((element as DrawingElement & { isGuide?: boolean }).isGuide) {
+        return false;
+      }
+      return (
+        (anchorIndex.anchorsByElementId.get(element.id)?.length ?? 0) > 0 ||
+        element.type === "text"
+      );
+    },
     [anchorIndex.anchorsByElementId],
   );
 
