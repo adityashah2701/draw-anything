@@ -6,14 +6,14 @@ import {
 } from "@/features/whiteboard/types/whiteboard.types";
 import {
   getConnectionHandlePoint,
-  getConnectionHandlesForBounds,
 } from "@/core/routing/connectionHandles";
-import { ArrowElement, isArrowElement } from "@/core/shapes/Arrow";
-import { routeArrowPoints } from "@/core/routing/orthogonalRouter";
+import { ArrowElement, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
+import { routeArrowPoints } from "@/core/routing/orthogonal-router";
 import {
   buildAnchorId,
   parseAnchorSide,
 } from "@/core/anchors/generate-anchors";
+import { getShapeAnchors } from "@/core/shapes/shape-runtime";
 
 interface BoundsLike {
   minX: number;
@@ -54,23 +54,30 @@ export const useArrowRouting = ({
   const handlesByElementId = useMemo(() => {
     const map = new Map<
       string,
-      Array<ReturnType<typeof getConnectionHandlesForBounds>[number] & { id: string }>
+      Array<{ name: "top" | "right" | "bottom" | "left"; x: number; y: number; id: string }>
     >();
     elements.forEach((element) => {
-      if (
-        element.type !== "rectangle" &&
-        element.type !== "circle" &&
-        element.type !== "diamond"
-      ) {
-        return;
-      }
       const bounds = getElementBounds(element);
       if (!bounds) return;
+
+      const anchors = getShapeAnchors(element, {
+        minX: bounds.minX,
+        minY: bounds.minY,
+        maxX: bounds.maxX,
+        maxY: bounds.maxY,
+        width: bounds.maxX - bounds.minX,
+        height: bounds.maxY - bounds.minY,
+      });
+
+      if (anchors.length === 0) return;
+
       map.set(
         element.id,
-        getConnectionHandlesForBounds(bounds).map((handle) => ({
-          ...handle,
-          id: buildAnchorId(element.id, handle.name),
+        anchors.map((anchor) => ({
+          id: anchor.id,
+          name: anchor.side,
+          x: anchor.x,
+          y: anchor.y,
         })),
       );
     });

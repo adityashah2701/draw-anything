@@ -7,9 +7,10 @@ import {
   ConnectionHandle,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { getConnectionHandles } from "@/features/whiteboard/utils/canvas-render-utils";
-import { routeArrowPoints } from "@/core/routing/orthogonalRouter";
-import { isArrowElement } from "@/core/shapes/Arrow";
+import { routeArrowPoints } from "@/core/routing/orthogonal-router";
+import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import { createShape } from "@/core/shapes/shape-runtime";
 
 interface ConnectionDraft {
   fromElementId: string;
@@ -23,6 +24,16 @@ interface ArrowSnapPreview {
   pointer: Point;
   match: MagneticSnapMatch;
 }
+
+const TOOL_TO_SHAPE_TYPE: Partial<Record<Tool, DrawingElement["type"]>> = {
+  pen: "freehand",
+  rectangle: "rectangle",
+  circle: "circle",
+  diamond: "diamond",
+  line: "line",
+  arrow: "arrow",
+  "arrow-bidirectional": "arrow-bidirectional",
+};
 
 interface UseWhiteboardDrawingProps {
   currentTool: Tool;
@@ -272,45 +283,35 @@ export const useWhiteboardDrawing = ({
 
       setIsDrawing(true);
 
-      const newElement: DrawingElement = {
+      const shapeType = TOOL_TO_SHAPE_TYPE[currentTool];
+      if (!shapeType) return;
+
+      const newElement = createShape(shapeType, {
         id: generateId(),
-        type:
-          currentTool === "pen"
-            ? "freehand"
-            : currentTool === "rectangle"
-              ? "rectangle"
-              : currentTool === "circle"
-                ? "circle"
-                : currentTool === "diamond"
-                  ? "diamond"
-                : currentTool === "line"
-                  ? "line"
-                  : currentTool === "arrow"
-                    ? "arrow"
-                    : currentTool === "arrow-bidirectional"
-                      ? "arrow-bidirectional"
-                    : "freehand",
         points: [point],
         color: currentColor,
         strokeWidth,
         fill: fillColor !== "#transparent" ? fillColor : undefined,
         dashed: false,
         arrowHeadStart: currentTool === "arrow-bidirectional",
-        arrowHeadEnd: currentTool === "arrow" || currentTool === "arrow-bidirectional",
+        arrowHeadEnd:
+          currentTool === "arrow" || currentTool === "arrow-bidirectional",
         routingMode:
           currentTool === "arrow" || currentTool === "arrow-bidirectional"
             ? "orthogonal"
             : undefined,
         isManuallyRouted: false,
         label:
-          currentTool === "rectangle" ||
-          currentTool === "circle" ||
-          currentTool === "diamond"
+          shapeType === "rectangle" ||
+          shapeType === "circle" ||
+          shapeType === "diamond"
             ? "TEXT"
             : undefined,
-      };
+      });
 
-      setCurrentElement(newElement);
+      if (newElement) {
+        setCurrentElement(newElement);
+      }
     },
     [
       currentTool,
@@ -359,12 +360,7 @@ export const useWhiteboardDrawing = ({
         const atPoint = getElementsAtPoint(point);
         const connectable = [...atPoint]
           .reverse()
-          .find(
-            (el) =>
-              el.type === "rectangle" ||
-              el.type === "circle" ||
-              el.type === "diamond",
-          );
+          .find((element) => getElementConnectionHandles(element).length > 0);
         setHoveredElementId(connectable?.id ?? null);
       } else {
         // Clear hover when not on select tool
@@ -554,11 +550,9 @@ export const useWhiteboardDrawing = ({
       const target = [...targetElements]
         .reverse()
         .find(
-          (el) =>
-            (el.type === "rectangle" ||
-              el.type === "circle" ||
-              el.type === "diamond") &&
-            el.id !== connectionDraft.fromElementId,
+          (element) =>
+            element.id !== connectionDraft.fromElementId &&
+            getElementConnectionHandles(element).length > 0,
         );
 
       if (target && addElementDirect) {
@@ -587,9 +581,8 @@ export const useWhiteboardDrawing = ({
           }
 
           if (fromHandle && nearestToHandle) {
-            addElementDirect({
+            const arrow = createShape("arrow", {
               id: generateId(),
-              type: "arrow",
               points: routeArrowPoints({
                 start: { x: fromHandle.x, y: fromHandle.y },
                 end: { x: nearestToHandle.x, y: nearestToHandle.y },
@@ -612,6 +605,9 @@ export const useWhiteboardDrawing = ({
                 anchorId: nearestToHandle.id,
               },
             });
+            if (arrow) {
+              addElementDirect(arrow);
+            }
           }
         }
       }
@@ -693,15 +689,18 @@ export const useWhiteboardDrawing = ({
       }
 
       if (text && textPosition) {
-        const textElement: DrawingElement = {
+        const textElement = createShape("text", {
           id: generateId(),
-          type: "text",
           points: [textPosition],
           color: currentColor,
           strokeWidth,
           text,
           fontSize,
-        };
+        });
+
+        if (!textElement) {
+          return false;
+        }
 
         setCurrentElement(textElement);
         completeCurrentElement();

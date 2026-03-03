@@ -5,7 +5,7 @@ import {
   getConnectionHandles,
 } from "../utils/canvas-render-utils";
 import { DrawingElement, Point } from "../types/whiteboard.types";
-import { routeArrowPoints } from "@/core/routing/orthogonalRouter";
+import { routeArrowPoints } from "@/core/routing/orthogonal-router";
 import { Anchor } from "@/features/whiteboard/types/whiteboard.types";
 
 interface ConnectionDraft {
@@ -131,9 +131,7 @@ const useCanvasEngine = ({
       const renderElement =
         editingShapeLabelId &&
         element.id === editingShapeLabelId &&
-        (element.type === "rectangle" ||
-          element.type === "circle" ||
-          element.type === "diamond")
+        typeof element.label === "string"
           ? { ...element, label: undefined }
           : element;
       drawElement(ctx, renderElement, isSelected, renderCtx);

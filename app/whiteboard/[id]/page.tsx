@@ -17,13 +17,17 @@ import {
   DrawingElement,
   Tool,
 } from "@/features/whiteboard/types/whiteboard.types";
-import { getArrowHeadVisibility, isArrowElement } from "@/core/shapes/Arrow";
+import {
+  ArrowElement,
+  getArrowHeadVisibility,
+  isArrowElement,
+} from "@/core/shapes/arrow/arrow-utils";
 import { useMagneticSnap } from "@/core/snap/use-magnetic-snap";
 import { useArrowConnections } from "@/core/arrow/use-arrow-connections";
 import {
   insertBendPoint,
   removeBendPoint,
-} from "@/core/routing/orthogonalRouter";
+} from "@/core/routing/orthogonal-router";
 import { DrawingElementJson } from "@/liveblocks.config";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -543,7 +547,7 @@ const WhiteboardCanvas: React.FC = () => {
     (
       patch: Partial<
         Pick<
-          DrawingElement,
+          ArrowElement,
           | "type"
           | "routingMode"
           | "dashed"
@@ -556,7 +560,7 @@ const WhiteboardCanvas: React.FC = () => {
       if (!whiteboardAccess.hasEditAccess) return;
       if (!selectedElement || !isArrowElement(selectedElement)) return;
 
-      let next: DrawingElement = {
+      let next: ArrowElement = {
         ...selectedElement,
         ...patch,
       };
@@ -575,10 +579,7 @@ const WhiteboardCanvas: React.FC = () => {
         const endIndex = Math.max(1, next.points.length - 1);
         next.points = [next.points[0], next.points[endIndex]];
         next.isManuallyRouted = false;
-      } else if (
-        patch.routingMode === "orthogonal" &&
-        isArrowElement(next)
-      ) {
+      } else if (patch.routingMode === "orthogonal") {
         next = routeArrowByConnections(next);
       }
 

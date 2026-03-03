@@ -3,15 +3,28 @@ import {
   AnchorSide,
   DrawingElement,
 } from "@/features/whiteboard/types/whiteboard.types";
+import {
+  ANCHOR_SIDES,
+  BoundsLike,
+  ShapeBounds,
+  boundsToShapeBounds,
+  buildAnchorId,
+  defaultAnchorBySide,
+  generateAnchorsForShape,
+  parseAnchorSide,
+} from "@/core/anchors/anchor-geometry";
+import { getShapeAnchors } from "@/core/shapes/shape-runtime";
 
-export type { Anchor };
+export type { Anchor, BoundsLike, ShapeBounds };
 
-export interface ShapeBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+export {
+  ANCHOR_SIDES,
+  boundsToShapeBounds,
+  buildAnchorId,
+  defaultAnchorBySide,
+  generateAnchorsForShape,
+  parseAnchorSide,
+};
 
 export interface ShapeWithAnchors {
   id: string;
@@ -19,63 +32,19 @@ export interface ShapeWithAnchors {
   anchors: Anchor[];
 }
 
-interface BoundsLike {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
-
-const ANCHOR_SIDES: AnchorSide[] = ["top", "right", "bottom", "left"];
-
-export const buildAnchorId = (elementId: string, side: AnchorSide): string =>
-  `${elementId}-anchor-${side}`;
-
-export const parseAnchorSide = (anchorId: string): AnchorSide | null => {
-  const tail = anchorId.split("-").pop();
-  if (tail === "top" || tail === "right" || tail === "bottom" || tail === "left") {
-    return tail;
-  }
-  return null;
-};
-
-export const boundsToShapeBounds = (bounds: BoundsLike): ShapeBounds => ({
-  x: bounds.minX,
-  y: bounds.minY,
-  width: bounds.maxX - bounds.minX,
-  height: bounds.maxY - bounds.minY,
-});
-
-const isAnchorShape = (element: DrawingElement) =>
-  element.type === "rectangle" ||
-  element.type === "circle" ||
-  element.type === "diamond";
-
-export const generateAnchorsForShape = (
-  shapeId: string,
-  bounds: ShapeBounds,
-): Anchor[] => {
-  const cx = bounds.x + bounds.width / 2;
-  const cy = bounds.y + bounds.height / 2;
-  const left = bounds.x;
-  const right = bounds.x + bounds.width;
-  const top = bounds.y;
-  const bottom = bounds.y + bounds.height;
-
-  return [
-    { id: buildAnchorId(shapeId, "top"), x: cx, y: top, side: "top" },
-    { id: buildAnchorId(shapeId, "right"), x: right, y: cy, side: "right" },
-    { id: buildAnchorId(shapeId, "bottom"), x: cx, y: bottom, side: "bottom" },
-    { id: buildAnchorId(shapeId, "left"), x: left, y: cy, side: "left" },
-  ];
-};
-
 export const generateAnchorsForElement = (
   element: DrawingElement,
   bounds: BoundsLike | null,
 ): Anchor[] => {
-  if (!bounds || !isAnchorShape(element)) return [];
-  return generateAnchorsForShape(element.id, boundsToShapeBounds(bounds));
+  if (!bounds) return [];
+  return getShapeAnchors(element, {
+    minX: bounds.minX,
+    minY: bounds.minY,
+    maxX: bounds.maxX,
+    maxY: bounds.maxY,
+    width: bounds.maxX - bounds.minX,
+    height: bounds.maxY - bounds.minY,
+  });
 };
 
 export interface AnchorRecord {
@@ -103,18 +72,19 @@ export const createAnchorIndex = (
   const anchorByLookupKey = new Map<string, Anchor>();
 
   elements.forEach((element) => {
-    if (!isAnchorShape(element)) return;
     const bounds = getElementBounds(element);
     if (!bounds) return;
 
-    const shapeBounds = boundsToShapeBounds(bounds);
-    const shapeAnchors = generateAnchorsForShape(element.id, shapeBounds);
+    const shapeAnchors = generateAnchorsForElement(element, bounds);
+    if (shapeAnchors.length === 0) return;
 
+    const shapeBounds = boundsToShapeBounds(bounds);
     shapes.push({
       id: element.id,
       bounds: shapeBounds,
       anchors: shapeAnchors,
     });
+
     anchorsByElementId.set(element.id, shapeAnchors);
 
     shapeAnchors.forEach((anchor) => {
@@ -131,14 +101,5 @@ export const createAnchorIndex = (
   };
 };
 
-export const defaultAnchorBySide = (
-  elementId: string,
-  side: AnchorSide,
-): Anchor => ({
-  id: buildAnchorId(elementId, side),
-  x: 0,
-  y: 0,
-  side,
-});
-
-export { ANCHOR_SIDES };
+export const isAnchorSide = (value: string): value is AnchorSide =>
+  ANCHOR_SIDES.includes(value as AnchorSide);

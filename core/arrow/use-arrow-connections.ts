@@ -18,7 +18,7 @@ import {
   routeArrowBatch,
 } from "@/core/routing/orthogonal-router";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
-import { ArrowElement, isArrowElement } from "@/core/shapes/Arrow";
+import { ArrowElement, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 
 interface UseArrowConnectionsOptions {
@@ -59,11 +59,9 @@ export const useArrowConnections = ({
 }: UseArrowConnectionsOptions) => {
   const isRoutingObstacleElement = useCallback(
     (element: DrawingElement) =>
-      element.type === "rectangle" ||
-      element.type === "circle" ||
-      element.type === "diamond" ||
+      (anchorIndex.anchorsByElementId.get(element.id)?.length ?? 0) > 0 ||
       element.type === "text",
-    [],
+    [anchorIndex.anchorsByElementId],
   );
 
   const baseRoutingObstacles = useMemo(() => {

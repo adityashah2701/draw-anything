@@ -41,17 +41,9 @@ export interface Bounds {
   height: number;
 }
 
-export interface DrawingElement {
+export interface BaseDrawingElement {
   id: string;
-  type:
-    | "freehand"
-    | "rectangle"
-    | "circle"
-    | "diamond"
-    | "line"
-    | "text"
-    | "arrow"
-    | "arrow-bidirectional";
+  type: string;
   points: Point[];
   color: string;
   strokeWidth: number;
@@ -62,6 +54,38 @@ export interface DrawingElement {
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
+}
+
+export interface FreehandShape extends BaseDrawingElement {
+  type: "freehand";
+}
+
+export interface RectangleShape extends BaseDrawingElement {
+  type: "rectangle";
+}
+
+export interface CircleShape extends BaseDrawingElement {
+  type: "circle";
+}
+
+export interface DiamondShape extends BaseDrawingElement {
+  type: "diamond";
+}
+
+export interface LineShape extends BaseDrawingElement {
+  type: "line";
+}
+
+export interface TextShape extends BaseDrawingElement {
+  type: "text";
+  text?: string;
+  fontSize?: number;
+  fontWeight?: string | number;
+  fontStyle?: string;
+}
+
+export interface ArrowBaseShape extends BaseDrawingElement {
+  type: "arrow" | "arrow-bidirectional";
   startConnection?: ArrowConnection;
   endConnection?: ArrowConnection;
 
@@ -73,6 +97,24 @@ export interface DrawingElement {
   routePreference?: ArrowRoutePreference;
   isManuallyRouted?: boolean;
 }
+
+export interface ArrowShape extends ArrowBaseShape {
+  type: "arrow";
+}
+
+export interface BidirectionalArrowShape extends ArrowBaseShape {
+  type: "arrow-bidirectional";
+}
+
+export type DrawingElement =
+  | FreehandShape
+  | RectangleShape
+  | CircleShape
+  | DiamondShape
+  | LineShape
+  | TextShape
+  | ArrowShape
+  | BidirectionalArrowShape;
 
 export interface CanvasState {
   elements: DrawingElement[];

@@ -1,13 +1,12 @@
 import {
   ArrowStyle,
-  ArrowType,
+  ArrowShape,
+  BidirectionalArrowShape,
   DrawingElement,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
 
-export interface ArrowElement extends DrawingElement {
-  type: ArrowType;
-}
+export type ArrowElement = ArrowShape | BidirectionalArrowShape;
 
 export interface ArrowEditHandle {
   name: string;

@@ -1,14 +1,13 @@
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import {
-  drawArrow,
   getArrowEditHandles,
   isArrowElement,
-} from "@/core/shapes/Arrow";
+} from "@/core/shapes/arrow/arrow-utils";
+import { ConnectionHandle } from "@/core/routing/connectionHandles";
 import {
-  getConnectionHandlesForBounds,
-  ConnectionHandle,
-} from "@/core/routing/connectionHandles";
-import { buildAnchorId } from "@/core/anchors/generate-anchors";
+  getShapeAnchors,
+  renderShapeToCanvas,
+} from "@/core/shapes/shape-runtime";
 
 export interface RenderContext {
   zoom: number;
@@ -27,17 +26,21 @@ export const getConnectionHandles = (
   element: DrawingElement,
   bounds: { minX: number; minY: number; maxX: number; maxY: number } | null,
 ): { id: string; name: ConnectionHandle; x: number; y: number }[] => {
-  if (!bounds) return [];
-  if (
-    element.type !== "rectangle" &&
-    element.type !== "circle" &&
-    element.type !== "diamond"
-  ) {
-    return [];
-  }
-  return getConnectionHandlesForBounds(bounds).map((handle) => ({
-    ...handle,
-    id: buildAnchorId(element.id, handle.name),
+  const shapeBounds = bounds
+    ? {
+        minX: bounds.minX,
+        minY: bounds.minY,
+        maxX: bounds.maxX,
+        maxY: bounds.maxY,
+        width: bounds.maxX - bounds.minX,
+        height: bounds.maxY - bounds.minY,
+      }
+    : null;
+  return getShapeAnchors(element, shapeBounds).map((anchor) => ({
+    id: anchor.id,
+    name: anchor.side,
+    x: anchor.x,
+    y: anchor.y,
   }));
 };
 
@@ -224,216 +227,13 @@ export const drawElement = (
     ctx.fillStyle = element.fill;
   }
 
-  switch (element.type) {
-    case "freehand":
-      if (element.points.length > 1) {
-        ctx.beginPath();
-        ctx.moveTo(
-          element.points[0].x * zoom + panOffset.x,
-          element.points[0].y * zoom + panOffset.y,
-        );
-        for (let i = 1; i < element.points.length; i++) {
-          ctx.lineTo(
-            element.points[i].x * zoom + panOffset.x,
-            element.points[i].y * zoom + panOffset.y,
-          );
-        }
-        ctx.stroke();
-      }
-      break;
-
-    case "rectangle":
-      if (element.points.length === 2) {
-        const startX = element.points[0].x * zoom + panOffset.x;
-        const startY = element.points[0].y * zoom + panOffset.y;
-        const endX = element.points[1].x * zoom + panOffset.x;
-        const endY = element.points[1].y * zoom + panOffset.y;
-
-        const width = endX - startX;
-        const height = endY - startY;
-
-        if (element.fill) {
-          ctx.fillRect(startX, startY, width, height);
-        }
-        ctx.strokeRect(startX, startY, width, height);
-
-        // Draw embedded label centered inside the rect
-        if (element.label) {
-          const cx = startX + width / 2;
-          const cy = startY + height / 2;
-          drawShapeLabel(
-            ctx,
-            element.label,
-            cx,
-            cy,
-            () => {
-              ctx.beginPath();
-              ctx.rect(startX + 4, startY + 4, width - 8, height - 8);
-            },
-            zoom,
-            element.color,
-            Math.max(20, Math.abs(width) - 16),
-            Math.max(14, Math.abs(height) - 12),
-            element.fontSize,
-            element.fontWeight,
-            element.fontStyle,
-          );
-        }
-      }
-      break;
-
-    case "circle":
-      if (element.points.length === 2) {
-        const centerX = element.points[0].x * zoom + panOffset.x;
-        const centerY = element.points[0].y * zoom + panOffset.y;
-        const endX = element.points[1].x * zoom + panOffset.x;
-        const endY = element.points[1].y * zoom + panOffset.y;
-
-        const radius = Math.sqrt(
-          Math.pow(endX - centerX, 2) + Math.pow(endY - centerY, 2),
-        );
-
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-        if (element.fill) {
-          ctx.fill();
-        }
-        ctx.stroke();
-
-        // Draw embedded label centered inside the circle
-        if (element.label) {
-          drawShapeLabel(
-            ctx,
-            element.label,
-            centerX,
-            centerY,
-            () => {
-              ctx.beginPath();
-              ctx.arc(centerX, centerY, radius * 0.85, 0, Math.PI * 2);
-            },
-            zoom,
-            element.color,
-            Math.max(20, radius * 1.32),
-            Math.max(14, radius * 1.25),
-            element.fontSize,
-            element.fontWeight,
-            element.fontStyle,
-          );
-        }
-      }
-      break;
-
-    case "diamond":
-      if (element.points.length === 2) {
-        const startX = element.points[0].x * zoom + panOffset.x;
-        const startY = element.points[0].y * zoom + panOffset.y;
-        const endX = element.points[1].x * zoom + panOffset.x;
-        const endY = element.points[1].y * zoom + panOffset.y;
-
-        const left = Math.min(startX, endX);
-        const right = Math.max(startX, endX);
-        const top = Math.min(startY, endY);
-        const bottom = Math.max(startY, endY);
-        const cx = (left + right) / 2;
-        const cy = (top + bottom) / 2;
-
-        ctx.beginPath();
-        ctx.moveTo(cx, top);
-        ctx.lineTo(right, cy);
-        ctx.lineTo(cx, bottom);
-        ctx.lineTo(left, cy);
-        ctx.closePath();
-
-        if (element.fill) {
-          ctx.fill();
-        }
-        ctx.stroke();
-
-        if (element.label) {
-          drawShapeLabel(
-            ctx,
-            element.label,
-            cx,
-            cy,
-            () => {
-              ctx.beginPath();
-              ctx.moveTo(cx, top + 6);
-              ctx.lineTo(right - 6, cy);
-              ctx.lineTo(cx, bottom - 6);
-              ctx.lineTo(left + 6, cy);
-              ctx.closePath();
-            },
-            zoom,
-            element.color,
-            Math.max(20, (right - left) * 0.62),
-            Math.max(14, (bottom - top) * 0.62),
-            element.fontSize,
-            element.fontWeight,
-            element.fontStyle,
-          );
-        }
-      }
-      break;
-
-    case "line":
-      if (element.points.length === 2) {
-        ctx.beginPath();
-        ctx.moveTo(
-          element.points[0].x * zoom + panOffset.x,
-          element.points[0].y * zoom + panOffset.y,
-        );
-        ctx.lineTo(
-          element.points[1].x * zoom + panOffset.x,
-          element.points[1].y * zoom + panOffset.y,
-        );
-        ctx.stroke();
-      }
-      break;
-
-    case "arrow":
-    case "arrow-bidirectional":
-      if (isArrowElement(element)) {
-        drawArrow(ctx, element, zoom, panOffset);
-      }
-      break;
-
-    case "text":
-      if (element.text && element.fontSize && element.id !== editingTextId) {
-        ctx.textBaseline = "top";
-        const weight =
-          element.fontWeight ||
-          (element.fontSize >= 36
-            ? "800"
-            : element.fontSize >= 26
-              ? "700"
-              : element.fontSize >= 20
-                ? "600"
-                : "400");
-        const style = element.fontStyle || "normal";
-
-        // Sync scaling logic with CanvasTextBlock
-        const baseSize = element.fontSize;
-        let effectiveSize = baseSize;
-        if (weight === "800") effectiveSize = Math.max(baseSize, 36);
-        else if (weight === "700") effectiveSize = Math.max(baseSize, 26);
-        else if (weight === "600" && baseSize >= 20)
-          effectiveSize = Math.max(baseSize, 20);
-
-        // Enhanced font stack for premium look
-        ctx.font = `${style} ${weight} ${effectiveSize * zoom}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
-        ctx.fillStyle = element.color || "#000000";
-
-        const lines = element.text.split("\n");
-        const lineHeight = effectiveSize * zoom * 1.2;
-        const startX = element.points[0].x * zoom + panOffset.x;
-        const startY = element.points[0].y * zoom + panOffset.y;
-
-        lines.forEach((line, i) => {
-          ctx.fillText(line, startX, startY + i * lineHeight);
-        });
-      }
-      break;
-  }
+  renderShapeToCanvas(element, {
+    ctx,
+    zoom,
+    panOffset,
+    getElementBounds,
+    editingTextId,
+  });
 
   // Draw selection box and resize handles
   if (isSelected) {
@@ -631,12 +431,7 @@ export const drawElement = (
   }
 
   // ── Connection handles (shown when this shape is hovered) ─────────────────
-  if (
-    hoveredElementId === element.id &&
-    (element.type === "rectangle" ||
-      element.type === "circle" ||
-      element.type === "diamond")
-  ) {
+  if (hoveredElementId === element.id) {
     const bounds = getElementBounds(element);
     const handles = getConnectionHandles(element, bounds);
     handles.forEach((h) => {
