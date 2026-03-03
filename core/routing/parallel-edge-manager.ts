@@ -2,6 +2,7 @@ import {
   ConnectionHandle,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { isValidPoint } from "@/core/routing/routing-guards";
 
 export interface ParallelEdgeDescriptor {
   arrowId: string;
@@ -24,6 +25,8 @@ const getDirectionBucket = (
   startHandle?: ConnectionHandle,
   endHandle?: ConnectionHandle,
 ): "h" | "v" => {
+  // Guard: if either point is invalid, fall back to horizontal
+  if (!isValidPoint(start) || !isValidPoint(end)) return "h";
   if (startHandle === "left" || startHandle === "right") return "h";
   if (startHandle === "top" || startHandle === "bottom") return "v";
   if (endHandle === "left" || endHandle === "right") return "h";
@@ -64,18 +67,25 @@ const centeredIndex = (position: number, total: number): number => {
   return position - center;
 };
 
-const computeGroupSpacing = (baseSpacing: number, groupSize: number): number => {
+const computeGroupSpacing = (
+  baseSpacing: number,
+  groupSize: number,
+): number => {
   if (groupSize <= 2) return baseSpacing;
-  // Slightly increase spacing for dense bundles while keeping compact routing.
-  const scale = 1 + Math.min(0.7, (groupSize - 2) * 0.08);
-  return baseSpacing * scale;
+  // Increase spacing for dense bundles while keeping compact routing.
+  const scale = 1 + Math.min(1.0, (groupSize - 2) * 0.1);
+  return Math.max(12, baseSpacing * scale);
 };
 
 export const computeParallelOffsets = (
   edges: ParallelEdgeDescriptor[],
-  baseSpacing = 12,
+  baseSpacing = 16,
 ): Map<string, number> => {
-  const grouped: GroupedEdge[] = edges.map((descriptor) => ({
+  // Guard: skip descriptors with invalid start/end to prevent crash in getDirectionBucket
+  const validEdges = edges.filter(
+    (d) => isValidPoint(d.start) && isValidPoint(d.end),
+  );
+  const grouped: GroupedEdge[] = validEdges.map((descriptor) => ({
     descriptor,
     groupKey: getGroupKey(descriptor),
   }));
@@ -95,7 +105,10 @@ export const computeParallelOffsets = (
     );
     const spacing = computeGroupSpacing(baseSpacing, sorted.length);
     sorted.forEach((entry, index) => {
-      offsets.set(entry.descriptor.arrowId, centeredIndex(index, sorted.length) * spacing);
+      offsets.set(
+        entry.descriptor.arrowId,
+        centeredIndex(index, sorted.length) * spacing,
+      );
     });
   });
 

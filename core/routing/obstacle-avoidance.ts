@@ -309,6 +309,28 @@ export const getObstacleAwareOrthogonalPath = ({
     ),
   ];
 
+  // Midpoint-via candidates: route through the midpoint of source/target.
+  const midX = (startExit.x + endEntry.x) / 2;
+  const midY = (startExit.y + endEntry.y) / 2;
+  baseCandidates.push(
+    wrapWithHandles(
+      start,
+      end,
+      startExit,
+      endEntry,
+      routeViaX(startExit, endEntry, midX),
+    ),
+  );
+  baseCandidates.push(
+    wrapWithHandles(
+      start,
+      end,
+      startExit,
+      endEntry,
+      routeViaY(startExit, endEntry, midY),
+    ),
+  );
+
   const blockers = getBlockingObstacles(
     baseCandidates[0],
     obstacles,
@@ -339,6 +361,53 @@ export const getObstacleAwareOrthogonalPath = ({
         ),
       );
     });
+
+    // U-turn candidates for fully blocked paths: go wide around obstacles.
+    const allBounds = blockers.map((b) => b.bounds);
+    const globalMinX =
+      Math.min(...allBounds.map((b) => b.minX)) - obstaclePadding * 2;
+    const globalMaxX =
+      Math.max(...allBounds.map((b) => b.maxX)) + obstaclePadding * 2;
+    const globalMinY =
+      Math.min(...allBounds.map((b) => b.minY)) - obstaclePadding * 2;
+    const globalMaxY =
+      Math.max(...allBounds.map((b) => b.maxY)) + obstaclePadding * 2;
+    baseCandidates.push(
+      wrapWithHandles(
+        start,
+        end,
+        startExit,
+        endEntry,
+        routeViaX(startExit, endEntry, globalMinX),
+      ),
+    );
+    baseCandidates.push(
+      wrapWithHandles(
+        start,
+        end,
+        startExit,
+        endEntry,
+        routeViaX(startExit, endEntry, globalMaxX),
+      ),
+    );
+    baseCandidates.push(
+      wrapWithHandles(
+        start,
+        end,
+        startExit,
+        endEntry,
+        routeViaY(startExit, endEntry, globalMinY),
+      ),
+    );
+    baseCandidates.push(
+      wrapWithHandles(
+        start,
+        end,
+        startExit,
+        endEntry,
+        routeViaY(startExit, endEntry, globalMaxY),
+      ),
+    );
   }
 
   let best = baseCandidates[0];
@@ -364,8 +433,73 @@ export const getObstacleAwareOrthogonalPath = ({
     }
   });
 
-  // Fallback if every candidate intersects after expansion:
-  // pick the least-cost candidate so routing still remains deterministic.
+  // Multi-level fallback if every candidate intersects:
+  if (bestScore === Number.POSITIVE_INFINITY) {
+    // Level 1: Try with expanded padding (50% more clearance).
+    const expandedPadding = obstaclePadding * 1.5;
+    const expandedBlockers = getBlockingObstacles(
+      baseCandidates[0],
+      obstacles,
+      ignoreIds,
+      expandedPadding,
+    );
+    if (expandedBlockers.length > 0) {
+      const expandedLanes = collectCandidateLanes(
+        expandedBlockers,
+        expandedPadding,
+      );
+      const expandedCandidates: Point[][] = [];
+      expandedLanes.xLanes.forEach((xLane) => {
+        expandedCandidates.push(
+          wrapWithHandles(
+            start,
+            end,
+            startExit,
+            endEntry,
+            routeViaX(startExit, endEntry, xLane),
+          ),
+        );
+      });
+      expandedLanes.yLanes.forEach((yLane) => {
+        expandedCandidates.push(
+          wrapWithHandles(
+            start,
+            end,
+            startExit,
+            endEntry,
+            routeViaY(startExit, endEntry, yLane),
+          ),
+        );
+      });
+
+      expandedCandidates.forEach((candidate) => {
+        if (candidate.length < 2) return;
+        if (
+          pathIntersectsObstacles(
+            candidate,
+            obstacles,
+            ignoreIds,
+            obstaclePadding,
+          )
+        )
+          return;
+        const score = scoreCandidate(
+          candidate,
+          start,
+          end,
+          preferred,
+          pathRanking,
+          candidatePenalty,
+        );
+        if (score < bestScore) {
+          bestScore = score;
+          best = candidate;
+        }
+      });
+    }
+  }
+
+  // Level 2: Accept the best intersecting candidate (least-cost) as last resort.
   if (bestScore === Number.POSITIVE_INFINITY) {
     best = [...baseCandidates].sort(
       (a, b) =>

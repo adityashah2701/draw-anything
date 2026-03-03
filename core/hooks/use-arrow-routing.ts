@@ -4,9 +4,7 @@ import {
   DrawingElement,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
-import {
-  getConnectionHandlePoint,
-} from "@/core/routing/connectionHandles";
+import { getConnectionHandlePoint } from "@/core/routing/connection-handles";
 import { ArrowElement, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { routeArrowPoints } from "@/core/routing/orthogonal-router";
 import {
@@ -54,7 +52,12 @@ export const useArrowRouting = ({
   const handlesByElementId = useMemo(() => {
     const map = new Map<
       string,
-      Array<{ name: "top" | "right" | "bottom" | "left"; x: number; y: number; id: string }>
+      Array<{
+        name: "top" | "right" | "bottom" | "left";
+        x: number;
+        y: number;
+        id: string;
+      }>
     >();
     elements.forEach((element) => {
       if ((element as DrawingElement & { isGuide?: boolean }).isGuide) {
@@ -89,17 +92,23 @@ export const useArrowRouting = ({
 
   const resolveConnectionPoint = useCallback(
     (
-      connection?: ArrowElement["startConnection"] | ArrowElement["endConnection"],
+      connection?:
+        | ArrowElement["startConnection"]
+        | ArrowElement["endConnection"],
     ): Point | null => {
       if (!connection) return null;
       const handles = handlesByElementId.get(connection.elementId);
       if (handles) {
         const connectionSide =
           connection.handle ??
-          (connection.anchorId ? parseAnchorSide(connection.anchorId) ?? undefined : undefined);
+          (connection.anchorId
+            ? (parseAnchorSide(connection.anchorId) ?? undefined)
+            : undefined);
         const anchorId =
           connection.anchorId ??
-          (connectionSide ? buildAnchorId(connection.elementId, connectionSide) : undefined);
+          (connectionSide
+            ? buildAnchorId(connection.elementId, connectionSide)
+            : undefined);
         const matched =
           handles.find((handle) =>
             anchorId
@@ -122,7 +131,9 @@ export const useArrowRouting = ({
       if (!bounds) return null;
       const fallbackSide =
         connection.handle ??
-        (connection.anchorId ? parseAnchorSide(connection.anchorId) ?? undefined : undefined);
+        (connection.anchorId
+          ? (parseAnchorSide(connection.anchorId) ?? undefined)
+          : undefined);
       if (!fallbackSide) return null;
       const point = getConnectionHandlePoint(bounds, fallbackSide);
       return { x: point.x, y: point.y };
@@ -138,8 +149,11 @@ export const useArrowRouting = ({
         routingMode?: ArrowRoutingMode;
       },
     ): ArrowElement => {
-      const start = resolveConnectionPoint(arrow.startConnection) ?? getFallbackStart(arrow);
-      const end = resolveConnectionPoint(arrow.endConnection) ?? getFallbackEnd(arrow);
+      const start =
+        resolveConnectionPoint(arrow.startConnection) ??
+        getFallbackStart(arrow);
+      const end =
+        resolveConnectionPoint(arrow.endConnection) ?? getFallbackEnd(arrow);
 
       const points = routeArrowPoints({
         start,
@@ -147,12 +161,12 @@ export const useArrowRouting = ({
         startHandle:
           arrow.startConnection?.handle ??
           (arrow.startConnection?.anchorId
-            ? parseAnchorSide(arrow.startConnection.anchorId) ?? undefined
+            ? (parseAnchorSide(arrow.startConnection.anchorId) ?? undefined)
             : undefined),
         endHandle:
           arrow.endConnection?.handle ??
           (arrow.endConnection?.anchorId
-            ? parseAnchorSide(arrow.endConnection.anchorId) ?? undefined
+            ? (parseAnchorSide(arrow.endConnection.anchorId) ?? undefined)
             : undefined),
         routePreference: arrow.routePreference,
         routingMode: options?.routingMode ?? arrow.routingMode ?? "orthogonal",
@@ -180,7 +194,8 @@ export const useArrowRouting = ({
           !!element.startConnection &&
           changedIds.has(element.startConnection.elementId);
         const endChanged =
-          !!element.endConnection && changedIds.has(element.endConnection.elementId);
+          !!element.endConnection &&
+          changedIds.has(element.endConnection.elementId);
         if (!startChanged && !endChanged) return;
 
         const rerouted = routeArrow(element, {

@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
+
+/** World-space axis-aligned bounding box of the current viewport. */
+export interface ViewportBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
 
 export const useCanvasViewport = () => {
   // Canvas settings
@@ -21,6 +29,19 @@ export const useCanvasViewport = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // ── Viewport bounds in world space ──────────────────────────────────
+  // Tells consumers which portion of world-space is currently visible.
+  // Used for viewport-based virtualization (skip routing/rendering off-screen).
+  const viewportBounds = useMemo<ViewportBounds>(() => {
+    const { width, height } = canvasSize;
+    // Convert screen-space rect to world-space coords
+    const minX = -panOffset.x / zoom;
+    const minY = -panOffset.y / zoom;
+    const maxX = minX + width / zoom;
+    const maxY = minY + height / zoom;
+    return { minX, minY, maxX, maxY };
+  }, [zoom, panOffset, canvasSize]);
+
   // Get mouse position relative to canvas
   const getMousePosition = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): Point => {
@@ -31,7 +52,7 @@ export const useCanvasViewport = () => {
         y: (e.clientY - rect.top - panOffset.y) / zoom,
       };
     },
-    [zoom, panOffset]
+    [zoom, panOffset],
   );
 
   const handleWheelZoom = useCallback(
@@ -61,11 +82,11 @@ export const useCanvasViewport = () => {
 
   // Zoom operations
   const handleZoomIn = useCallback(() => {
-    setZoom(prev => Math.min(prev * 1.2, 5));
+    setZoom((prev) => Math.min(prev * 1.2, 5));
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    setZoom(prev => Math.max(prev / 1.2, 0.1));
+    setZoom((prev) => Math.max(prev / 1.2, 0.1));
   }, []);
 
   const handleResetZoom = useCallback(() => {
@@ -111,7 +132,7 @@ export const useCanvasViewport = () => {
         });
       }
     },
-    [startPan, panOffset, zoom]
+    [startPan, panOffset, zoom],
   );
 
   const stopPanning = useCallback(() => {
@@ -120,19 +141,22 @@ export const useCanvasViewport = () => {
 
   // Grid toggle
   const toggleGrid = useCallback(() => {
-    setShowGrid(prev => !prev);
+    setShowGrid((prev) => !prev);
   }, []);
 
   // Load viewport settings
-  const loadViewportSettings = useCallback((settings: {
-    zoom?: number;
-    panOffset?: { x: number; y: number };
-    showGrid?: boolean;
-  }) => {
-    if (settings.zoom !== undefined) setZoom(settings.zoom);
-    if (settings.panOffset) setPanOffset(settings.panOffset);
-    if (settings.showGrid !== undefined) setShowGrid(settings.showGrid);
-  }, []);
+  const loadViewportSettings = useCallback(
+    (settings: {
+      zoom?: number;
+      panOffset?: { x: number; y: number };
+      showGrid?: boolean;
+    }) => {
+      if (settings.zoom !== undefined) setZoom(settings.zoom);
+      if (settings.panOffset) setPanOffset(settings.panOffset);
+      if (settings.showGrid !== undefined) setShowGrid(settings.showGrid);
+    },
+    [],
+  );
 
   return {
     // State
@@ -141,7 +165,10 @@ export const useCanvasViewport = () => {
     startPan,
     showGrid,
     canvasSize,
-    
+
+    // Viewport-based virtualization boundary (world-space)
+    viewportBounds,
+
     // Actions
     setZoom,
     setPanOffset,
@@ -156,7 +183,7 @@ export const useCanvasViewport = () => {
     toggleGrid,
     getMousePosition,
     loadViewportSettings,
-    
+
     // Utils
     isPanning: startPan !== null,
   };

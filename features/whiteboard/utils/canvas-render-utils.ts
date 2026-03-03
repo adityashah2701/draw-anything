@@ -3,7 +3,7 @@ import {
   getArrowEditHandles,
   isArrowElement,
 } from "@/core/shapes/arrow/arrow-utils";
-import { ConnectionHandle } from "@/core/routing/connectionHandles";
+import { ConnectionHandle } from "@/core/routing/connection-handles";
 import {
   getShapeAnchors,
   renderShapeToCanvas,
@@ -329,7 +329,6 @@ export const drawElement = (
               y: element.points[endIndex].y * zoom + panOffset.y,
             },
           ];
-
         }
       } else if (isArrowElement(element)) {
         const arrowHandles = getArrowEditHandles(element.points);

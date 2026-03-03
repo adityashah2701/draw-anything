@@ -4,6 +4,7 @@ import {
   ConnectionHandle,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { Aabb } from "@/core/collision/aabb";
 import {
   computeParallelOffsets,
   ParallelEdgeDescriptor,
@@ -23,12 +24,24 @@ import {
   SegmentConflictOptions,
   SegmentSpatialIndex,
 } from "@/core/routing/segment-conflict-resolver";
+import {
+  computeLaneAssignments,
+  applyLaneOffsets,
+} from "@/core/routing/lane-manager";
+import {
+  normalizeRoutes,
+  PathNormalizerOptions,
+} from "@/core/routing/path-normalizer";
+import { isValidPoint } from "@/core/routing/routing-guards";
 
 const isOrthogonalSegment = (a: Point, b: Point) => a.x === b.x || a.y === b.y;
 
 const samePoint = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
 
-const getDominantAxis = (start: Point, end: Point): "horizontal" | "vertical" =>
+const getDominantAxis = (
+  start: Point,
+  end: Point,
+): "horizontal" | "vertical" =>
   Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
     ? "horizontal"
     : "vertical";
@@ -97,9 +110,7 @@ const orthogonalizePath = (
     }
 
     const elbow =
-      preference === "vh"
-        ? { x: prev.x, y: next.y }
-        : { x: next.x, y: prev.y };
+      preference === "vh" ? { x: prev.x, y: next.y } : { x: next.x, y: prev.y };
     result.push(elbow, { ...next });
   }
 
@@ -205,6 +216,7 @@ export interface RouteArrowInput
     | "obstacles"
     | "ignoreObstacleIds"
     | "obstaclePadding"
+    | "candidatePenalty"
   > {
   arrowId?: string;
   sourceId?: string;
@@ -241,6 +253,10 @@ export interface RouteArrowBatchInput {
   parallelSpacing?: number;
   conflictOptions?: SegmentConflictOptions;
   pathRanking?: PathRankingWeights;
+  /** Optional layer boundary Y-coordinates for layer-aware routing. */
+  layerBoundaryYs?: number[];
+  /** Optional cluster bounding boxes for cluster-aware routing. */
+  clusterBounds?: Aabb[];
 }
 
 export interface PathRankingWeights extends PathRankingConfig {
@@ -254,8 +270,63 @@ export const routeArrowPoints = ({
   startHandle,
   endHandle,
   routePreference,
-  sourceId,
-  targetId,
+  routingMode = "orthogonal",
+  existingPoints,
+  preserveManualBends = false,
+  obstacles = [],
+  ignoreObstacleIds,
+  obstaclePadding = 12,
+  parallelOffset = 0,
+  occupiedSegments = null,
+  conflictOptions,
+  pathRanking,
+}: RouteArrowInput): Point[] => {
+  // ── Defensive guard: never crash on undefined/invalid points ──
+  if (!isValidPoint(start) || !isValidPoint(end)) {
+    // Return straight fallback; if both are missing, return empty array
+    if (isValidPoint(start) && !isValidPoint(end)) return [start];
+    if (!isValidPoint(start) && isValidPoint(end)) return [end];
+    return [];
+  }
+
+  try {
+    return routeArrowPointsInternal({
+      arrowId,
+      start,
+      end,
+      startHandle,
+      endHandle,
+      routePreference,
+      routingMode,
+      existingPoints,
+      preserveManualBends,
+      obstacles,
+      ignoreObstacleIds,
+      obstaclePadding,
+      parallelOffset,
+      occupiedSegments,
+      conflictOptions,
+      pathRanking,
+    });
+  } catch (err) {
+    // Fail-safe: never crash the app on routing errors
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        "[routeArrowPoints] Routing failed, using straight fallback:",
+        err,
+      );
+    }
+    return [start, end];
+  }
+};
+
+const routeArrowPointsInternal = ({
+  arrowId = "arrow",
+  start,
+  end,
+  startHandle,
+  endHandle,
+  routePreference,
   routingMode = "orthogonal",
   existingPoints,
   preserveManualBends = false,
@@ -281,8 +352,11 @@ export const routeArrowPoints = ({
   const candidatePenalty =
     occupiedSegments && crossingPenalty > 0
       ? (candidate: Point[]) =>
-          countPathCrossingsWithSpatialIndex(arrowId, candidate, occupiedSegments) *
-          crossingPenalty
+          countPathCrossingsWithSpatialIndex(
+            arrowId,
+            candidate,
+            occupiedSegments,
+          ) * crossingPenalty
       : undefined;
 
   let points = getObstacleAwareOrthogonalPath({
@@ -299,7 +373,8 @@ export const routeArrowPoints = ({
   });
   points = orthogonalizePath(
     points,
-    routePreference ?? (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
+    routePreference ??
+      (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
   );
 
   points = applyParallelOffset(
@@ -311,7 +386,8 @@ export const routeArrowPoints = ({
   );
   points = orthogonalizePath(
     points,
-    routePreference ?? (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
+    routePreference ??
+      (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
   );
   points = pinPathEndpointStubs(points, start, end, startHandle, endHandle);
   points = resolvePathSegmentConflicts({
@@ -326,7 +402,8 @@ export const routeArrowPoints = ({
   points = pinPathEndpointStubs(points, start, end, startHandle, endHandle);
   points = orthogonalizePath(
     points,
-    routePreference ?? (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
+    routePreference ??
+      (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
   );
 
   return compressOrthogonalPath(points);
@@ -338,9 +415,11 @@ export const routeArrowBatch = ({
   existingRoutes = [],
   allParallelCandidates,
   obstaclePadding = 12,
-  parallelSpacing = 12,
+  parallelSpacing = 16,
   conflictOptions,
   pathRanking,
+  layerBoundaryYs,
+  clusterBounds,
 }: RouteArrowBatchInput): Map<string, Point[]> => {
   if (arrows.length === 0) return new Map<string, Point[]>();
 
@@ -360,8 +439,49 @@ export const routeArrowBatch = ({
   const occupied = buildSegmentSpatialIndex(existingRoutes);
   const routed = new Map<string, Point[]>();
 
-  const stableOrder = [...arrows].sort((a, b) => a.arrowId.localeCompare(b.arrowId));
+  // Build layer/cluster-aware candidate penalty if boundaries are provided.
+  const hasLayerAwareness = layerBoundaryYs && layerBoundaryYs.length > 0;
+  const hasClusterAwareness = clusterBounds && clusterBounds.length > 0;
+
+  const stableOrder = [...arrows].sort((a, b) =>
+    a.arrowId.localeCompare(b.arrowId),
+  );
   stableOrder.forEach((arrow) => {
+    // ── Guard: skip arrows with invalid/missing start or end points ──
+    if (!isValidPoint(arrow.start) || !isValidPoint(arrow.end)) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          `[routeArrowBatch] Skipping arrow '${arrow.arrowId}': invalid start/end points`,
+        );
+      }
+      return;
+    }
+
+    // Build per-arrow candidate penalty incorporating layer/cluster awareness.
+    const candidatePenalty =
+      hasLayerAwareness || hasClusterAwareness
+        ? (points: Point[]): number => {
+            let penalty = 0;
+            if (hasLayerAwareness) {
+              const startY = arrow.start.y;
+              const endY = arrow.end.y;
+              const minY = Math.min(startY, endY);
+              const maxY = Math.max(startY, endY);
+              for (let i = 0; i < points.length - 1; i += 1) {
+                const segMinY = Math.min(points[i].y, points[i + 1].y);
+                const segMaxY = Math.max(points[i].y, points[i + 1].y);
+                for (const boundaryY of layerBoundaryYs!) {
+                  if (boundaryY >= minY && boundaryY <= maxY) continue;
+                  if (segMinY < boundaryY && segMaxY > boundaryY) {
+                    penalty += 800;
+                  }
+                }
+              }
+            }
+            return penalty;
+          }
+        : undefined;
+
     const points = routeArrowPoints({
       arrowId: arrow.arrowId,
       start: arrow.start,
@@ -380,10 +500,53 @@ export const routeArrowBatch = ({
       occupiedSegments: occupied,
       conflictOptions,
       pathRanking,
+      candidatePenalty,
     });
     routed.set(arrow.arrowId, points);
     addPathToSegmentSpatialIndex(occupied, arrow.arrowId, points);
   });
+
+  // Post-routing: apply lane assignments to separate collinear segments.
+  const routeEntries = Array.from(routed.entries()).map(
+    ([arrowId, points]) => ({
+      arrowId,
+      points,
+    }),
+  );
+  const laneAssignments = computeLaneAssignments(routeEntries, {
+    laneSpacing: parallelSpacing,
+    maxLanes: 4,
+  });
+  if (laneAssignments.length > 0) {
+    const laneAdjusted = applyLaneOffsets(routed, laneAssignments);
+    laneAdjusted.forEach((points, arrowId) => {
+      routed.set(arrowId, points);
+    });
+  }
+
+  // ── Final stage: Path Normalization ──
+  // Runs after all routing stages to enforce pixel-perfect Manhattan alignment,
+  // grid snapping, shared corridor unification, and stub straightening.
+  if (arrows.length > 0) {
+    const ignoreObstacleIdsByArrow = new Map<string, Set<string>>();
+    for (const arrow of arrows) {
+      const ids = new Set<string>();
+      if (arrow.sourceId) ids.add(arrow.sourceId);
+      if (arrow.targetId) ids.add(arrow.targetId);
+      if (ids.size > 0) ignoreObstacleIdsByArrow.set(arrow.arrowId, ids);
+    }
+    const normalizerOptions: PathNormalizerOptions = {
+      gridSize: 16,
+      snapToGrid: true,
+      corridorTolerance: 2,
+      minStubLength: 24,
+      obstacles,
+      ignoreObstacleIdsByArrow,
+      obstaclePadding,
+    };
+    const normalized = normalizeRoutes(routed, normalizerOptions);
+    normalized.forEach((points, arrowId) => routed.set(arrowId, points));
+  }
 
   return routed;
 };
@@ -425,11 +588,7 @@ export const moveOrthogonalSegment = (
   target: Point,
 ): Point[] => {
   const lastSegment = points.length - 2;
-  if (
-    points.length < 3 ||
-    segmentIndex <= 0 ||
-    segmentIndex >= lastSegment
-  ) {
+  if (points.length < 3 || segmentIndex <= 0 || segmentIndex >= lastSegment) {
     return points;
   }
 
@@ -469,7 +628,8 @@ export const getOrthogonalPath = ({
 
 export const compressPath = compressOrthogonalPath;
 
-export const isOrthogonalPath = (points: Point[]) => isOrthogonalPathStrict(points);
+export const isOrthogonalPath = (points: Point[]) =>
+  isOrthogonalPathStrict(points);
 
 export const pathHasDuplicateNeighborPoints = (points: Point[]) => {
   for (let i = 0; i < points.length - 1; i += 1) {
@@ -477,3 +637,30 @@ export const pathHasDuplicateNeighborPoints = (points: Point[]) => {
   }
   return false;
 };
+
+// Re-export route engine for consumers
+export {
+  routeWithEngine,
+  createRouteEngineState,
+  markEdgeDirty,
+  markShapeEdgesDirty,
+  invalidateAllRoutes,
+} from "@/core/routing/route-engine";
+export type {
+  RouteEngineEdge,
+  RouteEngineConfig,
+  RouteEngineResult,
+  RouteEngineState,
+} from "@/core/routing/route-engine";
+
+// Re-export new data structures and utilities for consumers
+export { SpatialHashGrid } from "@/core/routing/spatial-hash-grid";
+export { AdjacencyMap } from "@/core/routing/adjacency-map";
+export {
+  isValidPoint,
+  isValidPointArray,
+  validateEdge,
+  isFullyConnectedEdge,
+  sanitizeEdges,
+  sanitizeObstacles,
+} from "@/core/routing/routing-guards";
