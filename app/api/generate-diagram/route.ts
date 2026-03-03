@@ -39,8 +39,12 @@ Node format:
 Edge format:
 {
   "from": "node_id",
-  "to": "node_id"
+  "to": "node_id",
+  "bidirectional"?: boolean,
+  "dashed"?: boolean
 }
+
+Use "bidirectional": true when the relationship is explicitly two-way.
 `;
 
 type ShapeType = "rectangle" | "circle" | "diamond";
@@ -55,6 +59,8 @@ interface NodeJson {
 interface EdgeJson {
   from: string;
   to: string;
+  bidirectional?: boolean;
+  dashed?: boolean;
 }
 
 interface DiagramJson {
@@ -68,9 +74,16 @@ interface LogicalNode {
   shape: ShapeType;
 }
 
+interface LogicalEdge {
+  from: string;
+  to: string;
+  bidirectional?: boolean;
+  dashed?: boolean;
+}
+
 interface LogicalGraph {
   nodes: LogicalNode[];
-  edges: EdgeJson[];
+  edges: LogicalEdge[];
 }
 
 interface LayoutConfig {
@@ -110,12 +123,23 @@ interface NodeVisualStyle {
 
 type CanvasElement = {
   id: string;
-  type: "rectangle" | "circle" | "diamond" | "arrow";
+  type:
+    | "rectangle"
+    | "circle"
+    | "diamond"
+    | "arrow"
+    | "arrow-bidirectional";
   label?: string;
   points: { x: number; y: number }[];
   fill?: string;
   color: string;
   strokeWidth: number;
+  dashed?: boolean;
+  arrowHeadStart?: boolean;
+  arrowHeadEnd?: boolean;
+  routingMode?: "straight" | "orthogonal";
+  routePreference?: "vh" | "hv";
+  isManuallyRouted?: boolean;
   startConnection?: { elementId: string; handle: string };
   endConnection?: { elementId: string; handle: string };
 };
@@ -137,7 +161,9 @@ function toShapeType(node: NodeJson): ShapeType {
   if (/\?|decision|if|approved|valid|success|fail|eligible/.test(label)) {
     return "diamond";
   }
-  if (/(db|database|start|end|terminal|cache|redis|postgres|mysql)/.test(label)) {
+  if (
+    /(db|database|start|end|terminal|cache|redis|postgres|mysql)/.test(label)
+  ) {
     return "circle";
   }
   return "rectangle";
@@ -147,7 +173,11 @@ function sanitizeGraph(raw: DiagramJson): LogicalGraph {
   const nodesById = new Map<string, LogicalNode>();
 
   for (const node of raw.nodes ?? []) {
-    if (!node || typeof node.id !== "string" || typeof node.label !== "string") {
+    if (
+      !node ||
+      typeof node.id !== "string" ||
+      typeof node.label !== "string"
+    ) {
       continue;
     }
 
@@ -163,7 +193,7 @@ function sanitizeGraph(raw: DiagramJson): LogicalGraph {
   }
 
   const uniqueEdges = new Set<string>();
-  const edges: EdgeJson[] = [];
+  const edges: LogicalEdge[] = [];
 
   for (const edge of raw.edges ?? []) {
     if (!edge || typeof edge.from !== "string" || typeof edge.to !== "string") {
@@ -177,7 +207,12 @@ function sanitizeGraph(raw: DiagramJson): LogicalGraph {
     const key = `${from}->${to}`;
     if (uniqueEdges.has(key)) continue;
     uniqueEdges.add(key);
-    edges.push({ from, to });
+    edges.push({
+      from,
+      to,
+      bidirectional: Boolean(edge.bidirectional),
+      dashed: Boolean(edge.dashed),
+    });
   }
 
   return {
@@ -224,7 +259,10 @@ function computeNodeDepths(graph: LogicalGraph): Map<string, number> {
     visited.add(current);
 
     for (const child of outgoing.get(current) ?? []) {
-      depth.set(child, Math.max(depth.get(child) ?? 0, (depth.get(current) ?? 0) + 1));
+      depth.set(
+        child,
+        Math.max(depth.get(child) ?? 0, (depth.get(current) ?? 0) + 1),
+      );
       indegree.set(child, (indegree.get(child) ?? 0) - 1);
       if ((indegree.get(child) ?? 0) === 0) queue.push(child);
     }
@@ -241,7 +279,10 @@ function computeNodeDepths(graph: LogicalGraph): Map<string, number> {
       const current = localQueue.shift()!;
       visited.add(current);
       for (const child of outgoing.get(current) ?? []) {
-        const nextDepth = Math.max((depth.get(child) ?? 0), (depth.get(current) ?? 0) + 1);
+        const nextDepth = Math.max(
+          depth.get(child) ?? 0,
+          (depth.get(current) ?? 0) + 1,
+        );
         depth.set(child, nextDepth);
         if (!seen.has(child)) {
           seen.add(child);
@@ -279,13 +320,22 @@ function pickPrimaryParents(
       return a.localeCompare(b);
     });
 
-    parentOf.set(node.id, ranked[0] ?? null);
+    const bestParent = ranked[0];
+    const bestParentDepth = depth.get(bestParent) ?? 0;
+    if (bestParentDepth >= nodeDepth) {
+      parentOf.set(node.id, null);
+    } else {
+      parentOf.set(node.id, bestParent);
+    }
   }
 
   return parentOf;
 }
 
-function createLayoutConfig(graph: LogicalGraph, maxDepth: number): LayoutConfig {
+function createLayoutConfig(
+  graph: LogicalGraph,
+  maxDepth: number,
+): LayoutConfig {
   const nodeCount = graph.nodes.length;
   const depthSpan = Math.max(1, maxDepth + 1);
 
@@ -401,7 +451,11 @@ function orderChildrenForFlow(
       left = second;
       right = first;
     } else if (hintFirst === 0 && hintSecond === 0) {
-      if (layoutNodes.get(first)!.label.localeCompare(layoutNodes.get(second)!.label) > 0) {
+      if (
+        layoutNodes
+          .get(first)!
+          .label.localeCompare(layoutNodes.get(second)!.label) > 0
+      ) {
         left = second;
         right = first;
       }
@@ -420,12 +474,18 @@ function shiftSubtree(
 ) {
   if (deltaX === 0) return;
   const queue = [nodeId];
+  const seen = new Set<string>([nodeId]);
   while (queue.length > 0) {
     const currentId = queue.shift()!;
     const node = layoutNodes.get(currentId);
     if (!node) continue;
     node.x += deltaX;
-    queue.push(...node.children);
+    for (const childId of node.children) {
+      if (!seen.has(childId)) {
+        seen.add(childId);
+        queue.push(childId);
+      }
+    }
   }
 }
 
@@ -435,7 +495,9 @@ function recenterParents(layoutNodes: Map<string, LayoutNode>) {
   ).sort((a, b) => b - a);
 
   for (const depth of depths) {
-    const nodes = Array.from(layoutNodes.values()).filter((n) => n.depth === depth);
+    const nodes = Array.from(layoutNodes.values()).filter(
+      (n) => n.depth === depth,
+    );
     for (const node of nodes) {
       if (node.children.length === 0) continue;
       const children = node.children
@@ -449,14 +511,24 @@ function recenterParents(layoutNodes: Map<string, LayoutNode>) {
   }
 }
 
-function placeForest(layoutNodes: Map<string, LayoutNode>, config: LayoutConfig) {
+function placeForest(
+  layoutNodes: Map<string, LayoutNode>,
+  config: LayoutConfig,
+) {
   for (const parent of layoutNodes.values()) {
-    parent.children = orderChildrenForFlow(parent, parent.children, layoutNodes);
+    parent.children = orderChildrenForFlow(
+      parent,
+      parent.children,
+      layoutNodes,
+    );
   }
 
   const subtreeWidthMemo = new Map<string, number>();
 
-  const computeSubtreeWidth = (nodeId: string, stack = new Set<string>()): number => {
+  const computeSubtreeWidth = (
+    nodeId: string,
+    stack = new Set<string>(),
+  ): number => {
     if (subtreeWidthMemo.has(nodeId)) return subtreeWidthMemo.get(nodeId)!;
     if (stack.has(nodeId)) return layoutNodes.get(nodeId)?.width ?? 120;
     stack.add(nodeId);
@@ -468,7 +540,9 @@ function placeForest(layoutNodes: Map<string, LayoutNode>, config: LayoutConfig)
       return node.width;
     }
 
-    const childWidths = node.children.map((id) => computeSubtreeWidth(id, stack));
+    const childWidths = node.children.map((id) =>
+      computeSubtreeWidth(id, stack),
+    );
     let childrenWidth =
       childWidths.reduce((sum, w) => sum + w, 0) +
       Math.max(0, childWidths.length - 1) * config.minSiblingGap;
@@ -497,13 +571,17 @@ function placeForest(layoutNodes: Map<string, LayoutNode>, config: LayoutConfig)
 
     const childWidths = node.children.map((id) => computeSubtreeWidth(id));
     const gapCount = Math.max(0, node.children.length - 1);
-    const requiredWidth = childWidths.reduce((acc, w) => acc + w, 0) + gapCount * config.minSiblingGap;
+    const requiredWidth =
+      childWidths.reduce((acc, w) => acc + w, 0) +
+      gapCount * config.minSiblingGap;
     let start = left + (subtreeWidth - requiredWidth) / 2;
 
     for (let i = 0; i < node.children.length; i += 1) {
       const childId = node.children[i];
       placeNode(childId, start);
-      start += childWidths[i] + (i < node.children.length - 1 ? config.minSiblingGap : 0);
+      start +=
+        childWidths[i] +
+        (i < node.children.length - 1 ? config.minSiblingGap : 0);
     }
 
     const first = layoutNodes.get(node.children[0])!;
@@ -600,7 +678,12 @@ function applyDecisionAndMergeAlignment(
   for (const decision of layoutNodes.values()) {
     if (!decision.isDecision || decision.children.length < 2) continue;
     const [leftId, rightId] = decision.children;
-    const mergeCandidateId = findNearestCommonTarget(leftId, rightId, outgoing, depth);
+    const mergeCandidateId = findNearestCommonTarget(
+      leftId,
+      rightId,
+      outgoing,
+      depth,
+    );
     if (!mergeCandidateId) continue;
 
     const mergeNode = layoutNodes.get(mergeCandidateId);
@@ -626,7 +709,10 @@ function applyDecisionAndMergeAlignment(
   }
 }
 
-function resolveHorizontalCollisions(layoutNodes: Map<string, LayoutNode>, config: LayoutConfig) {
+function resolveHorizontalCollisions(
+  layoutNodes: Map<string, LayoutNode>,
+  config: LayoutConfig,
+) {
   const byDepth = new Map<number, LayoutNode[]>();
   for (const node of layoutNodes.values()) {
     if (!byDepth.has(node.depth)) byDepth.set(node.depth, []);
@@ -639,7 +725,8 @@ function resolveHorizontalCollisions(layoutNodes: Map<string, LayoutNode>, confi
     for (let i = 1; i < nodes.length; i += 1) {
       const prev = nodes[i - 1];
       const curr = nodes[i];
-      const minCenterDistance = prev.width / 2 + config.minSiblingGap + curr.width / 2;
+      const minCenterDistance =
+        prev.width / 2 + config.minSiblingGap + curr.width / 2;
       const requiredX = prev.x + minCenterDistance;
       if (curr.x < requiredX) {
         shiftSubtree(layoutNodes, curr.id, requiredX - curr.x);
@@ -649,9 +736,9 @@ function resolveHorizontalCollisions(layoutNodes: Map<string, LayoutNode>, confi
 }
 
 function assignY(layoutNodes: Map<string, LayoutNode>, config: LayoutConfig) {
-  const depths = Array.from(new Set(Array.from(layoutNodes.values()).map((n) => n.depth))).sort(
-    (a, b) => a - b,
-  );
+  const depths = Array.from(
+    new Set(Array.from(layoutNodes.values()).map((n) => n.depth)),
+  ).sort((a, b) => a - b);
 
   const maxHeightByDepth = new Map<number, number>();
   for (const d of depths) maxHeightByDepth.set(d, 0);
@@ -676,7 +763,10 @@ function assignY(layoutNodes: Map<string, LayoutNode>, config: LayoutConfig) {
   }
 }
 
-function normalizeLayout(layoutNodes: Map<string, LayoutNode>, config: LayoutConfig) {
+function normalizeLayout(
+  layoutNodes: Map<string, LayoutNode>,
+  config: LayoutConfig,
+) {
   let minLeft = Number.POSITIVE_INFINITY;
   let minTop = Number.POSITIVE_INFINITY;
 
@@ -741,7 +831,8 @@ function compressOrthogonalPoints(points: { x: number; y: number }[]) {
     const a = compacted[compacted.length - 1];
     const b = deduped[i];
     const c = deduped[i + 1];
-    const collinear = (a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y);
+    const collinear =
+      (a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y);
     if (!collinear) compacted.push(b);
   }
   compacted.push(deduped[deduped.length - 1]);
@@ -749,9 +840,16 @@ function compressOrthogonalPoints(points: { x: number; y: number }[]) {
   return compacted;
 }
 
-function chooseHandles(source: LayoutNode, target: LayoutNode): { from: Handle; to: Handle } {
+function chooseHandles(
+  source: LayoutNode,
+  target: LayoutNode,
+): { from: Handle; to: Handle } {
   // Decision split: enforce semantic left(No) and right(Yes) branches.
-  if (source.isDecision && source.outgoingCount >= 2 && target.depth > source.depth) {
+  if (
+    source.isDecision &&
+    source.outgoingCount >= 2 &&
+    target.depth > source.depth
+  ) {
     if (target.x < source.x) return { from: "left", to: "top" };
     return { from: "right", to: "top" };
   }
@@ -873,7 +971,8 @@ function getNodeVisualStyle(node: LayoutNode): NodeVisualStyle {
     defaultCircle: "#fde68a",
   };
 
-  if (node.shape === "diamond") return { fill: palette.decision, color: stroke };
+  if (node.shape === "diamond")
+    return { fill: palette.decision, color: stroke };
   if (node.shape === "circle") {
     if (/(db|database|cache|redis|mongo|postgres|mysql|storage)/.test(label)) {
       return { fill: palette.data, color: stroke };
@@ -937,7 +1036,13 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
   );
 
   placeForest(layoutNodes, config);
-  applyDecisionAndMergeAlignment(layoutNodes, outgoing, incoming, depth, config);
+  applyDecisionAndMergeAlignment(
+    layoutNodes,
+    outgoing,
+    incoming,
+    depth,
+    config,
+  );
   recenterParents(layoutNodes);
   resolveHorizontalCollisions(layoutNodes, config);
   recenterParents(layoutNodes);
@@ -958,24 +1063,66 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
 
   const sourceFanout = new Map<string, number>();
   const targetFanin = new Map<string, number>();
+  const edgesByKey = new Map<string, LogicalEdge>();
+  const consumedDirectionalEdges = new Set<string>();
 
   for (const edge of graph.edges) {
-    const sourceLayout = layoutNodes.get(edge.from);
-    const targetLayout = layoutNodes.get(edge.to);
-    const sourceElement = nodeElementByLogicalId.get(edge.from);
-    const targetElement = nodeElementByLogicalId.get(edge.to);
-    if (!sourceLayout || !targetLayout || !sourceElement || !targetElement) continue;
+    edgesByKey.set(`${edge.from}->${edge.to}`, edge);
+  }
+
+  for (const edge of graph.edges) {
+    const forwardKey = `${edge.from}->${edge.to}`;
+    if (consumedDirectionalEdges.has(forwardKey)) continue;
+
+    const reverseKey = `${edge.to}->${edge.from}`;
+    const reverseEdge = edgesByKey.get(reverseKey);
+    const isBidirectional = Boolean(
+      edge.bidirectional || reverseEdge?.bidirectional || reverseEdge,
+    );
+    const isDashed = Boolean(edge.dashed || reverseEdge?.dashed);
+
+    consumedDirectionalEdges.add(forwardKey);
+    if (isBidirectional) {
+      consumedDirectionalEdges.add(reverseKey);
+    }
+
+    let renderFrom = edge.from;
+    let renderTo = edge.to;
+
+    const fromDepth = depth.get(renderFrom) ?? 0;
+    const toDepth = depth.get(renderTo) ?? 0;
+    const fromLayoutForDirection = layoutNodes.get(renderFrom);
+    const toLayoutForDirection = layoutNodes.get(renderTo);
+    if (
+      isBidirectional &&
+      fromLayoutForDirection &&
+      toLayoutForDirection &&
+      (fromDepth > toDepth ||
+        (fromDepth === toDepth &&
+          fromLayoutForDirection.x > toLayoutForDirection.x))
+    ) {
+      renderFrom = edge.to;
+      renderTo = edge.from;
+    }
+
+    const sourceLayout = layoutNodes.get(renderFrom);
+    const targetLayout = layoutNodes.get(renderTo);
+    const sourceElement = nodeElementByLogicalId.get(renderFrom);
+    const targetElement = nodeElementByLogicalId.get(renderTo);
+    if (!sourceLayout || !targetLayout || !sourceElement || !targetElement)
+      continue;
 
     const handles = chooseHandles(sourceLayout, targetLayout);
-    const outKey = `${edge.from}:${handles.from}`;
-    const inKey = `${edge.to}:${handles.to}`;
+    const outKey = `${renderFrom}:${handles.from}`;
+    const inKey = `${renderTo}:${handles.to}`;
 
     const outIndex = sourceFanout.get(outKey) ?? 0;
     const inIndex = targetFanin.get(inKey) ?? 0;
     sourceFanout.set(outKey, outIndex + 1);
     targetFanin.set(inKey, inIndex + 1);
 
-    const laneOffset = staggerLaneOffset(outIndex) + Math.trunc(staggerLaneOffset(inIndex) / 2);
+    const laneOffset =
+      staggerLaneOffset(outIndex) + Math.trunc(staggerLaneOffset(inIndex) / 2);
     const points = routeEdgePoints(
       sourceLayout,
       targetLayout,
@@ -986,10 +1133,17 @@ function buildElements(graph: LogicalGraph): CanvasElement[] {
 
     elements.push({
       id: generateShortId(index++),
-      type: "arrow",
+      type: isBidirectional ? "arrow-bidirectional" : "arrow",
       points,
       color: "#64748b",
       strokeWidth: 2,
+      dashed: isDashed,
+      arrowHeadStart: isBidirectional,
+      arrowHeadEnd: true,
+      routingMode: "orthogonal",
+      routePreference:
+        handles.from === "left" || handles.from === "right" ? "hv" : "vh",
+      isManuallyRouted: false,
       startConnection: {
         elementId: sourceElement.id,
         handle: handles.from,
@@ -1010,16 +1164,23 @@ export async function POST(req: NextRequest) {
     const prompt = body?.prompt;
 
     if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json({ error: "Prompt is required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Prompt is required." },
+        { status: 400 },
+      );
     }
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       temperature: 0,
       max_tokens: 4096,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Generate a logical architecture graph for: ${prompt}` },
+        {
+          role: "user",
+          content: `Generate a logical architecture graph for: ${prompt}`,
+        },
       ],
     });
 
@@ -1036,7 +1197,9 @@ export async function POST(req: NextRequest) {
       throw new Error("Invalid JSON from AI");
     }
 
-    const parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1)) as DiagramJson;
+    const parsed = JSON.parse(
+      cleaned.slice(jsonStart, jsonEnd + 1),
+    ) as DiagramJson;
     if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
       throw new Error("Invalid nodes/edges format");
     }

@@ -4,6 +4,12 @@ import {
   Point,
   Bounds,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { getArrowEditHandles, isArrowElement } from "@/core/shapes/Arrow";
+import {
+  compressPath,
+  moveOrthogonalSegment,
+  routeArrowPoints,
+} from "@/core/routing/orthogonalRouter";
 
 export const useWhiteboardUtils = (
   zoom: number,
@@ -235,6 +241,7 @@ export const useWhiteboardUtils = (
 
         case "line":
         case "arrow":
+        case "arrow-bidirectional":
           if (element.points.length >= 2) {
             for (let i = 0; i < element.points.length - 1; i += 1) {
               const start = element.points[i];
@@ -374,7 +381,8 @@ export const useWhiteboardUtils = (
       if (
         element.type !== "text" &&
         element.type !== "line" &&
-        element.type !== "arrow"
+        element.type !== "arrow" &&
+        element.type !== "arrow-bidirectional"
       ) {
         const padding = (element.strokeWidth || 2) / 2;
         minX -= padding;
@@ -385,7 +393,7 @@ export const useWhiteboardUtils = (
 
       let handles: { name: string; x: number; y: number }[] = [];
 
-      if (element.type === "line" || element.type === "arrow") {
+      if (element.type === "line") {
         if (element.points.length >= 2) {
           const endIndex = element.points.length - 1;
           handles = [
@@ -397,6 +405,15 @@ export const useWhiteboardUtils = (
             },
           ];
         }
+      } else if (isArrowElement(element)) {
+        const arrowHandles = getArrowEditHandles(element.points).filter(
+          (handleItem) => handleItem.kind !== "bend",
+        );
+        handles = arrowHandles.map((handleItem) => ({
+          name: handleItem.name,
+          x: handleItem.point.x,
+          y: handleItem.point.y,
+        }));
       } else {
         handles = [
           { name: "nw", x: minX, y: minY },
@@ -527,7 +544,7 @@ export const useWhiteboardUtils = (
             { x: centerX + radius, y: centerY },
           ];
         }
-      } else if (element.type === "line" || element.type === "arrow") {
+      } else if (element.type === "line") {
         if (element.points.length >= 2) {
           const nextPoints = [...element.points];
           let start = nextPoints[0];
@@ -544,6 +561,108 @@ export const useWhiteboardUtils = (
           nextPoints[0] = start;
           nextPoints[nextPoints.length - 1] = end;
           newPoints = nextPoints;
+        }
+      } else if (isArrowElement(element)) {
+        if (element.points.length >= 2) {
+          const nextPoints = element.points.map((pt) => ({ ...pt }));
+          const lastPointIndex = nextPoints.length - 1;
+
+          if (handle === "start" || handle === "end") {
+            if (handle === "start") {
+              nextPoints[0] = { x: point.x, y: point.y };
+            } else {
+              nextPoints[lastPointIndex] = { x: point.x, y: point.y };
+            }
+
+            newPoints = routeArrowPoints({
+              start: nextPoints[0],
+              end: nextPoints[lastPointIndex],
+              startHandle: element.startConnection?.handle,
+              endHandle: element.endConnection?.handle,
+              routePreference: element.routePreference,
+              routingMode: element.routingMode ?? "orthogonal",
+              existingPoints: nextPoints,
+              preserveManualBends: Boolean(element.isManuallyRouted),
+            });
+          } else if (handle.startsWith("segment-")) {
+            const segmentIndex = Number(handle.split("-")[1]);
+            const lastSegmentIndex = nextPoints.length - 2;
+            let orthogonalPoints = nextPoints;
+
+            if (
+              !Number.isFinite(segmentIndex) ||
+              (element.routingMode ?? "orthogonal") === "straight" ||
+              orthogonalPoints.length < 3
+            ) {
+              const start = orthogonalPoints[0];
+              const end = orthogonalPoints[lastPointIndex];
+              const dx = Math.abs(end.x - start.x);
+              const dy = Math.abs(end.y - start.y);
+
+              if (dx >= dy) {
+                orthogonalPoints = [
+                  start,
+                  { x: start.x, y: point.y },
+                  { x: end.x, y: point.y },
+                  end,
+                ];
+              } else {
+                orthogonalPoints = [
+                  start,
+                  { x: point.x, y: start.y },
+                  { x: point.x, y: end.y },
+                  end,
+                ];
+              }
+            } else if (segmentIndex === 0 && orthogonalPoints.length >= 2) {
+              const start = orthogonalPoints[0];
+              const second = orthogonalPoints[1];
+              if (start.x === second.x) {
+                orthogonalPoints = [
+                  start,
+                  { x: point.x, y: start.y },
+                  { x: point.x, y: second.y },
+                  ...orthogonalPoints.slice(1),
+                ];
+              } else {
+                orthogonalPoints = [
+                  start,
+                  { x: start.x, y: point.y },
+                  { x: second.x, y: point.y },
+                  ...orthogonalPoints.slice(1),
+                ];
+              }
+            } else if (
+              segmentIndex === lastSegmentIndex &&
+              orthogonalPoints.length >= 2
+            ) {
+              const penultimate = orthogonalPoints[lastPointIndex - 1];
+              const end = orthogonalPoints[lastPointIndex];
+              if (penultimate.x === end.x) {
+                orthogonalPoints = [
+                  ...orthogonalPoints.slice(0, lastPointIndex),
+                  { x: point.x, y: penultimate.y },
+                  { x: point.x, y: end.y },
+                  end,
+                ];
+              } else {
+                orthogonalPoints = [
+                  ...orthogonalPoints.slice(0, lastPointIndex),
+                  { x: penultimate.x, y: point.y },
+                  { x: end.x, y: point.y },
+                  end,
+                ];
+              }
+            } else {
+              orthogonalPoints = moveOrthogonalSegment(
+                orthogonalPoints,
+                segmentIndex,
+                point,
+              );
+            }
+
+            newPoints = compressPath(orthogonalPoints);
+          }
         }
       } else if (element.type === "text" && element.text && element.fontSize) {
         const weight =
@@ -631,7 +750,30 @@ export const useWhiteboardUtils = (
         newPoints[0] = { x: newX, y: newY };
       }
 
-      return { ...element, points: newPoints, fontSize: newFontSize };
+      const isArrowResize =
+        isArrowElement(element) &&
+        (handle === "start" ||
+          handle === "end" ||
+          handle.startsWith("segment-") ||
+          handle.startsWith("bend-"));
+
+      return {
+        ...element,
+        points: newPoints,
+        fontSize: newFontSize,
+        ...(isArrowResize
+          ? {
+              routingMode:
+                handle.startsWith("segment-") || handle.startsWith("bend-")
+                  ? "orthogonal"
+                  : element.routingMode,
+              isManuallyRouted:
+                handle.startsWith("segment-") || handle.startsWith("bend-")
+                  ? true
+                  : element.isManuallyRouted,
+            }
+          : {}),
+      };
     },
     [elements],
   );

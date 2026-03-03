@@ -1,61 +1,52 @@
 interface StrokeWidthSelectorProps {
   strokeWidth: number;
   onStrokeWidthChange: (width: number) => void;
-  disabled?: boolean; // Add disabled prop
+  disabled?: boolean;
 }
 
 const StrokeWidthSelector: React.FC<StrokeWidthSelectorProps> = ({
   strokeWidth,
   onStrokeWidthChange,
-  disabled = false // Default to false
+  disabled = false,
 }) => {
-  const strokeWidths = [1, 2, 4, 8, 12, 16];
+  const strokeWidths = [1, 2, 3, 4, 6, 8];
 
   return (
-    <div className="flex items-center space-x-2">
-      <span className={`text-sm ${disabled ? 'text-gray-400' : 'text-gray-600'}`}>
-        Stroke:
+    <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        Stroke
       </span>
-      <div className="flex space-x-1">
+      <div className="inline-flex items-center gap-1">
         {strokeWidths.map((width) => {
           const isSelected = strokeWidth === width;
-          
+
           return (
             <button
               key={width}
               onClick={disabled ? undefined : () => onStrokeWidthChange(width)}
               disabled={disabled}
-              className={`p-2 rounded border transition-all ${
-                isSelected && !disabled
-                  ? 'border-blue-500 bg-blue-50'
-                  : isSelected && disabled
-                  ? 'border-gray-300 bg-gray-100'
-                  : disabled
-                  ? 'border-gray-200 hover:border-gray-200'
-                  : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-              } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-              title={
-                disabled 
-                  ? `Stroke width ${width}px (Read-only mode)` 
-                  : `Set stroke width to ${width}px`
-              }
+              className={`grid h-8 w-8 place-items-center rounded-md border transition-colors ${
+                isSelected
+                  ? "border-sky-500 bg-sky-50"
+                  : "border-slate-200 bg-white hover:border-slate-300"
+              } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+              title={`Set stroke width to ${width}px`}
             >
               <div
-                className={`rounded-full ${
-                  disabled ? 'bg-gray-400' : 'bg-gray-800'
-                }`}
-                style={{ 
-                  width: Math.max(width, 2), 
-                  height: Math.max(width, 2) 
+                className={`rounded-full ${disabled ? "bg-slate-400" : "bg-slate-700"}`}
+                style={{
+                  width: Math.max(2, width),
+                  height: Math.max(2, width),
                 }}
               />
             </button>
           );
         })}
       </div>
-      
-      {/* Custom stroke width input for more precision */}
-      <div className="flex items-center space-x-1 ml-2 pl-2 border-l border-gray-200">
+
+      <div className="h-5 w-px bg-slate-200" />
+
+      <div className="inline-flex items-center gap-1">
         <input
           type="number"
           value={strokeWidth}
@@ -68,14 +59,14 @@ const StrokeWidthSelector: React.FC<StrokeWidthSelectorProps> = ({
           min="1"
           max="50"
           disabled={disabled}
-          className={`w-12 px-1 py-1 text-xs text-center border rounded ${
-            disabled 
-              ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' 
-              : 'border-gray-300 bg-white text-gray-900'
+          className={`h-8 w-12 rounded-md border px-1 text-center text-xs ${
+            disabled
+              ? "border-slate-200 bg-slate-100 text-slate-400"
+              : "border-slate-300 bg-white text-slate-900"
           }`}
-          title={disabled ? "Read-only mode" : "Custom stroke width (1-50px)"}
+          title="Custom stroke width (1-50px)"
         />
-        <span className={`text-xs ${disabled ? 'text-gray-400' : 'text-gray-500'}`}>
+        <span className="text-xs text-slate-500">
           px
         </span>
       </div>

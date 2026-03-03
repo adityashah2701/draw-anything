@@ -20,6 +20,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
         { key: "D", description: "Decision (diamond) tool" },
         { key: "L", description: "Line tool" },
         { key: "A", description: "Arrow tool" },
+        { key: "B", description: "Bidirectional arrow tool" },
         { key: "T", description: "Text tool" },
         { key: "E", description: "Eraser tool" },
         { key: "H", description: "Hand/Pan tool" },

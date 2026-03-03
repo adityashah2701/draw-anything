@@ -4,6 +4,24 @@ export interface Point {
   y: number;
 }
 
+export type ConnectionHandle = "top" | "right" | "bottom" | "left";
+export type ArrowType = "arrow" | "arrow-bidirectional";
+export type ArrowRoutingMode = "straight" | "orthogonal";
+export type ArrowRoutePreference = "vh" | "hv";
+
+export interface ArrowStyle {
+  strokeWidth: number;
+  color: string;
+  dashed?: boolean;
+  arrowHeadStart?: boolean;
+  arrowHeadEnd?: boolean;
+}
+
+export interface ArrowConnection {
+  elementId: string;
+  handle: ConnectionHandle;
+}
+
 export interface Bounds {
   minX: number;
   minY: number;
@@ -22,7 +40,8 @@ export interface DrawingElement {
     | "diamond"
     | "line"
     | "text"
-    | "arrow";
+    | "arrow"
+    | "arrow-bidirectional";
   points: Point[];
   color: string;
   strokeWidth: number;
@@ -33,8 +52,16 @@ export interface DrawingElement {
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
-  startConnection?: { elementId: string; handle: string };
-  endConnection?: { elementId: string; handle: string };
+  startConnection?: ArrowConnection;
+  endConnection?: ArrowConnection;
+
+  /* Arrow style */
+  dashed?: boolean;
+  arrowHeadStart?: boolean;
+  arrowHeadEnd?: boolean;
+  routingMode?: ArrowRoutingMode;
+  routePreference?: ArrowRoutePreference;
+  isManuallyRouted?: boolean;
 }
 
 export interface CanvasState {
@@ -66,4 +93,5 @@ export type Tool =
   | "text"
   | "eraser"
   | "hand"
-  | "arrow";
+  | "arrow"
+  | "arrow-bidirectional";

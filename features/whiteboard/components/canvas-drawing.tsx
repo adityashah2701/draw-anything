@@ -5,6 +5,7 @@ import {
   getConnectionHandles,
 } from "../utils/canvas-render-utils";
 import { DrawingElement, Point } from "../types/whiteboard.types";
+import { routeArrowPoints } from "@/core/routing/orthogonalRouter";
 
 interface ConnectionDraft {
   fromElementId: string;
@@ -199,8 +200,6 @@ const useCanvasEngine = ({
           (h) => h.name === connectionDraft.fromHandle,
         );
         if (fromHandle) {
-          const sx = fromHandle.x * zoom + panOffset.x;
-          const sy = fromHandle.y * zoom + panOffset.y;
           const ex = connectionDraft.currentPoint.x * zoom + panOffset.x;
           const ey = connectionDraft.currentPoint.y * zoom + panOffset.y;
 
@@ -209,13 +208,31 @@ const useCanvasEngine = ({
           ctx.strokeStyle = "#38bdf8";
           ctx.lineWidth = 2;
           ctx.lineCap = "round";
+          const previewPath = routeArrowPoints({
+            start: { x: fromHandle.x, y: fromHandle.y },
+            end: connectionDraft.currentPoint,
+            startHandle: fromHandle.name,
+            routingMode: "orthogonal",
+          });
           ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(ex, ey);
+          ctx.moveTo(
+            previewPath[0].x * zoom + panOffset.x,
+            previewPath[0].y * zoom + panOffset.y,
+          );
+          for (let i = 1; i < previewPath.length; i += 1) {
+            ctx.lineTo(
+              previewPath[i].x * zoom + panOffset.x,
+              previewPath[i].y * zoom + panOffset.y,
+            );
+          }
           ctx.stroke();
 
           // Arrowhead at cursor
-          const angle = Math.atan2(ey - sy, ex - sx);
+          const prevPoint = previewPath[Math.max(0, previewPath.length - 2)];
+          const angle = Math.atan2(
+            ey - (prevPoint.y * zoom + panOffset.y),
+            ex - (prevPoint.x * zoom + panOffset.x),
+          );
           const arrowLen = 12;
           ctx.setLineDash([]);
           ctx.fillStyle = "#38bdf8";

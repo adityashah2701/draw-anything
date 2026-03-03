@@ -1,4 +1,13 @@
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import {
+  drawArrow,
+  getArrowEditHandles,
+  isArrowElement,
+} from "@/core/shapes/Arrow";
+import {
+  getConnectionHandlesForBounds,
+  ConnectionHandle,
+} from "@/core/routing/connectionHandles";
 
 export interface RenderContext {
   zoom: number;
@@ -16,7 +25,7 @@ export interface RenderContext {
 export const getConnectionHandles = (
   element: DrawingElement,
   bounds: { minX: number; minY: number; maxX: number; maxY: number } | null,
-): { name: string; x: number; y: number }[] => {
+): { name: ConnectionHandle; x: number; y: number }[] => {
   if (!bounds) return [];
   if (
     element.type !== "rectangle" &&
@@ -25,15 +34,7 @@ export const getConnectionHandles = (
   ) {
     return [];
   }
-  const { minX, minY, maxX, maxY } = bounds;
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-  return [
-    { name: "top", x: cx, y: minY },
-    { name: "right", x: maxX, y: cy },
-    { name: "bottom", x: cx, y: maxY },
-    { name: "left", x: minX, y: cy },
-  ];
+  return getConnectionHandlesForBounds(bounds);
 };
 
 export const drawGrid = (
@@ -93,8 +94,7 @@ const drawShapeLabel = (
   const baseWeight =
     (preferredFontWeight?.toString() as string) ||
     (preferredFontSize && preferredFontSize >= 20 ? "600" : "500");
-  const baseStyle =
-    preferredFontStyle === "italic" ? "italic" : "normal";
+  const baseStyle = preferredFontStyle === "italic" ? "italic" : "normal";
 
   const measureWithFont = (fontSize: number, text: string) => {
     ctx.font = `${baseStyle} ${baseWeight} ${fontSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
@@ -387,49 +387,9 @@ export const drawElement = (
       break;
 
     case "arrow":
-      if (element.points.length >= 2) {
-        const transformed = element.points.map((p) => ({
-          x: p.x * zoom + panOffset.x,
-          y: p.y * zoom + panOffset.y,
-        }));
-
-        // Draw routed polyline.
-        ctx.beginPath();
-        ctx.moveTo(transformed[0].x, transformed[0].y);
-        for (let i = 1; i < transformed.length; i++) {
-          ctx.lineTo(transformed[i].x, transformed[i].y);
-        }
-        ctx.stroke();
-
-        // Arrowhead follows the direction of the final segment.
-        const end = transformed[transformed.length - 1];
-        let prev = transformed[transformed.length - 2];
-        for (let i = transformed.length - 2; i >= 0; i -= 1) {
-          if (
-            transformed[i].x !== end.x ||
-            transformed[i].y !== end.y
-          ) {
-            prev = transformed[i];
-            break;
-          }
-        }
-
-        const angle = Math.atan2(end.y - prev.y, end.x - prev.x);
-        const arrowLength = 15;
-        const arrowAngle = Math.PI / 6;
-
-        ctx.beginPath();
-        ctx.moveTo(end.x, end.y);
-        ctx.lineTo(
-          end.x - arrowLength * Math.cos(angle - arrowAngle),
-          end.y - arrowLength * Math.sin(angle - arrowAngle),
-        );
-        ctx.moveTo(end.x, end.y);
-        ctx.lineTo(
-          end.x - arrowLength * Math.cos(angle + arrowAngle),
-          end.y - arrowLength * Math.sin(angle + arrowAngle),
-        );
-        ctx.stroke();
+    case "arrow-bidirectional":
+      if (isArrowElement(element)) {
+        drawArrow(ctx, element, zoom, panOffset);
       }
       break;
 
@@ -497,7 +457,11 @@ export const drawElement = (
           (maxX - minX) * zoom + pad * 2,
           (maxY - minY) * zoom + pad * 2,
         );
-      } else if (element.type !== "line" && element.type !== "arrow") {
+      } else if (
+        element.type !== "line" &&
+        element.type !== "arrow" &&
+        element.type !== "arrow-bidirectional"
+      ) {
         const padding = (element.strokeWidth || 2) / 2;
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = "#007bff";
@@ -516,7 +480,10 @@ export const drawElement = (
           element.points[0].y * zoom + panOffset.y,
         );
         const endIndex = element.points.length - 1;
-        if (element.type === "arrow") {
+        if (
+          element.type === "arrow" ||
+          element.type === "arrow-bidirectional"
+        ) {
           for (let i = 1; i <= endIndex; i += 1) {
             ctx.lineTo(
               element.points[i].x * zoom + panOffset.x,
@@ -543,10 +510,11 @@ export const drawElement = (
       const handleSize = 8;
       let handles: { x: number; y: number }[] = [];
 
-      if (element.type === "line" || element.type === "arrow") {
-        // Lines and arrows only have 2 endpoints
+      if (element.type === "line") {
+        // Lines and arrows only have endpoints (and optionally midpoints)
         if (element.points.length >= 2) {
           const endIndex = element.points.length - 1;
+
           handles = [
             {
               x: element.points[0].x * zoom + panOffset.x,
@@ -557,7 +525,40 @@ export const drawElement = (
               y: element.points[endIndex].y * zoom + panOffset.y,
             },
           ];
+
         }
+      } else if (isArrowElement(element)) {
+        const arrowHandles = getArrowEditHandles(element.points);
+        arrowHandles.forEach((handle) => {
+          const x = handle.point.x * zoom + panOffset.x;
+          const y = handle.point.y * zoom + panOffset.y;
+
+          if (handle.kind === "segment") {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(Math.PI / 4);
+            ctx.beginPath();
+            ctx.rect(-4, -4, 8, 8);
+            ctx.fillStyle = "#dbeafe";
+            ctx.strokeStyle = "#3b82f6";
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            return;
+          }
+
+          if (handle.kind === "bend") {
+            ctx.beginPath();
+            ctx.rect(x - 4, y - 4, 8, 8);
+            ctx.fillStyle = "#ffffff";
+            ctx.strokeStyle = "#2563eb";
+            ctx.fill();
+            ctx.stroke();
+            return;
+          }
+
+          handles.push({ x, y });
+        });
       } else {
         const padding = (element.strokeWidth || 2) / 2;
         const pMinX = minX - padding;

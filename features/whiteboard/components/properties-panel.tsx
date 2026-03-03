@@ -1,9 +1,14 @@
 import React from "react";
-import { Tool } from "@/features/whiteboard/types/whiteboard.types";
+import {
+  ArrowRoutingMode,
+  ArrowType,
+  Tool,
+} from "@/features/whiteboard/types/whiteboard.types";
 import StrokeWidthSelector from "./stroke-width-selector";
 import { ColorSection } from "./properties/color-section";
 import { FontSizeSection } from "./properties/font-size-section";
 import { StatusSection } from "./properties/status-section";
+import { ArrowSection } from "./properties/arrow-section";
 
 interface PropertiesPanelProps {
   currentTool: Tool;
@@ -19,6 +24,20 @@ interface PropertiesPanelProps {
   onToggleFillColorPicker: () => void;
   onStrokeWidthChange: (width: number) => void;
   onFontSizeChange: (size: number) => void;
+  selectedArrow:
+    | {
+        type: ArrowType;
+        routingMode: ArrowRoutingMode;
+        dashed: boolean;
+        arrowHeadStart: boolean;
+        arrowHeadEnd: boolean;
+      }
+    | null;
+  onArrowTypeChange: (type: ArrowType) => void;
+  onArrowRoutingModeChange: (mode: ArrowRoutingMode) => void;
+  onArrowDashedChange: (value: boolean) => void;
+  onArrowHeadStartChange: (value: boolean) => void;
+  onArrowHeadEndChange: (value: boolean) => void;
   disabled?: boolean;
   isSaving?: boolean;
   lastSaved?: Date | null;
@@ -38,6 +57,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onToggleFillColorPicker,
   onStrokeWidthChange,
   onFontSizeChange,
+  selectedArrow,
+  onArrowTypeChange,
+  onArrowRoutingModeChange,
+  onArrowDashedChange,
+  onArrowHeadStartChange,
+  onArrowHeadEndChange,
   disabled = false,
   isSaving = false,
   lastSaved = null,
@@ -50,6 +75,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     "diamond",
     "line",
     "arrow",
+    "arrow-bidirectional",
     "text",
     "select",
   ];
@@ -68,115 +94,125 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     "diamond",
     "line",
     "arrow",
+    "arrow-bidirectional",
     "text",
   ];
   const showStrokeControls =
     strokeTools.includes(currentTool) || currentTool === "select";
 
+  const toolLabel =
+    currentTool === "pen"
+      ? "Pen"
+      : currentTool === "rectangle"
+        ? "Rectangle"
+        : currentTool === "circle"
+          ? "Circle"
+          : currentTool === "diamond"
+            ? "Decision"
+            : currentTool === "line"
+              ? "Line"
+              : currentTool === "arrow"
+                ? "Arrow"
+                : currentTool === "arrow-bidirectional"
+                  ? "Bi Arrow"
+                  : currentTool === "text"
+                    ? "Text"
+                    : currentTool === "eraser"
+                      ? "Eraser"
+                      : currentTool === "hand"
+                        ? "Pan"
+                        : "Select";
+
   return (
     <div
-      className={`bg-white/90 backdrop-blur-md border border-gray-200/50 p-2 sm:px-4 sm:py-2.5 shadow-sm rounded-2xl ${
+      className={`rounded-2xl border border-slate-200/80 bg-white/95 p-2 shadow-lg backdrop-blur-md ${
         disabled ? "opacity-75" : ""
       }`}
     >
-      <div className="flex items-center justify-between space-x-2 sm:space-x-4 min-w-0">
-        {/* Left side: Tool properties */}
-        <div className="flex items-center space-x-2 sm:space-x-6 min-w-0 flex-1">
-          {/* Read-only indicator */}
-          {disabled && (
-            <div className="flex items-center space-x-2 px-3 py-1.5 bg-yellow-100 border border-yellow-300 rounded-lg flex-shrink-0">
-              <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-              <span className="text-xs text-yellow-800 font-medium">
-                Read-only
-              </span>
-            </div>
-          )}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-3 text-white">
+          <span className="h-2 w-2 rounded-full bg-cyan-300" />
+          <span className="text-xs font-semibold tracking-wide uppercase">
+            {toolLabel}
+          </span>
+        </div>
 
-          {/* Selection mode indicator */}
-          {currentTool === "select" && !disabled && (
-            <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex-shrink-0">
-              <svg
-                className="w-3 h-3 text-blue-600"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <span className="text-xs text-blue-700 font-medium">
-                Selection Mode
-              </span>
-            </div>
-          )}
+        {disabled && (
+          <div className="inline-flex h-9 items-center rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-medium text-amber-800">
+            Read-only
+          </div>
+        )}
 
-          {showColorControls && !disabled && (
-            <div className="flex items-center space-x-3 sm:space-x-5 min-w-0 overflow-x-auto">
-              <ColorSection
-                currentColor={currentColor}
-                fillColor={fillColor}
-                showOutlineColorPicker={showOutlineColorPicker}
-                showFillColorPicker={showFillColorPicker}
-                onColorChange={onColorChange}
-                onFillColorChange={onFillColorChange}
-                onToggleOutlineColorPicker={onToggleOutlineColorPicker}
-                onToggleFillColorPicker={onToggleFillColorPicker}
+        {showColorControls && !disabled && (
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1">
+            <ColorSection
+              currentColor={currentColor}
+              fillColor={fillColor}
+              showOutlineColorPicker={showOutlineColorPicker}
+              showFillColorPicker={showFillColorPicker}
+              onColorChange={onColorChange}
+              onFillColorChange={onFillColorChange}
+              onToggleOutlineColorPicker={onToggleOutlineColorPicker}
+              onToggleFillColorPicker={onToggleFillColorPicker}
+              disabled={disabled}
+              showFillControls={showFillControls}
+              isSelectMode={currentTool === "select"}
+            />
+
+            {showStrokeControls && (
+              <StrokeWidthSelector
+                strokeWidth={strokeWidth}
+                onStrokeWidthChange={onStrokeWidthChange}
                 disabled={disabled}
-                showFillControls={showFillControls}
-                isSelectMode={currentTool === "select"}
               />
+            )}
 
-              {showStrokeControls && (
-                <div className="flex items-center space-x-2 flex-shrink-0">
-                  <span className="text-xs text-gray-600 hidden sm:inline font-medium">
-                    Width:
-                  </span>
-                  <StrokeWidthSelector
-                    strokeWidth={strokeWidth}
-                    onStrokeWidthChange={onStrokeWidthChange}
-                    disabled={disabled}
-                  />
-                </div>
-              )}
-
-              {(currentTool === "text" || currentTool === "select") && (
+            {(currentTool === "text" || currentTool === "select") && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
                 <FontSizeSection
                   fontSize={fontSize}
                   onFontSizeChange={onFontSizeChange}
                   disabled={disabled}
                 />
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {!showColorControls && !disabled && (
-            <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-              <span className="text-xs text-gray-500">
-                {currentTool === "hand"
-                  ? "Pan mode - Navigate the canvas"
-                  : currentTool === "eraser"
-                    ? "Eraser mode - Click to delete elements"
-                    : "No properties for this tool"}
-              </span>
-            </div>
-          )}
+            {selectedArrow && (
+              <ArrowSection
+                arrowType={selectedArrow.type}
+                routingMode={selectedArrow.routingMode}
+                dashed={selectedArrow.dashed}
+                arrowHeadStart={selectedArrow.arrowHeadStart}
+                arrowHeadEnd={selectedArrow.arrowHeadEnd}
+                onArrowTypeChange={onArrowTypeChange}
+                onRoutingModeChange={onArrowRoutingModeChange}
+                onDashedChange={onArrowDashedChange}
+                onArrowHeadStartChange={onArrowHeadStartChange}
+                onArrowHeadEndChange={onArrowHeadEndChange}
+                disabled={disabled}
+              />
+            )}
+          </div>
+        )}
 
-          {disabled && (
-            <span className="text-xs text-gray-500">
-              Properties not available in read-only mode
-            </span>
-          )}
+        {!showColorControls && !disabled && (
+          <div className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-600">
+            {currentTool === "hand"
+              ? "Pan mode"
+              : currentTool === "eraser"
+                ? "Eraser mode"
+                : "No properties"}
+          </div>
+        )}
+
+        <div className="ml-auto">
+          <StatusSection
+            currentTool={currentTool}
+            isSaving={isSaving}
+            lastSaved={lastSaved}
+            disabled={disabled}
+          />
         </div>
-
-        <StatusSection
-          currentTool={currentTool}
-          isSaving={isSaving}
-          lastSaved={lastSaved}
-          disabled={disabled}
-        />
       </div>
     </div>
   );

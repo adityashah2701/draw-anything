@@ -11,10 +11,17 @@ import TopToolbar from "@/features/whiteboard/components/top-toolbar";
 import AIDiagramModal from "@/features/whiteboard/components/ai-diagram-modal";
 import { CommandMenu } from "@/features/whiteboard/components/command-menu";
 import {
+  ArrowRoutingMode,
+  ArrowType,
   DrawingElement,
   Tool,
 } from "@/features/whiteboard/types/whiteboard.types";
-import { getConnectionHandles } from "@/features/whiteboard/utils/canvas-render-utils";
+import { getArrowHeadVisibility, isArrowElement } from "@/core/shapes/Arrow";
+import { useArrowRouting } from "@/core/hooks/useArrowRouting";
+import {
+  insertBendPoint,
+  removeBendPoint,
+} from "@/core/routing/orthogonalRouter";
 import { DrawingElementJson } from "@/liveblocks.config";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -76,6 +83,7 @@ const WhiteboardCanvas: React.FC = () => {
   const [showAIModal, setShowAIModal] = useState(false);
   const [hideCanvasUi, setHideCanvasUi] = useState(false);
   const seededRef = useRef(false);
+  const viewportLoadedRef = useRef(false);
 
   // Inline text editing state
   // isNewTextElement = true means the element has NOT yet been persisted to Liveblocks
@@ -166,7 +174,7 @@ const WhiteboardCanvas: React.FC = () => {
       const toDelete = new Set(ids);
 
       elements.forEach((el) => {
-        if (el.type !== "arrow") return;
+        if (!isArrowElement(el)) return;
         const startId = el.startConnection?.elementId;
         const endId = el.endConnection?.elementId;
         if (
@@ -287,77 +295,16 @@ const WhiteboardCanvas: React.FC = () => {
     }
 
     canvasViewport.fitToBounds({ minX, minY, maxX, maxY });
-  }, [elements, getElementBounds, canvasViewport]);
+  }, [
+    elements,
+    getElementBounds,
+    canvasViewport,
+  ]);
 
-  // Helper to re-evaluate arrow positions when connected shapes move/resize
-  const updateConnectedArrows = useCallback(
-    (changedElements: DrawingElement[], allElements: DrawingElement[]) => {
-      const changedIds = new Set(changedElements.map((el) => el.id));
-      const changedById = new Map(changedElements.map((el) => [el.id, el]));
-      const arrowsToUpdate: DrawingElement[] = [];
-
-      allElements.forEach((el) => {
-        if (el.type === "arrow" && (el.startConnection || el.endConnection)) {
-          const isStartChanged =
-            !!el.startConnection &&
-            changedIds.has(el.startConnection.elementId);
-          const isEndChanged =
-            !!el.endConnection && changedIds.has(el.endConnection.elementId);
-          if (!isStartChanged && !isEndChanged) return;
-
-          let needsUpdate = false;
-          const newPoints = [...el.points];
-          const endPointIndex = Math.max(1, newPoints.length - 1);
-
-          // Check if start is connected to a changed shape
-          if (isStartChanged && el.startConnection) {
-            const tgt = changedById.get(el.startConnection.elementId);
-            if (tgt) {
-              const bounds = getElementBounds(tgt);
-              const handles = getConnectionHandles(tgt, bounds);
-              const h = handles.find(
-                (h) => h.name === el.startConnection!.handle,
-              );
-              if (h) {
-                if (newPoints[0]?.x !== h.x || newPoints[0]?.y !== h.y) {
-                  newPoints[0] = { x: h.x, y: h.y };
-                  needsUpdate = true;
-                }
-              }
-            }
-          }
-
-          // Check if end is connected to a changed shape
-          if (isEndChanged && el.endConnection) {
-            const tgt = changedById.get(el.endConnection.elementId);
-            if (tgt) {
-              const bounds = getElementBounds(tgt);
-              const handles = getConnectionHandles(tgt, bounds);
-              const h = handles.find(
-                (h) => h.name === el.endConnection!.handle,
-              );
-              if (h) {
-                if (
-                  newPoints[endPointIndex]?.x !== h.x ||
-                  newPoints[endPointIndex]?.y !== h.y
-                ) {
-                  newPoints[endPointIndex] = { x: h.x, y: h.y };
-                  needsUpdate = true;
-                }
-              }
-            }
-          }
-
-          if (needsUpdate) {
-            arrowsToUpdate.push({ ...el, points: newPoints });
-          }
-        }
-      });
-
-      return arrowsToUpdate;
-    },
-    [getElementBounds],
-  );
+  const { rerouteArrowsForChanges, routeArrow } = useArrowRouting({
+    elements,
+    getElementBounds,
+  });
 
   const whiteboardDrawing = useWhiteboardDrawing({
     currentTool,
@@ -373,15 +320,14 @@ const WhiteboardCanvas: React.FC = () => {
     deleteElements: (ids) => deleteElementsWithConnectedArrows(ids),
     moveElements: (ids, dx, dy) => {
       const moved = moveElements(ids, dx, dy);
-      // Trigger connected arrow updates
-      const arrows = updateConnectedArrows(moved, elements);
+      const arrows = rerouteArrowsForChanges(moved);
       arrows.forEach((a) => updateElement(a as unknown as DrawingElementJson));
       return moved;
     },
     resizeElement: (id, handle, pt, bounds) => {
       const resized = resizeElement(id, handle, pt, bounds);
       if (resized) {
-        const arrows = updateConnectedArrows([resized], elements);
+        const arrows = rerouteArrowsForChanges([resized]);
         arrows.forEach((a) =>
           updateElement(a as unknown as DrawingElementJson),
         );
@@ -424,6 +370,12 @@ const WhiteboardCanvas: React.FC = () => {
     whiteboard,
   });
 
+  // Reset one-time hydration guards when room changes.
+  useEffect(() => {
+    seededRef.current = false;
+    viewportLoadedRef.current = false;
+  }, [whiteboardId]);
+
   // Keyboard shortcuts hook
   useWhiteboardKeyboard({
     currentTool,
@@ -448,19 +400,20 @@ const WhiteboardCanvas: React.FC = () => {
     setShowCommandMenu,
   });
 
-  // Load canvas viewport settings from Convex (zoom, pan, grid)
+  // Load canvas viewport settings once from Convex (zoom, pan, grid)
   useEffect(() => {
-    if (whiteboard?.content) {
-      try {
-        const parsed = JSON.parse(whiteboard.content);
-        if (parsed?.canvasSettings) {
-          canvasViewport.loadViewportSettings(parsed.canvasSettings);
-        }
-      } catch {
-        // ignore
+    if (!whiteboard?.content || viewportLoadedRef.current) return;
+
+    try {
+      const parsed = JSON.parse(whiteboard.content);
+      if (parsed?.canvasSettings) {
+        canvasViewport.loadViewportSettings(parsed.canvasSettings);
       }
+      viewportLoadedRef.current = true;
+    } catch {
+      // ignore
     }
-  }, [whiteboard?.content, canvasViewport]);
+  }, [whiteboard?.content, canvasViewport, canvasViewport.loadViewportSettings]);
 
   // Broadcast local selection and drafts to Presence
   useEffect(() => {
@@ -496,6 +449,79 @@ const WhiteboardCanvas: React.FC = () => {
     fillColor,
     fontSize,
   ]);
+
+  const selectedElement = React.useMemo(
+    () =>
+      selectedElements.length === 1
+        ? elements.find((element) => element.id === selectedElements[0]) ?? null
+        : null,
+    [elements, selectedElements],
+  );
+
+  const selectedArrow = React.useMemo(() => {
+    if (!selectedElement || !isArrowElement(selectedElement)) {
+      return null;
+    }
+    const heads = getArrowHeadVisibility(selectedElement);
+    return {
+      type: selectedElement.type,
+      routingMode: selectedElement.routingMode ?? "orthogonal",
+      dashed: Boolean(selectedElement.dashed),
+      arrowHeadStart: heads.start,
+      arrowHeadEnd: heads.end,
+    };
+  }, [selectedElement]);
+
+  const updateSelectedArrow = useCallback(
+    (
+      patch: Partial<
+        Pick<
+          DrawingElement,
+          | "type"
+          | "routingMode"
+          | "dashed"
+          | "arrowHeadStart"
+          | "arrowHeadEnd"
+          | "isManuallyRouted"
+        >
+      >,
+    ) => {
+      if (!whiteboardAccess.hasEditAccess) return;
+      if (!selectedElement || !isArrowElement(selectedElement)) return;
+
+      let next: DrawingElement = {
+        ...selectedElement,
+        ...patch,
+      };
+
+      if (patch.type === "arrow-bidirectional") {
+        next.arrowHeadStart = patch.arrowHeadStart ?? true;
+        next.arrowHeadEnd = patch.arrowHeadEnd ?? true;
+      }
+
+      if (patch.type === "arrow") {
+        next.arrowHeadStart = patch.arrowHeadStart ?? false;
+        next.arrowHeadEnd = patch.arrowHeadEnd ?? true;
+      }
+
+      if (patch.routingMode === "straight") {
+        const endIndex = Math.max(1, next.points.length - 1);
+        next.points = [next.points[0], next.points[endIndex]];
+        next.isManuallyRouted = false;
+      } else if (
+        patch.routingMode === "orthogonal" &&
+        isArrowElement(next)
+      ) {
+        next = routeArrow(next, {
+          routingMode: "orthogonal",
+          preserveManualBends: Boolean(next.isManuallyRouted),
+        });
+      }
+
+      updateElement(next as unknown as DrawingElementJson);
+    },
+    [routeArrow, selectedElement, updateElement, whiteboardAccess.hasEditAccess],
+  );
 
   const others = useOthers();
   const otherUsersDrafts = others
@@ -609,6 +635,26 @@ const WhiteboardCanvas: React.FC = () => {
     }
   };
 
+  const handleArrowTypeChange = (type: ArrowType) => {
+    updateSelectedArrow({ type });
+  };
+
+  const handleArrowRoutingModeChange = (mode: ArrowRoutingMode) => {
+    updateSelectedArrow({ routingMode: mode });
+  };
+
+  const handleArrowDashedChange = (value: boolean) => {
+    updateSelectedArrow({ dashed: value });
+  };
+
+  const handleArrowHeadStartChange = (value: boolean) => {
+    updateSelectedArrow({ arrowHeadStart: value });
+  };
+
+  const handleArrowHeadEndChange = (value: boolean) => {
+    updateSelectedArrow({ arrowHeadEnd: value });
+  };
+
   const handleToggleOutlineColorPicker = () => {
     setShowFillColorPicker(false);
     setShowOutlineColorPicker(!showOutlineColorPicker);
@@ -618,6 +664,76 @@ const WhiteboardCanvas: React.FC = () => {
     setShowOutlineColorPicker(false);
     setShowFillColorPicker(!showFillColorPicker);
   };
+
+  const updateArrowBendsAtPoint = useCallback(
+    (arrow: DrawingElement, point: { x: number; y: number }) => {
+      if (!whiteboardAccess.hasEditAccess || !isArrowElement(arrow)) {
+        return false;
+      }
+
+      const removeThreshold = 10 / canvasViewport.zoom;
+      const insertThreshold = 12 / canvasViewport.zoom;
+
+      for (let i = 1; i < arrow.points.length - 1; i += 1) {
+        const bend = arrow.points[i];
+        const distance = Math.hypot(point.x - bend.x, point.y - bend.y);
+        if (distance <= removeThreshold) {
+          const points = removeBendPoint(arrow.points, i);
+          updateElement({
+            ...arrow,
+            points,
+            routingMode: "orthogonal",
+            isManuallyRouted: true,
+          } as unknown as DrawingElementJson);
+          return true;
+        }
+      }
+
+      let closestSegment = -1;
+      let closestDistance = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < arrow.points.length - 1; i += 1) {
+        const from = arrow.points[i];
+        const to = arrow.points[i + 1];
+        const distance =
+          from.x === to.x
+            ? Math.abs(point.x - from.x) +
+              (point.y < Math.min(from.y, to.y) ||
+              point.y > Math.max(from.y, to.y)
+                ? Math.min(
+                    Math.abs(point.y - from.y),
+                    Math.abs(point.y - to.y),
+                  )
+                : 0)
+            : Math.abs(point.y - from.y) +
+              (point.x < Math.min(from.x, to.x) ||
+              point.x > Math.max(from.x, to.x)
+                ? Math.min(
+                    Math.abs(point.x - from.x),
+                    Math.abs(point.x - to.x),
+                  )
+                : 0);
+
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestSegment = i;
+        }
+      }
+
+      if (closestSegment >= 0 && closestDistance <= insertThreshold) {
+        const points = insertBendPoint(arrow.points, closestSegment);
+        updateElement({
+          ...arrow,
+          points,
+          routingMode: "orthogonal",
+          isManuallyRouted: true,
+        } as unknown as DrawingElementJson);
+        return true;
+      }
+
+      return false;
+    },
+    [canvasViewport.zoom, updateElement, whiteboardAccess.hasEditAccess],
+  );
 
   // Text commits are handled inside CanvasTextBlock directly.
 
@@ -689,6 +805,12 @@ const WhiteboardCanvas: React.FC = () => {
               onToggleFillColorPicker={handleToggleFillColorPicker}
               onStrokeWidthChange={handleStrokeWidthChange}
               onFontSizeChange={handleFontSizeChange}
+              selectedArrow={selectedArrow}
+              onArrowTypeChange={handleArrowTypeChange}
+              onArrowRoutingModeChange={handleArrowRoutingModeChange}
+              onArrowDashedChange={handleArrowDashedChange}
+              onArrowHeadStartChange={handleArrowHeadStartChange}
+              onArrowHeadEndChange={handleArrowHeadEndChange}
               disabled={!whiteboardAccess.hasEditAccess}
               isSaving={whiteboardAutoSave.isSaving}
               lastSaved={whiteboardAutoSave.lastSaved}
@@ -798,6 +920,13 @@ const WhiteboardCanvas: React.FC = () => {
               setEditingTextElement(topEl);
               setCurrentTool("select");
               return;
+            }
+
+            if (isArrowElement(topEl)) {
+              const handled = updateArrowBendsAtPoint(topEl, pos);
+              if (handled) {
+                return;
+              }
             }
 
             if (

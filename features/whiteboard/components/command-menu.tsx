@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   ArrowRight,
+  ArrowLeftRight,
   Circle,
   Diamond,
   Eraser,
@@ -114,6 +115,14 @@ export function CommandMenu({
             <ArrowRight className="mr-2 h-4 w-4" />
             <span>Arrow</span>
             <CommandShortcut>A</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => onToolChange("arrow-bidirectional"))
+            }
+          >
+            <ArrowLeftRight className="mr-2 h-4 w-4" />
+            <span>Bidirectional Arrow</span>
           </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onToolChange("text"))}>
             <Type className="mr-2 h-4 w-4" />

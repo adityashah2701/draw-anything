@@ -124,6 +124,9 @@ export const useWhiteboardKeyboard = ({
         case "a":
           if (hasEditAccess) setCurrentTool("arrow");
           break;
+        case "b":
+          if (hasEditAccess) setCurrentTool("arrow-bidirectional");
+          break;
         case "t":
           if (hasEditAccess) setCurrentTool("text");
           break;
