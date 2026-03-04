@@ -3,7 +3,7 @@ import {
   compressPath,
   moveOrthogonalSegment,
   routeArrowPoints,
-} from "@/core/routing/orthogonal-router";
+} from "@/core/routing/engines/orthogonal-router";
 import {
   ShapeResizeHandle,
 } from "@/core/shapes/base/base-shape-definition";

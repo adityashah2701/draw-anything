@@ -8,7 +8,7 @@ import {
 import {
   pathIntersectsObstacles,
   RoutingObstacle,
-} from "@/core/routing/obstacle-avoidance";
+} from "@/core/routing/algorithms/obstacle-avoidance";
 
 /**
  * Unified route scoring model.

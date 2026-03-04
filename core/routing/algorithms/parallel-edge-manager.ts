@@ -2,7 +2,7 @@ import {
   ConnectionHandle,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
-import { isValidPoint } from "@/core/routing/routing-guards";
+import { isValidPoint } from "@/core/routing/utils/routing-guards";
 
 export interface ParallelEdgeDescriptor {
   arrowId: string;

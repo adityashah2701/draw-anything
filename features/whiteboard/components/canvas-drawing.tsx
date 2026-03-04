@@ -5,7 +5,7 @@ import {
   getConnectionHandles,
 } from "../utils/canvas-render-utils";
 import { DrawingElement, Point } from "../types/whiteboard.types";
-import { routeArrowPoints } from "@/core/routing/orthogonal-router";
+import { routeArrowPoints } from "@/core/routing/engines/orthogonal-router";
 import { Anchor } from "@/features/whiteboard/types/whiteboard.types";
 
 interface ConnectionDraft {

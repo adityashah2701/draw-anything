@@ -7,7 +7,7 @@ import {
   ConnectionHandle,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { getConnectionHandles } from "@/features/whiteboard/utils/canvas-render-utils";
-import { routeArrowPoints } from "@/core/routing/orthogonal-router";
+import { routeArrowPoints } from "@/core/routing/engines/orthogonal-router";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 import { createShape } from "@/core/shapes/shape-runtime";

@@ -16,8 +16,8 @@ import {
 import {
   RouteArrowDescriptor,
   routeArrowBatch,
-} from "@/core/routing/orthogonal-router";
-import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
+} from "@/core/routing/engines/orthogonal-router";
+import { RoutingObstacle } from "@/core/routing/algorithms/obstacle-avoidance";
 import { ArrowElement, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 

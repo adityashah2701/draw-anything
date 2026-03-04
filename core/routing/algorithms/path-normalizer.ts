@@ -16,13 +16,13 @@ import { Point } from "@/features/whiteboard/types/whiteboard.types";
 import {
   RoutingObstacle,
   pathIntersectsObstacles,
-} from "@/core/routing/obstacle-avoidance";
+} from "@/core/routing/algorithms/obstacle-avoidance";
 import {
   compressOrthogonalPath,
   orthogonalizePath,
   EPSILON,
-} from "@/core/routing/routing-utils";
-import { countTotalCrossings } from "@/core/routing/crossing-minimizer";
+} from "@/core/routing/utils/routing-utils";
+import { countTotalCrossings } from "@/core/routing/algorithms/crossing-minimizer";
 
 // ─────────────────── Types ───────────────────
 

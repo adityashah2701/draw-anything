@@ -4,9 +4,9 @@ import {
   DrawingElement,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
-import { getConnectionHandlePoint } from "@/core/routing/connection-handles";
+import { getConnectionHandlePoint } from "@/core/routing/utils/connection-handles";
 import { ArrowElement, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import { routeArrowPoints } from "@/core/routing/orthogonal-router";
+import { routeArrowPoints } from "@/core/routing/engines/orthogonal-router";
 import {
   buildAnchorId,
   parseAnchorSide,

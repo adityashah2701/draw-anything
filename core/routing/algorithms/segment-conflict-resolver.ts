@@ -7,12 +7,12 @@ import {
 import {
   RoutingObstacle,
   pathIntersectsObstacles,
-} from "@/core/routing/obstacle-avoidance";
+} from "@/core/routing/algorithms/obstacle-avoidance";
 import {
   compressOrthogonalPath,
   orthogonalizePath,
   EPSILON,
-} from "@/core/routing/routing-utils";
+} from "@/core/routing/utils/routing-utils";
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
 
 type SegmentOrientation = "horizontal" | "vertical";

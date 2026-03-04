@@ -19,7 +19,7 @@ import {
   segmentBounds,
   segmentIntersectsAabb,
 } from "@/core/collision/aabb";
-import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
+import { RoutingObstacle } from "@/core/routing/algorithms/obstacle-avoidance";
 
 // ─────────────────── Types ───────────────────
 

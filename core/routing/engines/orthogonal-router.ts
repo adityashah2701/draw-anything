@@ -8,19 +8,19 @@ import { Aabb } from "@/core/collision/aabb";
 import {
   computeParallelOffsets,
   ParallelEdgeDescriptor,
-} from "@/core/routing/parallel-edge-manager";
+} from "@/core/routing/algorithms/parallel-edge-manager";
 import {
   ObstacleAwareRouteInput,
   PathRankingConfig,
   RoutingObstacle,
-} from "@/core/routing/obstacle-avoidance";
+} from "@/core/routing/algorithms/obstacle-avoidance";
 import {
   compressOrthogonalPath,
   isOrthogonalSegment,
   arePointsEqual as samePoint,
   orthogonalizePath,
   EPSILON,
-} from "@/core/routing/routing-utils";
+} from "@/core/routing/utils/routing-utils";
 import {
   addPathToSegmentSpatialIndex,
   buildSegmentSpatialIndex,
@@ -28,17 +28,17 @@ import {
   resolvePathSegmentConflicts,
   SegmentConflictOptions,
   SegmentSpatialIndex,
-} from "@/core/routing/segment-conflict-resolver";
+} from "@/core/routing/algorithms/segment-conflict-resolver";
 import {
   computeLaneAssignments,
   applyLaneOffsets,
-} from "@/core/routing/lane-manager";
+} from "@/core/routing/algorithms/lane-manager";
 import {
   normalizeRoutes,
   PathNormalizerOptions,
-} from "@/core/routing/path-normalizer";
-import { getObstacleAwareOrthogonalPath } from "@/core/routing/obstacle-avoidance";
-import { isValidPoint } from "@/core/routing/routing-guards";
+} from "@/core/routing/algorithms/path-normalizer";
+import { getObstacleAwareOrthogonalPath } from "@/core/routing/algorithms/obstacle-avoidance";
+import { isValidPoint } from "@/core/routing/utils/routing-guards";
 
 const getDominantAxis = (
   start: Point,
@@ -645,17 +645,17 @@ export {
   markEdgeDirty,
   markShapeEdgesDirty,
   invalidateAllRoutes,
-} from "@/core/routing/route-engine";
+} from "@/core/routing/engines/route-engine";
 export type {
   RouteEngineEdge,
   RouteEngineConfig,
   RouteEngineResult,
   RouteEngineState,
-} from "@/core/routing/route-engine";
+} from "@/core/routing/engines/route-engine";
 
 // Re-export new data structures and utilities for consumers
-export { SpatialHashGrid } from "@/core/routing/spatial-hash-grid";
-export { AdjacencyMap } from "@/core/routing/adjacency-map";
+export { SpatialHashGrid } from "@/core/routing/spatial/spatial-hash-grid";
+export { AdjacencyMap } from "@/core/routing/spatial/adjacency-map";
 export {
   isValidPoint,
   isValidPointArray,
@@ -663,4 +663,4 @@ export {
   isFullyConnectedEdge,
   sanitizeEdges,
   sanitizeObstacles,
-} from "@/core/routing/routing-guards";
+} from "@/core/routing/utils/routing-guards";

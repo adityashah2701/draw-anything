@@ -27,7 +27,7 @@ import { useArrowConnections } from "@/core/arrow/use-arrow-connections";
 import {
   insertBendPoint,
   removeBendPoint,
-} from "@/core/routing/orthogonal-router";
+} from "@/core/routing/engines/orthogonal-router";
 import { DrawingElementJson } from "@/liveblocks.config";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -345,11 +345,7 @@ const WhiteboardCanvas: React.FC = () => {
     }
 
     canvasViewport.fitToBounds({ minX, minY, maxX, maxY });
-  }, [
-    elements,
-    getElementBounds,
-    canvasViewport,
-  ]);
+  }, [elements, getElementBounds, canvasViewport]);
 
   const magneticSnap = useMagneticSnap({
     elements,
@@ -484,7 +480,11 @@ const WhiteboardCanvas: React.FC = () => {
     } catch {
       // ignore
     }
-  }, [whiteboard?.content, canvasViewport, canvasViewport.loadViewportSettings]);
+  }, [
+    whiteboard?.content,
+    canvasViewport,
+    canvasViewport.loadViewportSettings,
+  ]);
 
   // Broadcast local selection and drafts to Presence
   useEffect(() => {
@@ -524,10 +524,29 @@ const WhiteboardCanvas: React.FC = () => {
   const selectedElement = React.useMemo(
     () =>
       selectedElements.length === 1
-        ? elements.find((element) => element.id === selectedElements[0]) ?? null
+        ? (elements.find((element) => element.id === selectedElements[0]) ??
+          null)
         : null,
     [elements, selectedElements],
   );
+
+  // Derive focused node info for the AI modal (only node elements with a logicalId)
+  const focusedNode = React.useMemo(() => {
+    if (
+      !selectedElement ||
+      !selectedElement.logicalId ||
+      selectedElement.type === "arrow" ||
+      selectedElement.type === "arrow-bidirectional" ||
+      selectedElement.type === "freehand" ||
+      selectedElement.type === "line"
+    ) {
+      return null;
+    }
+    return {
+      id: selectedElement.logicalId,
+      label: selectedElement.label ?? selectedElement.logicalId,
+    };
+  }, [selectedElement]);
 
   const selectedArrow = React.useMemo(() => {
     if (!selectedElement || !isArrowElement(selectedElement)) {
@@ -770,18 +789,12 @@ const WhiteboardCanvas: React.FC = () => {
             ? Math.abs(point.x - from.x) +
               (point.y < Math.min(from.y, to.y) ||
               point.y > Math.max(from.y, to.y)
-                ? Math.min(
-                    Math.abs(point.y - from.y),
-                    Math.abs(point.y - to.y),
-                  )
+                ? Math.min(Math.abs(point.y - from.y), Math.abs(point.y - to.y))
                 : 0)
             : Math.abs(point.y - from.y) +
               (point.x < Math.min(from.x, to.x) ||
               point.x > Math.max(from.x, to.x)
-                ? Math.min(
-                    Math.abs(point.x - from.x),
-                    Math.abs(point.x - to.x),
-                  )
+                ? Math.min(Math.abs(point.x - from.x), Math.abs(point.x - to.x))
                 : 0);
 
         if (distance < closestDistance) {
@@ -1044,13 +1057,48 @@ const WhiteboardCanvas: React.FC = () => {
           onClose={() => setShowShortcuts(false)}
         />
 
+        {/* Floating AI Bubble — appears above a selected node with a logicalId */}
+        {!hideCanvasUi &&
+          focusedNode &&
+          selectedElement &&
+          (() => {
+            const bounds = getElementBounds(selectedElement);
+            if (!bounds) return null;
+            const cx = (bounds.minX + bounds.maxX) / 2;
+            const top = bounds.minY;
+            const sx = cx * canvasViewport.zoom + canvasViewport.panOffset.x;
+            const sy = top * canvasViewport.zoom + canvasViewport.panOffset.y;
+            return (
+              <button
+                style={{
+                  position: "absolute",
+                  left: sx,
+                  top: sy - 38,
+                  transform: "translateX(-50%)",
+                  zIndex: 60,
+                }}
+                onClick={() => setShowAIModal(true)}
+                disabled={!whiteboardAccess.hasEditAccess}
+                className="inline-flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-violet-900/30 transition-all hover:bg-violet-500 hover:scale-105 active:scale-95 disabled:opacity-50"
+                title={`Edit "${focusedNode.label}" with AI`}
+              >
+                <span>✨</span>
+                <span>AI Edit</span>
+              </button>
+            );
+          })()}
+
         {/* AI Diagram Modal */}
         <AIDiagramModal
           isOpen={showAIModal}
           onClose={() => setShowAIModal(false)}
           disabled={!whiteboardAccess.hasEditAccess}
+          currentElements={elements}
+          boardId={whiteboardId}
+          focusedNodeId={focusedNode?.id}
+          focusedNodeLabel={focusedNode?.label}
           onGenerate={(newElements) => {
-            // Place new AI graph near current viewport origin, then auto-fit to center it.
+            // Generate mode: shift new elements near viewport origin, then add.
             const viewWorldMinX =
               -canvasViewport.panOffset.x / canvasViewport.zoom;
             const viewWorldMinY =
@@ -1090,6 +1138,27 @@ const WhiteboardCanvas: React.FC = () => {
             };
             setTimeout(() => {
               canvasViewport.fitToBounds(shiftedBounds);
+            }, 0);
+          }}
+          onUpdate={(newElements) => {
+            // Update mode: REPLACE existing canvas content with the new graph.
+            // Clear first, then add — this prevents double-stacking.
+            handleClear();
+            const allX = newElements.flatMap((el) => el.points.map((p) => p.x));
+            const allY = newElements.flatMap((el) => el.points.map((p) => p.y));
+            const minX = Math.min(...allX);
+            const minY = Math.min(...allY);
+            const maxX = Math.max(...allX);
+            const maxY = Math.max(...allY);
+            newElements.forEach((el) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              addElement(el as any);
+            });
+            toast.success(
+              `✅ AI updated diagram (${newElements.length} elements).`,
+            );
+            setTimeout(() => {
+              canvasViewport.fitToBounds({ minX, minY, maxX, maxY });
             }, 0);
           }}
         />

@@ -14,8 +14,8 @@ import { expandAabb, segmentBounds } from "@/core/collision/aabb";
 import {
   RoutingObstacle,
   pathIntersectsObstacles,
-} from "@/core/routing/obstacle-avoidance";
-import { orthogonalizePath, EPSILON } from "@/core/routing/routing-utils";
+} from "@/core/routing/algorithms/obstacle-avoidance";
+import { orthogonalizePath, EPSILON } from "@/core/routing/utils/routing-utils";
 
 // ─────────────────── Types ───────────────────
 

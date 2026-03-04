@@ -54,6 +54,13 @@ export interface BaseDrawingElement {
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
+  /** AI-agent stamps for round-trip graph reconstruction */
+  logicalId?: string;
+  logicalShape?: "rectangle" | "circle" | "diamond";
+  logicalLayer?: string;
+  logicalColumn?: number;
+  logicalFill?: string;
+  logicalColor?: string;
 }
 
 export interface FreehandShape extends BaseDrawingElement {

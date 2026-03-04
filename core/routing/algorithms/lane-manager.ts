@@ -1,5 +1,5 @@
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
-import { EPSILON, orthogonalizePath } from "@/core/routing/routing-utils";
+import { EPSILON, orthogonalizePath } from "@/core/routing/utils/routing-utils";
 
 /**
  * Lane manager for systematic lane allocation.

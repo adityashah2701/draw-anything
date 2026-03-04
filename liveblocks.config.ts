@@ -46,6 +46,13 @@ export type DrawingElementJson = JsonObject & {
   isManuallyRouted?: boolean;
   startConnection?: ArrowConnection;
   endConnection?: ArrowConnection;
+  /** AI-agent stamps for round-trip graph reconstruction */
+  logicalId?: string;
+  logicalShape?: "rectangle" | "circle" | "diamond";
+  logicalLayer?: string;
+  logicalColumn?: number;
+  logicalFill?: string;
+  logicalColor?: string;
 };
 
 // Storage: the shared document — all connected users read/write to this

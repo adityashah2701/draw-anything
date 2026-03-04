@@ -3,7 +3,7 @@ import {
   ConnectionHandle,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
-import { compressOrthogonalPath } from "@/core/routing/routing-utils";
+import { compressOrthogonalPath } from "@/core/routing/utils/routing-utils";
 import {
   Aabb,
   expandAabb,

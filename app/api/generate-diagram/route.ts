@@ -4,13 +4,18 @@ import { buildAnchorId } from "@/core/anchors/generate-anchors";
 import {
   RouteArrowDescriptor,
   routeArrowBatch,
-} from "@/core/routing/orthogonal-router";
-import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
+} from "@/core/routing/engines/orthogonal-router";
+import { RoutingObstacle } from "@/core/routing/algorithms/obstacle-avoidance";
 import { computeArchitectureLayeredLayout } from "@/core/layout/layered-layout";
 import {
   ArchitectureLayerName,
   parseArchitectureLayerName,
 } from "@/core/layout/layer-constraint";
+import { runAgentWorkflow } from "@/core/ai/workflow/agent-workflow";
+import {
+  validateGraph,
+  formatValidationReport,
+} from "@/core/validation/graph-validator";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
@@ -178,6 +183,10 @@ interface LogicalNode {
   shape: ShapeType;
   layer?: ArchitectureLayerName;
   column?: number;
+  /** Explicit fill color override from the agent (e.g. "green", "#22c55e") */
+  fill?: string;
+  /** Explicit text color override from the agent */
+  color?: string;
 }
 
 interface LogicalEdge {
@@ -220,6 +229,10 @@ interface LayoutNode {
   outgoingCount: number;
   isDecision: boolean;
   isMerge: boolean;
+  /** Agent-supplied fill override; bypasses getNodeVisualStyle when present */
+  fillOverride?: string;
+  /** Agent-supplied text color override */
+  colorOverride?: string;
 }
 
 interface NodeVisualStyle {
@@ -255,6 +268,18 @@ type CanvasElement = {
   startConnection?: { elementId: string; anchorId: string };
   endConnection?: { elementId: string; anchorId: string };
   isGuide?: boolean;
+  /** Logical node id for round-trip reconstruction in update mode */
+  logicalId?: string;
+  /** Logical shape for round-trip reconstruction in update mode */
+  logicalShape?: "rectangle" | "circle" | "diamond";
+  /** Logical layer for round-trip reconstruction in update mode */
+  logicalLayer?: string;
+  /** Logical column hint for round-trip reconstruction in update mode */
+  logicalColumn?: number;
+  /** Agent-set fill color — stamped so it survives the round-trip */
+  logicalFill?: string;
+  /** Agent-set text color — stamped so it survives the round-trip */
+  logicalColor?: string;
 };
 
 function generateShortId(index: number) {
@@ -908,6 +933,8 @@ function createInitialLayoutNodes(
       outgoingCount,
       isDecision: node.shape === "diamond",
       isMerge: incomingCount > 1,
+      ...(node.fill ? { fillOverride: node.fill } : {}),
+      ...(node.color ? { colorOverride: node.color } : {}),
     });
   }
 
@@ -1541,18 +1568,29 @@ function spreadTargetHandle(
   return pickLeastUsedHandle(verticalFirst, usage, preferred);
 }
 
-function mapNodeToElement(node: LayoutNode, index: number): CanvasElement {
-  const style = getNodeVisualStyle(node);
+function mapNodeToElement(
+  node: LayoutNode,
+  index: number,
+  logicalId?: string,
+): CanvasElement {
+  // Use agent-supplied color override when present; otherwise derive from label/shape
+  const style: NodeVisualStyle = node.fillOverride
+    ? { fill: node.fillOverride, color: node.colorOverride ?? "#1f2937" }
+    : getNodeVisualStyle(node);
   const id = generateShortId(index);
 
   if (node.shape === "circle") {
     const radius = node.width / 2;
     const centerX = node.x;
     const centerY = node.y + node.height / 2;
-    return {
+    const el: CanvasElement = {
       id,
       type: "circle",
       label: node.label,
+      logicalId: logicalId ?? node.id,
+      logicalShape: "circle",
+      ...(node.fillOverride ? { logicalFill: node.fillOverride } : {}),
+      ...(node.colorOverride ? { logicalColor: node.colorOverride } : {}),
       points: [
         { x: centerX, y: centerY },
         { x: centerX + radius, y: centerY },
@@ -1561,12 +1599,18 @@ function mapNodeToElement(node: LayoutNode, index: number): CanvasElement {
       color: style.color,
       strokeWidth: 2,
     };
+    return el;
   }
 
+  const shape = node.shape === "diamond" ? "diamond" : "rectangle";
   return {
     id,
-    type: node.shape === "diamond" ? "diamond" : "rectangle",
+    type: shape,
     label: node.label,
+    logicalId: logicalId ?? node.id,
+    logicalShape: shape,
+    ...(node.fillOverride ? { logicalFill: node.fillOverride } : {}),
+    ...(node.colorOverride ? { logicalColor: node.colorOverride } : {}),
     points: [
       { x: node.x - node.width / 2, y: node.y },
       { x: node.x + node.width / 2, y: node.y + node.height },
@@ -2045,6 +2089,8 @@ function buildArchitectureElements(graph: LogicalGraph): CanvasElement[] {
       height,
       layerHint: node.layer,
       columnHint: node.column,
+      fill: node.fill,
+      color: node.color,
     };
   });
 
@@ -2130,6 +2176,8 @@ function buildArchitectureElements(graph: LogicalGraph): CanvasElement[] {
       outgoingCount: outgoing.get(node.id)?.length ?? 0,
       isDecision: node.shape === "diamond",
       isMerge: (incoming.get(node.id)?.length ?? 0) > 1,
+      ...(node.fill ? { fillOverride: node.fill } : {}),
+      ...(node.color ? { colorOverride: node.color } : {}),
     });
   });
 
@@ -2209,10 +2257,134 @@ function buildElements(
   ).elements;
 }
 
+// ─── Update mode: agent workflow ──────────────────────────────────────────────
+
+async function handleUpdateMode(
+  prompt: string,
+  boardId: string,
+  currentElements: CanvasElement[],
+  intent: DiagramIntent,
+  focusedNodeId?: string,
+): Promise<NextResponse> {
+  const workflowResult = await runAgentWorkflow({
+    prompt,
+    boardId,
+    currentElements: currentElements as Parameters<
+      typeof runAgentWorkflow
+    >[0]["currentElements"],
+    intent,
+    groqClient: groq,
+    focusedNodeId,
+  });
+
+  const { agentGraph } = workflowResult;
+
+  // Convert AgentGraph → LogicalGraph so the existing pipeline can render it
+  const logicalGraph: LogicalGraph = {
+    nodes: Object.values(agentGraph.nodes).map((n) => ({
+      id: n.id,
+      label: n.label,
+      shape: n.shape,
+      layer: n.layer as ArchitectureLayerName | undefined,
+      column: n.column,
+      fill: n.fill,
+      color: n.color,
+    })),
+    edges: Object.values(agentGraph.edges).map((e) => ({
+      from: e.from,
+      to: e.to,
+      bidirectional: e.bidirectional,
+      dashed: e.dashed,
+    })),
+  };
+
+  // Run validation (end-of-loop only, not sent to Groq)
+  const validationReport = validateGraph(agentGraph);
+  if (!validationReport.valid) {
+    console.warn(
+      "[agent-workflow] Post-render validation issues:",
+      formatValidationReport(validationReport),
+    );
+  }
+
+  const sanitised = simplifyGraphForReadability(
+    keepMostRelevantComponent(
+      // We trust the agent's graph — sanitizeGraph for safety only
+      {
+        nodes: logicalGraph.nodes,
+        edges: logicalGraph.edges,
+      },
+      prompt,
+    ),
+    intent,
+  );
+
+  const elements = buildElements(sanitised, intent);
+
+  return NextResponse.json({
+    elements,
+    meta: {
+      iterations: workflowResult.iterations,
+      timedOut: workflowResult.timedOut,
+      graphVersion: agentGraph.version,
+      validation: validationReport.summary,
+    },
+  });
+}
+
+// ─── Generate mode: original single-shot flow ─────────────────────────────────
+
+async function handleGenerateMode(
+  prompt: string,
+  intent: DiagramIntent,
+): Promise<NextResponse> {
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    temperature: 0,
+    max_tokens: 4096,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: buildSystemPrompt(intent) },
+      { role: "user", content: buildUserPrompt(prompt, intent) },
+    ],
+  });
+
+  const raw = completion.choices[0]?.message?.content?.trim() ?? "";
+  const cleaned = raw
+    .replace(/^```json/i, "")
+    .replace(/^```/, "")
+    .replace(/```$/, "")
+    .trim();
+
+  const jsonStart = cleaned.indexOf("{");
+  const jsonEnd = cleaned.lastIndexOf("}");
+  if (jsonStart === -1 || jsonEnd === -1) {
+    throw new Error("Invalid JSON from AI");
+  }
+
+  const parsed = JSON.parse(
+    cleaned.slice(jsonStart, jsonEnd + 1),
+  ) as DiagramJson;
+  if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+    throw new Error("Invalid nodes/edges format");
+  }
+
+  const logicalGraph = simplifyGraphForReadability(
+    keepMostRelevantComponent(sanitizeGraph(parsed, intent, prompt), prompt),
+    intent,
+  );
+  const elements = buildElements(logicalGraph, intent);
+
+  return NextResponse.json({ elements });
+}
+
+// ─── POST handler ─────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const prompt = body?.prompt;
+    const mode: string = body?.mode ?? "generate";
 
     if (!prompt || typeof prompt !== "string") {
       return NextResponse.json(
@@ -2222,47 +2394,38 @@ export async function POST(req: NextRequest) {
     }
 
     const intent = detectDiagramIntent(prompt);
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: buildSystemPrompt(intent) },
-        {
-          role: "user",
-          content: buildUserPrompt(prompt, intent),
-        },
-      ],
-    });
 
-    const raw = completion.choices[0]?.message?.content?.trim() ?? "";
-    const cleaned = raw
-      .replace(/^```json/i, "")
-      .replace(/^```/, "")
-      .replace(/```$/, "")
-      .trim();
+    // ── Update mode: surgical agent mutations ───────────────────────────────
+    if (mode === "update") {
+      const boardId = body?.boardId;
+      const currentElements = body?.currentElements;
 
-    const jsonStart = cleaned.indexOf("{");
-    const jsonEnd = cleaned.lastIndexOf("}");
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error("Invalid JSON from AI");
+      if (!boardId || typeof boardId !== "string") {
+        return NextResponse.json(
+          { error: "boardId is required for update mode." },
+          { status: 400 },
+        );
+      }
+      if (!Array.isArray(currentElements)) {
+        return NextResponse.json(
+          { error: "currentElements array is required for update mode." },
+          { status: 400 },
+        );
+      }
+
+      return await handleUpdateMode(
+        prompt,
+        boardId,
+        currentElements as CanvasElement[],
+        intent,
+        typeof body?.focusedNodeId === "string"
+          ? body.focusedNodeId
+          : undefined,
+      );
     }
 
-    const parsed = JSON.parse(
-      cleaned.slice(jsonStart, jsonEnd + 1),
-    ) as DiagramJson;
-    if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
-      throw new Error("Invalid nodes/edges format");
-    }
-
-    const logicalGraph = simplifyGraphForReadability(
-      keepMostRelevantComponent(sanitizeGraph(parsed, intent, prompt), prompt),
-      intent,
-    );
-    const elements = buildElements(logicalGraph, intent);
-
-    return NextResponse.json({ elements });
+    // ── Generate mode: original single-shot flow ────────────────────────────
+    return await handleGenerateMode(prompt, intent);
   } catch (error) {
     console.error("generate-diagram error:", error);
     if (

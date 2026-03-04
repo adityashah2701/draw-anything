@@ -3,7 +3,7 @@ import {
   getArrowEditHandles,
   isArrowElement,
 } from "@/core/shapes/arrow/arrow-utils";
-import { ConnectionHandle } from "@/core/routing/connection-handles";
+import { ConnectionHandle } from "@/core/routing/utils/connection-handles";
 import {
   getShapeAnchors,
   renderShapeToCanvas,

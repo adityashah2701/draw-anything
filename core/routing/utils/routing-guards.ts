@@ -6,8 +6,8 @@
  */
 
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
-import { RouteEngineEdge } from "@/core/routing/route-engine";
-import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
+import { RouteEngineEdge } from "@/core/routing/engines/route-engine";
+import { RoutingObstacle } from "@/core/routing/algorithms/obstacle-avoidance";
 
 // ─────────────────── Type Guards ───────────────────
 

@@ -25,23 +25,23 @@ import {
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { Aabb } from "@/core/collision/aabb";
-import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
-import { routeArrowPoints } from "@/core/routing/orthogonal-router";
+import { RoutingObstacle } from "@/core/routing/algorithms/obstacle-avoidance";
+import { routeArrowPoints } from "@/core/routing/engines/orthogonal-router";
 import {
   computeParallelOffsets,
   ParallelEdgeDescriptor,
-} from "@/core/routing/parallel-edge-manager";
+} from "@/core/routing/algorithms/parallel-edge-manager";
 import {
   buildSegmentSpatialIndex,
   addPathToSegmentSpatialIndex,
   countPathCrossingsWithSpatialIndex,
   SegmentConflictOptions,
-} from "@/core/routing/segment-conflict-resolver";
+} from "@/core/routing/algorithms/segment-conflict-resolver";
 import {
   computeLaneAssignments,
   applyLaneOffsets,
   LaneManagerOptions,
-} from "@/core/routing/lane-manager";
+} from "@/core/routing/algorithms/lane-manager";
 import {
   createCongestionMap,
   recordPath,
@@ -49,18 +49,18 @@ import {
   computePathCongestionPenalty,
   CongestionMap,
   CongestionConfig,
-} from "@/core/routing/congestion-map";
+} from "@/core/routing/spatial/congestion-map";
 import {
   minimizeCrossings,
   CrossingMinimizerOptions,
-} from "@/core/routing/crossing-minimizer";
-import { validateNoShapeOverlap } from "@/core/routing/obstacle-detector";
-import { PathRankingConfig } from "@/core/routing/obstacle-avoidance";
-import { normalizeRoutes } from "@/core/routing/path-normalizer";
+} from "@/core/routing/algorithms/crossing-minimizer";
+import { validateNoShapeOverlap } from "@/core/routing/spatial/obstacle-detector";
+import { PathRankingConfig } from "@/core/routing/algorithms/obstacle-avoidance";
+import { normalizeRoutes } from "@/core/routing/algorithms/path-normalizer";
 import {
   sanitizeEdges,
   sanitizeObstacles,
-} from "@/core/routing/routing-guards";
+} from "@/core/routing/utils/routing-guards";
 
 // ─────────────────── Types ───────────────────
 
