@@ -100,7 +100,7 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={isOpen} onOpenChange={(open:boolean) => !open && onClose()}>
       <SheetContent
         side="right"
         className="z-[80] w-[420px] gap-0 border-l border-slate-300 bg-slate-50 p-0 sm:max-w-[420px] [&>[data-slot=sheet-close]]:top-4 [&>[data-slot=sheet-close]]:right-4 [&>[data-slot=sheet-close]]:rounded-md [&>[data-slot=sheet-close]]:text-white/85 [&>[data-slot=sheet-close]]:hover:bg-white/15 [&>[data-slot=sheet-close]]:hover:text-white [&>[data-slot=sheet-close]]:focus:ring-white/40"
