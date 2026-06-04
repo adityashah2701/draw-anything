@@ -4,11 +4,11 @@ import {
   ArrowType,
   Tool,
 } from "@/features/whiteboard/types/whiteboard.types";
-import StrokeWidthSelector from "./stroke-width-selector";
-import { ColorSection } from "./properties/color-section";
-import { FontSizeSection } from "./properties/font-size-section";
-import { StatusSection } from "./properties/status-section";
-import { ArrowSection } from "./properties/arrow-section";
+import StrokeWidthSelector from "../properties/stroke-width-selector";
+import { ColorSection } from "../properties/color-section";
+import { FontSizeSection } from "../properties/font-size-section";
+import { StatusSection } from "../properties/status-section";
+import { ArrowSection } from "../properties/arrow-section";
 
 interface PropertiesPanelProps {
   currentTool: Tool;

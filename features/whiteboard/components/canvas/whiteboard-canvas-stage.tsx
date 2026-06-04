@@ -1,6 +1,6 @@
-import { WhiteboardPageController } from "@/features/whiteboard/hooks/use-whiteboard-page-controller";
-import useCanvasEngine from "@/features/whiteboard/components/canvas-drawing";
-import { Cursors } from "@/features/whiteboard/components/cursors";
+import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
+import useCanvasEngine from "@/features/whiteboard/hooks/canvas/use-canvas-engine";
+import { Cursors } from "@/features/whiteboard/components/canvas/cursors";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 

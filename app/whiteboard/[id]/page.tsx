@@ -3,7 +3,7 @@ import { useParams } from "next/navigation";
 import { ClientSideSuspense } from "@liveblocks/react";
 import { LiveList } from "@liveblocks/client";
 import { RoomProvider } from "@/liveblocks.config";
-import { WhiteboardCanvasRoom } from "@/features/whiteboard/components/whiteboard-canvas-room";
+import { WhiteboardCanvasRoom } from "@/features/whiteboard/components/canvas/whiteboard-canvas-room";
 
 export default function WhiteboardCanvasRoomPage() {
   const params = useParams();

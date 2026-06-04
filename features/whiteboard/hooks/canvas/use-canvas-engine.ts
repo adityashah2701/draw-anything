@@ -3,15 +3,20 @@ import {
   drawGrid,
   drawElement,
   getConnectionHandles,
-} from "../utils/canvas-render-utils";
-import { DrawingElement, Point } from "../types/whiteboard.types";
-import { Anchor } from "@/features/whiteboard/types/whiteboard.types";
+} from "@/features/whiteboard/utils/canvas-render-utils";
+import {
+  Anchor,
+  DrawingElement,
+  Point,
+} from "@/features/whiteboard/types/whiteboard.types";
+import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 
 interface ConnectionDraft {
   fromElementId: string;
   fromAnchorId: string;
   fromHandle: string;
   currentPoint: Point;
+  snapMatch?: MagneticSnapMatch | null;
 }
 
 interface MagneticSnapPreview {
@@ -207,8 +212,9 @@ const useCanvasEngine = ({
           (h) => h.name === connectionDraft.fromHandle,
         );
         if (fromHandle) {
-          const ex = connectionDraft.currentPoint.x * zoom + panOffset.x;
-          const ey = connectionDraft.currentPoint.y * zoom + panOffset.y;
+          const endPoint = connectionDraft.snapMatch?.anchor ?? connectionDraft.currentPoint;
+          const ex = endPoint.x * zoom + panOffset.x;
+          const ey = endPoint.y * zoom + panOffset.y;
 
           ctx.save();
           ctx.setLineDash([6, 4]);
@@ -217,7 +223,7 @@ const useCanvasEngine = ({
           ctx.lineCap = "round";
           const previewPath = [
             { x: fromHandle.x, y: fromHandle.y },
-            { x: connectionDraft.currentPoint.x, y: connectionDraft.currentPoint.y },
+            endPoint,
           ];
           ctx.beginPath();
           ctx.moveTo(

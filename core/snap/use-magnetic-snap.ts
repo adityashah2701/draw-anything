@@ -30,6 +30,7 @@ interface FindNearestSnapInput {
   point: Point;
   dragVector?: Point;
   previous?: MagneticSnapMatch | null;
+  excludeElementIds?: string[];
 }
 
 interface AnchorGridIndex {
@@ -114,9 +115,24 @@ export const useMagneticSnap = ({
   }, [anchorIndex.anchors, snapRadius]);
 
   const findNearestSnap = useCallback(
-    ({ point, dragVector, previous }: FindNearestSnapInput): MagneticSnapMatch | null => {
+    ({
+      point,
+      dragVector,
+      previous,
+      excludeElementIds,
+    }: FindNearestSnapInput): MagneticSnapMatch | null => {
+      if (
+        typeof point?.x !== "number" ||
+        typeof point?.y !== "number" ||
+        !Number.isFinite(point.x) ||
+        !Number.isFinite(point.y)
+      ) {
+        return null;
+      }
+
       const snapRadiusSq = snapRadius * snapRadius;
       const hysteresisRadiusSq = (snapRadius * 1.35) * (snapRadius * 1.35);
+      const excludedIds = new Set(excludeElementIds ?? []);
 
       if (previous) {
         const prevDistSq = squaredDistance(point, previous.anchor);
@@ -135,6 +151,7 @@ export const useMagneticSnap = ({
       candidateIndices.forEach((index) => {
         const record = anchorIndex.anchors[index];
         if (!record) return;
+        if (excludedIds.has(record.elementId)) return;
 
         const distSq = squaredDistance(point, record.anchor);
         if (distSq > snapRadiusSq) return;
@@ -170,4 +187,3 @@ export const useMagneticSnap = ({
     findNearestSnap,
   };
 };
-

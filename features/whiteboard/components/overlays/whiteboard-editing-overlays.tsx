@@ -1,8 +1,8 @@
-import { WhiteboardPageController } from "@/features/whiteboard/hooks/use-whiteboard-page-controller";
-import CanvasTextBlock from "@/features/whiteboard/components/canvas-text-block";
-import KeyboardShortcuts from "@/features/whiteboard/components/keyboard-shortcuts";
-import AIDiagramModal from "@/features/whiteboard/components/ai-diagram-modal";
-import { CommandMenu } from "@/features/whiteboard/components/command-menu";
+import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
+import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text-block";
+import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
+import AIDiagramModal from "@/features/whiteboard/components/overlays/ai-diagram-modal";
+import { CommandMenu } from "@/features/whiteboard/components/overlays/command-menu";
 import { DrawingElementJson } from "@/liveblocks.config";
 
 interface WhiteboardEditingOverlaysProps {

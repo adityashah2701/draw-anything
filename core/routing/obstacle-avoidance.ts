@@ -55,8 +55,8 @@ const getDefaultPreference = (
   startHandle?: ConnectionHandle,
   endHandle?: ConnectionHandle,
 ): ArrowRoutePreference => {
-  if (startHandle) return isVerticalHandle(startHandle) ? "vh" : "hv";
-  if (endHandle) return isVerticalHandle(endHandle) ? "hv" : "vh";
+  if (startHandle) return isVerticalHandle(startHandle) ? "hv" : "vh";
+  if (endHandle) return isVerticalHandle(endHandle) ? "vh" : "hv";
   return Math.abs(end.x - start.x) > Math.abs(end.y - start.y) ? "hv" : "vh";
 };
 

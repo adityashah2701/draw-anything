@@ -26,7 +26,10 @@ import {
 } from "@/features/whiteboard/types/whiteboard.types";
 import { Aabb } from "@/core/collision/aabb";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
-import { routeArrowPoints } from "@/core/routing/orthogonal-router";
+import {
+  routeArrowPoints,
+  stabilizeArrowRouteEndpoints,
+} from "@/core/routing/orthogonal-router";
 import {
   computeParallelOffsets,
   ParallelEdgeDescriptor,
@@ -257,6 +260,10 @@ export const routeWithEngine = (
           state.dirtyEdges.has(e.arrowId) || !state.routeCache.has(e.arrowId),
       )
     : safeEdges;
+
+  const edgeByArrowId = new Map(
+    safeEdges.map((edge) => [edge.arrowId, edge] as const),
+  );
 
   // ── Stage 1: Parallel offset computation ──
   const parallelInputs: ParallelEdgeDescriptor[] =
@@ -505,6 +512,28 @@ export const routeWithEngine = (
     corridorTolerance: 2,
     minStubLength: 24,
   });
+
+  const stabilizedRoutes = new Map<string, Point[]>();
+  finalRoutes.forEach((points, arrowId) => {
+    const edge = edgeByArrowId.get(arrowId);
+    if (!edge) {
+      stabilizedRoutes.set(arrowId, points);
+      return;
+    }
+
+    stabilizedRoutes.set(
+      arrowId,
+      stabilizeArrowRouteEndpoints(
+        points,
+        edge.start,
+        edge.end,
+        edge.startHandle,
+        edge.endHandle,
+        edge.routePreference,
+      ),
+    );
+  });
+  finalRoutes = stabilizedRoutes;
 
   // ── Stage 8: Hard overlap validation ──
   let validationViolations = 0;

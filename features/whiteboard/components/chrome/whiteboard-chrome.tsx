@@ -1,8 +1,8 @@
 import { Eye, EyeOff } from "lucide-react";
-import TopToolbar from "@/features/whiteboard/components/top-toolbar";
-import PropertiesPanel from "@/features/whiteboard/components/properties-panel";
-import Sidebar from "@/features/whiteboard/components/sidebar";
-import { WhiteboardPageController } from "@/features/whiteboard/hooks/use-whiteboard-page-controller";
+import TopToolbar from "@/features/whiteboard/components/chrome/top-toolbar";
+import PropertiesPanel from "@/features/whiteboard/components/chrome/properties-panel";
+import Sidebar from "@/features/whiteboard/components/chrome/sidebar";
+import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 
 interface WhiteboardChromeProps {
   controller: WhiteboardPageController;

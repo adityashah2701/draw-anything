@@ -21,13 +21,13 @@ import {
 } from "@/features/whiteboard/types/whiteboard.types";
 import { useMagneticSnap } from "@/core/snap/use-magnetic-snap";
 import { useArrowConnections } from "@/core/arrow/use-arrow-connections";
-import { useWhiteboardAccess } from "@/features/whiteboard/hooks/use-whiteboard-access";
-import { useCanvasViewport } from "@/features/whiteboard/hooks/use-canvas-viewport";
-import { useWhiteboardUtils } from "@/features/whiteboard/hooks/use-whiteboard-utils";
-import { useWhiteboardDrawing } from "@/features/whiteboard/hooks/use-whiteboard-drawing";
-import { useWhiteboardKeyboard } from "@/features/whiteboard/hooks/use-whiteboard-keyboard";
-import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/use-whiteboard-auto-save";
-import { useWhiteboardUiState } from "@/features/whiteboard/hooks/use-whiteboard-ui-state";
+import { useWhiteboardAccess } from "@/features/whiteboard/hooks/access/use-whiteboard-access";
+import { useCanvasViewport } from "@/features/whiteboard/hooks/canvas/use-canvas-viewport";
+import { useWhiteboardUtils } from "@/features/whiteboard/hooks/utils/use-whiteboard-utils";
+import { useWhiteboardDrawing } from "@/features/whiteboard/hooks/interaction/use-whiteboard-drawing";
+import { useWhiteboardKeyboard } from "@/features/whiteboard/hooks/interaction/use-whiteboard-keyboard";
+import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/data/use-whiteboard-auto-save";
+import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whiteboard-ui-state";
 import {
   ArrowElement,
   getArrowHeadVisibility,

@@ -53,7 +53,7 @@ function ensureStyles() {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-import { TextFormat, TextToolbar } from "./text-toolbar";
+import { TextFormat, TextToolbar } from "../overlays/text-toolbar";
 
 export interface CanvasTextBlockProps {
   element: DrawingElement;

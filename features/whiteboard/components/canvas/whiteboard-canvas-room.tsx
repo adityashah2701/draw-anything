@@ -1,7 +1,7 @@
-import { WhiteboardPageController, useWhiteboardPageController } from "@/features/whiteboard/hooks/use-whiteboard-page-controller";
-import { WhiteboardChrome } from "@/features/whiteboard/components/whiteboard-chrome";
-import { WhiteboardCanvasStage } from "@/features/whiteboard/components/whiteboard-canvas-stage";
-import { WhiteboardEditingOverlays } from "@/features/whiteboard/components/whiteboard-editing-overlays";
+import { WhiteboardPageController, useWhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
+import { WhiteboardChrome } from "@/features/whiteboard/components/chrome/whiteboard-chrome";
+import { WhiteboardCanvasStage } from "@/features/whiteboard/components/canvas/whiteboard-canvas-stage";
+import { WhiteboardEditingOverlays } from "@/features/whiteboard/components/overlays/whiteboard-editing-overlays";
 
 interface WhiteboardCanvasRoomProps {
   whiteboardId: string;

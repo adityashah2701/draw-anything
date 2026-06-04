@@ -118,6 +118,7 @@ const pinPathEndpointStubs = (
   startHandle?: ConnectionHandle,
   endHandle?: ConnectionHandle,
   stubDistance = 24,
+  preference: ArrowRoutePreference = "hv",
 ): Point[] => {
   if (points.length < 4 || (!startHandle && !endHandle)) {
     return points;
@@ -146,8 +147,37 @@ const pinPathEndpointStubs = (
     pinned[penultimateIndex] = endEntry;
   }
 
-  return orthogonalizePath(pinned);
+  return orthogonalizePath(pinned, preference);
 };
+
+export const stabilizeArrowRouteEndpoints = (
+  points: Point[],
+  start: Point,
+  end: Point,
+  startHandle?: ConnectionHandle,
+  endHandle?: ConnectionHandle,
+  preference?: ArrowRoutePreference,
+): Point[] =>
+  compressOrthogonalPath(
+    pinPathEndpointStubs(
+      points,
+      start,
+      end,
+      startHandle,
+      endHandle,
+      undefined,
+      preference ??
+        (startHandle
+          ? startHandle === "top" || startHandle === "bottom"
+            ? "hv"
+            : "vh"
+          : endHandle
+            ? endHandle === "top" || endHandle === "bottom"
+              ? "vh"
+              : "hv"
+            : "hv"),
+    ),
+  );
 
 export const reanchorPathEndpoints = (
   points: Point[],
@@ -321,12 +351,31 @@ const routeArrowPointsInternal = ({
   conflictOptions,
   pathRanking,
 }: RouteArrowInput): Point[] => {
+  const endpointPreference =
+    routePreference ??
+    (startHandle
+      ? startHandle === "top" || startHandle === "bottom"
+        ? "hv"
+        : "vh"
+      : endHandle
+        ? endHandle === "top" || endHandle === "bottom"
+          ? "vh"
+          : "hv"
+        : "hv");
+
   if (routingMode === "straight") {
     return [start, end];
   }
 
   if (preserveManualBends && existingPoints && existingPoints.length > 2) {
-    return reanchorPathEndpoints(existingPoints, start, end);
+    return stabilizeArrowRouteEndpoints(
+      reanchorPathEndpoints(existingPoints, start, end),
+      start,
+      end,
+      startHandle,
+      endHandle,
+      endpointPreference,
+    );
   }
 
   const ignoreIds = new Set<string>(ignoreObstacleIds ?? []);
@@ -356,8 +405,7 @@ const routeArrowPointsInternal = ({
   });
   points = orthogonalizePath(
     points,
-    routePreference ??
-      (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
+    endpointPreference,
   );
 
   points = applyParallelOffset(
@@ -366,10 +414,17 @@ const routeArrowPointsInternal = ({
     end,
     parallelOffset,
     lockEndpointStubs,
-    routePreference ??
-      (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
+    endpointPreference,
   );
-  points = pinPathEndpointStubs(points, start, end, startHandle, endHandle);
+  points = pinPathEndpointStubs(
+    points,
+    start,
+    end,
+    startHandle,
+    endHandle,
+    undefined,
+    endpointPreference,
+  );
   points = resolvePathSegmentConflicts({
     arrowId,
     path: points,
@@ -382,10 +437,17 @@ const routeArrowPointsInternal = ({
   // Final orthogonalization and pinning sequence
   points = orthogonalizePath(
     points,
-    routePreference ??
-      (startHandle === "top" || startHandle === "bottom" ? "vh" : "hv"),
+    endpointPreference,
   );
-  points = pinPathEndpointStubs(points, start, end, startHandle, endHandle);
+  points = pinPathEndpointStubs(
+    points,
+    start,
+    end,
+    startHandle,
+    endHandle,
+    undefined,
+    endpointPreference,
+  );
 
   const finalPoints = compressOrthogonalPath(points);
 
@@ -405,8 +467,14 @@ const routeArrowPointsInternal = ({
     ignoreObstacleIdsByArrow: new Map([[arrowId, ignoreIdsSet]]),
     obstaclePadding,
   });
-
-  return normalized.get(arrowId) || finalPoints;
+  return stabilizeArrowRouteEndpoints(
+    normalized.get(arrowId) || finalPoints,
+    start,
+    end,
+    startHandle,
+    endHandle,
+    endpointPreference,
+  );
 };
 
 export const routeArrowBatch = ({

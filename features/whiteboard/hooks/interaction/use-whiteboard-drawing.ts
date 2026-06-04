@@ -17,6 +17,7 @@ interface ConnectionDraft {
   fromAnchorId: string;
   fromHandle: ConnectionHandle;
   currentPoint: Point;
+  snapMatch: MagneticSnapMatch | null;
 }
 
 interface ArrowSnapPreview {
@@ -76,6 +77,7 @@ interface UseWhiteboardDrawingProps {
     point: Point;
     dragVector?: Point;
     previous?: MagneticSnapMatch | null;
+    excludeElementIds?: string[];
   }) => MagneticSnapMatch | null;
   bindArrowEndpoint?: (
     arrow: DrawingElement,
@@ -202,6 +204,7 @@ export const useWhiteboardDrawing = ({
                   fromAnchorId: handle.id,
                   fromHandle: handle.name,
                   currentPoint: point,
+                  snapMatch: null,
                 });
                 return;
               }
@@ -350,8 +353,29 @@ export const useWhiteboardDrawing = ({
       if (currentTool === "select") {
         // If dragging a connection, just update its endpoint
         if (connectionDraft) {
+          const dragVector = {
+            x: point.x - connectionDraft.currentPoint.x,
+            y: point.y - connectionDraft.currentPoint.y,
+          };
+          const snapMatch = findNearestAnchorSnap?.({
+            point,
+            dragVector,
+            previous: connectionDraft.snapMatch,
+            excludeElementIds: [connectionDraft.fromElementId],
+          });
           setConnectionDraft((prev) =>
-            prev ? { ...prev, currentPoint: point } : null,
+            prev
+              ? { ...prev, currentPoint: point, snapMatch: snapMatch ?? null }
+              : null,
+          );
+          onArrowSnapPreviewChange?.(
+            snapMatch
+              ? {
+                  endpoint: "end",
+                  pointer: point,
+                  match: snapMatch,
+                }
+              : null,
           );
           return;
         }
@@ -549,7 +573,17 @@ export const useWhiteboardDrawing = ({
   const stopDrawing = useCallback(() => {
     // ── Complete a connection drag ────────────────────────────────────────
     if (connectionDraft) {
-      const targetElements = getElementsAtPoint(connectionDraft.currentPoint);
+      const targetSnap =
+        connectionDraft.snapMatch ??
+        findNearestAnchorSnap?.({
+          point: connectionDraft.currentPoint,
+          excludeElementIds: [connectionDraft.fromElementId],
+        }) ??
+        null;
+
+      const targetElements = targetSnap
+        ? elements.filter((element) => element.id === targetSnap.elementId)
+        : getElementsAtPoint(connectionDraft.currentPoint);
       const target = [...targetElements]
         .reverse()
         .find(
@@ -567,7 +601,17 @@ export const useWhiteboardDrawing = ({
           const fromHandle = fromHandles.find(
             (h) => h.name === connectionDraft.fromHandle,
           );
-          const toHandles = getElementConnectionHandles(target);
+          const targetHandle = targetSnap?.anchor
+            ? {
+                id: targetSnap.anchor.id,
+                name: targetSnap.anchor.side,
+                x: targetSnap.anchor.x,
+                y: targetSnap.anchor.y,
+              }
+            : null;
+          const toHandles = targetHandle
+            ? [targetHandle]
+            : getElementConnectionHandles(target);
 
           // Find nearest target handle to the cursor
           let nearestToHandle = toHandles[0];
@@ -677,6 +721,7 @@ export const useWhiteboardDrawing = ({
     stopPanning,
     connectionDraft,
     getElementsAtPoint,
+    findNearestAnchorSnap,
     addElementDirect,
     elements,
     getElementConnectionHandles,

@@ -17,6 +17,7 @@ import {
   RouteArrowDescriptor,
   routeWithEngine,
   createRouteEngineState,
+  markEdgeDirty,
   AdjacencyMap,
 } from "@/core/routing/orthogonal-router";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
@@ -296,6 +297,7 @@ export const useArrowConnections = ({
         return arrow;
       }
 
+      markEdgeDirty(routeEngineStateRef.current, arrow.id);
       const result = routeWithEngine(
         [descriptor],
         {
@@ -363,6 +365,9 @@ export const useArrowConnections = ({
       if (affectedArrows.length === 0) return [];
 
       const affectedIds = new Set(affectedArrows.map((arrow) => arrow.id));
+      affectedIds.forEach((arrowId) => {
+        markEdgeDirty(routeEngineStateRef.current, arrowId);
+      });
       const descriptors = affectedArrows
         .map((arrow) => buildRouteDescriptor(arrow, anchorOverrides))
         .filter(isRouteDescriptorReady);
