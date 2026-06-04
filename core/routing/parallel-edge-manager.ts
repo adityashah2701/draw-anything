@@ -20,12 +20,11 @@ interface GroupedEdge {
 }
 
 const getDirectionBucket = (
-  start: Point,
-  end: Point,
+  start?: Point,
+  end?: Point,
   startHandle?: ConnectionHandle,
   endHandle?: ConnectionHandle,
 ): "h" | "v" => {
-  // Guard: if either point is invalid, fall back to horizontal
   if (!isValidPoint(start) || !isValidPoint(end)) return "h";
   if (startHandle === "left" || startHandle === "right") return "h";
   if (startHandle === "top" || startHandle === "bottom") return "v";
@@ -35,6 +34,9 @@ const getDirectionBucket = (
 };
 
 const getFallbackEdgeKey = (descriptor: ParallelEdgeDescriptor): string => {
+  if (!isValidPoint(descriptor.start) || !isValidPoint(descriptor.end)) {
+    return descriptor.arrowId || "invalid-edge";
+  }
   const roundedStartX = Math.round(descriptor.start.x / 16);
   const roundedStartY = Math.round(descriptor.start.y / 16);
   const roundedEndX = Math.round(descriptor.end.x / 16);
@@ -81,9 +83,12 @@ export const computeParallelOffsets = (
   edges: ParallelEdgeDescriptor[],
   baseSpacing = 16,
 ): Map<string, number> => {
-  // Guard: skip descriptors with invalid start/end to prevent crash in getDirectionBucket
   const validEdges = edges.filter(
-    (d) => isValidPoint(d.start) && isValidPoint(d.end),
+    (d) =>
+      isValidPoint(d.start) &&
+      isValidPoint(d.end) &&
+      typeof d.arrowId === "string" &&
+      d.arrowId.length > 0,
   );
   const grouped: GroupedEdge[] = validEdges.map((descriptor) => ({
     descriptor,

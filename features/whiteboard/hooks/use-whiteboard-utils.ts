@@ -11,6 +11,7 @@ import {
   resizeShape,
   shapeContainsPoint,
 } from "@/core/shapes/shape-runtime";
+import { SpatialHashGrid } from "@/core/routing/spatial-hash-grid";
 
 export const useWhiteboardUtils = (
   zoom: number,
@@ -44,53 +45,32 @@ export const useWhiteboardUtils = (
     return map;
   }, [elements, getBoundsStatic]);
 
+  const elementsById = useMemo(() => {
+    const map = new Map<string, DrawingElement>();
+    elements.forEach((element) => map.set(element.id, element));
+    return map;
+  }, [elements]);
+
   const spatialIndex = useMemo(() => {
-    const grid = new Map<string, string[]>();
+    const grid = new SpatialHashGrid<string>(SPATIAL_CELL_SIZE);
 
     elements.forEach((element) => {
       const bounds = boundsById.get(element.id);
       if (!bounds) return;
-
-      const minCellX = Math.floor(bounds.minX / SPATIAL_CELL_SIZE);
-      const maxCellX = Math.floor(bounds.maxX / SPATIAL_CELL_SIZE);
-      const minCellY = Math.floor(bounds.minY / SPATIAL_CELL_SIZE);
-      const maxCellY = Math.floor(bounds.maxY / SPATIAL_CELL_SIZE);
-
-      for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-        for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
-          const key = `${cellX}:${cellY}`;
-          if (!grid.has(key)) grid.set(key, []);
-          grid.get(key)!.push(element.id);
-        }
-      }
+      grid.insertAabb(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, element.id);
     });
 
-    return { grid };
+    return grid;
   }, [boundsById, elements]);
 
   const queryCandidatesInRect = useCallback(
     (minX: number, minY: number, maxX: number, maxY: number): DrawingElement[] => {
-      const minCellX = Math.floor(minX / SPATIAL_CELL_SIZE);
-      const maxCellX = Math.floor(maxX / SPATIAL_CELL_SIZE);
-      const minCellY = Math.floor(minY / SPATIAL_CELL_SIZE);
-      const maxCellY = Math.floor(maxY / SPATIAL_CELL_SIZE);
-
-      const seen = new Set<string>();
-
-      for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-        for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
-          const key = `${cellX}:${cellY}`;
-          const cell = spatialIndex.grid.get(key);
-          if (!cell) continue;
-          for (const id of cell) {
-            seen.add(id);
-          }
-        }
-      }
-
-      return elements.filter((element) => seen.has(element.id));
+      return spatialIndex
+        .queryAabb(minX, minY, maxX, maxY)
+        .map((id) => elementsById.get(id))
+        .filter((element): element is DrawingElement => Boolean(element));
     },
-    [elements, spatialIndex.grid],
+    [elementsById, spatialIndex],
   );
 
   const generateId = useCallback(() => Math.random().toString(36).substr(2, 9), []);

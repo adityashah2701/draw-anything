@@ -423,9 +423,26 @@ export const routeArrowBatch = ({
 }: RouteArrowBatchInput): Map<string, Point[]> => {
   if (arrows.length === 0) return new Map<string, Point[]>();
 
+  const routableArrows = arrows.filter(
+    (arrow) =>
+      typeof arrow.arrowId === "string" &&
+      arrow.arrowId.length > 0 &&
+      typeof arrow.sourceId === "string" &&
+      arrow.sourceId.length > 0 &&
+      typeof arrow.targetId === "string" &&
+      arrow.targetId.length > 0 &&
+      isValidPoint(arrow.start) &&
+      isValidPoint(arrow.end) &&
+      (!Array.isArray(arrow.existingPoints) || arrow.existingPoints.length >= 2),
+  );
+
+  if (routableArrows.length === 0) {
+    return new Map<string, Point[]>();
+  }
+
   const parallelInputs: ParallelEdgeDescriptor[] =
-    allParallelCandidates ??
-    arrows.map((arrow) => ({
+    (allParallelCandidates ??
+      routableArrows.map((arrow) => ({
       arrowId: arrow.arrowId,
       sourceId: arrow.sourceId,
       targetId: arrow.targetId,
@@ -433,7 +450,17 @@ export const routeArrowBatch = ({
       end: arrow.end,
       startHandle: arrow.startHandle,
       endHandle: arrow.endHandle,
-    }));
+      }))).filter(
+      (edge) =>
+        typeof edge.arrowId === "string" &&
+        edge.arrowId.length > 0 &&
+        typeof edge.sourceId === "string" &&
+        edge.sourceId.length > 0 &&
+        typeof edge.targetId === "string" &&
+        edge.targetId.length > 0 &&
+        isValidPoint(edge.start) &&
+        isValidPoint(edge.end),
+    );
 
   const offsets = computeParallelOffsets(parallelInputs, parallelSpacing);
   const occupied = buildSegmentSpatialIndex(existingRoutes);
@@ -443,20 +470,10 @@ export const routeArrowBatch = ({
   const hasLayerAwareness = layerBoundaryYs && layerBoundaryYs.length > 0;
   const hasClusterAwareness = clusterBounds && clusterBounds.length > 0;
 
-  const stableOrder = [...arrows].sort((a, b) =>
+  const stableOrder = [...routableArrows].sort((a, b) =>
     a.arrowId.localeCompare(b.arrowId),
   );
   stableOrder.forEach((arrow) => {
-    // ── Guard: skip arrows with invalid/missing start or end points ──
-    if (!isValidPoint(arrow.start) || !isValidPoint(arrow.end)) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(
-          `[routeArrowBatch] Skipping arrow '${arrow.arrowId}': invalid start/end points`,
-        );
-      }
-      return;
-    }
-
     // Build per-arrow candidate penalty incorporating layer/cluster awareness.
     const candidatePenalty =
       hasLayerAwareness || hasClusterAwareness

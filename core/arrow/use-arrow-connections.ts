@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
   ArrowConnection,
   ConnectionHandle,
@@ -15,7 +15,9 @@ import {
 } from "@/core/anchors/generate-anchors";
 import {
   RouteArrowDescriptor,
-  routeArrowBatch,
+  routeWithEngine,
+  createRouteEngineState,
+  AdjacencyMap,
 } from "@/core/routing/orthogonal-router";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { ArrowElement, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
@@ -35,10 +37,23 @@ interface UseArrowConnectionsOptions {
 const arePointsEqual = (a: Point[], b: Point[]) => {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
-    if (a[i].x !== b[i].x || a[i].y !== b[i].y) return false;
+    const left = a[i];
+    const right = b[i];
+    if (!left || !right) return false;
+    if (left.x !== right.x || left.y !== right.y) return false;
   }
   return true;
 };
+
+const isRouteDescriptorReady = (descriptor: RouteArrowDescriptor) =>
+  typeof descriptor.arrowId === "string" &&
+  descriptor.arrowId.length > 0 &&
+  typeof descriptor.sourceId === "string" &&
+  descriptor.sourceId.length > 0 &&
+  typeof descriptor.targetId === "string" &&
+  descriptor.targetId.length > 0 &&
+  Array.isArray(descriptor.existingPoints) &&
+  descriptor.existingPoints.length >= 2;
 
 const getSideFromConnection = (
   connection: ArrowConnection | undefined,
@@ -69,6 +84,8 @@ export const useArrowConnections = ({
     },
     [anchorIndex.anchorsByElementId],
   );
+
+  const routeEngineStateRef = useRef(createRouteEngineState());
 
   const baseRoutingObstacles = useMemo(() => {
     const obstacles = new Map<string, RoutingObstacle>();
@@ -122,6 +139,17 @@ export const useArrowConnections = ({
     },
     [baseRoutingObstacles],
   );
+
+  const adjacencyMap = useMemo(() => {
+    const edges = elements
+      .filter((element) => isArrowElement(element))
+      .map((arrow) => ({
+        arrowId: arrow.id,
+        sourceId: arrow.startConnection?.elementId,
+        targetId: arrow.endConnection?.elementId,
+      }));
+    return AdjacencyMap.fromEdges(edges);
+  }, [elements]);
 
   const resolveAnchor = useCallback(
     (connection?: ArrowConnection): Anchor | null => {
@@ -264,12 +292,20 @@ export const useArrowConnections = ({
   const routeArrowByConnections = useCallback(
     (arrow: ArrowElement): ArrowElement => {
       const descriptor = buildRouteDescriptor(arrow);
-      const points = routeArrowBatch({
-        arrows: [descriptor],
-        obstacles: getRoutingObstacles(),
-        existingRoutes: getExistingRoutes(new Set([arrow.id])),
-        allParallelCandidates: getAllParallelCandidates(),
-      }).get(arrow.id);
+      if (!isRouteDescriptorReady(descriptor)) {
+        return arrow;
+      }
+
+      const result = routeWithEngine(
+        [descriptor],
+        {
+          obstacles: getRoutingObstacles(),
+          existingRoutes: getExistingRoutes(new Set([arrow.id])),
+          allParallelCandidates: getAllParallelCandidates(),
+        },
+        routeEngineStateRef.current,
+      );
+      const points = result.routes.get(arrow.id);
 
       return {
         ...arrow,
@@ -288,7 +324,6 @@ export const useArrowConnections = ({
     (changedElements: DrawingElement[]): ArrowElement[] => {
       if (changedElements.length === 0) return [];
 
-      const changedIds = new Set(changedElements.map((element) => element.id));
       const anchorOverrides = new Map<string, Anchor[]>();
       const boundsOverrides = new Map<
         string,
@@ -309,33 +344,43 @@ export const useArrowConnections = ({
           anchorOverrides.set(element.id, anchors);
         }
       });
-      const affectedArrows = elements.filter((element): element is ArrowElement => {
-        if (!isArrowElement(element)) return false;
-        const startChanged =
-          !!element.startConnection &&
-          changedIds.has(element.startConnection.elementId);
-        const endChanged =
-          !!element.endConnection &&
-          changedIds.has(element.endConnection.elementId);
 
-        return startChanged || endChanged;
+      const affectedArrowIds = new Set<string>();
+      changedElements.forEach((element) => {
+        adjacencyMap.getEdgesForNode(element.id).forEach((edgeId) => {
+          affectedArrowIds.add(edgeId);
+        });
+        if (isArrowElement(element)) {
+          affectedArrowIds.add(element.id);
+        }
       });
+
+      const affectedArrows = elements.filter(
+        (element): element is ArrowElement =>
+          isArrowElement(element) && affectedArrowIds.has(element.id),
+      );
 
       if (affectedArrows.length === 0) return [];
 
       const affectedIds = new Set(affectedArrows.map((arrow) => arrow.id));
-      const reroutedPointsByArrowId = routeArrowBatch({
-        arrows: affectedArrows.map((arrow) =>
-          buildRouteDescriptor(arrow, anchorOverrides),
-        ),
-        obstacles: getRoutingObstacles(boundsOverrides),
-        existingRoutes: getExistingRoutes(affectedIds),
-        allParallelCandidates: getAllParallelCandidates(anchorOverrides),
-      });
+      const descriptors = affectedArrows
+        .map((arrow) => buildRouteDescriptor(arrow, anchorOverrides))
+        .filter(isRouteDescriptorReady);
+      if (descriptors.length === 0) return [];
+
+      const rerouted = routeWithEngine(
+        descriptors,
+        {
+          obstacles: getRoutingObstacles(boundsOverrides),
+          existingRoutes: getExistingRoutes(affectedIds),
+          allParallelCandidates: getAllParallelCandidates(anchorOverrides),
+        },
+        routeEngineStateRef.current,
+      );
 
       const updates: ArrowElement[] = [];
       affectedArrows.forEach((arrow) => {
-        const points = reroutedPointsByArrowId.get(arrow.id);
+        const points = rerouted.routes.get(arrow.id);
         if (!points || arePointsEqual(points, arrow.points)) return;
         updates.push({ ...arrow, points });
       });
@@ -344,6 +389,7 @@ export const useArrowConnections = ({
     },
     [
       buildRouteDescriptor,
+      adjacencyMap,
       elements,
       getAllParallelCandidates,
       getElementBounds,

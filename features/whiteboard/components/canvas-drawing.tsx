@@ -5,7 +5,6 @@ import {
   getConnectionHandles,
 } from "../utils/canvas-render-utils";
 import { DrawingElement, Point } from "../types/whiteboard.types";
-import { routeArrowPoints } from "@/core/routing/orthogonal-router";
 import { Anchor } from "@/features/whiteboard/types/whiteboard.types";
 
 interface ConnectionDraft {
@@ -216,12 +215,10 @@ const useCanvasEngine = ({
           ctx.strokeStyle = "#38bdf8";
           ctx.lineWidth = 2;
           ctx.lineCap = "round";
-          const previewPath = routeArrowPoints({
-            start: { x: fromHandle.x, y: fromHandle.y },
-            end: connectionDraft.currentPoint,
-            startHandle: fromHandle.name,
-            routingMode: "orthogonal",
-          });
+          const previewPath = [
+            { x: fromHandle.x, y: fromHandle.y },
+            { x: connectionDraft.currentPoint.x, y: connectionDraft.currentPoint.y },
+          ];
           ctx.beginPath();
           ctx.moveTo(
             previewPath[0].x * zoom + panOffset.x,
@@ -236,7 +233,7 @@ const useCanvasEngine = ({
           ctx.stroke();
 
           // Arrowhead at cursor
-          const prevPoint = previewPath[Math.max(0, previewPath.length - 2)];
+          const prevPoint = previewPath[0];
           const angle = Math.atan2(
             ey - (prevPoint.y * zoom + panOffset.y),
             ex - (prevPoint.x * zoom + panOffset.x),

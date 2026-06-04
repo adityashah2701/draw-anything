@@ -28,7 +28,12 @@ interface UseArrowRoutingOptions {
 const arePointsEqual = (a: Point[], b: Point[]) => {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
-    if (a[i].x !== b[i].x || a[i].y !== b[i].y) {
+    const left = a[i];
+    const right = b[i];
+    if (!left || !right) {
+      return false;
+    }
+    if (left.x !== right.x || left.y !== right.y) {
       return false;
     }
   }

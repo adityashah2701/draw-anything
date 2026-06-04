@@ -1,5 +1,6 @@
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
 import { EPSILON, orthogonalizePath } from "@/core/routing/routing-utils";
+import { isValidPoint } from "@/core/routing/routing-guards";
 
 /**
  * Lane manager for systematic lane allocation.
@@ -56,6 +57,7 @@ const extractSegment = (
   if (index < 0 || index >= points.length - 1) return null;
   const from = points[index];
   const to = points[index + 1];
+  if (!isValidPoint(from) || !isValidPoint(to)) return null;
   if (Math.abs(from.y - to.y) < EPSILON) {
     return {
       arrowId,
@@ -217,6 +219,10 @@ export const applyLaneOffsets = (
 
   const result = new Map<string, Point[]>();
   routes.forEach((points, arrowId) => {
+    if (!Array.isArray(points) || points.length < 2) {
+      result.set(arrowId, points);
+      return;
+    }
     const offset = offsetByArrow.get(arrowId);
     if (!offset || Math.abs(offset) < 0.5 || points.length < 4) {
       result.set(arrowId, points);

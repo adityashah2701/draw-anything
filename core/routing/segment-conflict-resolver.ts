@@ -13,6 +13,7 @@ import {
   orthogonalizePath,
   EPSILON,
 } from "@/core/routing/routing-utils";
+import { isValidPoint } from "@/core/routing/routing-guards";
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
 
 type SegmentOrientation = "horizontal" | "vertical";
@@ -59,6 +60,7 @@ const toSegment = (
   if (index < 0 || index >= points.length - 1) return null;
   const from = points[index];
   const to = points[index + 1];
+  if (!isValidPoint(from) || !isValidPoint(to)) return null;
   if (from.x === to.x && from.y === to.y) return null;
 
   if (Math.abs(from.y - to.y) < EPSILON) {
@@ -244,6 +246,7 @@ export const addPathToSegmentSpatialIndex = (
   arrowId: string,
   points: Point[],
 ) => {
+  if (!Array.isArray(points) || points.length < 2) return;
   for (let i = 0; i < points.length - 1; i += 1) {
     const segment = toSegment(arrowId, points, i);
     if (!segment) continue;
@@ -256,9 +259,10 @@ export const buildSegmentSpatialIndex = (
   cellSize = DEFAULT_CELL_SIZE,
 ): SegmentSpatialIndex => {
   const index = createSegmentSpatialIndex(cellSize);
-  routes.forEach((route) =>
-    addPathToSegmentSpatialIndex(index, route.arrowId, route.points),
-  );
+  routes.forEach((route) => {
+    if (!route || typeof route.arrowId !== "string") return;
+    addPathToSegmentSpatialIndex(index, route.arrowId, route.points);
+  });
   return index;
 };
 
