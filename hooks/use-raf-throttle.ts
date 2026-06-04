@@ -1,16 +1,4 @@
-/**
- * useRafThrottle.ts
- *
- * A hook that throttles a callback to once per animation frame using
- * requestAnimationFrame. Ideal for drag handlers and move events where
- * re-routing or re-rendering should not fire more than once per frame.
- *
- * Usage:
- *   const throttledMove = useRafThrottle((point: Point) => {
- *     // called at most once per frame
- *     handleDragUpdate(point);
- *   });
- */
+
 
 import { useCallback, useEffect, useRef } from "react";
 
