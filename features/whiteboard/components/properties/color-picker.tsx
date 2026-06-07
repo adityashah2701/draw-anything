@@ -372,7 +372,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     <div className="flex items-center space-x-2">
       {label && (
         <span
-          className={`text-xs ${disabled ? "text-gray-400" : "text-gray-600"} hidden sm:inline font-medium`}
+          className={`text-xs ${disabled ? "text-muted-foreground" : "text-muted-foreground"} hidden sm:inline font-medium`}
         >
           {label}:
         </span>
@@ -393,7 +393,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
           disabled={disabled}
           className={`${sizeClasses[size]} rounded-lg border-2 shadow-sm transition-all duration-200 ${
             disabled
-              ? "border-gray-200 cursor-not-allowed opacity-60"
+              ? "border-border cursor-not-allowed opacity-60"
               : "border-gray-300 cursor-pointer hover:border-gray-400 hover:shadow-md active:scale-95"
           } ${showColorPicker ? "ring-2 ring-blue-500 ring-opacity-50" : ""}`}
           style={{ backgroundColor: currentColor }}

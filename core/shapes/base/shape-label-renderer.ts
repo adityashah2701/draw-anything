@@ -1,3 +1,9 @@
+import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
+import {
+  layoutRichTextLines,
+  measureRichTextLineWidth,
+  RichTextSpan,
+} from "@/features/whiteboard/utils/rich-text-renderer";
 export interface ShapeLabelRenderOptions {
   ctx: CanvasRenderingContext2D;
   label: string;
@@ -95,15 +101,17 @@ const contrastRatio = (a: Rgb, b: Rgb) => {
 };
 
 const resolveTextColor = (preferredColor?: string, fillColor?: string) => {
-  const fallbackColor = "#1f2937";
+  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const adaptivePreferred = getAdaptiveColor(preferredColor, isDark);
+  const fallbackColor = isDark ? "#f8fafc" : "#1f2937";
   const fillRgb = parseColorToRgb(fillColor);
   if (!fillRgb) {
-    return preferredColor || fallbackColor;
+    return adaptivePreferred || fallbackColor;
   }
 
-  const preferredRgb = parseColorToRgb(preferredColor);
+  const preferredRgb = parseColorToRgb(adaptivePreferred);
   if (preferredRgb && contrastRatio(preferredRgb, fillRgb) >= 3) {
-    return preferredColor || fallbackColor;
+    return adaptivePreferred || fallbackColor;
   }
 
   const light = { r: 248, g: 250, b: 252 };
@@ -111,93 +119,6 @@ const resolveTextColor = (preferredColor?: string, fillColor?: string) => {
   return contrastRatio(light, fillRgb) >= contrastRatio(dark, fillRgb)
     ? "#f8fafc"
     : "#0f172a";
-};
-
-const splitLongToken = (
-  ctx: CanvasRenderingContext2D,
-  token: string,
-  maxWidth: number,
-) => {
-  if (ctx.measureText(token).width <= maxWidth) return [token];
-  const chunks: string[] = [];
-  let current = "";
-  for (const char of token) {
-    const candidate = `${current}${char}`;
-    if (current && ctx.measureText(candidate).width > maxWidth) {
-      chunks.push(current);
-      current = char;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) {
-    chunks.push(current);
-  }
-  return chunks;
-};
-
-const buildWrappedLines = (
-  ctx: CanvasRenderingContext2D,
-  label: string,
-  maxWidth: number,
-) => {
-  const lines: string[] = [];
-  const paragraphs = label
-    .split(/\n+/)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-
-  if (paragraphs.length === 0) {
-    return lines;
-  }
-
-  for (const paragraph of paragraphs) {
-    const tokens = paragraph
-      .split(/\s+/)
-      .filter(Boolean)
-      .flatMap((token) => splitLongToken(ctx, token, maxWidth));
-
-    if (tokens.length === 0) {
-      continue;
-    }
-
-    let currentLine = tokens[0];
-    for (let index = 1; index < tokens.length; index += 1) {
-      const next = `${currentLine} ${tokens[index]}`;
-      if (ctx.measureText(next).width <= maxWidth) {
-        currentLine = next;
-      } else {
-        lines.push(currentLine);
-        currentLine = tokens[index];
-      }
-    }
-    lines.push(currentLine);
-  }
-
-  return lines;
-};
-
-const ellipsizeLine = (
-  ctx: CanvasRenderingContext2D,
-  line: string,
-  maxWidth: number,
-) => {
-  const ellipsis = "…";
-  if (ctx.measureText(ellipsis).width > maxWidth) {
-    return "";
-  }
-  if (ctx.measureText(line).width <= maxWidth) {
-    return line;
-  }
-  let shortened = line;
-  while (shortened.length > 0) {
-    const candidate = `${shortened}${ellipsis}`;
-    if (ctx.measureText(candidate).width <= maxWidth) {
-      return candidate;
-    }
-    shortened = shortened.slice(0, -1);
-  }
-  return ellipsis;
 };
 
 const makeFont = (
@@ -244,22 +165,28 @@ export const renderShapeLabel = ({
   const maxAllowedLines = clamp(maxLines ?? MAX_LINE_COUNT, 1, MAX_LINE_COUNT);
 
   let finalFontSize = MIN_FONT_SIZE;
-  let finalLines: string[] = [];
+  let finalLines: RichTextSpan[][] = [];
   let finalLineHeight = MIN_FONT_SIZE * LINE_HEIGHT_MULTIPLIER;
   let fitted = false;
 
   for (let fontSize = Math.floor(targetFontSize); fontSize >= MIN_FONT_SIZE; fontSize -= 1) {
     ctx.font = makeFont(fontSize, preferredFontWeight, preferredFontStyle);
-    const lines = buildWrappedLines(ctx, normalizedLabel, availableWidth);
-    if (lines.length === 0 || lines.length > maxAllowedLines) {
+    const layout = layoutRichTextLines(ctx, normalizedLabel, {
+      baseFontSize: fontSize,
+      baseFontWeight: preferredFontWeight || (fontSize >= 18 ? "600" : "500"),
+      baseFontStyle: preferredFontStyle || "normal",
+      maxWidth: availableWidth,
+      maxLines: maxAllowedLines,
+    });
+    if (layout.lines.length === 0 || layout.truncated) {
       continue;
     }
     const lineHeight = fontSize * LINE_HEIGHT_MULTIPLIER;
-    if (lines.length * lineHeight > availableHeight) {
+    if (layout.lines.length * lineHeight > availableHeight) {
       continue;
     }
     finalFontSize = fontSize;
-    finalLines = lines;
+    finalLines = layout.lines;
     finalLineHeight = lineHeight;
     fitted = true;
     break;
@@ -269,29 +196,26 @@ export const renderShapeLabel = ({
     finalFontSize = MIN_FONT_SIZE;
     ctx.font = makeFont(finalFontSize, preferredFontWeight, preferredFontStyle);
     finalLineHeight = finalFontSize * LINE_HEIGHT_MULTIPLIER;
-    const fallbackLines = buildWrappedLines(ctx, normalizedLabel, availableWidth);
-    if (fallbackLines.length === 0) return;
-
-    const maxVisibleLines = clamp(
-      Math.floor(availableHeight / finalLineHeight),
-      1,
-      maxAllowedLines,
-    );
-    finalLines = fallbackLines.slice(0, maxVisibleLines);
-    const lastIndex = finalLines.length - 1;
-    const truncated = fallbackLines.length > maxVisibleLines;
-    if (truncated && lastIndex >= 0) {
-      finalLines[lastIndex] = ellipsizeLine(
-        ctx,
-        finalLines[lastIndex],
-        availableWidth,
-      );
-    }
+    const fallbackLayout = layoutRichTextLines(ctx, normalizedLabel, {
+      baseFontSize: finalFontSize,
+      baseFontWeight: preferredFontWeight || (finalFontSize >= 18 ? "600" : "500"),
+      baseFontStyle: preferredFontStyle || "normal",
+      maxWidth: availableWidth,
+      maxLines: clamp(
+        Math.floor(availableHeight / finalLineHeight),
+        1,
+        maxAllowedLines,
+      ),
+    });
+    if (fallbackLayout.lines.length === 0) return;
+    finalLines = fallbackLayout.lines;
   }
 
   if (finalLines.length === 0) return;
 
   const textColor = resolveTextColor(preferredColor, fillColor);
+  const baseWeight = preferredFontWeight?.toString() || (finalFontSize >= 18 ? "600" : "500");
+  const baseStyle = preferredFontStyle || "normal";
   const blockHeight = finalLines.length * finalLineHeight;
   let drawY = centerY - blockHeight / 2;
 
@@ -300,11 +224,27 @@ export const renderShapeLabel = ({
   ctx.clip();
   ctx.font = makeFont(finalFontSize, preferredFontWeight, preferredFontStyle);
   ctx.fillStyle = textColor;
-  ctx.textAlign = "center";
+  ctx.textAlign = "left";
   ctx.textBaseline = "top";
 
   for (const line of finalLines) {
-    ctx.fillText(line, centerX, drawY);
+    const lineWidth = measureRichTextLineWidth(
+      ctx,
+      line,
+      finalFontSize,
+      baseWeight,
+      baseStyle,
+    );
+    let drawX = centerX - lineWidth / 2;
+    for (const span of line) {
+      const weight = span.bold
+        ? String(Math.max(Number.parseInt(baseWeight, 10) || 400, 700))
+        : baseWeight;
+      const style = span.italic ? "italic" : baseStyle;
+      ctx.font = `${style} ${weight} ${finalFontSize}px ${FONT_FAMILY}`;
+      ctx.fillText(span.text, drawX, drawY);
+      drawX += ctx.measureText(span.text).width;
+    }
     drawY += finalLineHeight;
   }
 

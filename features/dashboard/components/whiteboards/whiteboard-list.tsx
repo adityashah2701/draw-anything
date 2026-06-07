@@ -9,30 +9,30 @@ import {
 import { Clock, Copy, Edit3, Folder, Link, MoreVertical, Share2, Star, Trash2, Users } from "lucide-react";
 
 const WhiteboardListItem = ({ board }: { board: any }) => (
-    <div className="group bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200">
+    <div className="group bg-card border border-border rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200">
       <div className="flex items-center gap-4">
         {/* Thumbnail */}
         <div className="w-16 h-12 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Edit3 className="w-6 h-6 text-gray-400" />
+          <Edit3 className="w-6 h-6 text-muted-foreground" />
         </div>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+            <h3 className="font-semibold text-foreground truncate group-hover:text-blue-600 transition-colors">
               {board.title}
             </h3>
             {board.isStarred && (
               <Star className="w-4 h-4 text-yellow-500 fill-current flex-shrink-0" />
             )}
             {board.isShared && (
-              <Share2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <Share2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             )}
           </div>
-          <p className="text-sm text-gray-600 truncate mb-2">
+          <p className="text-sm text-muted-foreground truncate mb-2">
             {board.description}
           </p>
-          <div className="flex items-center gap-4 text-xs text-gray-500">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
               {board.lastModified}

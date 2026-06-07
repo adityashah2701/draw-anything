@@ -17,10 +17,10 @@ export default function WhiteboardCanvasRoomPage() {
     >
       <ClientSideSuspense
         fallback={
-          <div className="flex h-screen items-center justify-center bg-gray-50">
+          <div className="flex h-screen items-center justify-center bg-background">
             <div className="flex flex-col items-center gap-3">
               <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-indigo-500"></div>
-              <p className="text-sm font-medium text-gray-500">
+              <p className="text-sm font-medium text-muted-foreground">
                 Connecting to room…
               </p>
             </div>

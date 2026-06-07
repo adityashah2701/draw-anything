@@ -71,13 +71,13 @@ const LandingPage = () => {
         }
       />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-white px-4 sticky top-0 z-50">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-card px-4 sticky top-0 z-50">
           <SidebarTrigger className="-ml-1" />
           <div className="flex-1">
             <CleanNavbar isSidebarIntegrated={true} />
           </div>
         </header>
-        <main className="flex-1 overflow-auto bg-gray-50">
+        <main className="flex-1 overflow-auto bg-background">
           {renderSelectedPage()}
         </main>
       </SidebarInset>

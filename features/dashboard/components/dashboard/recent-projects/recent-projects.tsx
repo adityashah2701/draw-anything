@@ -72,7 +72,7 @@ const RecentProjects = ({ projects }:RecentProjectsProps) => {
     <div className="mb-8">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-8">
         <div className="space-y-2">
-          <h2 className="text-3xl font-bold text-gray-900">
+          <h2 className="text-3xl font-bold text-foreground">
             Recent Whiteboards
           </h2>
         </div>

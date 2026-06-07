@@ -12,6 +12,12 @@ import type { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 // ─────────────────── Type Guards ───────────────────
 
 /**
+ * Verify that a value is a non-empty string.
+ */
+export const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0;
+
+/**
  * Verify that an object is a valid {x, y} point with finite number coordinates.
  */
 export const isValidPoint = (obj: unknown): obj is Point => {
@@ -36,6 +42,12 @@ export const isValidPointArray = (
   return points.every((p) => isValidPoint(p));
 };
 
+/**
+ * Normalize a value to a valid point or null.
+ */
+export const toValidPoint = (value: unknown): Point | null =>
+  isValidPoint(value) ? value : null;
+
 // ─────────────────── Edge Validation ───────────────────
 
 /**
@@ -47,8 +59,7 @@ export const validateEdge = (edge: RouteEngineEdge): boolean => {
   if (!isValidPoint(edge.start)) return false;
   if (!isValidPoint(edge.end)) return false;
   // arrowId must be a non-empty string
-  if (typeof edge.arrowId !== "string" || edge.arrowId.length === 0)
-    return false;
+  if (!isNonEmptyString(edge.arrowId)) return false;
   return true;
 };
 
@@ -59,10 +70,8 @@ export const validateEdge = (edge: RouteEngineEdge): boolean => {
 export const isFullyConnectedEdge = (edge: RouteEngineEdge): boolean => {
   return (
     validateEdge(edge) &&
-    typeof edge.sourceId === "string" &&
-    edge.sourceId.length > 0 &&
-    typeof edge.targetId === "string" &&
-    edge.targetId.length > 0
+    isNonEmptyString(edge.sourceId) &&
+    isNonEmptyString(edge.targetId)
   );
 };
 

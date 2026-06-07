@@ -47,11 +47,11 @@ const Whiteboard = (props: any) => {
   // Loading state while checking user and organization status
   if (!orgLoaded || !userLoaded) {
     return (
-      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-gray-50">
+      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-64">
-            <Loader className="w-8 h-8 animate-spin text-gray-500" />
-            <span className="ml-3 text-gray-600">Loading...</span>
+            <Loader className="w-8 h-8 animate-spin text-muted-foreground" />
+            <span className="ml-3 text-muted-foreground">Loading...</span>
           </div>
         </div>
       </div>
@@ -61,17 +61,17 @@ const Whiteboard = (props: any) => {
   // User is not authenticated
   if (!user) {
     return (
-      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-gray-50">
+      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-16">
             <div className="max-w-md mx-auto">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Users className="w-8 h-8 text-blue-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              <h2 className="text-2xl font-bold text-foreground mb-4">
                 Sign in Required
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-muted-foreground mb-6">
                 Please sign in to access your whiteboards and start
                 collaborating.
               </p>
@@ -89,17 +89,17 @@ const Whiteboard = (props: any) => {
   // No organization selected
   if (!organization) {
     return (
-      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-gray-50">
+      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-16">
             <div className="max-w-md mx-auto">
               <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Building className="w-8 h-8 text-orange-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              <h2 className="text-2xl font-bold text-foreground mb-4">
                 No Organization Selected
               </h2>
-              <p className="text-gray-600 mb-8">
+              <p className="text-muted-foreground mb-8">
                 You need to select or create an organization to manage
                 whiteboards. Organizations help you collaborate with your team
                 and organize your work.
@@ -152,15 +152,15 @@ const Whiteboard = (props: any) => {
   // Loading whiteboards
   if (queryPending) {
     return (
-      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-gray-50">
+      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              <h1 className="text-3xl font-bold text-foreground mb-2">
                 Whiteboards
               </h1>
-              <p className="text-gray-600">
+              <p className="text-muted-foreground">
                 Create and collaborate on visual ideas
               </p>
             </div>
@@ -171,8 +171,8 @@ const Whiteboard = (props: any) => {
           </div>
 
           <div className="flex items-center justify-center h-64">
-            <Loader className="w-8 h-8 animate-spin text-gray-500" />
-            <span className="ml-3 text-gray-600">Loading whiteboards...</span>
+            <Loader className="w-8 h-8 animate-spin text-muted-foreground" />
+            <span className="ml-3 text-muted-foreground">Loading whiteboards...</span>
           </div>
         </div>
       </div>
@@ -181,21 +181,21 @@ const Whiteboard = (props: any) => {
 
   // Main content - organization exists and user is authenticated
   return (
-    <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-gray-50">
+    <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-bold text-foreground mb-2">
               Whiteboards
             </h1>
-            <p className="text-gray-600">
+            <p className="text-muted-foreground">
               Create and collaborate on visual ideas
             </p>
             {organization && (
-              <div className="mt-6 border-b border-gray-200 pb-3">
+              <div className="mt-6 border-b border-border pb-3">
                 <h2 className="flex items-center text-2xl font-semibold text-gray-800">
-                  <Building className="w-5 h-5 mr-2 text-gray-600" />
+                  <Building className="w-5 h-5 mr-2 text-muted-foreground" />
                   {organization.name}
                 </h2>
               </div>

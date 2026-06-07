@@ -20,6 +20,11 @@ import React, {
   CSSProperties,
 } from "react";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import {
+  editableHtmlToMarkdown,
+  markdownToEditableHtml,
+  normalizeRichTextInput,
+} from "@/features/whiteboard/utils/rich-text-renderer";
 
 // ─── One-time global style injection ─────────────────────────────────────────
 
@@ -54,6 +59,7 @@ function ensureStyles() {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 import { TextFormat, TextToolbar } from "../overlays/text-toolbar";
+import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
 
 export interface CanvasTextBlockProps {
   element: DrawingElement;
@@ -108,7 +114,10 @@ export function CanvasTextBlock({
   const justMountedRef = useRef(true);
 
   // ── Draft (local only — NOT synced to storage per keystroke) ──────────────
-  const [draft, setDraft] = useState(element.text || "");
+  const [draft, setDraft] = useState(normalizeRichTextInput(element.text || ""));
+  const [draftHtml, setDraftHtml] = useState(() =>
+    markdownToEditableHtml(normalizeRichTextInput(element.text || "")),
+  );
 
   // ── Format ────────────────────────────────────────────────────────────────
   const [fmt, setFmt] = useState<TextFormat>(() => {
@@ -122,12 +131,23 @@ export function CanvasTextBlock({
     else if (fw === "600" && baseSize >= 20) heading = "h3";
 
     return {
-      bold: fw === "600" && heading === "none",
+      bold: (fw === "600" && heading === "none") || fw === "bold" || (fw === "700" && heading === "none"),
       italic: fs === "italic",
       heading,
       size: baseSize,
     };
   });
+
+  useEffect(() => {
+    const normalizedText = normalizeRichTextInput(element.text || "");
+    setDraft(normalizedText);
+    setDraftHtml(markdownToEditableHtml(normalizedText));
+    setFmt((prev) => {
+      const nextSize = element.fontSize || 18;
+      if (prev.size === nextSize) return prev;
+      return { ...prev, size: nextSize };
+    });
+  }, [element.fontSize, element.text]);
 
   // ── Visual state ──────────────────────────────────────────────────────────
   const [focused, setFocused] = useState(false);
@@ -169,13 +189,15 @@ export function CanvasTextBlock({
   useLayoutEffect(() => {
     committedRef.current = false;
     const el = editorRef.current;
-    if (!el) return;
-    el.innerText = element.text || "";
-    el.focus();
+    if (!committedRef.current && el && !el.dataset.initialized) {
+      el.innerHTML = draftHtml || "";
+      el.dataset.initialized = "true";
+    }
+    el?.focus();
 
     try {
       const r = document.createRange();
-      r.selectNodeContents(el);
+      r.selectNodeContents(el as Node);
       if (!selectAllOnMount) {
         // Caret to end for standard edit mode
         r.collapse(false);
@@ -201,7 +223,9 @@ export function CanvasTextBlock({
   const commit = useCallback(() => {
     if (committedRef.current) return;
     committedRef.current = true;
-    const text = editorRef.current?.innerText?.trim() ?? draft.trim();
+    const markdown =
+      editableHtmlToMarkdown(editorRef.current || "") || draft.trim();
+    const text = markdown.trim();
 
     // Map fmt to actual storage attributes
     const fw =
@@ -266,11 +290,12 @@ export function CanvasTextBlock({
     }, 100);
   }, []);
 
-  const handleInput = useCallback(() => {
-    const text = editorRef.current?.innerText ?? "";
-    setDraft(text); // draft only — NOT sent to Liveblocks
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const markdown = editableHtmlToMarkdown(e.currentTarget);
+    setDraft(markdown);
+    setDraftHtml(markdownToEditableHtml(markdown));
     refreshAnchor();
-    onChange?.(text, {
+    onChange?.(markdown, {
       fontSize: fmt.size,
       fontWeight:
         fmt.heading === "h1"
@@ -284,11 +309,31 @@ export function CanvasTextBlock({
                 : "400",
       fontStyle: fmt.italic ? "italic" : "normal",
     });
-  }, [fmt, onChange, refreshAnchor]);
+  };
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       const mod = e.metaKey || e.ctrlKey;
+      const applyInlineFormat = (command: "bold" | "italic") => {
+        document.execCommand(command);
+        const markdown = editableHtmlToMarkdown(editorRef.current || "");
+        setDraft(markdown);
+        setDraftHtml(markdownToEditableHtml(markdown));
+        onChange?.(markdown, {
+          fontSize: fmt.size,
+          fontWeight:
+            fmt.heading === "h1"
+              ? "800"
+              : fmt.heading === "h2"
+                ? "700"
+                : fmt.heading === "h3"
+                  ? "600"
+                  : fmt.bold
+                    ? "600"
+                    : "400",
+          fontStyle: fmt.italic ? "italic" : "normal",
+        });
+      };
       if (e.key === "Escape") {
         e.preventDefault();
         commit();
@@ -296,20 +341,16 @@ export function CanvasTextBlock({
       }
       if (mod && e.key === "b") {
         e.preventDefault();
-        setFmt((f) => ({ ...f, bold: !f.bold }));
-        return;
-      }
-      if (mod && e.key === "i") {
+        applyInlineFormat("bold");
+      } else if (mod && e.key.toLowerCase() === "i") {
         e.preventDefault();
-        setFmt((f) => ({ ...f, italic: !f.italic }));
-        return;
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
+        applyInlineFormat("italic");
+      } else if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         commit();
       }
     },
-    [commit],
+    [commit, fmt, onChange],
   );
 
   // ── Drag ──────────────────────────────────────────────────────────────────
@@ -392,8 +433,8 @@ export function CanvasTextBlock({
               : "400",
     fontStyle: fmt.italic ? "italic" : "normal",
     letterSpacing: "0",
-    color: element.color || "#111",
-    caretColor: element.color || "#111",
+    color: getAdaptiveColor(element.color || "#111", typeof document !== 'undefined' && document.documentElement.classList.contains('dark')),
+    caretColor: getAdaptiveColor(element.color || "#111", typeof document !== 'undefined' && document.documentElement.classList.contains('dark')),
     lineHeight: `${lineHeightPx}px`,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
@@ -403,34 +444,17 @@ export function CanvasTextBlock({
   return (
     <>
       {focused && toolbarAnchor && (
-        <TextToolbar
+          <TextToolbar
           fmt={fmt}
           ax={toolbarAnchor.x}
           ay={toolbarAnchor.y}
           onBold={() => {
-            const next = !fmt.bold;
-            setFmt((f) => ({ ...f, bold: next }));
+            document.execCommand("bold");
             editorRef.current?.focus();
-            onChange?.(draft, {
-              fontSize: fmt.size,
-              fontWeight:
-                fmt.heading === "h1"
-                  ? "800"
-                  : fmt.heading === "h2"
-                    ? "700"
-                    : fmt.heading === "h3"
-                      ? "600"
-                      : next
-                        ? "600"
-                        : "400",
-              fontStyle: fmt.italic ? "italic" : "normal",
-            });
-          }}
-          onItalic={() => {
-            const next = !fmt.italic;
-            setFmt((f) => ({ ...f, italic: next }));
-            editorRef.current?.focus();
-            onChange?.(draft, {
+            const markdown = editableHtmlToMarkdown(editorRef.current || "");
+            setDraft(markdown);
+            setDraftHtml(markdownToEditableHtml(markdown));
+            onChange?.(markdown, {
               fontSize: fmt.size,
               fontWeight:
                 fmt.heading === "h1"
@@ -442,7 +466,28 @@ export function CanvasTextBlock({
                       : fmt.bold
                         ? "600"
                         : "400",
-              fontStyle: next ? "italic" : "normal",
+              fontStyle: fmt.italic ? "italic" : "normal",
+            });
+          }}
+          onItalic={() => {
+            document.execCommand("italic");
+            editorRef.current?.focus();
+            const markdown = editableHtmlToMarkdown(editorRef.current || "");
+            setDraft(markdown);
+            setDraftHtml(markdownToEditableHtml(markdown));
+            onChange?.(markdown, {
+              fontSize: fmt.size,
+              fontWeight:
+                fmt.heading === "h1"
+                  ? "800"
+                  : fmt.heading === "h2"
+                    ? "700"
+                    : fmt.heading === "h3"
+                      ? "600"
+                      : fmt.bold
+                        ? "600"
+                        : "400",
+              fontStyle: fmt.italic ? "italic" : "normal",
             });
           }}
           onHeading={(h) => {

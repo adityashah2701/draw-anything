@@ -16,7 +16,7 @@ export const StatusSection: React.FC<StatusSectionProps> = ({
 }) => {
   return (
     <div className="inline-flex items-center gap-2">
-      <div className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2">
+      <div className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-background px-2">
         {isSaving ? (
           <>
             <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />

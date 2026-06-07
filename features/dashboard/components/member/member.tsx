@@ -111,7 +111,7 @@ const Member = ({ user, organization }: MemberProps) => {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-bold text-foreground mb-2">
               Team Members
             </h1>
           </div>
@@ -119,10 +119,10 @@ const Member = ({ user, organization }: MemberProps) => {
         </div>
 
         {/* Search and Filters */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
+        <div className="bg-card rounded-2xl border border-border p-6 mb-6">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <input
                 type="text"
                 placeholder="Search members..."
@@ -141,9 +141,9 @@ const Member = ({ user, organization }: MemberProps) => {
         </div>
 
         {/* Members List */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden mb-6">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">
+        <div className="bg-card rounded-2xl border border-border overflow-hidden mb-6">
+          <div className="p-6 border-b border-border">
+            <h3 className="text-lg font-semibold text-foreground">
               Active Members ({filteredMembers.length})
             </h3>
           </div>
@@ -154,7 +154,7 @@ const Member = ({ user, organization }: MemberProps) => {
               return (
                 <div
                   key={membership.id}
-                  className="p-6 hover:bg-gray-50 transition-colors"
+                  className="p-6 hover:bg-muted transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -170,10 +170,10 @@ const Member = ({ user, organization }: MemberProps) => {
                       </Avatar>
                       <div>
                         <div className="flex items-center gap-3">
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium text-foreground">
                             {member.firstName} {member.lastName}
                             {member.userId === user?.id && (
-                              <span className="ml-2 text-sm text-gray-500">
+                              <span className="ml-2 text-sm text-muted-foreground">
                                 You
                               </span>
                             )}
@@ -188,7 +188,7 @@ const Member = ({ user, organization }: MemberProps) => {
                           </span>
                         </div>
                         <div className="flex items-center gap-4 mt-1">
-                          <p className="text-sm text-gray-500 flex items-center gap-1">
+                          <p className="text-sm text-muted-foreground flex items-center gap-1">
                             <Mail className="w-3 h-3" />
                             {member.identifier}
                           </p>
@@ -208,7 +208,7 @@ const Member = ({ user, organization }: MemberProps) => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-gray-400 hover:text-gray-600"
+                          className="text-muted-foreground hover:text-gray-600"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </Button>

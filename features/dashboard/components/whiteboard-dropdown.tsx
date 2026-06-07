@@ -31,7 +31,7 @@ const WhiteboardDropdown = ({
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-gray-200 shadow-sm cursor-pointer"
+          className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-border shadow-sm cursor-pointer"
           onClick={(e) => e.stopPropagation()}
         >
           <MoreVertical className="w-4 h-4" />

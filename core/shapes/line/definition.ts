@@ -4,6 +4,7 @@ import { LineShape } from "@/core/shapes/line/types";
 import { getLineBounds } from "@/core/shapes/line/geometry";
 import { getLineAnchors } from "@/core/shapes/line/anchors";
 import { renderLineToCanvas } from "@/core/shapes/line/renderer";
+import { Minus } from "lucide-react";
 import {
   containsPointInLine,
   getLineResizeHandles,
@@ -29,4 +30,22 @@ export const lineDefinition = createShapeDefinition<LineShape>({
     containsPointInLine(shape, point, options?.radius ?? 0),
   getResizeHandles: (shape) => getLineResizeHandles(shape),
   validate: (shape) => shape.points.length >= 2,
+  toolbarConfig: {
+    icon: Minus,
+    label: "Line",
+    shortcut: "L",
+    group: "connectors",
+    order: 3,
+  },
+  propertiesConfig: {
+    supportsColor: true,
+    supportsFill: false,
+    supportsStrokeWidth: true,
+    supportsFontSize: false,
+  },
+  labelConfig: {
+    anchor: "none",
+    padding: 0,
+    verticalAlign: "middle",
+  },
 });

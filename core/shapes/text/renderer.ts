@@ -1,4 +1,6 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
+import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
+import { renderRichTextLines } from "@/features/whiteboard/utils/rich-text-renderer";
 import { TextShape } from "@/core/shapes/text/types";
 
 export const renderTextToCanvas = (
@@ -28,13 +30,29 @@ export const renderTextToCanvas = (
 
   ctx.textBaseline = "top";
   ctx.font = `${style} ${weight} ${effectiveSize * zoom}px Inter, sans-serif`;
-  ctx.fillStyle = shape.color || "#000000";
+  
+  const isDark =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark");
+
+  const color = getAdaptiveColor(shape.color, isDark);
+  ctx.fillStyle = color;
 
   const startX = shape.points[0].x * zoom + panOffset.x;
   const startY = shape.points[0].y * zoom + panOffset.y;
   const lineHeight = effectiveSize * zoom * 1.2;
-  shape.text.split("\n").forEach((line, index) => {
-    ctx.fillText(line, startX, startY + index * lineHeight);
-  });
+
+  renderRichTextLines(
+    ctx,
+    shape.text,
+    startX,
+    startY,
+    effectiveSize * zoom,
+    weight,
+    style,
+    lineHeight,
+    color,
+    "left"
+  );
 };
 

@@ -29,7 +29,7 @@ export const MemberProvider = ({ children }: { children: ReactNode }) => {
       case "org:member":
         return "bg-green-100 text-green-700 border-green-200";
       default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
+        return "bg-muted text-gray-700 border-border";
     }
   };
 

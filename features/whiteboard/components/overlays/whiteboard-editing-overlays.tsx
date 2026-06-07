@@ -1,9 +1,17 @@
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text-block";
+import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
 import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
-import AIDiagramModal from "@/features/whiteboard/components/overlays/ai-diagram-modal";
+import { AIPanel } from "@/features/whiteboard/components/overlays/ai-panel";
 import { CommandMenu } from "@/features/whiteboard/components/overlays/command-menu";
+import { AIAgentStatusWidget } from "@/features/whiteboard/components/overlays/ai-agent-status-widget";
 import { DrawingElementJson } from "@/liveblocks.config";
+import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import {
+  editableHtmlToMarkdown,
+  markdownToEditableHtml,
+  normalizeRichTextInput,
+} from "@/features/whiteboard/utils/rich-text-renderer";
 
 interface WhiteboardEditingOverlaysProps {
   controller: WhiteboardPageController;
@@ -52,11 +60,19 @@ export const WhiteboardEditingOverlays = ({
         onClose={() => setShowShortcuts(false)}
       />
 
-      <AIDiagramModal
+      <AIPanel
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
+        triggerAIGeneration={controller.triggerAIGeneration}
         disabled={!whiteboardAccess.hasEditAccess}
-        onGenerate={handleGenerateAIDiagram}
+      />
+
+      <AIAgentStatusWidget
+        isGenerating={controller.isAIGenerating}
+        thoughtPhase={controller.aiThoughtPhase}
+        placedCount={controller.aiPlacedCount}
+        currentNodeLabel={controller.aiCurrentNodeLabel}
+        error={controller.aiError}
       />
 
       <CommandMenu
@@ -81,7 +97,7 @@ export const WhiteboardEditingOverlays = ({
 
       {editingShapeLabelId &&
         (() => {
-          const shape = elements.find((el) => el.id === editingShapeLabelId);
+          const shape = elements.find((el: DrawingElement) => el.id === editingShapeLabelId);
           if (!shape) return null;
           const bounds = getElementBounds(shape);
           if (!bounds) return null;
@@ -90,6 +106,9 @@ export const WhiteboardEditingOverlays = ({
           const cy = (bounds.minY + bounds.maxY) / 2;
           const sx = cx * canvasViewport.zoom + canvasViewport.panOffset.x;
           const sy = cy * canvasViewport.zoom + canvasViewport.panOffset.y;
+          const labelMarkdown = normalizeRichTextInput(
+            editingShapeLabelDraft || "TEXT",
+          );
           const inputWidth = Math.max(
             120,
             Math.min(260, (bounds.maxX - bounds.minX) * canvasViewport.zoom * 0.9),
@@ -99,11 +118,6 @@ export const WhiteboardEditingOverlays = ({
             editingShapeLabelFontSize * canvasViewport.zoom,
           );
           const editorLineHeight = editorFontSize * 1.2;
-          const lineCount = Math.max(
-            1,
-            (editingShapeLabelDraft || "TEXT").split("\n").length,
-          );
-          const editorBlockHeight = editorLineHeight * lineCount;
 
           return (
             <>
@@ -119,14 +133,17 @@ export const WhiteboardEditingOverlays = ({
               >
                 <button
                   onMouseDown={(ev) => ev.preventDefault()}
-                  onClick={() =>
-                    setEditingShapeLabelFontWeight((prev) =>
-                      prev === "700" ? "500" : "700",
-                    )
-                  }
+                  onClick={() => {
+                    document.execCommand("bold");
+                    shapeLabelEditorRef.current?.focus();
+                    const next = editableHtmlToMarkdown(
+                      shapeLabelEditorRef.current || document.createElement("div"),
+                    );
+                    setEditingShapeLabelDraft(next);
+                  }}
                   className={`h-7 w-7 rounded text-xs font-bold ${
                     editingShapeLabelFontWeight === "700"
-                      ? "bg-slate-900 text-white"
+                      ? "bg-primary text-primary-foreground"
                       : "text-slate-700 hover:bg-slate-200"
                   }`}
                   title="Bold"
@@ -135,14 +152,17 @@ export const WhiteboardEditingOverlays = ({
                 </button>
                 <button
                   onMouseDown={(ev) => ev.preventDefault()}
-                  onClick={() =>
-                    setEditingShapeLabelFontStyle((prev) =>
-                      prev === "italic" ? "normal" : "italic",
-                    )
-                  }
+                  onClick={() => {
+                    document.execCommand("italic");
+                    shapeLabelEditorRef.current?.focus();
+                    const next = editableHtmlToMarkdown(
+                      shapeLabelEditorRef.current || document.createElement("div"),
+                    );
+                    setEditingShapeLabelDraft(next);
+                  }}
                   className={`h-7 w-7 rounded text-xs italic ${
                     editingShapeLabelFontStyle === "italic"
-                      ? "bg-slate-900 text-white"
+                      ? "bg-primary text-primary-foreground"
                       : "text-slate-700 hover:bg-slate-200"
                   }`}
                   title="Italic"
@@ -152,20 +172,20 @@ export const WhiteboardEditingOverlays = ({
                 <button
                   onMouseDown={(ev) => ev.preventDefault()}
                   onClick={() =>
-                    setEditingShapeLabelFontSize((s) => Math.max(12, s - 2))
+                    setEditingShapeLabelFontSize((s: number) => Math.max(12, s - 2))
                   }
                   className="h-7 w-7 rounded text-slate-700 hover:bg-slate-200"
                   title="Decrease size"
                 >
                   -
                 </button>
-                <span className="w-10 text-center text-xs font-medium text-slate-600">
+                <span className="w-10 text-center text-xs font-medium text-muted-foreground">
                   {editingShapeLabelFontSize}
                 </span>
                 <button
                   onMouseDown={(ev) => ev.preventDefault()}
                   onClick={() =>
-                    setEditingShapeLabelFontSize((s) => Math.min(96, s + 2))
+                    setEditingShapeLabelFontSize((s: number) => Math.min(96, s + 2))
                   }
                   className="h-7 w-7 rounded text-slate-700 hover:bg-slate-200"
                   title="Increase size"
@@ -174,38 +194,62 @@ export const WhiteboardEditingOverlays = ({
                 </button>
               </div>
               <div
-                ref={shapeLabelEditorRef}
+                ref={(node) => {
+                  if (node && !node.dataset.initialized) {
+                    shapeLabelEditorRef.current = node;
+                    node.innerHTML = markdownToEditableHtml(labelMarkdown);
+                    node.dataset.initialized = "true";
+                    setTimeout(() => {
+                      node.focus();
+                      try {
+                        const selection = window.getSelection();
+                        const range = document.createRange();
+                        range.selectNodeContents(node);
+                        selection?.removeAllRanges();
+                        selection?.addRange(range);
+                      } catch (e) {}
+                    }, 0);
+                  }
+                }}
                 contentEditable
                 suppressContentEditableWarning
                 onMouseDown={(ev) => ev.stopPropagation()}
                 onInput={(ev) => {
-                  const next = (ev.currentTarget as HTMLDivElement).innerText;
+                  const next = editableHtmlToMarkdown(
+                    ev.currentTarget as HTMLDivElement,
+                  );
                   setEditingShapeLabelDraft(next);
                 }}
                 onKeyDown={(ev) => {
                   const mod = ev.metaKey || ev.ctrlKey;
                   if (mod && ev.key.toLowerCase() === "b") {
                     ev.preventDefault();
-                    setEditingShapeLabelFontWeight((prev) =>
-                      prev === "700" ? "500" : "700",
+                    document.execCommand("bold");
+                    setEditingShapeLabelDraft(
+                      editableHtmlToMarkdown(
+                        shapeLabelEditorRef.current || ev.currentTarget,
+                      ),
                     );
                     return;
                   }
                   if (mod && ev.key.toLowerCase() === "i") {
                     ev.preventDefault();
-                    setEditingShapeLabelFontStyle((prev) =>
-                      prev === "italic" ? "normal" : "italic",
+                    document.execCommand("italic");
+                    setEditingShapeLabelDraft(
+                      editableHtmlToMarkdown(
+                        shapeLabelEditorRef.current || ev.currentTarget,
+                      ),
                     );
                     return;
                   }
                   if (mod && (ev.key === "+" || ev.key === "=")) {
                     ev.preventDefault();
-                    setEditingShapeLabelFontSize((s) => Math.min(96, s + 2));
+                    setEditingShapeLabelFontSize((s: number) => Math.min(96, s + 2));
                     return;
                   }
                   if (mod && ev.key === "-") {
                     ev.preventDefault();
-                    setEditingShapeLabelFontSize((s) => Math.max(12, s - 2));
+                    setEditingShapeLabelFontSize((s: number) => Math.max(12, s - 2));
                     return;
                   }
                   if (ev.key === "Escape") {
@@ -216,10 +260,9 @@ export const WhiteboardEditingOverlays = ({
                   if (ev.key === "Enter") {
                     ev.preventDefault();
                     const nextLabel =
-                      (
-                        shapeLabelEditorRef.current?.innerText ||
-                        editingShapeLabelDraft
-                      ).trim() || "TEXT";
+                      editableHtmlToMarkdown(
+                        shapeLabelEditorRef.current || ev.currentTarget,
+                      ) || editingShapeLabelDraft || "TEXT";
                     updateElement({
                       ...shape,
                       label: nextLabel,
@@ -233,10 +276,9 @@ export const WhiteboardEditingOverlays = ({
                 }}
                 onBlur={() => {
                   const nextLabel =
-                    (
-                      shapeLabelEditorRef.current?.innerText ||
-                      editingShapeLabelDraft
-                    ).trim() || "TEXT";
+                    editableHtmlToMarkdown(shapeLabelEditorRef.current || "") ||
+                    editingShapeLabelDraft ||
+                    "TEXT";
                   updateElement({
                     ...shape,
                     label: nextLabel,
@@ -250,8 +292,8 @@ export const WhiteboardEditingOverlays = ({
                 style={{
                   position: "absolute",
                   left: sx,
-                  top: sy - editorBlockHeight / 2,
-                  transform: "translateX(-50%)",
+                  top: sy,
+                  transform: "translate(-50%, -50%)",
                   width: inputWidth,
                   zIndex: 110,
                   textAlign: "center",
@@ -271,8 +313,10 @@ export const WhiteboardEditingOverlays = ({
                   wordBreak: "break-word",
                   fontFamily:
                     "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                  color: getAdaptiveColor(shape.color, typeof document !== 'undefined' && document.documentElement.classList.contains('dark')),
+                  caretColor: getAdaptiveColor(shape.color, typeof document !== 'undefined' && document.documentElement.classList.contains('dark')),
                 }}
-                className="bg-transparent text-slate-800 outline-none"
+                className="bg-transparent outline-none"
               />
             </>
           );

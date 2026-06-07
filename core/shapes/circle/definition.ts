@@ -7,6 +7,7 @@ import { CircleShape } from "@/core/shapes/circle/types";
 import { getCircleBounds } from "@/core/shapes/circle/geometry";
 import { getCircleAnchors } from "@/core/shapes/circle/anchors";
 import { renderCircleToCanvas } from "@/core/shapes/circle/renderer";
+import { Circle } from "lucide-react";
 import {
   containsPointInCircle,
   getCircleResizeHandles,
@@ -43,4 +44,22 @@ export const circleDefinition = createShapeDefinition<CircleShape>({
   getResizeHandles: (shape, options) =>
     getCircleResizeHandles(shape, options?.bounds),
   validate: (shape) => shape.points.length >= 2,
+  toolbarConfig: {
+    icon: Circle,
+    label: "Circle",
+    shortcut: "C",
+    group: "shapes",
+    order: 2,
+  },
+  propertiesConfig: {
+    supportsColor: true,
+    supportsFill: true,
+    supportsStrokeWidth: true,
+    supportsFontSize: false,
+  },
+  labelConfig: {
+    anchor: "center",
+    padding: 12,
+    verticalAlign: "middle",
+  },
 });

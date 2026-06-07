@@ -9,6 +9,23 @@ import {
   renderShapeToCanvas,
 } from "@/core/shapes/shape-runtime";
 
+
+export const getAdaptiveColor = (color: string | undefined, isDark: boolean): string => {
+  if (!color) return isDark ? "#ffffff" : "#000000";
+  const c = color.toLowerCase();
+  
+  if (isDark) {
+    if (c === "#000000" || c === "black" || c === "#1e293b" || c === "#111318") {
+      return "#ffffff";
+    }
+  } else {
+    if (c === "#ffffff" || c === "white" || c === "#f8fafc") {
+      return "#000000";
+    }
+  }
+  return color;
+};
+
 export interface RenderContext {
   zoom: number;
   panOffset: { x: number; y: number };
@@ -60,6 +77,10 @@ export const drawGrid = (
   const offsetX = panOffset.x % gridSize;
   const offsetY = panOffset.y % gridSize;
 
+  const isDark =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark");
+
   for (let x = offsetX; x < width; x += gridSize) {
     for (let y = offsetY; y < height; y += gridSize) {
       const worldX = (x - panOffset.x) / zoom;
@@ -72,10 +93,10 @@ export const drawGrid = (
 
       ctx.beginPath();
       if (isMajor) {
-        ctx.fillStyle = "#cbd5e1"; // Darker for major
+        ctx.fillStyle = isDark ? "#334155" : "#cbd5e1"; // Darker for major
         ctx.arc(x, y, 1.5, 0, Math.PI * 2);
       } else {
-        ctx.fillStyle = "#e2e8f0"; // Lighter for minor
+        ctx.fillStyle = isDark ? "#1e293b" : "#e2e8f0"; // Lighter for minor
         ctx.arc(x, y, 1, 0, Math.PI * 2);
       }
       ctx.fill();
@@ -182,8 +203,14 @@ const drawShapeLabel = (
   ctx.save();
   clipPath();
   ctx.clip();
+  const isDark =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark");
+
   ctx.font = `${baseStyle} ${baseWeight} ${fittedSize}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
-  ctx.fillStyle = color || "#1e293b";
+  
+  const finalColor = getAdaptiveColor(color, isDark);
+  ctx.fillStyle = finalColor;
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
 
@@ -217,7 +244,13 @@ export const drawElement = (
   // Save context state
   ctx.save();
 
-  ctx.strokeStyle = element.color || "#000000";
+  const isDark =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark");
+
+  const strokeColor = getAdaptiveColor(element.color, isDark);
+
+  ctx.strokeStyle = strokeColor;
   ctx.lineWidth = element.strokeWidth || 2;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";

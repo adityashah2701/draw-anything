@@ -152,7 +152,7 @@ const CreateWhiteboardDialog = ({
                   className={`p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 hover:shadow-md ${
                     selectedTemplate.id === template.id
                       ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 hover:border-gray-300"
+                      : "border-border hover:border-gray-300"
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -160,16 +160,16 @@ const CreateWhiteboardDialog = ({
                       className={`p-2 rounded-lg ${
                         selectedTemplate.id === template.id
                           ? "bg-blue-100 text-blue-600"
-                          : "bg-gray-100 text-gray-600"
+                          : "bg-muted text-muted-foreground"
                       }`}
                     >
                       {template.icon}
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-medium text-gray-900 mb-1">
+                      <h4 className="font-medium text-foreground mb-1">
                         {template.name}
                       </h4>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {template.description}
                       </p>
                     </div>
@@ -193,7 +193,7 @@ const CreateWhiteboardDialog = ({
                 className="text-base"
                 maxLength={100}
               />
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 {formData.title.length}/100 characters
               </p>
             </div>
@@ -212,7 +212,7 @@ const CreateWhiteboardDialog = ({
                 className="min-h-[100px] resize-none"
                 maxLength={500}
               />
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 {formData.description?.length || 0}/500 characters
               </p>
             </div>
@@ -270,7 +270,7 @@ const CreateWhiteboardDialog = ({
 
             {/* Suggested Tags */}
             <div className="space-y-2">
-              <p className="text-sm text-gray-600">Suggested tags:</p>
+              <p className="text-sm text-muted-foreground">Suggested tags:</p>
               <div className="flex flex-wrap gap-2">
                 {SUGGESTED_TAGS.filter((tag) => !formData.tags.includes(tag))
                   .slice(0, 5)
@@ -295,21 +295,21 @@ const CreateWhiteboardDialog = ({
           <div className="space-y-4">
             <Label className="text-base font-semibold">Settings</Label>
 
-            <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
+            <div className="space-y-4 bg-background p-4 rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg">
+                  <div className="p-2 bg-card rounded-lg">
                     {formData.isPublic ? (
                       <Globe className="w-4 h-4 text-green-600" />
                     ) : (
-                      <Lock className="w-4 h-4 text-gray-600" />
+                      <Lock className="w-4 h-4 text-muted-foreground" />
                     )}
                   </div>
                   <div>
                     <Label htmlFor="isPublic" className="font-medium">
                       Public Whiteboard
                     </Label>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       Anyone with the link can view this whiteboard
                     </p>
                   </div>
@@ -325,14 +325,14 @@ const CreateWhiteboardDialog = ({
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg">
+                  <div className="p-2 bg-card rounded-lg">
                     <Users className="w-4 h-4 text-purple-600" />
                   </div>
                   <div>
                     <Label htmlFor="isTemplate" className="font-medium">
                       Save as Template
                     </Label>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       Others can use this as a starting point
                     </p>
                   </div>

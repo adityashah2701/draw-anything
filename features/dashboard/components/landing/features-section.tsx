@@ -15,25 +15,25 @@ export const FeaturesSection = () => {
     >
       <div className="mx-auto max-w-7xl">
         <div className="grid gap-7 lg:grid-cols-12">
-          <article className="rounded-2xl border border-slate-300 bg-white p-6 shadow-[0_8px_20px_rgba(15,23,42,0.06)] lg:col-span-5 lg:p-8">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-600">
+          <article className="rounded-2xl border border-slate-300 bg-card p-6 shadow-[0_8px_20px_rgba(15,23,42,0.06)] lg:col-span-5 lg:p-8">
+            <p className="mb-4 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-background px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Bot className="h-3.5 w-3.5 text-blue-700" />
               AI Graph Intelligence
             </p>
-            <h3 className="text-2xl font-black tracking-tight text-slate-900">
+            <h3 className="text-2xl font-black tracking-tight text-foreground">
               AI outputs graph logic.
               <br />
               Engine outputs clean structure.
             </h3>
-            <p className="mt-4 text-base leading-relaxed text-slate-600">
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
               Prompt in natural language, then get deterministic node semantics,
               branch clarity, and merge behavior without manual cleanup.
             </p>
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <div className="rounded-lg border border-border bg-background p-3 text-sm text-slate-700">
                 Decision diamond rules
               </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <div className="rounded-lg border border-border bg-background p-3 text-sm text-slate-700">
                 Yes/No edge semantics
               </div>
             </div>
@@ -60,52 +60,52 @@ export const FeaturesSection = () => {
             </div>
           </article>
 
-          <article className="rounded-2xl border border-slate-300 bg-white p-6 lg:col-span-4 lg:translate-y-8">
-            <p className="mb-3 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-600">
+          <article className="rounded-2xl border border-slate-300 bg-card p-6 lg:col-span-4 lg:translate-y-8">
+            <p className="mb-3 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-background px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Workflow className="h-3.5 w-3.5 text-blue-700" />
               Canvas UX
             </p>
-            <h4 className="text-xl font-black tracking-tight text-slate-900">
+            <h4 className="text-xl font-black tracking-tight text-foreground">
               Interaction that feels precise.
             </h4>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               Smart handles, text editing parity, snapping guides, and clean
               transform behavior in collaborative sessions.
             </p>
           </article>
 
-          <article className="rounded-2xl border border-slate-300 bg-white p-6 lg:col-span-3 lg:translate-y-2">
-            <p className="mb-3 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-600">
+          <article className="rounded-2xl border border-slate-300 bg-card p-6 lg:col-span-3 lg:translate-y-2">
+            <p className="mb-3 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-background px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <ShieldCheck className="h-3.5 w-3.5 text-blue-700" />
               Reliability
             </p>
-            <h4 className="text-xl font-black tracking-tight text-slate-900">
+            <h4 className="text-xl font-black tracking-tight text-foreground">
               Multiplayer by default.
             </h4>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               Presence, persistence, and resilient updates across complex boards.
             </p>
           </article>
 
-          <article className="rounded-2xl border border-slate-300 bg-white p-6 lg:col-span-5 lg:-translate-y-4">
-            <p className="mb-3 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-600">
+          <article className="rounded-2xl border border-slate-300 bg-card p-6 lg:col-span-5 lg:-translate-y-4">
+            <p className="mb-3 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-background px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <ScanSearch className="h-3.5 w-3.5 text-blue-700" />
               Runtime Signals
             </p>
-            <h4 className="text-xl font-black tracking-tight text-slate-900">
+            <h4 className="text-xl font-black tracking-tight text-foreground">
               Optimized for large architecture maps.
             </h4>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-700">
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="rounded-md border border-border bg-background px-3 py-2">
                 Spatial indexing
               </div>
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="rounded-md border border-border bg-background px-3 py-2">
                 Batched rendering
               </div>
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="rounded-md border border-border bg-background px-3 py-2">
                 Cached bounds
               </div>
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="rounded-md border border-border bg-background px-3 py-2">
                 Deterministic routing
               </div>
             </div>
@@ -113,24 +113,24 @@ export const FeaturesSection = () => {
         </div>
 
         <div className="mt-16 grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-300 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <div className="rounded-xl border border-slate-300 bg-card p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Pipeline
             </p>
             <p className="mt-2 text-sm font-medium text-slate-800">
               Graph → Layout → Render
             </p>
           </div>
-          <div className="rounded-xl border border-slate-300 bg-white p-4 md:translate-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <div className="rounded-xl border border-slate-300 bg-card p-4 md:translate-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Decision Semantics
             </p>
             <p className="mt-2 text-sm font-medium text-slate-800">
               Yes/No branches as edge labels
             </p>
           </div>
-          <div className="rounded-xl border border-slate-300 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <div className="rounded-xl border border-slate-300 bg-card p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Canvas Runtime
             </p>
             <p className="mt-2 text-sm font-medium text-slate-800">

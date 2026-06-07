@@ -64,4 +64,37 @@ export interface BaseShapeDefinition<T extends DrawingElement> {
     options?: ShapeResizeHandleOptions,
   ) => ShapeResizeHandle[];
   validate?: (shape: T) => boolean;
+
+  /** Config for how this shape appears in the toolbar sidebar */
+  toolbarConfig?: {
+    /** Using unknown for icon type to avoid a direct server-side React dependency.
+        The UI component will cast this. */
+    icon: unknown;
+    /** Human-readable label */
+    label: string;
+    /** Keyboard shortcut character */
+    shortcut?: string;
+    /** Grouping in sidebar */
+    group: "shapes" | "connectors" | "drawing" | "tools";
+    /** Order within the group (lower = higher in list) */
+    order?: number;
+  };
+
+  /** Config for which properties panel sections to show */
+  propertiesConfig?: {
+    supportsColor: boolean;
+    supportsFill: boolean;
+    supportsStrokeWidth: boolean;
+    supportsFontSize: boolean;
+  };
+
+  /** Config for how the embedded label is rendered */
+  labelConfig?: {
+    /** Where to anchor the text within the shape */
+    anchor: "center" | "top" | "bottom" | "none";
+    /** Padding from shape edges in pixels */
+    padding: number;
+    /** Vertical alignment within the anchor region */
+    verticalAlign: "middle" | "top" | "bottom";
+  };
 }

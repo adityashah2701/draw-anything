@@ -11,6 +11,7 @@ import { routeArrowPoints } from "@/core/routing/orthogonal-router";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 import { createShape } from "@/core/shapes/shape-runtime";
+import { shapeRegistry } from "@/core/shapes/shape-registry";
 
 interface ConnectionDraft {
   fromElementId: string;
@@ -28,12 +29,7 @@ interface ArrowSnapPreview {
 
 const TOOL_TO_SHAPE_TYPE: Partial<Record<Tool, DrawingElement["type"]>> = {
   pen: "freehand",
-  rectangle: "rectangle",
-  circle: "circle",
-  diamond: "diamond",
-  line: "line",
-  arrow: "arrow",
-  "arrow-bidirectional": "arrow-bidirectional",
+  // Other tools will fall back to their name if they exist in shapeRegistry
 };
 
 interface UseWhiteboardDrawingProps {
@@ -140,6 +136,7 @@ export const useWhiteboardDrawing = ({
   const lastPointRef = useRef<Point | null>(null);
   const resizeInitialBoundsRef = useRef<Bounds | null>(null);
   const lastResizePointRef = useRef<Point | null>(null);
+  const pendingArrowRerouteRef = useRef<DrawingElement | null>(null);
   const previousSnapRef = useRef<{
     start: MagneticSnapMatch | null;
     end: MagneticSnapMatch | null;
@@ -286,10 +283,12 @@ export const useWhiteboardDrawing = ({
 
       setIsDrawing(true);
 
-      const shapeType = TOOL_TO_SHAPE_TYPE[currentTool];
-      if (!shapeType) return;
+      const shapeType = TOOL_TO_SHAPE_TYPE[currentTool] || currentTool;
+      
+      const shapeDef = shapeRegistry.get(shapeType as any);
+      if (!shapeDef) return;
 
-      const newElement = createShape(shapeType, {
+      const newElement = createShape(shapeType as any, {
         id: generateId(),
         points: [point],
         color: currentColor,
@@ -473,9 +472,17 @@ export const useWhiteboardDrawing = ({
                       snapMatch,
                     );
                   }
-                  if (routeConnectedArrow) {
-                    updated = routeConnectedArrow(updated);
-                  }
+                  const previewStart = updated.points[0] ?? point;
+                  const previewEnd =
+                    updated.points[Math.max(1, updated.points.length - 1)] ??
+                    previewStart;
+                  const previewArrow = {
+                    ...updated,
+                    points: [previewStart, previewEnd],
+                    isManuallyRouted: false,
+                  } as DrawingElement;
+                  updated = previewArrow;
+                  pendingArrowRerouteRef.current = previewArrow;
                 }
                 updateElement(updated);
               }
@@ -572,7 +579,7 @@ export const useWhiteboardDrawing = ({
 
   const stopDrawing = useCallback(() => {
     // ── Complete a connection drag ────────────────────────────────────────
-    if (connectionDraft) {
+      if (connectionDraft) {
       const targetSnap =
         connectionDraft.snapMatch ??
         findNearestAnchorSnap?.({
@@ -660,6 +667,7 @@ export const useWhiteboardDrawing = ({
       }
       setConnectionDraft(null);
       onArrowSnapPreviewChange?.(null);
+      pendingArrowRerouteRef.current = null;
       return;
     }
 
@@ -687,6 +695,14 @@ export const useWhiteboardDrawing = ({
       completeCurrentElement();
     }
 
+    if (pendingArrowRerouteRef.current && routeConnectedArrow) {
+      const rerouted = routeConnectedArrow(pendingArrowRerouteRef.current);
+      if (rerouted) {
+        updateElement(rerouted);
+      }
+      pendingArrowRerouteRef.current = null;
+    }
+
     if ((isDragging || isResizing) && hasEditAccess) {
       saveToHistory();
     }
@@ -701,6 +717,7 @@ export const useWhiteboardDrawing = ({
     setResizeHandle(null);
     setDragStart(null);
     lastResizePointRef.current = null;
+    pendingArrowRerouteRef.current = null;
     previousSnapRef.current = { start: null, end: null };
     onArrowSnapPreviewChange?.(null);
     lastPointRef.current = null;
@@ -727,6 +744,8 @@ export const useWhiteboardDrawing = ({
     getElementConnectionHandles,
     generateId,
     onArrowSnapPreviewChange,
+    routeConnectedArrow,
+    updateElement,
   ]);
 
   // Text handling

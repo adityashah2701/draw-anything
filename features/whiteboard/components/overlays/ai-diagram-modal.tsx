@@ -103,18 +103,18 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
     <Sheet open={isOpen} onOpenChange={(open:boolean) => !open && onClose()}>
       <SheetContent
         side="right"
-        className="z-[80] w-[420px] gap-0 border-l border-slate-300 bg-slate-50 p-0 sm:max-w-[420px] [&>[data-slot=sheet-close]]:top-4 [&>[data-slot=sheet-close]]:right-4 [&>[data-slot=sheet-close]]:rounded-md [&>[data-slot=sheet-close]]:text-white/85 [&>[data-slot=sheet-close]]:hover:bg-white/15 [&>[data-slot=sheet-close]]:hover:text-white [&>[data-slot=sheet-close]]:focus:ring-white/40"
+        className="z-[80] w-[420px] gap-0 border-l border-slate-300 bg-background p-0 sm:max-w-[420px] [&>[data-slot=sheet-close]]:top-4 [&>[data-slot=sheet-close]]:right-4 [&>[data-slot=sheet-close]]:rounded-md [&>[data-slot=sheet-close]]:text-white/85 [&>[data-slot=sheet-close]]:hover:bg-white/15 [&>[data-slot=sheet-close]]:hover:text-white [&>[data-slot=sheet-close]]:focus:ring-white/40"
       >
-        <SheetHeader className="space-y-0 border-b border-slate-300 bg-slate-900 px-5 py-5 text-left">
+        <SheetHeader className="space-y-0 border-b border-slate-300 bg-primary px-5 py-5 text-left">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
-              <Wand2 size={20} className="text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-foreground/15">
+              <Wand2 size={20} className="text-primary-foreground" />
             </div>
             <div>
-              <SheetTitle className="flex items-center gap-2 text-lg text-white">
+              <SheetTitle className="flex items-center gap-2 text-lg text-primary-foreground">
                 AI Diagram Generator
               </SheetTitle>
-              <SheetDescription className="text-sm text-white/75">
+              <SheetDescription className="text-sm text-primary-foreground/75">
                 Powered by Groq · Llama 3.3 70B
               </SheetDescription>
             </div>
@@ -135,15 +135,15 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
                 placeholder="e.g. E-commerce system with API gateway, auth service, order service, payment provider, and database."
                 rows={5}
                 disabled={isLoading}
-                className="w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400/30 disabled:opacity-60"
+                className="w-full resize-none rounded-xl border border-slate-300 bg-card px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400/30 disabled:opacity-60"
               />
-              <p className="mt-2 text-xs text-slate-400">
-                Tip: press <kbd className="rounded bg-slate-100 px-1.5 py-0.5">⌘ Enter</kbd> to generate.
+              <p className="mt-2 text-xs text-muted-foreground">
+                Tip: press <kbd className="rounded bg-muted px-1.5 py-0.5">⌘ Enter</kbd> to generate.
               </p>
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Quick Suggestions
               </p>
               <div className="space-y-1.5">
@@ -152,11 +152,11 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
                     key={s}
                     onClick={() => setPrompt(s)}
                     disabled={isLoading}
-                    className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-slate-200/70 hover:text-slate-900 disabled:opacity-50"
+                    className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-slate-200/70 hover:text-slate-900 disabled:opacity-50"
                   >
                     <ChevronRight
                       size={14}
-                      className="shrink-0 text-slate-400 group-hover:text-slate-700"
+                      className="shrink-0 text-muted-foreground group-hover:text-slate-700"
                     />
                     <span>{s}</span>
                   </button>
@@ -172,18 +172,18 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
           </div>
         </ScrollArea>
 
-        <SheetFooter className="mt-0 flex-row items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
+        <SheetFooter className="mt-0 flex-row items-center justify-between gap-3 border-t border-border px-5 py-4">
           <button
             onClick={onClose}
             disabled={isLoading}
-            className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
+            className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleGenerate}
             disabled={!prompt.trim() || isLoading || disabled}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? (
               <>

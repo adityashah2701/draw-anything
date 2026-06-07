@@ -1,6 +1,6 @@
 import { Eye, EyeOff } from "lucide-react";
 import TopToolbar from "@/features/whiteboard/components/chrome/top-toolbar";
-import PropertiesPanel from "@/features/whiteboard/components/chrome/properties-panel";
+import FloatingPropertiesPanel from "@/features/whiteboard/components/chrome/floating-properties-panel";
 import Sidebar from "@/features/whiteboard/components/chrome/sidebar";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 
@@ -19,7 +19,6 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
     fontSize,
     showOutlineColorPicker,
     showFillColorPicker,
-    whiteboardAutoSave,
     selectedArrow,
     whiteboardAccess,
     canvasViewport,
@@ -47,12 +46,12 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
     <>
       <div
         className={`absolute right-4 z-[70] transition-all ${
-          hideCanvasUi ? "top-4" : "top-24"
+          hideCanvasUi ? "top-4" : "top-16"
         }`}
       >
         <button
-          onClick={() => setHideCanvasUi((prev) => !prev)}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-white"
+          onClick={() => setHideCanvasUi((prev: boolean) => !prev)}
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-popover/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur hover:bg-popover cursor-pointer"
           title={hideCanvasUi ? "Show toolbars" : "Hide toolbars"}
         >
           {hideCanvasUi ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -61,71 +60,63 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
       </div>
 
       {!hideCanvasUi && (
-        <div className="pointer-events-none absolute top-4 left-1/2 z-50 w-[min(1440px,calc(100%-2rem))] -translate-x-1/2 px-1">
-          <div className="pointer-events-auto">
-            <TopToolbar
-              canUndo={controller.canUndo}
-              canRedo={controller.canRedo}
-              zoom={canvasViewport.zoom}
-              showGrid={canvasViewport.showGrid}
-              whiteboardTitle={controller.whiteboard?.title}
-              onUndo={handleUndo}
-              onRedo={handleRedo}
-              onClear={handleClear}
-              onZoomIn={canvasViewport.handleZoomIn}
-              onZoomOut={canvasViewport.handleZoomOut}
-              onResetZoom={canvasViewport.handleResetZoom}
-              onFitToScreen={handleFitToScreen}
-              onToggleGrid={canvasViewport.toggleGrid}
-              onSave={whiteboardAutoSave.saveWhiteboard}
-              onLoad={loadWhiteboard}
-              onRename={handleRenameWhiteboard}
-              onGenerateDiagram={handleGenerateDiagram}
-              disabled={!whiteboardAccess.hasEditAccess}
-            />
-          </div>
-        </div>
-      )}
-
-      {!hideCanvasUi && (
-        <div className="pointer-events-none absolute bottom-24 left-1/2 z-40 w-[min(1280px,calc(100%-1rem))] -translate-x-1/2 px-1">
-          <div className="pointer-events-auto">
-            <PropertiesPanel
-              currentTool={currentTool}
-              currentColor={currentColor}
-              strokeWidth={strokeWidth}
-              fillColor={fillColor}
-              fontSize={fontSize}
-              showOutlineColorPicker={showOutlineColorPicker}
-              showFillColorPicker={showFillColorPicker}
-              onColorChange={handleColorChange}
-              onFillColorChange={handleFillColorChange}
-              onToggleOutlineColorPicker={handleToggleOutlineColorPicker}
-              onToggleFillColorPicker={handleToggleFillColorPicker}
-              onStrokeWidthChange={handleStrokeWidthChange}
-              onFontSizeChange={handleFontSizeChange}
-              selectedArrow={selectedArrow}
-              onArrowTypeChange={handleArrowTypeChange}
-              onArrowRoutingModeChange={handleArrowRoutingModeChange}
-              onArrowDashedChange={handleArrowDashedChange}
-              onArrowHeadStartChange={handleArrowHeadStartChange}
-              onArrowHeadEndChange={handleArrowHeadEndChange}
-              disabled={!whiteboardAccess.hasEditAccess}
-              isSaving={whiteboardAutoSave.isSaving}
-              lastSaved={whiteboardAutoSave.lastSaved}
-            />
-          </div>
-        </div>
-      )}
-
-      {!hideCanvasUi && (
-        <div className="absolute bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full">
-          <Sidebar
-            currentTool={currentTool}
-            onToolChange={controller.setCurrentTool}
+        <div className="absolute left-[52px] right-0 top-0 z-40 pointer-events-none">
+          <TopToolbar
+            canUndo={controller.canUndo}
+            canRedo={controller.canRedo}
+            zoom={canvasViewport.zoom}
+            showGrid={canvasViewport.showGrid}
+            whiteboardTitle={controller.whiteboard?.title}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onClear={handleClear}
+            onZoomIn={canvasViewport.handleZoomIn}
+            onZoomOut={canvasViewport.handleZoomOut}
+            onResetZoom={canvasViewport.handleResetZoom}
+            onFitToScreen={handleFitToScreen}
+            onToggleGrid={canvasViewport.toggleGrid}
+            onSave={controller.whiteboardAutoSave.saveWhiteboard}
+            onLoad={loadWhiteboard}
+            onRename={handleRenameWhiteboard}
+            onGenerateDiagram={handleGenerateDiagram}
             disabled={!whiteboardAccess.hasEditAccess}
           />
         </div>
+      )}
+
+      {!hideCanvasUi && (
+        <FloatingPropertiesPanel
+          currentTool={currentTool}
+          currentColor={currentColor}
+          strokeWidth={strokeWidth}
+          fillColor={fillColor}
+          fontSize={fontSize}
+          showOutlineColorPicker={showOutlineColorPicker}
+          showFillColorPicker={showFillColorPicker}
+          onColorChange={handleColorChange}
+          onFillColorChange={handleFillColorChange}
+          onToggleOutlineColorPicker={handleToggleOutlineColorPicker}
+          onToggleFillColorPicker={handleToggleFillColorPicker}
+          onStrokeWidthChange={handleStrokeWidthChange}
+          onFontSizeChange={handleFontSizeChange}
+          selectedArrow={selectedArrow}
+          onArrowTypeChange={handleArrowTypeChange}
+          onArrowRoutingModeChange={handleArrowRoutingModeChange}
+          onArrowDashedChange={handleArrowDashedChange}
+          onArrowHeadStartChange={handleArrowHeadStartChange}
+          onArrowHeadEndChange={handleArrowHeadEndChange}
+          disabled={!whiteboardAccess.hasEditAccess}
+          hasSelection={controller.selectedElements.length > 0}
+        />
+      )}
+
+      {!hideCanvasUi && (
+        <Sidebar
+          currentTool={currentTool}
+          onToolChange={controller.setCurrentTool}
+          disabled={!whiteboardAccess.hasEditAccess}
+          onOpenAIPanel={handleGenerateDiagram}
+        />
       )}
     </>
   );

@@ -22,7 +22,7 @@ const WhiteboardEmptyState = ({
     switch (type) {
       case 'no-whiteboards':
         return {
-          icon: <Edit3 className="w-16 h-16 text-gray-400" />,
+          icon: <Edit3 className="w-16 h-16 text-muted-foreground" />,
           title: "Welcome to your whiteboard workspace",
           description: "Create your first whiteboard to start collaborating and bringing ideas to life",
           primaryAction: {
@@ -47,7 +47,7 @@ const WhiteboardEmptyState = ({
 
       case 'no-results':
         return {
-          icon: <Search className="w-16 h-16 text-gray-400" />,
+          icon: <Search className="w-16 h-16 text-muted-foreground" />,
           title: "No whiteboards found",
           description: searchQuery 
             ? `No whiteboards match "${searchQuery}". Try a different search term.`
@@ -64,7 +64,7 @@ const WhiteboardEmptyState = ({
 
       case 'no-starred':
         return {
-          icon: <Edit3 className="w-16 h-16 text-gray-400" />,
+          icon: <Edit3 className="w-16 h-16 text-muted-foreground" />,
           title: "No starred whiteboards",
           description: "Star your favorite whiteboards to find them quickly here",
           primaryAction: {
@@ -76,7 +76,7 @@ const WhiteboardEmptyState = ({
 
       case 'no-shared':
         return {
-          icon: <Users className="w-16 h-16 text-gray-400" />,
+          icon: <Users className="w-16 h-16 text-muted-foreground" />,
           title: "No shared whiteboards",
           description: "Whiteboards you share with teammates will appear here",
           primaryAction: {
@@ -88,7 +88,7 @@ const WhiteboardEmptyState = ({
 
       case 'no-owned':
         return {
-          icon: <Edit3 className="w-16 h-16 text-gray-400" />,
+          icon: <Edit3 className="w-16 h-16 text-muted-foreground" />,
           title: "No whiteboards created by you",
           description: "Whiteboards you create will be shown here",
           primaryAction: {
@@ -99,7 +99,7 @@ const WhiteboardEmptyState = ({
 
       default:
         return {
-          icon: <Edit3 className="w-16 h-16 text-gray-400" />,
+          icon: <Edit3 className="w-16 h-16 text-muted-foreground" />,
           title: "No whiteboards found",
           description: "Get started by creating a new whiteboard",
           primaryAction: {
@@ -115,17 +115,17 @@ const WhiteboardEmptyState = ({
   return (
     <div className="text-center py-16 px-4">
       {/* Icon */}
-      <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-gray-100">
+      <div className="w-24 h-24 bg-background rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-gray-100">
         {content.icon}
       </div>
 
       {/* Title */}
-      <h3 className="text-2xl font-bold text-gray-900 mb-3">
+      <h3 className="text-2xl font-bold text-foreground mb-3">
         {content.title}
       </h3>
 
       {/* Description */}
-      <p className="text-gray-600 mb-8 max-w-md mx-auto leading-relaxed">
+      <p className="text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
         {content.description}
       </p>
 
@@ -133,8 +133,8 @@ const WhiteboardEmptyState = ({
       {content.features && (
         <div className="flex flex-col sm:flex-row justify-center gap-6 mb-8 max-w-2xl mx-auto">
           {content.features.map((feature, index) => (
-            <div key={index} className="flex items-center gap-3 text-sm text-gray-600">
-              <div className="flex-shrink-0 w-8 h-8 bg-gray-50 rounded-lg flex items-center justify-center">
+            <div key={index} className="flex items-center gap-3 text-sm text-muted-foreground">
+              <div className="flex-shrink-0 w-8 h-8 bg-background rounded-lg flex items-center justify-center">
                 {feature.icon}
               </div>
               <span>{feature.text}</span>
@@ -181,16 +181,16 @@ const WhiteboardEmptyState = ({
       {/* Quick start guide for new users */}
       {type === 'no-whiteboards' && (
         <div className="mt-12 text-left max-w-lg mx-auto">
-          <h4 className="font-semibold text-gray-900 mb-4 text-center">
+          <h4 className="font-semibold text-foreground mb-4 text-center">
             What you can do with whiteboards:
           </h4>
-          <div className="space-y-3 text-sm text-gray-600">
+          <div className="space-y-3 text-sm text-muted-foreground">
             <div className="flex items-start gap-3">
               <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                 <span className="text-blue-600 font-bold text-xs">1</span>
               </div>
               <div>
-                <span className="font-medium text-gray-900">Create and sketch</span>
+                <span className="font-medium text-foreground">Create and sketch</span>
                 <br />
                 Draw diagrams, flowcharts, and mind maps
               </div>
@@ -200,7 +200,7 @@ const WhiteboardEmptyState = ({
                 <span className="text-green-600 font-bold text-xs">2</span>
               </div>
               <div>
-                <span className="font-medium text-gray-900">Collaborate in real-time</span>
+                <span className="font-medium text-foreground">Collaborate in real-time</span>
                 <br />
                 Work together with teammates simultaneously
               </div>
@@ -210,7 +210,7 @@ const WhiteboardEmptyState = ({
                 <span className="text-purple-600 font-bold text-xs">3</span>
               </div>
               <div>
-                <span className="font-medium text-gray-900">Share and present</span>
+                <span className="font-medium text-foreground">Share and present</span>
                 <br />
                 Present your ideas and share with stakeholders
               </div>

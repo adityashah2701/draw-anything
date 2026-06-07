@@ -30,14 +30,14 @@ const StatisticsCardsSkeleton = () => {
       {Array.from({ length: 4 }).map((_, index) => (
         <div
           key={index}
-          className="bg-white rounded-xl p-4 border border-gray-200"
+          className="bg-card rounded-xl p-4 border border-border"
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-              <div className="h-8 bg-gray-200 rounded w-16"></div>
+              <div className="h-4 bg-muted rounded w-24 mb-2"></div>
+              <div className="h-8 bg-muted rounded w-16"></div>
             </div>
-            <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
+            <div className="w-12 h-12 bg-muted rounded-lg"></div>
           </div>
         </div>
       ))}
@@ -130,7 +130,7 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
 
   // Regular Dashboard View
   return (
-    <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-auto bg-gray-50">
+    <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-auto bg-background">
       <div className="max-w-7xl mx-auto">
         {/* Welcome Header */}
         <WelcomeHeader
@@ -143,11 +143,11 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
           <StatisticsCardsSkeleton />
         ) : whiteboards.length > 0 ? (
           <div className="mb-7 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
-            <div className="bg-white rounded-xl p-4 border border-gray-200">
+            <div className="bg-card rounded-xl p-4 border border-border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Whiteboards</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm text-muted-foreground">Total Whiteboards</p>
+                  <p className="text-2xl font-bold text-foreground">
                     {whiteboards.length}
                   </p>
                 </div>
@@ -169,11 +169,11 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-4 border border-gray-200">
+            <div className="bg-card rounded-xl p-4 border border-border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Organization</p>
-                  <p className="text-lg font-bold text-gray-900 truncate">
+                  <p className="text-sm text-muted-foreground">Organization</p>
+                  <p className="text-lg font-bold text-foreground truncate">
                     {organization.name}
                   </p>
                 </div>
@@ -183,10 +183,10 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-4 border border-gray-200">
+            <div className="bg-card rounded-xl p-4 border border-border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">This Week</p>
+                  <p className="text-sm text-muted-foreground">This Week</p>
                   <p className="text-2xl font-bold text-green-600">
                     {
                       whiteboards.filter((board: any) => {
@@ -214,10 +214,10 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-4 border border-gray-200">
+            <div className="bg-card rounded-xl p-4 border border-border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Team Members</p>
+                  <p className="text-sm text-muted-foreground">Team Members</p>
                   <p className="text-2xl font-bold text-orange-600">
                     {organization.membersCount || 1}
                   </p>
@@ -232,10 +232,10 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
 
         {/* Empty State for No Whiteboards */}
         {!queryPending && whiteboards.length === 0 && (
-          <div className="bg-white rounded-xl p-8 border border-gray-200 text-center mb-8">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-card rounded-xl p-8 border border-border text-center mb-8">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
               <svg
-                className="w-8 h-8 text-gray-400"
+                className="w-8 h-8 text-muted-foreground"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -248,10 +248,10 @@ const Dashboard = ({ user, setSelectedPage }: DashboardProps) => {
                 />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-lg font-semibold text-foreground mb-2">
               No whiteboards yet
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="text-muted-foreground mb-6">
               Get started by creating your first whiteboard for{" "}
               {organization.name}
             </p>

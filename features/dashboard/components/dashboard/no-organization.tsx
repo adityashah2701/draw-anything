@@ -2,24 +2,24 @@ import { Building2, Users } from "lucide-react";
 
 const NoOrganizationState = () => {
   return (
-    <div className="flex-1 ml-20 lg:ml-0 bg-gray-50 min-h-screen flex flex-col">
+    <div className="flex-1 ml-20 lg:ml-0 bg-background min-h-screen flex flex-col">
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-md w-full text-center">
           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <Building2 className="w-8 h-8 text-blue-600" />
           </div>
 
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          <h2 className="text-2xl font-bold text-foreground mb-4">
             Welcome to Draw Anything
           </h2>
 
-          <p className="text-gray-600 mb-8">
+          <p className="text-muted-foreground mb-8">
             To get started with creating and managing whiteboards, you need to
             create or join an organization.
           </p>
 
           <div className="space-y-4">
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-muted-foreground">
               <p>
                 Or use the organization switcher above to join an existing one
               </p>
@@ -28,7 +28,7 @@ const NoOrganizationState = () => {
 
           {/* Features Preview */}
           <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
-            <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="bg-card p-4 rounded-lg border border-border">
               <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mb-3">
                 <svg
                   className="w-4 h-4 text-green-600"
@@ -44,22 +44,22 @@ const NoOrganizationState = () => {
                   />
                 </svg>
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">
+              <h3 className="font-semibold text-foreground mb-1">
                 Create Whiteboards
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Design and collaborate on unlimited whiteboards
               </p>
             </div>
 
-            <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="bg-card p-4 rounded-lg border border-border">
               <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
                 <Users className="w-4 h-4 text-purple-600" />
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">
+              <h3 className="font-semibold text-foreground mb-1">
                 Team Collaboration
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Invite team members and work together in real-time
               </p>
             </div>

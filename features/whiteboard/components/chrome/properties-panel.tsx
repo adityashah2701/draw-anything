@@ -1,4 +1,5 @@
 import React from "react";
+import { shapeRegistry } from "@/core/shapes/shape-registry";
 import {
   ArrowRoutingMode,
   ArrowType,
@@ -67,61 +68,31 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   isSaving = false,
   lastSaved = null,
 }) => {
+  const shapeDef = shapeRegistry.get(currentTool as any);
+  const toolConfig = shapeDef?.propertiesConfig;
+  const labelConfig = shapeDef?.toolbarConfig;
+
   // Tools that should show color controls (including select for changing selected elements)
-  const colorTools = [
-    "pen",
-    "rectangle",
-    "circle",
-    "diamond",
-    "line",
-    "arrow",
-    "arrow-bidirectional",
-    "text",
-    "select",
-  ];
-  const showColorControls = colorTools.includes(currentTool);
+  const showColorControls = toolConfig?.supportsColor || currentTool === "select" || currentTool === "pen";
 
   // Tools that support fill
-  const fillableTools = ["rectangle", "circle", "diamond"];
   const showFillControls =
-    fillableTools.includes(currentTool) || currentTool === "select";
+    toolConfig?.supportsFill || currentTool === "select";
 
   // Tools that need stroke width
-  const strokeTools = [
-    "pen",
-    "rectangle",
-    "circle",
-    "diamond",
-    "line",
-    "arrow",
-    "arrow-bidirectional",
-    "text",
-  ];
   const showStrokeControls =
-    strokeTools.includes(currentTool) || currentTool === "select";
+    toolConfig?.supportsStrokeWidth || currentTool === "select" || currentTool === "pen";
 
-  const toolLabel =
-    currentTool === "pen"
+  const toolLabel = labelConfig?.label ??
+    (currentTool === "pen"
       ? "Pen"
-      : currentTool === "rectangle"
-        ? "Rectangle"
-        : currentTool === "circle"
-          ? "Circle"
-          : currentTool === "diamond"
-            ? "Decision"
-            : currentTool === "line"
-              ? "Line"
-              : currentTool === "arrow"
-                ? "Arrow"
-                : currentTool === "arrow-bidirectional"
-                  ? "Bi Arrow"
-                  : currentTool === "text"
-                    ? "Text"
-                    : currentTool === "eraser"
-                      ? "Eraser"
-                      : currentTool === "hand"
-                        ? "Pan"
-                        : "Select";
+      : currentTool === "eraser"
+        ? "Eraser"
+        : currentTool === "hand"
+          ? "Pan"
+          : currentTool === "select"
+            ? "Select"
+            : "Tool");
 
   return (
     <div
@@ -130,7 +101,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-3 text-white">
+        <div className="inline-flex h-9 items-center gap-2 rounded-xl bg-primary px-3 text-primary-foreground">
           <span className="h-2 w-2 rounded-full bg-cyan-300" />
           <span className="text-xs font-semibold tracking-wide uppercase">
             {toolLabel}
@@ -144,7 +115,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         )}
 
         {showColorControls && !disabled && (
-          <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1">
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-2 py-1">
             <ColorSection
               currentColor={currentColor}
               fillColor={fillColor}
@@ -168,7 +139,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             )}
 
             {(currentTool === "text" || currentTool === "select") && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
+              <div className="rounded-xl border border-border bg-background px-2 py-1">
                 <FontSizeSection
                   fontSize={fontSize}
                   onFontSizeChange={onFontSizeChange}
@@ -196,7 +167,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         )}
 
         {!showColorControls && !disabled && (
-          <div className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-600">
+          <div className="inline-flex h-9 items-center rounded-xl border border-border bg-background px-3 text-xs text-muted-foreground">
             {currentTool === "hand"
               ? "Pan mode"
               : currentTool === "eraser"

@@ -189,7 +189,7 @@ export const ImageUploadDialog: React.FC<ImageUploadDialogProps> = ({
               <Label>
                 {previewUrl ? "New Image Preview" : "Current Image"}
               </Label>
-              <div className="relative border border-gray-200 rounded-lg overflow-hidden">
+              <div className="relative border border-border rounded-lg overflow-hidden">
                 <img
                   src={previewUrl || currentImageUrl}
                   alt="Preview"
@@ -207,7 +207,7 @@ export const ImageUploadDialog: React.FC<ImageUploadDialogProps> = ({
                 )}
               </div>
               {isPlaceholderImage && !previewUrl && (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted-foreground">
                   This is a placeholder image. Upload a custom image to replace
                   it.
                 </p>
@@ -243,7 +243,7 @@ export const ImageUploadDialog: React.FC<ImageUploadDialogProps> = ({
                 Choose Image
               </Button>
             </div>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               Supported: JPG, PNG, GIF, WebP. Max size: 10MB.
             </p>
           </div>

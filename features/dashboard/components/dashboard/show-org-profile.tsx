@@ -5,21 +5,21 @@ import React from 'react'
 
 const ShowOrgProfile = ({handleBackToDashboard,organization}:any) => {
   return (
-    <div className="flex-1 ml-20 lg:ml-0 bg-gray-50 min-h-screen flex flex-col">
+    <div className="flex-1 ml-20 lg:ml-0 bg-background min-h-screen flex flex-col">
         {/* Header with back button */}
-        <div className="flex-shrink-0 p-4 sm:p-6 bg-white border-b border-gray-200">
+        <div className="flex-shrink-0 p-4 sm:p-6 bg-card border-b border-border">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <Button
               variant="ghost"
               onClick={handleBackToDashboard}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 self-start"
+              className="flex items-center gap-2 text-muted-foreground hover:text-gray-900 self-start"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">Back to Dashboard</span>
               <span className="sm:hidden">Back</span>
             </Button>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground truncate">
                 Team Management - {organization?.name}
               </h1>
             </div>

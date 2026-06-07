@@ -13,22 +13,22 @@ const NoOrganization = ({ user }: { user: User }) => {
     <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
             Team Members
           </h1>
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             You&apos;re currently working as an individual user
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
+        <div className="bg-card rounded-2xl border border-border p-12 text-center">
           <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
             <Building2 className="w-10 h-10" />
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-4">
+          <h3 className="text-xl font-semibold text-foreground mb-4">
             No Organization Yet
           </h3>
-          <p className="text-gray-600 mb-8 max-w-md mx-auto">
+          <p className="text-muted-foreground mb-8 max-w-md mx-auto">
             Create or join an organization to collaborate with team members and
             manage shared resources.
           </p>
@@ -53,8 +53,8 @@ const NoOrganization = ({ user }: { user: User }) => {
           </div>
         </div>
 
-        <div className="mt-8 bg-white rounded-2xl border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="mt-8 bg-card rounded-2xl border border-border p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
             Your Account
           </h3>
           <div className="flex items-center gap-4">
@@ -68,10 +68,10 @@ const NoOrganization = ({ user }: { user: User }) => {
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-gray-900">
+              <p className="font-medium text-foreground">
                 {user?.fullName || "Unknown User"}
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 {user?.primaryEmailAddress?.emailAddress}
               </p>
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 mt-1">

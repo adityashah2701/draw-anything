@@ -1,6 +1,7 @@
 import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
 import { TextShape } from "@/core/shapes/text/types";
 import { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
+import { measureTextShapeBlock } from "@/core/shapes/text/geometry";
 
 export const containsPointInText = (
   _shape: TextShape,
@@ -51,30 +52,13 @@ export const resizeText = (
         ? "700"
         : shape.fontSize >= 20
           ? "600"
-          : "400");
-
-  const estimateTextSize = (size: number) => {
-    const baseSize = size;
-    let effectiveSize = baseSize;
-    if (weight === "800") effectiveSize = Math.max(baseSize, 36);
-    else if (weight === "700") effectiveSize = Math.max(baseSize, 26);
-    else if (weight === "600" && baseSize >= 20) {
-      effectiveSize = Math.max(baseSize, 20);
-    }
-
-    const lines = shape.text!.split("\n");
-    const maxChars = Math.max(...lines.map((line) => line.length), 1);
-    const width = maxChars * effectiveSize * 0.62 + 8;
-    const lineHeight = effectiveSize * 1.2;
-    const height = Math.max(
-      effectiveSize,
-      effectiveSize + Math.max(0, lines.length - 1) * lineHeight,
-    );
-
-    return { width, height };
-  };
-
-  const originalSize = estimateTextSize(shape.fontSize);
+      : "400");
+  const originalSize = measureTextShapeBlock(
+    shape.text,
+    shape.fontSize,
+    weight,
+    shape.fontStyle || "normal",
+  );
   const left = shape.points[0].x;
   const top = shape.points[0].y;
   const right = left + originalSize.width;
@@ -113,7 +97,12 @@ export const resizeText = (
     Math.min(200, Math.round(shape.fontSize * scaleFactor)),
   );
 
-  const resizedSize = estimateTextSize(nextFontSize);
+  const resizedSize = measureTextShapeBlock(
+    shape.text,
+    nextFontSize,
+    weight,
+    shape.fontStyle || "normal",
+  );
   let newX = shape.points[0].x;
   let newY = shape.points[0].y;
 

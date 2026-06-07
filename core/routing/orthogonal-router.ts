@@ -38,7 +38,12 @@ import {
   PathNormalizerOptions,
 } from "@/core/routing/path-normalizer";
 import { getObstacleAwareOrthogonalPath } from "@/core/routing/obstacle-avoidance";
-import { isValidPoint } from "@/core/routing/routing-guards";
+import {
+  isNonEmptyString,
+  isValidPoint,
+  isValidPointArray,
+  sanitizeObstacles,
+} from "@/core/routing/routing-guards";
 
 const getDominantAxis = (
   start: Point,
@@ -292,6 +297,8 @@ export const routeArrowPoints = ({
   conflictOptions,
   pathRanking,
 }: RouteArrowInput): Point[] => {
+  const safeObstacles = sanitizeObstacles(obstacles);
+
   // ── Defensive guard: never crash on undefined/invalid points ──
   if (!isValidPoint(start) || !isValidPoint(end)) {
     // Return straight fallback; if both are missing, return empty array
@@ -311,7 +318,7 @@ export const routeArrowPoints = ({
       routingMode,
       existingPoints,
       preserveManualBends,
-      obstacles,
+      obstacles: safeObstacles,
       ignoreObstacleIds,
       obstaclePadding,
       parallelOffset,
@@ -367,7 +374,7 @@ const routeArrowPointsInternal = ({
     return [start, end];
   }
 
-  if (preserveManualBends && existingPoints && existingPoints.length > 2) {
+  if (preserveManualBends && isValidPointArray(existingPoints, 3)) {
     return stabilizeArrowRouteEndpoints(
       reanchorPathEndpoints(existingPoints, start, end),
       start,
@@ -490,18 +497,17 @@ export const routeArrowBatch = ({
   clusterBounds,
 }: RouteArrowBatchInput): Map<string, Point[]> => {
   if (arrows.length === 0) return new Map<string, Point[]>();
+  const safeObstacles = sanitizeObstacles(obstacles);
 
   const routableArrows = arrows.filter(
     (arrow) =>
-      typeof arrow.arrowId === "string" &&
-      arrow.arrowId.length > 0 &&
-      typeof arrow.sourceId === "string" &&
-      arrow.sourceId.length > 0 &&
-      typeof arrow.targetId === "string" &&
-      arrow.targetId.length > 0 &&
+      isNonEmptyString(arrow.arrowId) &&
+      isNonEmptyString(arrow.sourceId) &&
+      isNonEmptyString(arrow.targetId) &&
       isValidPoint(arrow.start) &&
       isValidPoint(arrow.end) &&
-      (!Array.isArray(arrow.existingPoints) || arrow.existingPoints.length >= 2),
+      (!Array.isArray(arrow.existingPoints) ||
+        isValidPointArray(arrow.existingPoints, 2)),
   );
 
   if (routableArrows.length === 0) {
@@ -511,23 +517,20 @@ export const routeArrowBatch = ({
   const parallelInputs: ParallelEdgeDescriptor[] =
     (allParallelCandidates ??
       routableArrows.map((arrow) => ({
-      arrowId: arrow.arrowId,
-      sourceId: arrow.sourceId,
-      targetId: arrow.targetId,
-      start: arrow.start,
-      end: arrow.end,
-      startHandle: arrow.startHandle,
-      endHandle: arrow.endHandle,
+        arrowId: arrow.arrowId,
+        sourceId: arrow.sourceId,
+        targetId: arrow.targetId,
+        start: arrow.start,
+        end: arrow.end,
+        startHandle: arrow.startHandle,
+        endHandle: arrow.endHandle,
       }))).filter(
-      (edge) =>
-        typeof edge.arrowId === "string" &&
-        edge.arrowId.length > 0 &&
-        typeof edge.sourceId === "string" &&
-        edge.sourceId.length > 0 &&
-        typeof edge.targetId === "string" &&
-        edge.targetId.length > 0 &&
-        isValidPoint(edge.start) &&
-        isValidPoint(edge.end),
+    (edge) =>
+      isNonEmptyString(edge.arrowId) &&
+      isNonEmptyString(edge.sourceId) &&
+      isNonEmptyString(edge.targetId) &&
+      isValidPoint(edge.start) &&
+      isValidPoint(edge.end),
     );
 
   const offsets = computeParallelOffsets(parallelInputs, parallelSpacing);
@@ -579,7 +582,7 @@ export const routeArrowBatch = ({
       routingMode: arrow.routingMode ?? "orthogonal",
       existingPoints: arrow.existingPoints,
       preserveManualBends: Boolean(arrow.preserveManualBends),
-      obstacles,
+      obstacles: safeObstacles,
       obstaclePadding,
       parallelOffset: offsets.get(arrow.arrowId) ?? 0,
       occupiedSegments: occupied,
@@ -625,7 +628,7 @@ export const routeArrowBatch = ({
       snapToGrid: true,
       corridorTolerance: 2,
       minStubLength: 24,
-      obstacles,
+      obstacles: safeObstacles,
       ignoreObstacleIdsByArrow,
       obstaclePadding,
     };
@@ -728,6 +731,7 @@ export {
   routeWithEngine,
   createRouteEngineState,
   markEdgeDirty,
+  clearEdgeDirty,
   markShapeEdgesDirty,
   invalidateAllRoutes,
 } from "@/core/routing/route-engine";

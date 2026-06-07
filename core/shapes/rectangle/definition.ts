@@ -7,6 +7,7 @@ import { RectangleShape } from "@/core/shapes/rectangle/types";
 import { getRectangleBounds } from "@/core/shapes/rectangle/geometry";
 import { getRectangleAnchors } from "@/core/shapes/rectangle/anchors";
 import { renderRectangleToCanvas } from "@/core/shapes/rectangle/renderer";
+import { Square } from "lucide-react";
 import {
   containsPointInRectangle,
   getRectangleResizeHandles,
@@ -43,4 +44,22 @@ export const rectangleDefinition = createShapeDefinition<RectangleShape>({
   getResizeHandles: (shape, options) =>
     getRectangleResizeHandles(shape, options?.bounds),
   validate: (shape) => shape.points.length >= 2,
+  toolbarConfig: {
+    icon: Square,
+    label: "Rectangle",
+    shortcut: "R",
+    group: "shapes",
+    order: 1,
+  },
+  propertiesConfig: {
+    supportsColor: true,
+    supportsFill: true,
+    supportsStrokeWidth: true,
+    supportsFontSize: false,
+  },
+  labelConfig: {
+    anchor: "center",
+    padding: 12,
+    verticalAlign: "middle",
+  },
 });

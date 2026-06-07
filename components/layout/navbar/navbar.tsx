@@ -1,9 +1,10 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { UserButton, useUser } from "@clerk/nextjs";
-import { Menu, X } from "lucide-react";
+import { useTheme } from "next-themes";
+import { Menu, X, Moon, Sun } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MobileNavbar from "./mobile-navbar";
 import DesktopNavbar from "./desktop-navbar";
 
@@ -14,6 +15,7 @@ interface CleanNavbarProps {
 const CleanNavbar = ({ isSidebarIntegrated }: CleanNavbarProps) => {
   const { isLoaded, isSignedIn } = useUser();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   if (!isLoaded) {
     return null;
@@ -89,7 +91,20 @@ const CleanNavbar = ({ isSidebarIntegrated }: CleanNavbarProps) => {
             )}
             {/* User Profile for Integrated Mobile/Desktop Navbar Replacement */}
             {isSidebarIntegrated && (
-              <div className="flex items-center gap-2 justify-end w-full">
+              <div className="flex items-center gap-4 justify-end w-full">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="h-8 w-8 px-0 text-muted-foreground hover:bg-muted"
+                  title="Toggle theme"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Moon className="h-4 w-4" />
+                  )}
+                </Button>
                 {isSignedIn && (
                   <div className="relative">
                     <UserButton />

@@ -9,8 +9,8 @@ const EmptyOrganization = ({organization,setShowInviteModal}:any) => {
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Team Members</h1>
-              <p className="text-gray-600">Manage your organization's team members</p>
+              <h1 className="text-3xl font-bold text-foreground mb-2">Team Members</h1>
+              <p className="text-muted-foreground">Manage your organization's team members</p>
             </div>
             <Button 
               onClick={() => setShowInviteModal(true)}
@@ -22,25 +22,25 @@ const EmptyOrganization = ({organization,setShowInviteModal}:any) => {
           </div>
 
           {/* Organization Info */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-8">
+          <div className="bg-card rounded-2xl border border-border p-6 mb-8">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center">
                 <Building2 className="w-8 h-8 text-blue-600" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">{organization.name}</h3>
-                <p className="text-gray-500">Organization • {organization.membersCount || 0} members</p>
+                <h3 className="text-xl font-semibold text-foreground">{organization.name}</h3>
+                <p className="text-muted-foreground">Organization • {organization.membersCount || 0} members</p>
               </div>
             </div>
           </div>
 
           {/* Empty Members State */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
-            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Users className="w-10 h-10 text-gray-400" />
+          <div className="bg-card rounded-2xl border border-border p-12 text-center">
+            <div className="w-20 h-20 bg-background rounded-full flex items-center justify-center mx-auto mb-6">
+              <Users className="w-10 h-10 text-muted-foreground" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">No Team Members Yet</h3>
-            <p className="text-gray-600 mb-8 max-w-md mx-auto">
+            <h3 className="text-xl font-semibold text-foreground mb-4">No Team Members Yet</h3>
+            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
               Start building your team by inviting members to join your organization.
             </p>
             <Button 

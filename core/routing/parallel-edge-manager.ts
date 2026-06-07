@@ -2,7 +2,11 @@ import {
   ConnectionHandle,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
-import { isValidPoint } from "@/core/routing/routing-guards";
+import {
+  isNonEmptyString,
+  isValidPoint,
+  toValidPoint,
+} from "@/core/routing/routing-guards";
 
 export interface ParallelEdgeDescriptor {
   arrowId: string;
@@ -19,32 +23,51 @@ interface GroupedEdge {
   groupKey: string;
 }
 
+export const isValidParallelEdgeDescriptor = (
+  descriptor: Partial<ParallelEdgeDescriptor> | null | undefined,
+): descriptor is ParallelEdgeDescriptor =>
+  !!descriptor &&
+  isNonEmptyString(descriptor.arrowId) &&
+  isValidPoint(descriptor.start) &&
+  isValidPoint(descriptor.end);
+
 const getDirectionBucket = (
   start?: Point,
   end?: Point,
   startHandle?: ConnectionHandle,
   endHandle?: ConnectionHandle,
 ): "h" | "v" => {
-  if (!isValidPoint(start) || !isValidPoint(end)) return "h";
+  const safeStart = toValidPoint(start);
+  const safeEnd = toValidPoint(end);
+  if (!safeStart || !safeEnd) return "h";
   if (startHandle === "left" || startHandle === "right") return "h";
   if (startHandle === "top" || startHandle === "bottom") return "v";
   if (endHandle === "left" || endHandle === "right") return "h";
   if (endHandle === "top" || endHandle === "bottom") return "v";
-  return Math.abs(end.x - start.x) >= Math.abs(end.y - start.y) ? "h" : "v";
+  return Math.abs(safeEnd.x - safeStart.x) >=
+    Math.abs(safeEnd.y - safeStart.y)
+    ? "h"
+    : "v";
 };
 
 const getFallbackEdgeKey = (descriptor: ParallelEdgeDescriptor): string => {
-  if (!isValidPoint(descriptor.start) || !isValidPoint(descriptor.end)) {
+  const safeStart = toValidPoint(descriptor.start);
+  const safeEnd = toValidPoint(descriptor.end);
+  if (!safeStart || !safeEnd) {
     return descriptor.arrowId || "invalid-edge";
   }
-  const roundedStartX = Math.round(descriptor.start.x / 16);
-  const roundedStartY = Math.round(descriptor.start.y / 16);
-  const roundedEndX = Math.round(descriptor.end.x / 16);
-  const roundedEndY = Math.round(descriptor.end.y / 16);
+  const roundedStartX = Math.round(safeStart.x / 16);
+  const roundedStartY = Math.round(safeStart.y / 16);
+  const roundedEndX = Math.round(safeEnd.x / 16);
+  const roundedEndY = Math.round(safeEnd.y / 16);
   return `${roundedStartX},${roundedStartY}->${roundedEndX},${roundedEndY}`;
 };
 
 const getGroupKey = (descriptor: ParallelEdgeDescriptor): string => {
+  if (!isValidParallelEdgeDescriptor(descriptor)) {
+    return "invalid-edge|h";
+  }
+
   const axis = getDirectionBucket(
     descriptor.start,
     descriptor.end,
@@ -83,25 +106,17 @@ export const computeParallelOffsets = (
   edges: ParallelEdgeDescriptor[],
   baseSpacing = 16,
 ): Map<string, number> => {
-  const validEdges = edges.filter(
-    (d) =>
-      isValidPoint(d.start) &&
-      isValidPoint(d.end) &&
-      typeof d.arrowId === "string" &&
-      d.arrowId.length > 0,
-  );
-  const grouped: GroupedEdge[] = validEdges.map((descriptor) => ({
-    descriptor,
-    groupKey: getGroupKey(descriptor),
-  }));
-
   const byGroup = new Map<string, GroupedEdge[]>();
-  grouped.forEach((entry) => {
-    if (!byGroup.has(entry.groupKey)) {
-      byGroup.set(entry.groupKey, []);
+  for (const descriptor of edges) {
+    if (!isValidParallelEdgeDescriptor(descriptor)) continue;
+    const groupKey = getGroupKey(descriptor);
+    const grouped = byGroup.get(groupKey);
+    if (grouped) {
+      grouped.push({ descriptor, groupKey });
+    } else {
+      byGroup.set(groupKey, [{ descriptor, groupKey }]);
     }
-    byGroup.get(entry.groupKey)!.push(entry);
-  });
+  }
 
   const offsets = new Map<string, number>();
   byGroup.forEach((entries) => {

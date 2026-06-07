@@ -62,7 +62,7 @@ export const ColorSection: React.FC<ColorSectionProps> = ({
             </div>
           ) : (
             <div className="flex items-center space-x-2">
-              <span className="text-xs text-gray-600 hidden sm:inline font-medium">
+              <span className="text-xs text-muted-foreground hidden sm:inline font-medium">
                 Fill:
               </span>
               <button
@@ -74,7 +74,7 @@ export const ColorSection: React.FC<ColorSectionProps> = ({
                 disabled={disabled}
                 className={`w-8 h-8 rounded-lg border-2 flex-shrink-0 relative overflow-hidden ${
                   disabled
-                    ? "border-gray-200 cursor-not-allowed opacity-60"
+                    ? "border-border cursor-not-allowed opacity-60"
                     : "border-gray-300 cursor-pointer hover:border-gray-400 hover:shadow-md transition-all"
                 }`}
                 title="Enable fill"
@@ -91,7 +91,7 @@ export const ColorSection: React.FC<ColorSectionProps> = ({
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <svg
-                    className="w-4 h-4 text-gray-500"
+                    className="w-4 h-4 text-muted-foreground"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -118,7 +118,7 @@ export const ColorSection: React.FC<ColorSectionProps> = ({
               disabled={disabled}
               className={`px-2 py-1 rounded-md border transition-colors text-xs ${
                 disabled
-                  ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+                  ? "border-border bg-muted text-muted-foreground cursor-not-allowed"
                   : "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
               }`}
               title="Remove fill"

@@ -4,6 +4,7 @@ import { ArrowShape } from "@/core/shapes/arrow/types";
 import { getArrowBounds } from "@/core/shapes/arrow/geometry";
 import { getArrowAnchors } from "@/core/shapes/arrow/anchors";
 import { renderArrowToCanvas } from "@/core/shapes/arrow/renderer";
+import { ArrowRight } from "lucide-react";
 import {
   containsPointInArrow,
   getArrowResizeHandles,
@@ -37,4 +38,22 @@ export const arrowDefinition = createShapeDefinition<ArrowShape>({
     containsPointInArrow(shape, point, options?.radius ?? 0),
   getResizeHandles: (shape) => getArrowResizeHandles(shape),
   validate: (shape) => shape.points.length >= 2,
+  toolbarConfig: {
+    icon: ArrowRight,
+    label: "Arrow",
+    shortcut: "A",
+    group: "connectors",
+    order: 1,
+  },
+  propertiesConfig: {
+    supportsColor: true,
+    supportsFill: false,
+    supportsStrokeWidth: true,
+    supportsFontSize: false,
+  },
+  labelConfig: {
+    anchor: "none",
+    padding: 0,
+    verticalAlign: "middle",
+  },
 });

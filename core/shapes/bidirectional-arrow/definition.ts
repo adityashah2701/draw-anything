@@ -5,6 +5,7 @@ import { getBidirectionalArrowBounds } from "@/core/shapes/bidirectional-arrow/g
 import { getBidirectionalArrowAnchors } from "@/core/shapes/bidirectional-arrow/anchors";
 import { renderBidirectionalArrowToCanvas } from "@/core/shapes/bidirectional-arrow/renderer";
 import { resizeBidirectionalArrow } from "@/core/shapes/bidirectional-arrow/interaction";
+import { ArrowLeftRight } from "lucide-react";
 import {
   containsPointInArrow,
   getArrowResizeHandles,
@@ -38,4 +39,22 @@ export const bidirectionalArrowDefinition =
       containsPointInArrow(shape, point, options?.radius ?? 0),
     getResizeHandles: (shape) => getArrowResizeHandles(shape),
     validate: (shape) => shape.points.length >= 2,
+    toolbarConfig: {
+      icon: ArrowLeftRight,
+      label: "Bi-Arrow",
+      shortcut: "",
+      group: "connectors",
+      order: 2,
+    },
+    propertiesConfig: {
+      supportsColor: true,
+      supportsFill: false,
+      supportsStrokeWidth: true,
+      supportsFontSize: false,
+    },
+    labelConfig: {
+      anchor: "none",
+      padding: 0,
+      verticalAlign: "middle",
+    },
   });

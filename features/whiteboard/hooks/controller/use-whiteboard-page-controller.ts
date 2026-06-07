@@ -37,6 +37,7 @@ import {
   insertBendPoint,
   removeBendPoint,
 } from "@/core/routing/orthogonal-router";
+import { useAIGeneration } from "./use-ai-generation";
 
 export const useWhiteboardPageController = (whiteboardId: string) => {
   const whiteboard = useQuery(
@@ -679,10 +680,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
           canvasViewport.toggleGrid();
           break;
         case "clear":
-          if (confirm("Are you sure you want to clear the entire canvas?")) {
-            handleClear();
-            toast.success("Canvas cleared");
-          }
+          handleClear();
+          toast.success("Canvas cleared");
           break;
         case "save":
           toast.success("Autosave is active. Changes are synced!");
@@ -715,12 +714,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   );
 
   const loadWhiteboard = useCallback(() => {
-    console.log("=== LOAD WHITEBOARD ===");
-    console.log("This whiteboard is automatically loaded from the database.");
-    console.log("Current whiteboard ID:", whiteboardId);
-    console.log("=== END LOAD INFO ===");
     toast.success("This whiteboard is automatically loaded from the database!");
-  }, [whiteboardId]);
+  }, []);
 
   const handleRenameWhiteboard = useCallback(
     (title: string) => {
@@ -735,6 +730,42 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   const handleGenerateDiagram = useCallback(() => {
     uiState.setShowAIModal(true);
   }, [uiState]);
+
+  const aiShiftRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleAddAIElement = useCallback(
+    (element: DrawingElement) => {
+      if (!aiShiftRef.current) {
+        const viewWorldMinX = -canvasViewport.panOffset.x / canvasViewport.zoom;
+        const viewWorldMinY = -canvasViewport.panOffset.y / canvasViewport.zoom;
+        const allX = element.points.map((p) => p.x);
+        const allY = element.points.map((p) => p.y);
+        const minX = Math.min(...allX);
+        const minY = Math.min(...allY);
+        aiShiftRef.current = {
+          x: viewWorldMinX + 80 - minX,
+          y: viewWorldMinY + 80 - minY,
+        };
+      }
+
+      const shifted = {
+        ...element,
+        points: element.points.map((p) => ({
+          x: p.x + aiShiftRef.current!.x,
+          y: p.y + aiShiftRef.current!.y,
+        })),
+      };
+      addElement(shifted as unknown as DrawingElementJson);
+    },
+    [addElement, canvasViewport],
+  );
+
+  const aiState = useAIGeneration({
+    onAddElement: handleAddAIElement,
+    onGenerationStart: () => {
+      aiShiftRef.current = null;
+    },
+  });
 
   const handleGenerateAIDiagram = useCallback(
     (newElements: DrawingElement[]) => {
@@ -908,6 +939,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     updateSelectedArrow,
     updateArrowBendsAtPoint,
     handleGenerateAIDiagram,
+    handleAddAIElement,
+    ...aiState,
     handleEditingTextChange,
     handleEditingTextCommit,
     handleEditingTextMove,

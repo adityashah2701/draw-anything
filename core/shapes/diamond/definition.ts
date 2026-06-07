@@ -7,6 +7,7 @@ import { DiamondShape } from "@/core/shapes/diamond/types";
 import { getDiamondBounds } from "@/core/shapes/diamond/geometry";
 import { getDiamondAnchors } from "@/core/shapes/diamond/anchors";
 import { renderDiamondToCanvas } from "@/core/shapes/diamond/renderer";
+import { Diamond } from "lucide-react";
 import {
   containsPointInDiamond,
   getDiamondResizeHandles,
@@ -43,4 +44,22 @@ export const diamondDefinition = createShapeDefinition<DiamondShape>({
   getResizeHandles: (shape, options) =>
     getDiamondResizeHandles(shape, options?.bounds),
   validate: (shape) => shape.points.length >= 2,
+  toolbarConfig: {
+    icon: Diamond,
+    label: "Diamond",
+    shortcut: "D",
+    group: "shapes",
+    order: 3,
+  },
+  propertiesConfig: {
+    supportsColor: true,
+    supportsFill: true,
+    supportsStrokeWidth: true,
+    supportsFontSize: false,
+  },
+  labelConfig: {
+    anchor: "center",
+    padding: 12,
+    verticalAlign: "middle",
+  },
 });

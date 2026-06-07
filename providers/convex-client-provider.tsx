@@ -18,6 +18,9 @@ function StoreUser() {
   return null;
 }
 
+import { useTheme } from "next-themes";
+import { dark } from "@clerk/themes";
+
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL!;
 const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 const convex = new ConvexReactClient(convexUrl);
@@ -26,8 +29,15 @@ interface ConvexClientProviderProps {
   children: React.ReactNode;
 }
 const ConvexClientProvider = ({ children }: ConvexClientProviderProps) => {
+  const { resolvedTheme } = useTheme();
+
   return (
-    <ClerkProvider publishableKey={publishableKey}>
+    <ClerkProvider
+      publishableKey={publishableKey}
+      appearance={{
+        baseTheme: resolvedTheme === "dark" ? dark : undefined,
+      }}
+    >
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <StoreUser />
         {children}

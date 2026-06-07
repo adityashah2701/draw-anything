@@ -37,7 +37,7 @@ const LoadingSpinner = ({ className = "w-4 h-4" }: { className?: string }) => (
 
 // Simple skeleton loader component
 const SkeletonLoader = ({ className = "" }: { className?: string }) => (
-  <div className={`bg-gray-200 animate-pulse rounded ${className}`} />
+  <div className={`bg-muted animate-pulse rounded ${className}`} />
 );
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -146,10 +146,10 @@ const WhiteboardCard = ({ board }: { board: any }) => {
 
   return (
     <div
-      className={`group bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-lg transition-all duration-200 overflow-hidden ${isPending ? "opacity-50 pointer-events-none" : ""}`}
+      className={`group bg-card rounded-xl border border-border hover:border-gray-300 hover:shadow-lg transition-all duration-200 overflow-hidden ${isPending ? "opacity-50 pointer-events-none" : ""}`}
     >
       {/* Thumbnail */}
-      <div className="relative h-48 bg-gradient-to-br from-blue-50 to-purple-50 border-b border-gray-200">
+      <div className="relative h-48 bg-gradient-to-br from-blue-50 to-purple-50 border-b border-border">
         {/* Show preview image if available, otherwise show placeholder */}
         {board.imageUrl ? (
           <img
@@ -160,7 +160,7 @@ const WhiteboardCard = ({ board }: { board: any }) => {
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center">
-              <Edit3 className="w-8 h-8 text-gray-400" />
+              <Edit3 className="w-8 h-8 text-muted-foreground" />
             </div>
           </div>
         )}
@@ -182,7 +182,7 @@ const WhiteboardCard = ({ board }: { board: any }) => {
         <div className="flex items-start justify-between mb-2">
           <Link
             href={`/whiteboard/${board._id}`}
-            className="font-semibold text-gray-900 line-clamp-1 hover:text-blue-600 transition-colors cursor-pointer"
+            className="font-semibold text-foreground line-clamp-1 hover:text-blue-600 transition-colors cursor-pointer"
           >
             {board.title}
           </Link>
@@ -194,13 +194,13 @@ const WhiteboardCard = ({ board }: { board: any }) => {
             {board.tags.slice(0, 2).map((tag: string, index: number) => (
               <span
                 key={index}
-                className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-md"
+                className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded-md"
               >
                 {tag}
               </span>
             ))}
             {board.tags.length > 2 && (
-              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-md">
+              <span className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded-md">
                 +{board.tags.length - 2}
               </span>
             )}
@@ -225,7 +225,7 @@ const WhiteboardCard = ({ board }: { board: any }) => {
                   {creatorAvatar.initials}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-xs capitalize text-gray-500">
+              <span className="text-xs capitalize text-muted-foreground">
                 Created by {getCreatorName()}
               </span>
             </>
@@ -233,7 +233,7 @@ const WhiteboardCard = ({ board }: { board: any }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {formatDate(board._creationTime)}

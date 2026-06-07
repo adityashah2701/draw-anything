@@ -1,3 +1,4 @@
+import { getAdaptiveColor } from '@/features/whiteboard/utils/canvas-render-utils';
 import {
   ArrowConnection,
   ArrowStyle,
@@ -58,13 +59,21 @@ export const getArrowEditHandles = (points: Point[]): ArrowEditHandle[] => {
   return handles;
 };
 
-export const getArrowStyle = (element: ArrowElement): ArrowStyle => ({
-  strokeWidth: element.strokeWidth || 2,
-  color: element.color || "#000000",
-  dashed: element.dashed,
-  arrowHeadStart: element.arrowHeadStart,
-  arrowHeadEnd: element.arrowHeadEnd,
-});
+export const getArrowStyle = (element: ArrowElement): ArrowStyle => {
+  const isDark =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark");
+
+  const color = getAdaptiveColor(element.color, isDark);
+
+  return {
+    strokeWidth: element.strokeWidth || 2,
+    color,
+    dashed: element.dashed,
+    arrowHeadStart: element.arrowHeadStart,
+    arrowHeadEnd: element.arrowHeadEnd,
+  };
+};
 
 export const getArrowHeadVisibility = (
   element: ArrowElement,

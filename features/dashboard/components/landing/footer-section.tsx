@@ -34,7 +34,7 @@ export const FooterSection = () => {
               Anything helps teams externalize complexity and move with
               confidence.
             </p>
-            <div className="mt-8 space-y-2 text-sm text-slate-400">
+            <div className="mt-8 space-y-2 text-sm text-muted-foreground">
               <p className="inline-flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-slate-300" />
                 Enterprise security
@@ -51,7 +51,7 @@ export const FooterSection = () => {
               .slice(0, 2)
               .map(([section, items]) => (
                 <div key={section}>
-                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     {section}
                   </h4>
                   <ul className="space-y-2 text-sm text-slate-300">
@@ -72,7 +72,7 @@ export const FooterSection = () => {
               .slice(2)
               .map(([section, items]) => (
                 <div key={section}>
-                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     {section}
                   </h4>
                   <ul className="space-y-2 text-sm text-slate-300">
@@ -90,7 +90,7 @@ export const FooterSection = () => {
         </div>
 
         <div className="mt-12 border-t border-slate-800 pt-6">
-          <div className="flex flex-col gap-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <p>© 2026 Draw Anything. All rights reserved.</p>
             <div className="flex flex-wrap items-center gap-4">
               <a href="#" className="hover:text-slate-200">
@@ -108,7 +108,7 @@ export const FooterSection = () => {
       </div>
 
       <div className="mt-10 overflow-hidden border-y border-slate-800 bg-slate-900/40 py-3">
-        <div className="flex w-[200%] gap-6 text-xs uppercase tracking-[0.16em] text-slate-400 motion-safe:animate-[tickerSlide_24s_linear_infinite]">
+        <div className="flex w-[200%] gap-6 text-xs uppercase tracking-[0.16em] text-muted-foreground motion-safe:animate-[tickerSlide_24s_linear_infinite]">
           {Array.from({ length: 16 }).map((_, idx) => (
             <span key={idx} className="whitespace-nowrap">
               Architecture clarity at scale

@@ -31,15 +31,15 @@ const WelcomeHeader = ({
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <h1 className="text-4xl font-bold text-gray-900">
+            <h1 className="text-4xl font-bold text-foreground">
               {getCurrentGreeting()},{" "}
               {user?.firstName || user?.fullName || "there"}
             </h1>
           </div>
-          <p className="text-lg text-gray-600 mb-2">
+          <p className="text-lg text-muted-foreground mb-2">
             Ready to bring your ideas to life?
           </p>
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="w-4 h-4" />
             <span>{getCurrentDate()}</span>
           </div>

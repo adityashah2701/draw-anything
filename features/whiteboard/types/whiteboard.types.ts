@@ -72,6 +72,10 @@ export interface DiamondShape extends BaseDrawingElement {
   type: "diamond";
 }
 
+export interface TriangleShape extends BaseDrawingElement {
+  type: "triangle";
+}
+
 export interface LineShape extends BaseDrawingElement {
   type: "line";
 }
@@ -111,6 +115,7 @@ export type DrawingElement =
   | RectangleShape
   | CircleShape
   | DiamondShape
+  | TriangleShape
   | LineShape
   | TextShape
   | ArrowShape
@@ -135,15 +140,4 @@ export interface WhiteboardData {
   };
 }
 
-export type Tool =
-  | "select"
-  | "pen"
-  | "rectangle"
-  | "circle"
-  | "diamond"
-  | "line"
-  | "text"
-  | "eraser"
-  | "hand"
-  | "arrow"
-  | "arrow-bidirectional";
+export type Tool = string;

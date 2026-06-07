@@ -15,6 +15,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+import { ThemeProvider } from "@/providers/theme-provider";
+
 export const metadata: Metadata = {
   title: "Draw Anything",
   description: "A collaborative whiteboard platform.",
@@ -27,14 +29,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        <ConvexClientProvider>
-          <MemberProvider>{children}</MemberProvider>
-        </ConvexClientProvider>
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ConvexClientProvider>
+            <MemberProvider>{children}</MemberProvider>
+          </ConvexClientProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

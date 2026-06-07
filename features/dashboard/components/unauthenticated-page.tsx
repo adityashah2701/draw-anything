@@ -35,32 +35,32 @@ const Page = () => {
   };
 
   return (
-    <main className="relative min-h-screen w-full overflow-x-hidden scroll-smooth bg-[#F6F7FB] text-slate-900">
+    <main className="relative min-h-screen w-full overflow-x-hidden scroll-smooth bg-[#F6F7FB] text-foreground">
       <header className="sticky top-0 z-50 border-b border-slate-300/80 bg-[#F6F7FB]/90 backdrop-blur-md">
         <div className="mx-auto flex h-[76px] w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg border border-slate-300 bg-white p-2 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+            <div className="rounded-lg border border-slate-300 bg-card p-2 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
               <Image src="/logo.svg" alt="Logo" height={20} width={20} />
             </div>
             <div className="leading-tight">
-              <h1 className="text-[27px] font-bold tracking-tight text-slate-900">
+              <h1 className="text-[27px] font-bold tracking-tight text-foreground">
                 Draw Anything
               </h1>
-              <p className="text-[11px] tracking-[0.08em] text-slate-500">
+              <p className="text-[11px] tracking-[0.08em] text-muted-foreground">
                 Diagram Intelligence Platform
               </p>
             </div>
           </div>
 
-          <nav className="hidden items-center gap-1 rounded-full border border-slate-300 bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)] lg:flex">
+          <nav className="hidden items-center gap-1 rounded-full border border-slate-300 bg-card p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)] lg:flex">
             {navItems.map((item, index) => (
               <button
                 key={item.label}
                 type="button"
                 className={
                   index === 0
-                    ? "cursor-pointer rounded-full bg-slate-100 px-4 py-1.5 text-sm font-medium text-slate-700 transition-colors"
-                    : "cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800"
+                    ? "cursor-pointer rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-slate-700 transition-colors"
+                    : "cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-slate-800"
                 }
                 onClick={() => scrollToSection(item.href)}
               >
@@ -87,7 +87,7 @@ const Page = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="h-10 w-10 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 lg:hidden"
+              className="h-10 w-10 rounded-md border border-slate-300 bg-card text-slate-700 hover:bg-secondary lg:hidden"
               onClick={() => setMobileNavOpen((prev) => !prev)}
               aria-label="Toggle navigation"
             >
@@ -97,13 +97,13 @@ const Page = () => {
         </div>
 
         {mobileNavOpen && (
-          <div className="border-t border-slate-200 bg-[#F6F7FB] px-4 py-4 sm:px-6 lg:hidden">
-            <div className="mx-auto max-w-7xl rounded-xl border border-slate-300 bg-white p-2 shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
+          <div className="border-t border-border bg-[#F6F7FB] px-4 py-4 sm:px-6 lg:hidden">
+            <div className="mx-auto max-w-7xl rounded-xl border border-slate-300 bg-card p-2 shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
               {navItems.map((item) => (
                 <button
                   key={item.label}
                   type="button"
-                  className="block w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                  className="block w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-secondary"
                   onClick={() => {
                     scrollToSection(item.href);
                     setMobileNavOpen(false);
@@ -112,11 +112,11 @@ const Page = () => {
                   {item.label}
                 </button>
               ))}
-              <div className="mt-2 border-t border-slate-200 pt-2">
+              <div className="mt-2 border-t border-border pt-2">
                 <SignInButton mode="modal">
                   <Button
                     variant="ghost"
-                    className="w-full justify-start rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                    className="w-full justify-start rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-secondary"
                     onClick={() => setMobileNavOpen(false)}
                   >
                     Sign In

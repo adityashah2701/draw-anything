@@ -11,10 +11,10 @@ export const EmptyState = () => (
           <div className="w-4 h-4 bg-yellow-400 rounded-full animate-pulse"></div>
         </div>
       </div>
-      <h3 className="text-xl font-bold text-gray-900 mb-3">
+      <h3 className="text-xl font-bold text-foreground mb-3">
         Ready to create something amazing?
       </h3>
-      <p className="text-gray-600 mb-8 max-w-md mx-auto leading-relaxed">
+      <p className="text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
         Your whiteboards will appear here. Start by creating your first whiteboard
         and bring your ideas to life.
       </p>

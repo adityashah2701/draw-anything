@@ -76,7 +76,7 @@ const Cursor = memo(
         </svg>
         {info && (
           <div
-            className="ml-4 -mt-4 px-2 py-0.5 text-white font-medium text-xs rounded-md whitespace-nowrap"
+            className="ml-4 -mt-4 px-2 py-0.5 text-primary-foreground font-medium text-xs rounded-md whitespace-nowrap"
             style={{ backgroundColor: color }}
           >
             {info.name}

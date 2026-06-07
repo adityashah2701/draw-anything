@@ -1,21 +1,21 @@
 import * as React from "react";
 import {
-  Download,
-  FolderOpen,
   Grid3X3,
   Redo2,
-  RotateCcw,
-  Save,
-  Trash2,
   Undo2,
+  Trash2,
   Users,
   ZoomIn,
   ZoomOut,
+  RotateCcw,
+  Maximize,
   ArrowLeft,
   Sparkles,
-  Maximize,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 
 interface TopToolbarProps {
   canUndo: boolean;
@@ -54,13 +54,12 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   onResetZoom,
   onFitToScreen,
   onToggleGrid,
-  onSave,
-  onLoad,
   onRename,
   onGenerateDiagram,
   disabled = false,
 }) => {
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const [editedTitle, setEditedTitle] = React.useState(whiteboardTitle || "");
 
@@ -80,32 +79,26 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   };
 
   return (
-    <div className="bg-white/90 backdrop-blur-md border border-gray-200/50 p-2 sm:py-3 sm:px-4 flex items-center justify-between overflow-hidden shadow-sm rounded-2xl">
-      {/* Left Section - Back Button and Title */}
-      <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0 min-w-0">
-        {/* Back Button */}
+    <div className="h-12 w-full bg-card border-b border-border flex items-center justify-between px-4 select-none text-foreground pointer-events-auto">
+      {/* Left Section - Back, Title, Undo/Redo */}
+      <div className="flex items-center space-x-3 flex-shrink-0 min-w-0">
         <button
           onClick={handleBackClick}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0"
+          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           title="Go Back"
         >
-          <ArrowLeft size={18} className="sm:w-5 sm:h-5" />
+          <ArrowLeft size={16} />
         </button>
 
-        {/* Separator */}
-        <div className="w-px h-6 bg-gray-300 hidden sm:block flex-shrink-0" />
+        <div className="w-px h-4 bg-muted" />
 
-        {/* Whiteboard Title */}
-        <div className="min-w-0 flex-1 max-w-[200px] sm:max-w-[300px]">
+        <div className="min-w-0 max-w-[200px] sm:max-w-[300px]">
           {isLoading ? (
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-gray-300 rounded animate-pulse"></div>
-              <div className="w-24 h-4 bg-gray-300 rounded animate-pulse"></div>
-            </div>
+            <div className="w-24 h-4 bg-muted rounded animate-pulse" />
           ) : isEditingTitle ? (
             <input
               autoFocus
-              className="text-sm sm:text-lg font-medium text-gray-900 bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-1 w-full"
+              className="text-sm font-medium text-foreground bg-transparent border-none outline-none focus:ring-1 focus:ring-violet-500 rounded px-1 w-full"
               value={editedTitle}
               onChange={(e) => setEditedTitle(e.target.value)}
               onBlur={handleTitleSubmit}
@@ -119,7 +112,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             />
           ) : (
             <h1
-              className="text-sm sm:text-lg font-medium text-gray-900 truncate cursor-pointer hover:bg-gray-100/50 rounded px-1 transition-colors"
+              className="text-sm font-medium text-foreground truncate cursor-pointer hover:bg-muted rounded px-1 transition-colors"
               onClick={() => !disabled && setIsEditingTitle(true)}
               title={disabled ? "" : "Click to Rename"}
             >
@@ -128,133 +121,121 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           )}
         </div>
 
-        {/* Separator */}
-        <div className="w-px h-6 bg-gray-300 hidden sm:block flex-shrink-0" />
+        <div className="w-px h-4 bg-muted" />
 
-        {/* Action Buttons */}
-        <div className="flex items-center space-x-1 flex-shrink-0">
+        <div className="flex items-center space-x-0.5">
           <button
             onClick={onUndo}
             disabled={!canUndo || disabled}
-            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={disabled ? "Read-only mode" : "Undo"}
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
+            title="Undo (⌘Z)"
           >
-            <Undo2 size={18} className="sm:w-5 sm:h-5" />
+            <Undo2 size={16} />
           </button>
           <button
             onClick={onRedo}
             disabled={!canRedo || disabled}
-            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={disabled ? "Read-only mode" : "Redo"}
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
+            title="Redo (⌘Y)"
           >
-            <Redo2 size={18} className="sm:w-5 sm:h-5" />
+            <Redo2 size={16} />
           </button>
           <button
             onClick={onClear}
             disabled={disabled}
-            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed hidden sm:block"
-            title={disabled ? "Read-only mode" : "Clear Canvas"}
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
+            title="Clear Canvas"
           >
-            <Trash2 size={18} className="sm:w-5 sm:h-5" />
-          </button>
-          <button
-            onClick={onSave}
-            disabled={disabled}
-            className="p-2 rounded-lg text-slate-700 hover:bg-slate-100 disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-            title={disabled ? "Read-only mode" : "Save Whiteboard"}
-          >
-            <Save size={18} className="sm:w-5 sm:h-5" />
-          </button>
-          <button
-            onClick={onLoad}
-            className="p-2 rounded-lg text-slate-700 hover:bg-slate-100 hidden sm:block"
-            title="Load Whiteboard"
-          >
-            <FolderOpen size={18} className="sm:w-5 sm:h-5" />
+            <Trash2 size={16} />
           </button>
         </div>
       </div>
 
-      {/* Center Actions - Zoom and Grid Controls */}
-      <div className="flex items-center space-x-1 sm:space-x-4 flex-shrink-0">
+      {/* Center Section - Zoom and Grid */}
+      <div className="flex items-center space-x-1 flex-shrink-0">
         <button
           onClick={onZoomOut}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
           title="Zoom Out"
         >
-          <ZoomOut size={18} className="sm:w-5 sm:h-5" />
+          <ZoomOut size={16} />
         </button>
-        <span className="text-xs sm:text-sm text-gray-600 w-12 sm:w-16 text-center flex-shrink-0">
+        <span className="text-xs text-muted-foreground w-12 text-center font-mono">
           {Math.round(zoom * 100)}%
         </span>
         <button
           onClick={onZoomIn}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
           title="Zoom In"
         >
-          <ZoomIn size={18} className="sm:w-5 sm:h-5" />
+          <ZoomIn size={16} />
         </button>
         <button
           onClick={onResetZoom}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
           title="Reset Zoom"
         >
-          <RotateCcw size={18} className="sm:w-5 sm:h-5" />
+          <RotateCcw size={15} />
         </button>
         <button
           onClick={onFitToScreen}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
           title="Fit to Screen"
         >
-          <Maximize size={18} className="sm:w-5 sm:h-5" />
+          <Maximize size={15} />
         </button>
+        
+        <div className="w-px h-4 bg-muted mx-1" />
+
         <button
           onClick={onToggleGrid}
-          className={`p-2 rounded-lg transition-colors ${
+          className={`p-1.5 rounded transition-colors cursor-pointer ${
             showGrid
-              ? "bg-slate-700 text-white"
-              : "text-gray-600 hover:bg-gray-100"
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
           }`}
           title="Toggle Grid"
         >
-          <Grid3X3 size={18} className="sm:w-5 sm:h-5" />
+          <Grid3X3 size={16} />
         </button>
       </div>
 
-      {/* Right Actions */}
-      <div className="flex items-center space-x-1 sm:space-x-4 flex-shrink-0">
-        {/* Read-only indicator */}
-        {disabled && (
-          <div className="flex items-center space-x-2 px-2 py-1 bg-yellow-100 border border-yellow-300 rounded-lg">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0"></div>
-            <span className="text-xs text-yellow-800 font-medium hidden sm:inline">
-              Read-only
-            </span>
-          </div>
+      {/* Right Section - Status, AI Generate, Collaborators */}
+      <div className="flex items-center space-x-3 flex-shrink-0">
+        {/* Saved status indicator */}
+        <span className="text-[11px] text-muted-foreground opacity-40 hidden sm:inline font-mono">
+          Saved
+        </span>
+
+        {onGenerateDiagram && (
+          <>
+            <div className="w-px h-4 bg-muted" />
+            <button
+              onClick={onGenerateDiagram}
+              disabled={disabled}
+              className="flex items-center gap-1 px-3 py-1 rounded bg-violet-600 hover:bg-violet-500 text-foreground font-medium text-xs shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              title="Generate diagram with AI"
+            >
+              <Sparkles size={13} />
+              <span>AI Generate</span>
+            </button>
+          </>
         )}
 
-        {/* AI Generate Button */}
         <button
-          onClick={onGenerateDiagram}
-          disabled={disabled || !onGenerateDiagram}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-          title="Generate diagram with AI"
-        >
-          <Sparkles size={14} />
-          <span className="hidden sm:inline">AI Generate</span>
-        </button>
-
-        <button
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
           title="Collaborators"
         >
-          <Users size={18} className="sm:w-5 sm:h-5" />
+          <Users size={16} />
         </button>
+
+        <div className="w-px h-4 bg-muted" />
         <button
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 hidden sm:block"
-          title="Download"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+          title="Toggle Theme"
         >
-          <Download size={18} className="sm:w-5 sm:h-5" />
+          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
         </button>
       </div>
     </div>

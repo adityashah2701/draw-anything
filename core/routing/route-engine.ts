@@ -63,6 +63,8 @@ import { normalizeRoutes } from "@/core/routing/path-normalizer";
 import {
   sanitizeEdges,
   sanitizeObstacles,
+  isFullyConnectedEdge,
+  isValidPoint,
 } from "@/core/routing/routing-guards";
 
 // ─────────────────── Types ───────────────────
@@ -167,6 +169,16 @@ export const markEdgeDirty = (
 };
 
 /**
+ * Remove an edge from the dirty set after a cached route is reused.
+ */
+export const clearEdgeDirty = (
+  state: RouteEngineState,
+  arrowId: string,
+): void => {
+  state.dirtyEdges.delete(arrowId);
+};
+
+/**
  * Mark all edges connected to a shape as dirty.
  */
 export const markShapeEdgesDirty = (
@@ -192,10 +204,24 @@ export const invalidateAllRoutes = (state: RouteEngineState): void => {
 
 const computeObstacleHash = (obstacles: RoutingObstacle[]): string => {
   if (obstacles.length === 0) return "empty";
-  // Lightweight hash based on count and first/last bounds
-  const first = obstacles[0].bounds;
-  const last = obstacles[obstacles.length - 1].bounds;
-  return `${obstacles.length}:${first.minX},${first.minY},${first.maxX},${first.maxY}:${last.minX},${last.minY},${last.maxX},${last.maxY}`;
+  return [...obstacles]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map(
+      (obstacle) =>
+        `${obstacle.id}:${obstacle.bounds.minX},${obstacle.bounds.minY},${obstacle.bounds.maxX},${obstacle.bounds.maxY}`,
+    )
+    .join("|");
+};
+
+const hashPoints = (points?: Point[]): string => {
+  if (!Array.isArray(points) || points.length === 0) return "no-path";
+  return points
+    .map((point) =>
+      isValidPoint(point)
+        ? `${Math.round(point.x * 1000) / 1000},${Math.round(point.y * 1000) / 1000}`
+        : "invalid",
+    )
+    .join("|");
 };
 
 // ─────────────────── Main Routing Pipeline ───────────────────
@@ -242,7 +268,7 @@ export const routeWithEngine = (
   } = config;
 
   // ── Stage 0a: Sanitize inputs (Task 5 — Engine Stability) ──
-  const safeEdges = sanitizeEdges(edges);
+  const safeEdges = sanitizeEdges(edges).filter(isFullyConnectedEdge);
   const obstacles = sanitizeObstacles(config.obstacles);
 
   // ── Stage 0b: Dirty tracking ──
@@ -251,6 +277,16 @@ export const routeWithEngine = (
   if (hasState && obstacleHash !== state.lastObstacleHash) {
     invalidateAllRoutes(state);
     state.lastObstacleHash = obstacleHash;
+  }
+
+  if (hasState) {
+    const activeIds = new Set(safeEdges.map((edge) => edge.arrowId));
+    for (const cachedId of state.routeCache.keys()) {
+      if (activeIds.has(cachedId)) continue;
+      state.routeCache.delete(cachedId);
+      state.pathHashCache.delete(cachedId);
+      state.dirtyEdges.delete(cachedId);
+    }
   }
 
   // Determine which edges to route
@@ -321,7 +357,18 @@ export const routeWithEngine = (
 
   // ── Path hash helper for memoization (Task 2) ──
   const computePathHash = (edge: RouteEngineEdge): string =>
-    `${edge.sourceId ?? ""}|${edge.targetId ?? ""}|${edge.start.x},${edge.start.y}|${edge.end.x},${edge.end.y}`;
+    [
+      edge.sourceId ?? "",
+      edge.targetId ?? "",
+      edge.startHandle ?? "",
+      edge.endHandle ?? "",
+      edge.routePreference ?? "",
+      edge.routingMode ?? "orthogonal",
+      edge.preserveManualBends ? "manual" : "auto",
+      hashPoints(edge.existingPoints),
+      `${Math.round(edge.start.x * 1000) / 1000},${Math.round(edge.start.y * 1000) / 1000}`,
+      `${Math.round(edge.end.x * 1000) / 1000},${Math.round(edge.end.y * 1000) / 1000}`,
+    ].join("|");
 
   // Sort for determinism
   const sortedEdges = [...edgesToRoute].sort((a, b) =>
@@ -398,6 +445,7 @@ export const routeWithEngine = (
       // Still register in spatial index so subsequent edges see this path
       addPathToSegmentSpatialIndex(occupied, edge.arrowId, cached);
       recordPath(congestionMap, edge.arrowId, cached);
+      clearEdgeDirty(state, edge.arrowId);
       continue;
     }
 
@@ -441,6 +489,7 @@ export const routeWithEngine = (
     // Update path hash cache
     if (hasState) {
       state.pathHashCache.set(edge.arrowId, computePathHash(edge));
+      clearEdgeDirty(state, edge.arrowId);
     }
 
     // Update spatial index and congestion map

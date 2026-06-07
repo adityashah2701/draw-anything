@@ -4,6 +4,7 @@ import { FreehandShape } from "@/core/shapes/freehand/types";
 import { getFreehandBounds } from "@/core/shapes/freehand/geometry";
 import { getFreehandAnchors } from "@/core/shapes/freehand/anchors";
 import { renderFreehandToCanvas } from "@/core/shapes/freehand/renderer";
+import { Pencil } from "lucide-react";
 import {
   containsPointInFreehand,
   getFreehandResizeHandles,
@@ -29,4 +30,22 @@ export const freehandDefinition = createShapeDefinition<FreehandShape>({
     containsPointInFreehand(shape, point, options?.radius ?? 0),
   getResizeHandles: (shape) => getFreehandResizeHandles(shape),
   validate: (shape) => shape.points.length >= 1,
+  toolbarConfig: {
+    icon: Pencil,
+    label: "Pen",
+    shortcut: "P",
+    group: "drawing",
+    order: 1,
+  },
+  propertiesConfig: {
+    supportsColor: true,
+    supportsFill: false,
+    supportsStrokeWidth: true,
+    supportsFontSize: false,
+  },
+  labelConfig: {
+    anchor: "none",
+    padding: 0,
+    verticalAlign: "middle",
+  },
 });

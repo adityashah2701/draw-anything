@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import Groq from "groq-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { buildAnchorId } from "@/core/anchors/generate-anchors";
 import {
   RouteArrowDescriptor,
@@ -15,6 +16,8 @@ import {
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
 });
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 /**
  * Separation of concerns:
@@ -38,21 +41,27 @@ function detectDiagramIntent(prompt: string): DiagramIntent {
 function buildSystemPrompt(intent: DiagramIntent): string {
   const common = `
 You are an expert diagram architect.
-Generate ONLY a logical graph as valid JSON:
+You must THINK step-by-step before generating the diagram.
+Format your response exactly like this:
+
+THOUGHT:
+<your step-by-step reasoning about what components and relationships are needed>
+
+\`\`\`json
 {
   "nodes": [...],
   "edges": [...]
 }
+\`\`\`
 
-Hard rules:
-- No markdown.
-- No explanations.
+Hard rules for JSON:
+- No markdown inside the JSON.
 - Unique node ids.
 - Labels must be concise (1-4 words).
 - Node type must be "rectangle", "circle", or "diamond".
 - Use "diamond" ONLY for explicit branching/decision logic.
 - Do not emit any visual coordinates.
-- Keep graph small and readable (3-14 nodes).
+- Generate comprehensive, detailed architectures (8-25 nodes). Do not make simple 3-node diagrams unless explicitly requested.
 - Avoid unnecessary cycles.
 - Optimize for human readability over completeness.
 - Return one coherent diagram only. Do not mix unrelated sub-diagrams.
@@ -1707,111 +1716,7 @@ function isArchitectureLayoutInvalid(
   );
 }
 
-function createArchitectureGuides(
-  layerBands: Array<{
-    index: number;
-    name: string;
-    top: number;
-    bottom: number;
-    left: number;
-    right: number;
-  }>,
-  layoutNodes: Map<string, LayoutNode>,
-  startIndex: number,
-) {
-  let index = startIndex;
-  const guides: CanvasElement[] = [];
 
-  const layerBackgroundColors = [
-    "#f0f4ff", // edge - light blue
-    "#f5f3ff", // application - light purple
-    "#fffbeb", // data - light amber
-    "#f0fdf4", // observability - light green
-  ];
-
-  layerBands.forEach((band) => {
-    // Light background strip per layer for visual grouping.
-    guides.push({
-      id: generateShortId(index++),
-      type: "rectangle",
-      points: [
-        { x: band.left - 16, y: band.top - 4 },
-        { x: band.right + 16, y: band.bottom + 4 },
-      ],
-      fill: layerBackgroundColors[band.index % layerBackgroundColors.length],
-      color: "#e2e8f0",
-      strokeWidth: 1,
-      isGuide: true,
-    });
-
-    guides.push({
-      id: generateShortId(index++),
-      type: "line",
-      points: [
-        { x: band.left, y: band.top + 2 },
-        { x: band.right, y: band.top + 2 },
-      ],
-      color: "#dbe4f0",
-      strokeWidth: 1,
-      isGuide: true,
-    });
-
-    guides.push({
-      id: generateShortId(index++),
-      type: "text",
-      text: band.name[0].toUpperCase() + band.name.slice(1),
-      points: [{ x: band.left + 12, y: band.top + 10 }],
-      color: "#475569",
-      strokeWidth: 1,
-      fontSize: 18,
-      fontWeight: "700",
-      isGuide: true,
-    });
-  });
-
-  const clusters: Array<{
-    label: string;
-    match: (node: LayoutNode) => boolean;
-  }> = [
-    {
-      label: "Order Domain",
-      match: (node) =>
-        /(order|cart|catalog|inventory|product)/i.test(node.label),
-    },
-    {
-      label: "Payment Domain",
-      match: (node) => /(payment|billing|invoice|checkout)/i.test(node.label),
-    },
-    {
-      label: "Observability Cluster",
-      match: (node) =>
-        /(monitor|metrics|logging|trace|alert|analytics|audit)/i.test(
-          node.label,
-        ),
-    },
-  ];
-
-  clusters.forEach((cluster) => {
-    const members = Array.from(layoutNodes.values()).filter(cluster.match);
-    if (members.length < 2) return;
-    const minX = Math.min(...members.map((node) => node.x - node.width / 2));
-    const minY = Math.min(...members.map((node) => node.y));
-
-    guides.push({
-      id: generateShortId(index++),
-      type: "text",
-      text: cluster.label,
-      points: [{ x: minX - 8, y: minY - 20 }],
-      color: "#64748b",
-      strokeWidth: 1,
-      fontSize: 14,
-      fontWeight: "600",
-      isGuide: true,
-    });
-  });
-
-  return { guides, nextIndex: index };
-}
 
 function buildNodeAndArrowElementsFromLayout(
   graph: LogicalGraph,
@@ -2149,12 +2054,7 @@ function buildArchitectureElements(graph: LogicalGraph): CanvasElement[] {
     },
   );
 
-  const { guides } = createArchitectureGuides(
-    layout.layers,
-    layoutNodes,
-    rendered.nextIndex,
-  );
-  return [...guides, ...rendered.elements];
+  return rendered.elements;
 }
 
 function buildElements(
@@ -2210,76 +2110,151 @@ function buildElements(
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const prompt = body?.prompt;
+  const encoder = new TextEncoder();
+  
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const body = await req.json();
+        const prompt = body?.prompt;
+        const model = body?.model || "gemini";
 
-    if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json(
-        { error: "Prompt is required." },
-        { status: 400 },
-      );
-    }
+        if (!prompt || typeof prompt !== "string") {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", message: "Prompt is required." })}\n\n`));
+          controller.close();
+          return;
+        }
 
-    const intent = detectDiagramIntent(prompt);
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: buildSystemPrompt(intent) },
-        {
-          role: "user",
-          content: buildUserPrompt(prompt, intent),
-        },
-      ],
-    });
+        const intent = detectDiagramIntent(prompt);
+        const systemPrompt = buildSystemPrompt(intent);
+        const userPrompt = buildUserPrompt(prompt, intent);
 
-    const raw = completion.choices[0]?.message?.content?.trim() ?? "";
-    const cleaned = raw
-      .replace(/^```json/i, "")
-      .replace(/^```/, "")
-      .replace(/```$/, "")
-      .trim();
+        let raw = "";
 
-    const jsonStart = cleaned.indexOf("{");
-    const jsonEnd = cleaned.lastIndexOf("}");
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error("Invalid JSON from AI");
-    }
+        if (model === "gemini") {
+          const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+          const result = await geminiModel.generateContentStream({
+            contents: [
+              { role: "user", parts: [{ text: systemPrompt + "\\n\\nUser Request: " + userPrompt }] }
+            ],
+            generationConfig: {
+              temperature: 0,
+            }
+          });
 
-    const parsed = JSON.parse(
-      cleaned.slice(jsonStart, jsonEnd + 1),
-    ) as DiagramJson;
-    if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
-      throw new Error("Invalid nodes/edges format");
-    }
+          for await (const chunk of result.stream) {
+            const chunkText = chunk.text();
+            raw += chunkText;
+            
+            // Only stream thoughts before the JSON block starts
+            if (!raw.includes("```json")) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "thought", message: raw.replace(/THOUGHT:/i, "").trim().split("\\n").pop() || "Thinking..." })}\n\n`));
+            }
+          }
+        } else {
+          const completionStream = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            temperature: 0,
+            max_tokens: 4096,
+            stream: true,
+            messages: [
+              { role: "system", content: systemPrompt },
+              {
+                role: "user",
+                content: userPrompt,
+              },
+            ],
+          });
 
-    const logicalGraph = simplifyGraphForReadability(
-      keepMostRelevantComponent(sanitizeGraph(parsed, intent, prompt), prompt),
-      intent,
-    );
-    const elements = buildElements(logicalGraph, intent);
+          for await (const chunk of completionStream) {
+            const chunkText = chunk.choices[0]?.delta?.content || "";
+            raw += chunkText;
+            
+            // Only stream thoughts before the JSON block starts
+            if (!raw.includes("```json")) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "thought", message: raw.replace(/THOUGHT:/i, "").trim().split("\\n").pop() || "Thinking..." })}\n\n`));
+            }
+          }
+        }
 
-    return NextResponse.json({ elements });
-  } catch (error) {
-    console.error("generate-diagram error:", error);
-    if (
-      error instanceof Error &&
-      error.message.includes("rejected by quality gates")
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Generated diagram was rejected by layout quality gates. Try a narrower scope or fewer cross-domain links.",
-        },
-        { status: 422 },
-      );
-    }
-    return NextResponse.json(
-      { error: "Failed to generate diagram." },
-      { status: 500 },
-    );
-  }
+        const cleaned = raw
+          .replace(/^```json/mi, "")
+          .replace(/^```/m, "")
+          .replace(/```$/m, "")
+          .trim();
+
+        const jsonStart = cleaned.indexOf("{");
+        const jsonEnd = cleaned.lastIndexOf("}");
+        if (jsonStart === -1 || jsonEnd === -1) {
+          throw new Error("Invalid JSON from AI");
+        }
+
+        const parsed = JSON.parse(
+          cleaned.slice(jsonStart, jsonEnd + 1),
+        ) as DiagramJson;
+        if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+          throw new Error("Invalid nodes/edges format");
+        }
+
+        const logicalGraph = simplifyGraphForReadability(
+          keepMostRelevantComponent(sanitizeGraph(parsed, intent, prompt), prompt),
+          intent,
+        );
+        const elements = buildElements(logicalGraph, intent);
+
+        const nodeElements = elements.filter(
+          (el) => el.type !== "arrow" && el.type !== "arrow-bidirectional"
+        );
+        const edgeElements = elements.filter(
+          (el) => el.type === "arrow" || el.type === "arrow-bidirectional"
+        );
+
+        // Stream nodes one by one
+        for (const nodeElement of nodeElements) {
+          const data = JSON.stringify({ type: "element", element: nodeElement });
+          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          // Wait 80ms to create a nice predicting/drawing rhythm
+          await new Promise((resolve) => setTimeout(resolve, 80));
+        }
+
+        // Stream connections/arrows one by one
+        for (const edgeElement of edgeElements) {
+          const data = JSON.stringify({ type: "element", element: edgeElement });
+          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          // Wait 60ms between arrows
+          await new Promise((resolve) => setTimeout(resolve, 60));
+        }
+
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "done", count: elements.length })}\n\n`
+          )
+        );
+      } catch (error) {
+        console.error("generate-diagram error:", error);
+        let message = "Failed to generate diagram.";
+        if (
+          error instanceof Error &&
+          error.message.includes("rejected by quality gates")
+        ) {
+          message = "Generated diagram was rejected by layout quality gates. Try a narrower scope or fewer cross-domain links.";
+        } else if (error instanceof Error) {
+          message = error.message;
+        }
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: "error", message })}\n\n`)
+        );
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+  });
 }

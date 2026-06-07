@@ -65,16 +65,16 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-y-auto"
+        className="bg-card rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">
+          <h2 className="text-2xl font-bold text-foreground">
             Keyboard Shortcuts
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-2xl"
+            className="text-muted-foreground hover:text-gray-700 text-2xl"
           >
             ×
           </button>
@@ -83,7 +83,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
         <div className="grid md:grid-cols-2 gap-6">
           {shortcuts.map((category) => (
             <div key={category.category}>
-              <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-200 pb-2">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b border-border pb-2">
                 {category.category}
               </h3>
               <div className="space-y-2">
@@ -92,17 +92,17 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
                     key={index}
                     className="flex justify-between items-center py-1"
                   >
-                    <span className="text-gray-600">
+                    <span className="text-muted-foreground">
                       {shortcut.description}
                     </span>
                     <div className="flex space-x-1">
                       {shortcut.key.split("+").map((key, keyIndex) => (
                         <span key={keyIndex} className="inline-flex">
-                          <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded">
+                          <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-muted border border-border rounded">
                             {key}
                           </kbd>
                           {keyIndex < shortcut.key.split("+").length - 1 && (
-                            <span className="mx-1 text-gray-400">+</span>
+                            <span className="mx-1 text-muted-foreground">+</span>
                           )}
                         </span>
                       ))}
@@ -114,14 +114,14 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
           ))}
         </div>
 
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <p className="text-sm text-gray-500 text-center">
+        <div className="mt-6 pt-4 border-t border-border">
+          <p className="text-sm text-muted-foreground text-center">
             Press{" "}
-            <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded">
+            <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-muted border border-border rounded">
               ?
             </kbd>{" "}
             or
-            <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded ml-1">
+            <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-muted border border-border rounded ml-1">
               Ctrl+/
             </kbd>{" "}
             to toggle this panel

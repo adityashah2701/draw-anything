@@ -5,6 +5,7 @@ import { TextShape } from "@/core/shapes/text/types";
 import { getTextBounds } from "@/core/shapes/text/geometry";
 import { getTextAnchors } from "@/core/shapes/text/anchors";
 import { renderTextToCanvas } from "@/core/shapes/text/renderer";
+import { Type } from "lucide-react";
 import {
   containsPointInText,
   getTextResizeHandles,
@@ -35,4 +36,22 @@ export const textDefinition = createShapeDefinition<TextShape>({
   getResizeHandles: (shape, options) =>
     getTextResizeHandles(shape, options?.bounds),
   validate: (shape) => shape.points.length >= 1,
+  toolbarConfig: {
+    icon: Type,
+    label: "Text",
+    shortcut: "T",
+    group: "tools",
+    order: 1,
+  },
+  propertiesConfig: {
+    supportsColor: true,
+    supportsFill: false,
+    supportsStrokeWidth: false,
+    supportsFontSize: true,
+  },
+  labelConfig: {
+    anchor: "none",
+    padding: 0,
+    verticalAlign: "middle",
+  },
 });

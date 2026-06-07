@@ -2,7 +2,9 @@ import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller
 import useCanvasEngine from "@/features/whiteboard/hooks/canvas/use-canvas-engine";
 import { Cursors } from "@/features/whiteboard/components/canvas/cursors";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
+import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { normalizeRichTextInput } from "@/features/whiteboard/utils/rich-text-renderer";
 
 interface WhiteboardCanvasStageProps {
   controller: WhiteboardPageController;
@@ -96,10 +98,10 @@ export const WhiteboardCanvasStage = ({
       )}
 
       {!whiteboard && whiteboardId && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-50 bg-opacity-75">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background bg-opacity-75">
           <div className="text-center">
             <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500"></div>
-            <p className="text-gray-600">Loading whiteboard...</p>
+            <p className="text-muted-foreground">Loading whiteboard...</p>
           </div>
         </div>
       )}
@@ -161,13 +163,13 @@ export const WhiteboardCanvasStage = ({
             }
           }
 
-          if (
-            topEl.type === "rectangle" ||
-            topEl.type === "circle" ||
-            topEl.type === "diamond"
-          ) {
+          const shapeDef = shapeRegistry.get(topEl.type as any);
+
+          if (shapeDef?.labelConfig?.anchor === "center") {
             setEditingShapeLabelId(topEl.id);
-            setEditingShapeLabelDraft(topEl.label?.trim() || "TEXT");
+            setEditingShapeLabelDraft(
+              normalizeRichTextInput(topEl.label?.trim() || "TEXT"),
+            );
             setEditingShapeLabelFontSize(topEl.fontSize || 20);
             setEditingShapeLabelFontWeight(topEl.fontWeight || "600");
             setEditingShapeLabelFontStyle(topEl.fontStyle || "normal");

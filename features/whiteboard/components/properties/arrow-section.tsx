@@ -21,8 +21,8 @@ interface ArrowSectionProps {
 const controlClass = (disabled: boolean) =>
   `h-8 rounded-md border px-2 text-xs ${
     disabled
-      ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
-      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
+      ? "border-border bg-muted text-muted-foreground cursor-not-allowed"
+      : "border-slate-300 bg-card text-slate-700 hover:border-slate-400"
   }`;
 
 export const ArrowSection: React.FC<ArrowSectionProps> = ({
@@ -42,12 +42,12 @@ export const ArrowSection: React.FC<ArrowSectionProps> = ({
     `h-8 rounded-md border px-2 text-xs transition-colors ${
       active
         ? "border-sky-500 bg-sky-50 text-sky-700"
-        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+        : "border-border bg-card text-muted-foreground hover:border-slate-300"
     } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`;
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+    <div className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-2 py-1">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Arrow
       </span>
 
