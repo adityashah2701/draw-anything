@@ -25,11 +25,17 @@ interface GroupedEdge {
 
 export const isValidParallelEdgeDescriptor = (
   descriptor: Partial<ParallelEdgeDescriptor> | null | undefined,
-): descriptor is ParallelEdgeDescriptor =>
-  !!descriptor &&
-  isNonEmptyString(descriptor.arrowId) &&
-  isValidPoint(descriptor.start) &&
-  isValidPoint(descriptor.end);
+): descriptor is ParallelEdgeDescriptor => {
+  if (!descriptor) return false;
+  if (!descriptor.start || typeof descriptor.start.x !== 'number') return false;
+  if (!descriptor.end || typeof descriptor.end.x !== 'number') return false;
+
+  return (
+    isNonEmptyString(descriptor.arrowId) &&
+    isValidPoint(descriptor.start) &&
+    isValidPoint(descriptor.end)
+  );
+};
 
 const getDirectionBucket = (
   start?: Point,
@@ -37,6 +43,8 @@ const getDirectionBucket = (
   startHandle?: ConnectionHandle,
   endHandle?: ConnectionHandle,
 ): "h" | "v" => {
+  if (!start || typeof start.x !== 'number' || !end || typeof end.x !== 'number') return "h";
+
   const safeStart = toValidPoint(start);
   const safeEnd = toValidPoint(end);
   if (!safeStart || !safeEnd) return "h";
@@ -108,6 +116,7 @@ export const computeParallelOffsets = (
 ): Map<string, number> => {
   const byGroup = new Map<string, GroupedEdge[]>();
   for (const descriptor of edges) {
+    if (!descriptor || !descriptor.start || typeof descriptor.start.x !== 'number') continue;
     if (!isValidParallelEdgeDescriptor(descriptor)) continue;
     const groupKey = getGroupKey(descriptor);
     const grouped = byGroup.get(groupKey);

@@ -150,11 +150,11 @@ export const HeroSection = () => {
       <div className="mx-auto max-w-7xl">
         <div className="grid gap-6 lg:grid-cols-12 lg:items-end">
           <div className="lg:col-span-8">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-card px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5 text-blue-700" />
+            <p className="mb-4 inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
               Diagram intelligence for modern teams
             </p>
-            <h1 className="max-w-4xl text-[clamp(2.25rem,5.8vw,5rem)] font-black leading-[0.95] tracking-[-0.04em] text-[#0F172A]">
+            <h1 className="max-w-4xl text-[clamp(2.25rem,5.8vw,5rem)] font-black leading-[0.95] tracking-[-0.04em] text-foreground">
               Architecture that stays aligned.
             </h1>
             <p className="mt-1 text-[clamp(1.7rem,4.4vw,3.6rem)] font-semibold leading-[0.96] tracking-[-0.03em] text-muted-foreground">
@@ -164,7 +164,7 @@ export const HeroSection = () => {
 
           <div className="lg:col-span-4 lg:flex lg:justify-end">
             <SignUpButton mode="modal">
-              <Button className="h-12 rounded-md bg-blue-700 px-6 text-base font-semibold text-white hover:bg-blue-800">
+              <Button className="h-12 rounded-md bg-primary px-6 text-base font-semibold text-primary-foreground hover:bg-primary/90">
                 Set up your workspace
                 <ArrowUpRight className="ml-2 h-4 w-4" />
               </Button>
@@ -173,7 +173,7 @@ export const HeroSection = () => {
         </div>
 
         <motion.div
-          className="mt-10 overflow-hidden rounded-2xl border border-slate-300 bg-card shadow-[0_18px_42px_rgba(15,23,42,0.12)]"
+          className="mt-10 overflow-hidden rounded-2xl border border-border bg-card shadow-lg"
           variants={shell}
           initial="hidden"
           whileInView="visible"
@@ -185,14 +185,14 @@ export const HeroSection = () => {
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="h-2.5 w-2.5 rounded-full bg-slate-400" />
-                <div className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+                <div className="h-2.5 w-2.5 rounded-full bg-border" />
+                <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground" />
                 <div className="h-2.5 w-2.5 rounded-full bg-muted" />
               </div>
               <p className="text-xs font-medium text-muted-foreground">
                 Draw Anything Workspace
               </p>
-              <Image src="/logo.svg" alt="Logo" width={16} height={16} />
+              <Image src="/logo.svg" alt="Logo" width={16} height={16} className="dark:invert" />
             </div>
           </motion.div>
 
@@ -202,7 +202,7 @@ export const HeroSection = () => {
               variants={panel}
             />
             <motion.div
-              className="relative rounded-xl border border-slate-300 bg-card shadow-sm"
+              className="relative rounded-xl border border-border bg-card shadow-sm"
               variants={panel}
             >
               <div className="grid min-h-[320px] grid-cols-1 lg:min-h-[380px] lg:grid-cols-[210px_1fr]">
@@ -220,7 +220,7 @@ export const HeroSection = () => {
                         variants={itemReveal}
                         className={
                           index === 0
-                            ? "rounded-md border border-slate-300 bg-card px-3 py-2 font-medium text-slate-800"
+                            ? "rounded-md border border-border bg-surface-secondary px-3 py-2 font-medium text-foreground"
                             : "rounded-md px-3 py-2 text-muted-foreground"
                         }
                       >
@@ -245,7 +245,7 @@ export const HeroSection = () => {
                       </p>
                     </div>
                     <motion.div
-                      className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700"
+                      className="inline-flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"
                       initial={{ opacity: 0 }}
                       whileInView={{ opacity: 1 }}
                       viewport={{ once: true, amount: 0.2 }}
@@ -255,7 +255,7 @@ export const HeroSection = () => {
                       }}
                     >
                       <motion.span
-                        className="h-2 w-2 rounded-full bg-blue-600"
+                        className="h-2 w-2 rounded-full bg-primary"
                         animate={
                           reduceMotion
                             ? undefined
@@ -271,55 +271,55 @@ export const HeroSection = () => {
                     </motion.div>
                   </motion.div>
 
-                  <div className="relative overflow-hidden rounded-xl border border-border bg-[#f8fafc] p-3 sm:p-5">
+                  <div className="relative overflow-hidden rounded-xl border border-border bg-surface p-3 sm:p-5">
                     <div className="relative hidden h-[500px] md:block">
                       <motion.div
-                        className="absolute left-1/2 top-[20px] z-10 flex h-[68px] w-[68px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-slate-700 bg-amber-100 text-sm font-semibold text-slate-800"
+                        className="absolute left-1/2 top-[20px] z-10 flex h-[68px] w-[68px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-border bg-warning/20 text-sm font-semibold text-foreground"
                         {...nodeAnim(0.06)}
                       >
                         Start
                       </motion.div>
 
                       <motion.div
-                        className="absolute left-1/2 top-[88px] z-0 h-[34px] w-0.5 -translate-x-1/2 origin-top bg-slate-500"
+                        className="absolute left-1/2 top-[88px] z-0 h-[34px] w-0.5 -translate-x-1/2 origin-top bg-border"
                         {...lineYAnim(0.12)}
                       />
 
                       <motion.div
-                        className="absolute left-1/2 top-[122px] z-10 flex h-[54px] w-[180px] -translate-x-1/2 items-center justify-center rounded-md border-2 border-slate-700 bg-card text-base font-semibold text-slate-800"
+                        className="absolute left-1/2 top-[122px] z-10 flex h-[54px] w-[180px] -translate-x-1/2 items-center justify-center rounded-md border-2 border-border bg-card text-base font-semibold text-foreground"
                         {...nodeAnim(0.18)}
                       >
                         Login
                       </motion.div>
 
                       <motion.div
-                        className="absolute left-1/2 top-[176px] z-0 h-[44px] w-0.5 -translate-x-1/2 origin-top bg-slate-500"
+                        className="absolute left-1/2 top-[176px] z-0 h-[44px] w-0.5 -translate-x-1/2 origin-top bg-border"
                         {...lineYAnim(0.24)}
                       />
 
                       <motion.div
-                        className="absolute left-1/2 top-[220px] z-10 h-[64px] w-[64px] -translate-x-1/2 rotate-45 border-2 border-slate-700 bg-rose-100"
+                        className="absolute left-1/2 top-[220px] z-10 h-[64px] w-[64px] -translate-x-1/2 rotate-45 border-2 border-border bg-destructive/20"
                         {...nodeAnim(0.3)}
                       >
-                        <div className="flex h-full w-full -rotate-45 items-center justify-center text-sm font-semibold text-slate-800">
+                        <div className="flex h-full w-full -rotate-45 items-center justify-center text-sm font-semibold text-foreground">
                           Valid?
                         </div>
                       </motion.div>
 
                       <motion.div
-                        className="absolute left-1/2 top-[284px] z-0 h-[24px] w-0.5 -translate-x-1/2 origin-top bg-slate-500"
+                        className="absolute left-1/2 top-[284px] z-0 h-[24px] w-0.5 -translate-x-1/2 origin-top bg-border"
                         {...lineYAnim(0.36)}
                       />
                       <motion.div
-                        className="absolute left-[30%] right-[30%] top-[308px] z-0 h-0.5 origin-left bg-slate-500"
+                        className="absolute left-[30%] right-[30%] top-[308px] z-0 h-0.5 origin-left bg-border"
                         {...lineXAnim(0.42)}
                       />
                       <motion.div
-                        className="absolute left-[30%] top-[308px] z-0 h-[12px] w-0.5 origin-top bg-slate-500"
+                        className="absolute left-[30%] top-[308px] z-0 h-[12px] w-0.5 origin-top bg-border"
                         {...lineYAnim(0.48)}
                       />
                       <motion.div
-                        className="absolute right-[30%] top-[308px] z-0 h-[12px] w-0.5 origin-top bg-slate-500"
+                        className="absolute right-[30%] top-[308px] z-0 h-[12px] w-0.5 origin-top bg-border"
                         {...lineYAnim(0.48)}
                       />
 
@@ -337,37 +337,37 @@ export const HeroSection = () => {
                       </motion.div>
 
                       <motion.div
-                        className="absolute left-[18%] top-[320px] z-10 flex h-[50px] w-[170px] items-center justify-center rounded-md border-2 border-slate-700 bg-card text-base font-semibold text-slate-800"
+                        className="absolute left-[18%] top-[320px] z-10 flex h-[50px] w-[170px] items-center justify-center rounded-md border-2 border-border bg-card text-base font-semibold text-foreground"
                         {...nodeAnim(0.58)}
                       >
                         Show Error
                       </motion.div>
                       <motion.div
-                        className="absolute right-[18%] top-[320px] z-10 flex h-[50px] w-[170px] items-center justify-center rounded-md border-2 border-slate-700 bg-card text-base font-semibold text-slate-800"
+                        className="absolute right-[18%] top-[320px] z-10 flex h-[50px] w-[170px] items-center justify-center rounded-md border-2 border-border bg-card text-base font-semibold text-foreground"
                         {...nodeAnim(0.58)}
                       >
                         Dashboard
                       </motion.div>
 
                       <motion.div
-                        className="absolute left-[30%] top-[370px] z-0 h-[16px] w-0.5 origin-top bg-slate-500"
+                        className="absolute left-[30%] top-[370px] z-0 h-[16px] w-0.5 origin-top bg-border"
                         {...lineYAnim(0.68)}
                       />
                       <motion.div
-                        className="absolute right-[30%] top-[370px] z-0 h-[16px] w-0.5 origin-top bg-slate-500"
+                        className="absolute right-[30%] top-[370px] z-0 h-[16px] w-0.5 origin-top bg-border"
                         {...lineYAnim(0.68)}
                       />
                       <motion.div
-                        className="absolute left-[30%] right-[30%] top-[386px] z-0 h-0.5 origin-left bg-slate-500"
+                        className="absolute left-[30%] right-[30%] top-[386px] z-0 h-0.5 origin-left bg-border"
                         {...lineXAnim(0.74)}
                       />
                       <motion.div
-                        className="absolute left-1/2 top-[386px] z-0 h-[34px] w-0.5 -translate-x-1/2 origin-top bg-slate-500"
+                        className="absolute left-1/2 top-[386px] z-0 h-[34px] w-0.5 -translate-x-1/2 origin-top bg-border"
                         {...lineYAnim(0.8)}
                       />
 
                       <motion.div
-                        className="absolute left-1/2 top-[420px] z-10 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-slate-700 bg-amber-100 text-sm font-semibold text-slate-800"
+                        className="absolute left-1/2 top-[420px] z-10 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-border bg-warning/20 text-sm font-semibold text-foreground"
                         {...nodeAnim(0.86)}
                       >
                         End
@@ -386,7 +386,7 @@ export const HeroSection = () => {
                           <motion.div
                             key={step}
                             variants={itemReveal}
-                            className="rounded-md border border-slate-300 bg-card px-3 py-2 text-sm font-medium text-slate-800"
+                            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground"
                           >
                             {step}
                           </motion.div>

@@ -10,7 +10,6 @@ import {
   RotateCcw,
   Maximize,
   ArrowLeft,
-  Sparkles,
   Sun,
   Moon,
 } from "lucide-react";
@@ -206,21 +205,6 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         <span className="text-[11px] text-muted-foreground opacity-40 hidden sm:inline font-mono">
           Saved
         </span>
-
-        {onGenerateDiagram && (
-          <>
-            <div className="w-px h-4 bg-muted" />
-            <button
-              onClick={onGenerateDiagram}
-              disabled={disabled}
-              className="flex items-center gap-1 px-3 py-1 rounded bg-violet-600 hover:bg-violet-500 text-foreground font-medium text-xs shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              title="Generate diagram with AI"
-            >
-              <Sparkles size={13} />
-              <span>AI Generate</span>
-            </button>
-          </>
-        )}
 
         <button
           className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"

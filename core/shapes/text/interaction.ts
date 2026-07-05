@@ -2,6 +2,7 @@ import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
 import { TextShape } from "@/core/shapes/text/types";
 import { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
 import { measureTextShapeBlock } from "@/core/shapes/text/geometry";
+import { resolveTextStyle } from "@/core/shapes/text/text-metrics";
 
 export const containsPointInText = (
   _shape: TextShape,
@@ -44,15 +45,8 @@ export const resizeText = (
 ): TextShape => {
   if (!shape.text || !shape.fontSize || !originalBounds) return shape;
 
-  const weight =
-    shape.fontWeight ||
-    (shape.fontSize >= 36
-      ? "800"
-      : shape.fontSize >= 26
-        ? "700"
-        : shape.fontSize >= 20
-          ? "600"
-      : "400");
+  const { fontWeight: weight } = resolveTextStyle(shape.fontSize, shape.fontWeight, shape.fontStyle);
+  
   const originalSize = measureTextShapeBlock(
     shape.text,
     shape.fontSize,

@@ -23,7 +23,7 @@ const WhiteboardCanvasRoomView = ({
   controller: WhiteboardPageController;
 }) => {
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-card dark:bg-[#0a0a0a] transition-colors duration-300">
+    <div className="relative h-screen w-screen overflow-hidden bg-background transition-colors duration-300">
       <WhiteboardChrome controller={controller} />
       <WhiteboardCanvasStage controller={controller} />
       <WhiteboardEditingOverlays controller={controller} />

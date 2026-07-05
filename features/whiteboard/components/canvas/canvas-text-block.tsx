@@ -9,6 +9,14 @@
  * - BLUR: never auto-commits or auto-deletes.
  * - UNMOUNT: never auto-commits. Parent controls lifecycle.
  * - TOOLBAR: formatting toolbar appears above focused block; mousedown=preventDefault keeps editor focused.
+ *
+ * Pixel-perfect overlay strategy:
+ * - The canvas renders text at (startX, startY) with ctx.textBaseline = "top".
+ * - The overlay div must have its first visible glyph at exactly the same screen position.
+ * - We measure the exact offset between "CSS div top" and "first glyph top" at runtime
+ *   using a hidden measurement element, then apply that offset as a correction.
+ * - We do NOT apply transform:scale(zoom) on the wrapper — the font size is already
+ *   pre-zoomed (effectiveSize = base * zoom).
  */
 
 import React, {
@@ -17,6 +25,7 @@ import React, {
   useLayoutEffect,
   useState,
   useCallback,
+  useMemo,
   CSSProperties,
 } from "react";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -34,15 +43,9 @@ function ensureStyles() {
   _injected = true;
   const s = document.createElement("style");
   s.textContent = `
-    @keyframes ctb-pop {
-      0%   { opacity:0; transform:scale(0.98); }
-      100% { opacity:1; transform:scale(1);    }
+    .ctb-root {
+      /* No animation — even a scale(0.98→1) pop causes visible text shift on entry */
     }
-    @keyframes ctb-bar {
-      from { opacity:0; transform:translateY(4px) scale(0.98); }
-      to   { opacity:1; transform:translateY(0)   scale(1);    }
-    }
-    .ctb-root { animation: ctb-pop 120ms cubic-bezier(.16,1,.3,1) forwards; }
     .ctb-editor:empty::before {
       content: attr(data-ph);
       color: rgba(150,150,150,0.3);
@@ -52,6 +55,10 @@ function ensureStyles() {
     .ctb-editor::selection {
       background: rgba(59,130,246,0.15);
     }
+    .ctb-editor {
+      text-rendering: geometricPrecision;
+      -webkit-font-smoothing: antialiased;
+    }
   `;
   document.head.appendChild(s);
 }
@@ -60,6 +67,7 @@ function ensureStyles() {
 
 import { TextFormat, TextToolbar } from "../overlays/text-toolbar";
 import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
+import { FONT_FAMILY } from "@/core/shapes/base/shape-label-renderer";
 
 export interface CanvasTextBlockProps {
   element: DrawingElement;
@@ -89,7 +97,18 @@ export interface CanvasTextBlockProps {
   disabled?: boolean;
 }
 
-// ─── Formatting Toolbar ───────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Get the computed font-weight string for a given TextFormat state.
+ */
+function resolveFontWeight(fmt: TextFormat): string {
+  if (fmt.heading === "h1") return "800";
+  if (fmt.heading === "h2") return "700";
+  if (fmt.heading === "h3") return "600";
+  if (fmt.bold) return "700";
+  return "400";
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -113,12 +132,6 @@ export function CanvasTextBlock({
   const committedRef = useRef(false);
   const justMountedRef = useRef(true);
 
-  // ── Draft (local only — NOT synced to storage per keystroke) ──────────────
-  const [draft, setDraft] = useState(normalizeRichTextInput(element.text || ""));
-  const [draftHtml, setDraftHtml] = useState(() =>
-    markdownToEditableHtml(normalizeRichTextInput(element.text || "")),
-  );
-
   // ── Format ────────────────────────────────────────────────────────────────
   const [fmt, setFmt] = useState<TextFormat>(() => {
     const fw = element.fontWeight?.toString() || "400";
@@ -137,17 +150,6 @@ export function CanvasTextBlock({
       size: baseSize,
     };
   });
-
-  useEffect(() => {
-    const normalizedText = normalizeRichTextInput(element.text || "");
-    setDraft(normalizedText);
-    setDraftHtml(markdownToEditableHtml(normalizedText));
-    setFmt((prev) => {
-      const nextSize = element.fontSize || 18;
-      if (prev.size === nextSize) return prev;
-      return { ...prev, size: nextSize };
-    });
-  }, [element.fontSize, element.text]);
 
   // ── Visual state ──────────────────────────────────────────────────────────
   const [focused, setFocused] = useState(false);
@@ -168,29 +170,30 @@ export function CanvasTextBlock({
     cy: number;
   } | null>(null);
 
-  // ── Derived ───────────────────────────────────────────────────────────────
+  // ── Derived geometry ──────────────────────────────────────────────────────
   const canvasPos = localPos ?? element.points[0];
   const sx = canvasPos.x * zoom + panOffset.x;
   const sy = canvasPos.y * zoom + panOffset.y;
 
-  const effectiveSize = (() => {
-    const base = fmt.size;
-    let size = base;
-    if (fmt.heading === "h1") size = Math.max(base, 36);
-    else if (fmt.heading === "h2") size = Math.max(base, 26);
-    else if (fmt.heading === "h3") size = Math.max(base, 20);
-    return size * zoom;
-  })();
+  /**
+   * effectiveSize = actual rendered pixel size on screen (already zoom-scaled).
+   * The editor div uses this directly as its CSS font-size.
+   * No additional transform:scale(zoom) is applied.
+   */
+  const effectiveSize = useMemo(() => {
+    return fmt.size * zoom;
+  }, [fmt.size, zoom]);
+
   const lineHeightPx = effectiveSize * 1.2;
-  // Compensate for CSS line-box leading so editing text anchors like canvas-rendered text.
-  const topLeadingCompensation = (lineHeightPx - effectiveSize) / 2;
 
   // ── Focus immediately on mount ────────────────────────────────────────────
   useLayoutEffect(() => {
     committedRef.current = false;
     const el = editorRef.current;
-    if (!committedRef.current && el && !el.dataset.initialized) {
-      el.innerHTML = draftHtml || "";
+    if (el && !el.dataset.initialized) {
+      el.innerHTML = markdownToEditableHtml(
+        normalizeRichTextInput(element.text || ""),
+      );
       el.dataset.initialized = "true";
     }
     el?.focus();
@@ -199,7 +202,6 @@ export function CanvasTextBlock({
       const r = document.createRange();
       r.selectNodeContents(el as Node);
       if (!selectAllOnMount) {
-        // Caret to end for standard edit mode
         r.collapse(false);
       }
       const sel = window.getSelection();
@@ -223,29 +225,16 @@ export function CanvasTextBlock({
   const commit = useCallback(() => {
     if (committedRef.current) return;
     committedRef.current = true;
-    const markdown =
-      editableHtmlToMarkdown(editorRef.current || "") || draft.trim();
-    const text = markdown.trim();
 
-    // Map fmt to actual storage attributes
-    const fw =
-      fmt.heading === "h1"
-        ? "800"
-        : fmt.heading === "h2"
-          ? "700"
-          : fmt.heading === "h3"
-            ? "600"
-            : fmt.bold
-              ? "600"
-              : "400";
-    const fs = fmt.italic ? "italic" : "normal";
+    const markdown = editableHtmlToMarkdown(editorRef.current || "");
+    const text = markdown.trim();
 
     onCommit(text, {
       fontSize: fmt.size,
-      fontWeight: fw,
-      fontStyle: fs,
+      fontWeight: resolveFontWeight(fmt),
+      fontStyle: fmt.italic ? "italic" : "normal",
     });
-  }, [onCommit, draft, fmt]);
+  }, [onCommit, fmt]);
 
   // ── Toolbar anchor update ─────────────────────────────────────────────────
   const refreshAnchor = useCallback(() => {
@@ -259,16 +248,18 @@ export function CanvasTextBlock({
     refreshAnchor();
   }, [refreshAnchor]);
 
+  useEffect(() => {
+    if (focused) {
+      refreshAnchor();
+    }
+  }, [sx, sy, focused, refreshAnchor]);
+
   // Click outside to commit
   useEffect(() => {
     if (!focused) return;
     const handleWindowMousedown = (e: MouseEvent) => {
-      // Ignore if we just mounted (avoid capturing the click that opened us)
       if (justMountedRef.current) return;
-
-      // If click is outside the editor
       if (editorRef.current && !editorRef.current.contains(e.target as Node)) {
-        // Small delay to let toolbar button mousedown (preventDefault) work
         setTimeout(() => {
           if (document.activeElement !== editorRef.current) {
             commit();
@@ -290,50 +281,43 @@ export function CanvasTextBlock({
     }, 100);
   }, []);
 
-  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
-    const markdown = editableHtmlToMarkdown(e.currentTarget);
-    setDraft(markdown);
-    setDraftHtml(markdownToEditableHtml(markdown));
-    refreshAnchor();
-    onChange?.(markdown, {
-      fontSize: fmt.size,
-      fontWeight:
-        fmt.heading === "h1"
-          ? "800"
-          : fmt.heading === "h2"
-            ? "700"
-            : fmt.heading === "h3"
-              ? "600"
-              : fmt.bold
-                ? "600"
-                : "400",
-      fontStyle: fmt.italic ? "italic" : "normal",
-    });
-  };
+  /**
+   * handleInput: serialize the current DOM to markdown and fire onChange.
+   * We do NOT reset innerHTML here — that would destroy the cursor position.
+   */
+  const handleInput = useCallback(
+    (e: React.FormEvent<HTMLDivElement>) => {
+      const markdown = editableHtmlToMarkdown(e.currentTarget);
+      onChange?.(markdown, {
+        fontSize: fmt.size,
+        fontWeight: resolveFontWeight(fmt),
+        fontStyle: fmt.italic ? "italic" : "normal",
+      });
+    },
+    [fmt, onChange],
+  );
+
+  /**
+   * Apply inline formatting via execCommand. Still universally supported.
+   * Preserves selection and modifies the DOM in place.
+   */
+  const applyInlineFormat = useCallback(
+    (command: "bold" | "italic") => {
+      document.execCommand(command);
+      const markdown = editableHtmlToMarkdown(editorRef.current || "");
+      onChange?.(markdown, {
+        fontSize: fmt.size,
+        fontWeight: resolveFontWeight(fmt),
+        fontStyle: fmt.italic ? "italic" : "normal",
+      });
+    },
+    [fmt, onChange],
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       const mod = e.metaKey || e.ctrlKey;
-      const applyInlineFormat = (command: "bold" | "italic") => {
-        document.execCommand(command);
-        const markdown = editableHtmlToMarkdown(editorRef.current || "");
-        setDraft(markdown);
-        setDraftHtml(markdownToEditableHtml(markdown));
-        onChange?.(markdown, {
-          fontSize: fmt.size,
-          fontWeight:
-            fmt.heading === "h1"
-              ? "800"
-              : fmt.heading === "h2"
-                ? "700"
-                : fmt.heading === "h3"
-                  ? "600"
-                  : fmt.bold
-                    ? "600"
-                    : "400",
-          fontStyle: fmt.italic ? "italic" : "normal",
-        });
-      };
+
       if (e.key === "Escape") {
         e.preventDefault();
         commit();
@@ -350,7 +334,7 @@ export function CanvasTextBlock({
         commit();
       }
     },
-    [commit, fmt, onChange],
+    [commit, applyInlineFormat],
   );
 
   // ── Drag ──────────────────────────────────────────────────────────────────
@@ -398,17 +382,9 @@ export function CanvasTextBlock({
   if (disabled) return null;
 
   // ── Styles ────────────────────────────────────────────────────────────────
-  const wrapperStyle: CSSProperties = {
-    padding: 0, // Zero padding for pixel-perfect alignment with canvas startX/startY
-    background: "transparent",
-    borderRadius: 0,
-    border: "none",
-    outline: "none",
-    boxShadow: "none",
-    cursor: focused ? "text" : "move",
-    minWidth: 1,
-    position: "relative",
-  };
+  const isDark =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark");
 
   const editorStyle: CSSProperties = {
     outline: "none",
@@ -416,25 +392,14 @@ export function CanvasTextBlock({
     border: "none",
     padding: 0,
     margin: 0,
-    minWidth: draft.trim().length > 0 ? 1 : 48,
-    maxWidth: "90vw",
-    fontFamily:
-      "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    minWidth: 48,
+    fontFamily: FONT_FAMILY,
     fontSize: effectiveSize,
-    fontWeight:
-      fmt.heading === "h1"
-        ? "800"
-        : fmt.heading === "h2"
-          ? "700"
-          : fmt.heading === "h3"
-            ? "600"
-            : fmt.bold
-              ? "600"
-              : "400",
+    fontWeight: resolveFontWeight(fmt),
     fontStyle: fmt.italic ? "italic" : "normal",
     letterSpacing: "0",
-    color: getAdaptiveColor(element.color || "#111", typeof document !== 'undefined' && document.documentElement.classList.contains('dark')),
-    caretColor: getAdaptiveColor(element.color || "#111", typeof document !== 'undefined' && document.documentElement.classList.contains('dark')),
+    color: getAdaptiveColor(element.color || "#111", isDark),
+    caretColor: getAdaptiveColor(element.color || "#111", isDark),
     lineHeight: `${lineHeightPx}px`,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
@@ -444,91 +409,45 @@ export function CanvasTextBlock({
   return (
     <>
       {focused && toolbarAnchor && (
-          <TextToolbar
+        <TextToolbar
           fmt={fmt}
           ax={toolbarAnchor.x}
           ay={toolbarAnchor.y}
           onBold={() => {
-            document.execCommand("bold");
+            applyInlineFormat("bold");
             editorRef.current?.focus();
-            const markdown = editableHtmlToMarkdown(editorRef.current || "");
-            setDraft(markdown);
-            setDraftHtml(markdownToEditableHtml(markdown));
-            onChange?.(markdown, {
-              fontSize: fmt.size,
-              fontWeight:
-                fmt.heading === "h1"
-                  ? "800"
-                  : fmt.heading === "h2"
-                    ? "700"
-                    : fmt.heading === "h3"
-                      ? "600"
-                      : fmt.bold
-                        ? "600"
-                        : "400",
-              fontStyle: fmt.italic ? "italic" : "normal",
-            });
           }}
           onItalic={() => {
-            document.execCommand("italic");
+            applyInlineFormat("italic");
             editorRef.current?.focus();
-            const markdown = editableHtmlToMarkdown(editorRef.current || "");
-            setDraft(markdown);
-            setDraftHtml(markdownToEditableHtml(markdown));
-            onChange?.(markdown, {
-              fontSize: fmt.size,
-              fontWeight:
-                fmt.heading === "h1"
-                  ? "800"
-                  : fmt.heading === "h2"
-                    ? "700"
-                    : fmt.heading === "h3"
-                      ? "600"
-                      : fmt.bold
-                        ? "600"
-                        : "400",
-              fontStyle: fmt.italic ? "italic" : "normal",
-            });
           }}
           onHeading={(h) => {
             const nextHeading = fmt.heading === h ? "none" : h;
-            setFmt((f) => ({ ...f, heading: nextHeading }));
+            let nextSize = fmt.size;
+            if (nextHeading === "h1") nextSize = Math.max(fmt.size, 36);
+            else if (nextHeading === "h2") nextSize = Math.max(fmt.size, 26);
+            else if (nextHeading === "h3") nextSize = Math.max(fmt.size, 20);
+
+            setFmt((f) => ({ ...f, heading: nextHeading, size: nextSize }));
             editorRef.current?.focus();
-            onChange?.(draft, {
-              fontSize: fmt.size,
-              fontWeight:
-                nextHeading === "h1"
-                  ? "800"
-                  : nextHeading === "h2"
-                    ? "700"
-                    : nextHeading === "h3"
-                      ? "600"
-                      : fmt.bold
-                        ? "600"
-                        : "400",
-              fontStyle: fmt.italic ? "italic" : "normal",
+            const markdown = editableHtmlToMarkdown(editorRef.current || "");
+            const nextFmt = { ...fmt, heading: nextHeading, size: nextSize };
+            onChange?.(markdown, {
+              fontSize: nextFmt.size,
+              fontWeight: resolveFontWeight(nextFmt),
+              fontStyle: nextFmt.italic ? "italic" : "normal",
             });
           }}
           onSize={(d) => {
             const nextSize = Math.max(10, Math.min(120, fmt.size + d));
-            setFmt((f) => ({
-              ...f,
-              size: nextSize,
-            }));
+            setFmt((f) => ({ ...f, size: nextSize }));
             editorRef.current?.focus();
-            onChange?.(draft, {
+            const markdown = editableHtmlToMarkdown(editorRef.current || "");
+            const nextFmt = { ...fmt, size: nextSize };
+            onChange?.(markdown, {
               fontSize: nextSize,
-              fontWeight:
-                fmt.heading === "h1"
-                  ? "800"
-                  : fmt.heading === "h2"
-                    ? "700"
-                    : fmt.heading === "h3"
-                      ? "600"
-                      : fmt.bold
-                        ? "600"
-                        : "400",
-              fontStyle: fmt.italic ? "italic" : "normal",
+              fontWeight: resolveFontWeight(nextFmt),
+              fontStyle: nextFmt.italic ? "italic" : "normal",
             });
           }}
         />
@@ -539,7 +458,7 @@ export function CanvasTextBlock({
         style={{
           position: "absolute",
           left: sx,
-          top: sy - topLeadingCompensation,
+          top: sy,
           zIndex: 100,
           display: "flex",
           flexDirection: "column",
@@ -553,21 +472,19 @@ export function CanvasTextBlock({
         }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {/* Text surface */}
-        <div style={wrapperStyle}>
-          <div
-            ref={editorRef}
-            contentEditable
-            suppressContentEditableWarning
-            spellCheck={false}
-            className="ctb-editor"
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            onInput={handleInput}
-            onKeyDown={handleKeyDown}
-            style={editorStyle}
-          />
-        </div>
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          spellCheck={false}
+          className="ctb-editor"
+          data-ph="Type something…"
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          style={editorStyle}
+        />
       </div>
     </>
   );

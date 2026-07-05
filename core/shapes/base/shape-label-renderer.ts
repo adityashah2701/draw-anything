@@ -21,7 +21,7 @@ export interface ShapeLabelRenderOptions {
   maxLines?: number;
 }
 
-const FONT_FAMILY =
+export const FONT_FAMILY =
   "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MIN_FONT_SIZE = 9;
 const MAX_FONT_SIZE = 72;
@@ -100,7 +100,7 @@ const contrastRatio = (a: Rgb, b: Rgb) => {
   return (lighter + 0.05) / (darker + 0.05);
 };
 
-const resolveTextColor = (preferredColor?: string, fillColor?: string) => {
+export const resolveTextColor = (preferredColor?: string, fillColor?: string) => {
   const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   const adaptivePreferred = getAdaptiveColor(preferredColor, isDark);
   const fallbackColor = isDark ? "#f8fafc" : "#1f2937";
@@ -132,30 +132,33 @@ const makeFont = (
   return `${resolvedStyle} ${resolvedWeight} ${fontSize}px ${FONT_FAMILY}`;
 };
 
-export const renderShapeLabel = ({
+export interface ShapeLabelMetrics {
+  finalFontSize: number;
+  finalLineHeight: number;
+  lines: RichTextSpan[][];
+  width: number;
+  height: number;
+}
+
+export const measureShapeLabel = ({
   ctx,
   label,
-  centerX,
-  centerY,
   maxWidth,
   maxHeight,
   zoom,
-  clipPath,
-  preferredColor,
-  fillColor,
   preferredFontSize,
   preferredFontWeight,
   preferredFontStyle,
   maxLines,
-}: ShapeLabelRenderOptions) => {
+}: Omit<ShapeLabelRenderOptions, "centerX" | "centerY" | "clipPath" | "preferredColor" | "fillColor">): ShapeLabelMetrics | null => {
   const normalizedLabel = label.trim();
-  if (!normalizedLabel) return;
+  if (!normalizedLabel) return null;
 
   const padding = clamp(12 * zoom, MIN_PADDING, 24);
   const availableWidth = maxWidth - padding * 2;
   const availableHeight = maxHeight - padding * 2;
 
-  if (availableWidth <= 8 || availableHeight <= 8) return;
+  if (availableWidth <= 8 || availableHeight <= 8) return null;
 
   const targetFontSize = clamp(
     (preferredFontSize ?? 16) * zoom,
@@ -207,17 +210,42 @@ export const renderShapeLabel = ({
         maxAllowedLines,
       ),
     });
-    if (fallbackLayout.lines.length === 0) return;
+    if (fallbackLayout.lines.length === 0) return null;
     finalLines = fallbackLayout.lines;
   }
 
-  if (finalLines.length === 0) return;
+  if (finalLines.length === 0) return null;
+
+  const baseWeight = preferredFontWeight?.toString() || (finalFontSize >= 18 ? "600" : "500");
+  const baseStyle = preferredFontStyle || "normal";
+  
+  let maxWidthUsed = 0;
+  for (const line of finalLines) {
+    const lineWidth = measureRichTextLineWidth(ctx, line, finalFontSize, baseWeight, baseStyle);
+    maxWidthUsed = Math.max(maxWidthUsed, lineWidth);
+  }
+
+  return {
+    finalFontSize,
+    finalLineHeight,
+    lines: finalLines,
+    width: maxWidthUsed,
+    height: finalLines.length * finalLineHeight,
+  };
+};
+
+export const renderShapeLabel = (options: ShapeLabelRenderOptions) => {
+  const metrics = measureShapeLabel(options);
+  if (!metrics) return;
+
+  const { finalFontSize, finalLineHeight, lines, height: blockHeight } = metrics;
+  const { ctx, centerX, centerY, clipPath, preferredColor, fillColor, preferredFontWeight, preferredFontStyle } = options;
 
   const textColor = resolveTextColor(preferredColor, fillColor);
   const baseWeight = preferredFontWeight?.toString() || (finalFontSize >= 18 ? "600" : "500");
   const baseStyle = preferredFontStyle || "normal";
-  const blockHeight = finalLines.length * finalLineHeight;
-  let drawY = centerY - blockHeight / 2;
+  
+  let drawY = centerY - blockHeight / 2 + (finalLineHeight - finalFontSize) / 2;
 
   ctx.save();
   clipPath(ctx);
@@ -227,7 +255,7 @@ export const renderShapeLabel = ({
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
 
-  for (const line of finalLines) {
+  for (const line of lines) {
     const lineWidth = measureRichTextLineWidth(
       ctx,
       line,
@@ -250,3 +278,4 @@ export const renderShapeLabel = ({
 
   ctx.restore();
 };
+

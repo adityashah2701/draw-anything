@@ -4,6 +4,8 @@ export interface RichTextSpan {
   italic: boolean;
 }
 
+import { resolveTextWeight } from "@/core/shapes/text/text-metrics";
+
 export interface RichTextLayoutOptions {
   baseFontSize: number;
   baseFontWeight: string | number;
@@ -33,25 +35,7 @@ const escapeMarkdownText = (value: string) =>
     .replaceAll("\\", "\\\\")
     .replaceAll("*", "\\*");
 
-const normalizeWeight = (weight: string | number | undefined) => {
-  const value = weight?.toString().trim() || "400";
-  if (value === "bold") return "700";
-  if (value === "normal") return "400";
-  return value;
-};
 
-const resolveSpanWeight = (
-  baseWeight: string | number | undefined,
-  bold: boolean,
-) => {
-  const normalized = normalizeWeight(baseWeight);
-  if (!bold) return normalized;
-  const numeric = Number.parseInt(normalized, 10);
-  if (Number.isNaN(numeric)) {
-    return normalized === "400" ? "700" : normalized;
-  }
-  return String(Math.max(numeric, 700));
-};
 
 const resolveSpanStyle = (baseStyle: string | undefined, italic: boolean) => {
   const normalized = baseStyle?.trim() || "normal";
@@ -66,9 +50,30 @@ const makeFont = (
   baseFontStyle: string,
   span: RichTextSpan,
 ) => {
-  const weight = resolveSpanWeight(baseFontWeight, span.bold);
+  const weight = resolveTextWeight(baseFontWeight, span.bold);
   const style = resolveSpanStyle(baseFontStyle, span.italic);
   ctx.font = `${style} ${weight} ${baseFontSize}px ${FONT_FAMILY}`;
+};
+
+export const measureRichTextTopOffset = (
+  ctx: CanvasRenderingContext2D,
+  baseFontSize: number,
+  baseFontWeight: string | number,
+  baseFontStyle: string,
+) => {
+  makeFont(ctx, baseFontSize, baseFontWeight, baseFontStyle, {
+    text: "Mg",
+    bold: false,
+    italic: false,
+  });
+  ctx.textBaseline = "alphabetic";
+  const metrics = ctx.measureText("Mg");
+  const fontAscent =
+    metrics.fontBoundingBoxAscent ?? metrics.actualBoundingBoxAscent;
+  const glyphAscent = metrics.actualBoundingBoxAscent ?? baseFontSize * 0.8;
+  const leadingOffset = baseFontSize * 0.1;
+  const metricOffset = Math.max(0, (fontAscent ?? baseFontSize * 0.8) - glyphAscent);
+  return leadingOffset + metricOffset;
 };
 
 const isBlockElement = (tagName: string) =>

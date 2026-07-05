@@ -74,7 +74,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
           </h2>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-gray-700 text-2xl"
+            className="text-muted-foreground hover:text-foreground text-2xl"
           >
             ×
           </button>
@@ -83,7 +83,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
         <div className="grid md:grid-cols-2 gap-6">
           {shortcuts.map((category) => (
             <div key={category.category}>
-              <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b border-border pb-2">
+              <h3 className="text-lg font-semibold text-foreground mb-3 border-b border-border pb-2">
                 {category.category}
               </h3>
               <div className="space-y-2">
@@ -98,7 +98,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
                     <div className="flex space-x-1">
                       {shortcut.key.split("+").map((key, keyIndex) => (
                         <span key={keyIndex} className="inline-flex">
-                          <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-muted border border-border rounded">
+                          <kbd className="px-2 py-1 text-xs font-semibold text-foreground bg-muted border border-border rounded">
                             {key}
                           </kbd>
                           {keyIndex < shortcut.key.split("+").length - 1 && (
@@ -117,11 +117,11 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
         <div className="mt-6 pt-4 border-t border-border">
           <p className="text-sm text-muted-foreground text-center">
             Press{" "}
-            <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-muted border border-border rounded">
+            <kbd className="px-2 py-1 text-xs font-semibold text-foreground bg-muted border border-border rounded">
               ?
             </kbd>{" "}
             or
-            <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-muted border border-border rounded ml-1">
+            <kbd className="px-2 py-1 text-xs font-semibold text-foreground bg-muted border border-border rounded ml-1">
               Ctrl+/
             </kbd>{" "}
             to toggle this panel

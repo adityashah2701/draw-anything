@@ -10,6 +10,11 @@ export interface TextFormat {
 const H_LABELS = { none: "¶", h1: "H1", h2: "H2", h3: "H3" } as const;
 const HEADINGS: TextFormat["heading"][] = ["none", "h1", "h2", "h3"];
 
+/** Height of the toolbar in pixels (used for viewport clamping) */
+const TOOLBAR_HEIGHT = 40;
+/** Vertical gap between toolbar bottom and editor top */
+const TOOLBAR_GAP = 8;
+
 export function TextToolbar({
   fmt,
   ax,
@@ -27,26 +32,52 @@ export function TextToolbar({
   onHeading: (h: TextFormat["heading"]) => void;
   onSize: (d: number) => void;
 }) {
+  /**
+   * Viewport-clamped toolbar position.
+   *
+   * Preferred position: above the editor (ay - TOOLBAR_HEIGHT - TOOLBAR_GAP).
+   * If that would push the toolbar above the screen top, place it below instead
+   * by using ay + TOOLBAR_GAP (assumes editor is near the top of the screen).
+   *
+   * ax: clamp so the toolbar doesn't overflow past the right edge of the viewport.
+   */
+  const viewportWidth =
+    typeof window !== "undefined" ? window.innerWidth : 1440;
+  const viewportHeight =
+    typeof window !== "undefined" ? window.innerHeight : 900;
+
+  const toolbarWidth = 260; // approximate width
+  const preferredTop = ay - TOOLBAR_HEIGHT - TOOLBAR_GAP;
+
+  // If the toolbar would go above the viewport, show it below the editor instead
+  const top =
+    preferredTop < 4 ? ay + TOOLBAR_GAP : preferredTop;
+
+  // Clamp left so the toolbar doesn't overflow right edge
+  const left = Math.min(ax, viewportWidth - toolbarWidth - 8);
+
   return (
     <div
       className="ctb-bar"
       onMouseDown={(e) => e.preventDefault()} // keep editor focused
       style={{
         position: "fixed",
-        top: ay - 52,
-        left: ax,
+        top,
+        left,
         zIndex: 9999,
         display: "flex",
         alignItems: "center",
         gap: 2,
         padding: "4px 6px",
-        background: "rgba(24,24,27,0.8)",
+        background: "rgba(24,24,27,0.85)",
         backdropFilter: "blur(20px) saturate(180%)",
-        border: "1px solid rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.08)",
         borderRadius: 8,
-        boxShadow: "0 4px 15px rgba(0,0,0,0.25)",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2)",
         userSelect: "none",
         animation: "ctb-bar 0.12s cubic-bezier(.16,1,.3,1) forwards",
+        // Prevent accidental text selection dragging
+        WebkitUserSelect: "none",
       }}
     >
       <Btn active={fmt.bold} fw="bold" onClick={onBold}>
@@ -114,7 +145,7 @@ function Btn({
         onClick();
       }}
       style={{
-        background: active ? "rgba(255,255,255,0.18)" : "transparent",
+        background: active ? "rgba(255,255,255,0.2)" : "transparent",
         border: "none",
         borderRadius: 6,
         cursor: "pointer",
@@ -127,7 +158,7 @@ function Btn({
         fontFamily: "system-ui,sans-serif",
         fontWeight: fw,
         fontStyle: fi,
-        color: active ? "#fff" : "rgba(255,255,255,0.6)",
+        color: active ? "#fff" : "rgba(255,255,255,0.65)",
         transition: "background 0.1s, color 0.1s",
       }}
     >

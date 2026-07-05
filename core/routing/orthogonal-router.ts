@@ -499,16 +499,20 @@ export const routeArrowBatch = ({
   if (arrows.length === 0) return new Map<string, Point[]>();
   const safeObstacles = sanitizeObstacles(obstacles);
 
-  const routableArrows = arrows.filter(
-    (arrow) =>
+  const routableArrows = arrows.filter((arrow) => {
+    if (!arrow.sourceId || !arrow.targetId || !arrow.start || !arrow.end) return false;
+    if (arrow.existingPoints && arrow.existingPoints.length < 2) return false;
+
+    return (
       isNonEmptyString(arrow.arrowId) &&
       isNonEmptyString(arrow.sourceId) &&
       isNonEmptyString(arrow.targetId) &&
       isValidPoint(arrow.start) &&
       isValidPoint(arrow.end) &&
       (!Array.isArray(arrow.existingPoints) ||
-        isValidPointArray(arrow.existingPoints, 2)),
-  );
+        isValidPointArray(arrow.existingPoints, 2))
+    );
+  });
 
   if (routableArrows.length === 0) {
     return new Map<string, Point[]>();

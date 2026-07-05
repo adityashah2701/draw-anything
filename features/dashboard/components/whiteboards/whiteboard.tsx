@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { useApiMutation } from "@/hooks/use-api-mutation";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { ClerkDialog } from "../../dialogs/custom-dialog";
 import WhiteboardCard from "./whiteboard-card";
+import {Doc} from "@/convex/_generated/dataModel"
 
 const Whiteboard = (props: any) => {
   const router = useRouter();
@@ -33,7 +35,7 @@ const Whiteboard = (props: any) => {
       return;
     }
     try {
-      const whiteboard = await mutate({
+      await mutate({
         title: "Untitled",
         orgId: organization.id,
       });
@@ -41,6 +43,7 @@ const Whiteboard = (props: any) => {
       //  router.push(`/whiteboard/${whiteboard}`);
     } catch (error) {
       toast.error("Failed to create whiteboard.");
+      console.log(error)
     }
   };
 
@@ -194,7 +197,7 @@ const Whiteboard = (props: any) => {
             </p>
             {organization && (
               <div className="mt-6 border-b border-border pb-3">
-                <h2 className="flex items-center text-2xl font-semibold text-gray-800">
+                <h2 className="flex items-center text-2xl font-semibold text-foreground">
                   <Building className="w-5 h-5 mr-2 text-muted-foreground" />
                   {organization.name}
                 </h2>
@@ -220,7 +223,7 @@ const Whiteboard = (props: any) => {
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {whiteboards.map((board: any) => (
+            {whiteboards.map((board: Doc<"whiteboards">) => (
               <WhiteboardCard key={board._id} board={board} />
             ))}
           </div>

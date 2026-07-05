@@ -12,8 +12,6 @@ Integrity mode: development
 ### R1. Seamless Canvas Integration
 Text editing must perfectly align with the canvas rendering (no jumping or size changing when entering/exiting edit mode). The text editor must use transparent backgrounds and precisely matched font sizes/metrics.
 
-### R2. Rich Text Formatting Support
-Users must be able to select specific words within a text block and apply formatting (bold, italic) independently of the rest of the text. Use Markdown-based string serialization (e.g., `Hello **World**`) to store formatting in the JSON payload, and parse this markdown within the canvas rendering functions (`renderTextToCanvas`, `renderShapeLabel`).
 
 ### R3. Modern Web Guidance
 Use modern web guidance best practices. Review `modern-web-guidance` results for canvas HTML overlays. Avoid adding heavy third-party rich text libraries like Slate or Quill; prefer a lightweight custom implementation or a highly optimized minimal dependency.

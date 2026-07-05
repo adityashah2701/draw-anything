@@ -63,9 +63,9 @@ export const WhiteboardCard = ({
     setIsDeleteDialogOpen(true);
   };
   return (
-    <div className="group bg-card rounded-2xl p-4 border border-border shadow-sm hover:shadow-xl hover:border-gray-300 transition-all duration-300 cursor-pointer relative overflow-hidden">
+    <div className="group bg-card rounded-2xl p-4 border border-border shadow-sm hover:shadow-xl hover:border-primary/30 transition-all duration-300 cursor-pointer relative overflow-hidden">
       {/* Background Pattern */}
-      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-muted/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
       {/* Header */}
 
@@ -85,7 +85,7 @@ export const WhiteboardCard = ({
       {/* Preview Image or Placeholder */}
       <div className="mb-4">
         {whiteboard.imageUrl ? (
-          <div className="w-full h-full bg-muted rounded-lg overflow-hidden">
+          <div className="w-full h-full bg-white rounded-lg overflow-hidden">
             <img
               src={whiteboard.imageUrl}
               alt={whiteboard.title}
@@ -93,7 +93,7 @@ export const WhiteboardCard = ({
             />
           </div>
         ) : (
-          <div className="w-full h-32 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
+          <div className="w-full h-32 bg-gradient-to-br from-muted to-muted/50 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
             <div className="text-center">
               <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-xs text-muted-foreground">No preview</p>
@@ -114,13 +114,13 @@ export const WhiteboardCard = ({
             {whiteboard.tags.slice(0, 3).map((tag: string, index: number) => (
               <span
                 key={index}
-                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20"
               >
                 {tag}
               </span>
             ))}
             {whiteboard.tags.length > 3 && (
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-background text-gray-700 border border-border">
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-background text-foreground border border-border">
                 +{whiteboard.tags.length - 3}
               </span>
             )}
@@ -143,7 +143,7 @@ export const WhiteboardCard = ({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
+      <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
         <span className="text-xs text-muted-foreground font-medium">Whiteboard</span>
 
         {contentStats.elementCount > 0 ? (

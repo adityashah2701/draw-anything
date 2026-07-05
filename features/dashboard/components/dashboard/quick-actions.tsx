@@ -27,24 +27,24 @@ const QuickActions = ({
       title: "Create Whiteboard",
       description: "Start with a blank canvas",
       icon: <Plus className="w-6 h-6" />,
-      color: "bg-blue-50 text-blue-600 border-blue-200",
-      hoverColor: "hover:bg-blue-100",
+      color: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
+      hoverColor: "hover:bg-blue-100 dark:hover:bg-blue-500/20",
       onClick: onCreateWhiteboard
     },
     {
       title: "Upload & Edit",
       description: "Import images or documents",
       icon: <Upload className="w-6 h-6" />,
-      color: "bg-green-50 text-green-600 border-green-200",
-      hoverColor: "hover:bg-green-100",
+      color: "bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-500/20",
+      hoverColor: "hover:bg-green-100 dark:hover:bg-green-500/20",
       onClick: onUploadFile
     },
     {
       title: "Invite Team",
       description: "Add collaborators",
       icon: <Users className="w-6 h-6" />,
-      color: "bg-purple-50 text-purple-600 border-purple-200",
-      hoverColor: "hover:bg-purple-100",
+      color: "bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
+      hoverColor: "hover:bg-purple-100 dark:hover:bg-purple-500/20",
       onClick: onInviteTeam
     },
   ];

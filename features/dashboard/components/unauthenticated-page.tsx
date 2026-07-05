@@ -35,12 +35,12 @@ const Page = () => {
   };
 
   return (
-    <main className="relative min-h-screen w-full overflow-x-hidden scroll-smooth bg-[#F6F7FB] text-foreground">
-      <header className="sticky top-0 z-50 border-b border-slate-300/80 bg-[#F6F7FB]/90 backdrop-blur-md">
+    <main className="relative min-h-screen w-full overflow-x-hidden scroll-smooth bg-background text-foreground">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex h-[76px] w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg border border-slate-300 bg-card p-2 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
-              <Image src="/logo.svg" alt="Logo" height={20} width={20} />
+            <div className="rounded-lg border border-border bg-card p-2 shadow-sm">
+              <Image src="/logo.svg" alt="Logo" height={20} width={20} className="dark:invert" />
             </div>
             <div className="leading-tight">
               <h1 className="text-[27px] font-bold tracking-tight text-foreground">
@@ -52,15 +52,15 @@ const Page = () => {
             </div>
           </div>
 
-          <nav className="hidden items-center gap-1 rounded-full border border-slate-300 bg-card p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)] lg:flex">
+          <nav className="hidden items-center gap-1 rounded-full border border-border bg-card p-1.5 shadow-sm lg:flex">
             {navItems.map((item, index) => (
               <button
                 key={item.label}
                 type="button"
                 className={
                   index === 0
-                    ? "cursor-pointer rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-slate-700 transition-colors"
-                    : "cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-slate-800"
+                    ? "cursor-pointer rounded-full bg-surface-secondary px-4 py-1.5 text-sm font-medium text-text-secondary transition-colors"
+                    : "cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground"
                 }
                 onClick={() => scrollToSection(item.href)}
               >
@@ -73,13 +73,13 @@ const Page = () => {
             <SignInButton mode="modal">
               <Button
                 variant="ghost"
-                className="hidden h-10 rounded-md px-4 text-sm font-semibold text-slate-700 hover:bg-white sm:inline-flex"
+                className="hidden h-10 rounded-md px-4 text-sm font-semibold text-text-secondary hover:bg-surface-secondary sm:inline-flex"
               >
                 Sign In
               </Button>
             </SignInButton>
             <SignUpButton mode="modal">
-              <Button className="h-10 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white shadow-[0_2px_6px_rgba(15,23,42,0.18)] hover:bg-slate-800">
+              <Button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90">
                 Get Started
                 <ArrowUpRight className="ml-1.5 h-4 w-4" />
               </Button>
@@ -87,7 +87,7 @@ const Page = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="h-10 w-10 rounded-md border border-slate-300 bg-card text-slate-700 hover:bg-secondary lg:hidden"
+              className="h-10 w-10 rounded-md border border-border bg-card text-text-secondary hover:bg-surface-secondary lg:hidden"
               onClick={() => setMobileNavOpen((prev) => !prev)}
               aria-label="Toggle navigation"
             >
@@ -97,13 +97,13 @@ const Page = () => {
         </div>
 
         {mobileNavOpen && (
-          <div className="border-t border-border bg-[#F6F7FB] px-4 py-4 sm:px-6 lg:hidden">
-            <div className="mx-auto max-w-7xl rounded-xl border border-slate-300 bg-card p-2 shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
+          <div className="border-t border-border bg-background px-4 py-4 sm:px-6 lg:hidden">
+            <div className="mx-auto max-w-7xl rounded-xl border border-border bg-card p-2 shadow-md">
               {navItems.map((item) => (
                 <button
                   key={item.label}
                   type="button"
-                  className="block w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-secondary"
+                  className="block w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm font-medium text-text-secondary transition-colors hover:bg-surface-secondary"
                   onClick={() => {
                     scrollToSection(item.href);
                     setMobileNavOpen(false);
@@ -116,7 +116,7 @@ const Page = () => {
                 <SignInButton mode="modal">
                   <Button
                     variant="ghost"
-                    className="w-full justify-start rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-secondary"
+                    className="w-full justify-start rounded-lg px-3 text-sm font-semibold text-text-secondary hover:bg-surface-secondary"
                     onClick={() => setMobileNavOpen(false)}
                   >
                     Sign In

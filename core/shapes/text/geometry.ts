@@ -6,6 +6,7 @@ import {
   parseMarkdownRichText,
   RichTextSpan,
 } from "@/features/whiteboard/utils/rich-text-renderer";
+import { resolveTextStyle, computeTextBlockHeight } from "./text-metrics";
 
 const splitMarkdownLines = (text: string) => {
   const spans = parseMarkdownRichText(text);
@@ -33,11 +34,11 @@ export const measureTextShapeBlock = (
   measureCtx?: CanvasRenderingContext2D | null,
 ) => {
   const lines = splitMarkdownLines(text);
-  const lineHeight = fontSize * 1.2;
+  const { fontSize: finalFontSize, fontWeight: finalFontWeight, fontStyle: finalFontStyle, lineHeight } = resolveTextStyle(fontSize, fontWeight, fontStyle);
   const estimateSpanWidth = (span: RichTextSpan) => {
     const baseFactor = span.bold ? 0.68 : 0.62;
     const italicFactor = span.italic ? 1.03 : 1;
-    return span.text.length * fontSize * baseFactor * italicFactor;
+    return span.text.length * finalFontSize * baseFactor * italicFactor;
   };
 
   const widths = lines.map((line) => {
@@ -45,9 +46,9 @@ export const measureTextShapeBlock = (
       return measureRichTextLineWidth(
         measureCtx,
         line,
-        fontSize,
-        fontWeight,
-        fontStyle,
+        finalFontSize,
+        finalFontWeight,
+        finalFontStyle,
       );
     }
     return line.reduce((sum, span) => sum + estimateSpanWidth(span), 0);
@@ -56,7 +57,7 @@ export const measureTextShapeBlock = (
   return {
     lines,
     width: Math.max(1, ...widths, 1),
-    height: Math.max(fontSize, fontSize + Math.max(0, lines.length - 1) * lineHeight),
+    height: computeTextBlockHeight(lines.length, lineHeight),
     lineHeight,
   };
 };
@@ -68,33 +69,17 @@ export const getTextBounds = (
   if (!shape.text || !shape.fontSize || shape.points.length === 0) return null;
   const textX = shape.points[0].x;
   const textY = shape.points[0].y;
-  const weight =
-    shape.fontWeight ||
-    (shape.fontSize >= 36
-      ? "800"
-      : shape.fontSize >= 26
-        ? "700"
-        : shape.fontSize >= 20
-          ? "600"
-          : "400");
-  const style = shape.fontStyle || "normal";
-  const baseSize = shape.fontSize;
-  let effectiveSize = baseSize;
-  if (weight === "800") effectiveSize = Math.max(baseSize, 36);
-  else if (weight === "700") effectiveSize = Math.max(baseSize, 26);
-  else if (weight === "600" && baseSize >= 20) {
-    effectiveSize = Math.max(baseSize, 20);
-  }
+  const { fontSize: finalFontSize, fontWeight: finalFontWeight, fontStyle: finalFontStyle, fontString } = resolveTextStyle(shape.fontSize, shape.fontWeight, shape.fontStyle);
 
   const measureCtx = context?.textMeasureContext ?? null;
   if (measureCtx) {
-    measureCtx.font = `${style} ${weight} ${effectiveSize}px Inter, sans-serif`;
+    measureCtx.font = fontString;
   }
   const measured = measureTextShapeBlock(
     shape.text,
-    effectiveSize,
-    weight,
-    style,
+    finalFontSize,
+    finalFontWeight,
+    finalFontStyle,
     measureCtx,
   );
 

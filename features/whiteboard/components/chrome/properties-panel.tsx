@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 import {
@@ -96,7 +97,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   return (
     <div
-      className={`rounded-2xl border border-slate-200/80 bg-white/95 p-2 shadow-lg backdrop-blur-md ${
+      className={`rounded-2xl border border-border bg-surface/95 p-2 shadow-lg backdrop-blur-md ${
         disabled ? "opacity-75" : ""
       }`}
     >
@@ -109,7 +110,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </div>
 
         {disabled && (
-          <div className="inline-flex h-9 items-center rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-medium text-amber-800">
+          <div className="inline-flex h-9 items-center rounded-xl border border-warning/50 bg-warning/10 px-3 text-xs font-medium text-warning">
             Read-only
           </div>
         )}

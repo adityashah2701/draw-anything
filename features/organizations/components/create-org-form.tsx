@@ -47,7 +47,7 @@ export function CreateOrgForm({ onSuccess }: { onSuccess?: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <label htmlFor="orgName" className="text-sm font-medium text-gray-700">
+        <label htmlFor="orgName" className="text-sm font-medium text-foreground">
           Organization Name
         </label>
         <Input

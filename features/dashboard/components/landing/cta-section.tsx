@@ -9,7 +9,7 @@ export const CtaSection = () => {
       id="cta"
       className="scroll-mt-28 px-4 py-24 sm:px-6 lg:px-8 lg:py-32"
     >
-      <div className="mx-auto max-w-7xl border-t border-slate-300 pt-14">
+      <div className="mx-auto max-w-7xl border-t border-border pt-14">
         <div className="relative grid gap-8 lg:grid-cols-12">
           <div className="lg:col-span-8 lg:ml-10">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -27,9 +27,9 @@ export const CtaSection = () => {
           </div>
 
           <div className="lg:col-span-4 lg:pt-10">
-            <div className="space-y-2 rounded-xl border border-slate-300 bg-card p-3 shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
+            <div className="space-y-2 rounded-xl border border-border bg-card p-3 shadow-md">
               <SignUpButton mode="modal">
-                <Button className="h-11 w-full rounded-md bg-slate-900 text-sm font-semibold text-white hover:bg-slate-800">
+                <Button className="h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90">
                   Start Free Trial
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -37,7 +37,7 @@ export const CtaSection = () => {
               <SignInButton mode="modal">
                 <Button
                   variant="outline"
-                  className="h-11 w-full rounded-md border-slate-300 bg-card text-sm font-semibold text-slate-700 hover:bg-secondary"
+                  className="h-11 w-full rounded-md border-border bg-card text-sm font-semibold text-text-secondary hover:bg-surface-secondary hover:text-foreground"
                 >
                   Open Workspace
                   <ArrowUpRight className="ml-2 h-4 w-4" />
@@ -50,12 +50,12 @@ export const CtaSection = () => {
           </div>
         </div>
 
-        <div className="mt-14 grid gap-0 border border-slate-300 bg-card md:grid-cols-3">
+        <div className="mt-14 grid gap-0 border border-border bg-card md:grid-cols-3">
           <div className="border-b border-border px-5 py-4 md:border-b-0 md:border-r">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Layer 01
             </p>
-            <p className="mt-1 text-sm font-medium text-slate-800">
+            <p className="mt-1 text-sm font-medium text-foreground">
               AI generates logical graph structures
             </p>
           </div>
@@ -63,7 +63,7 @@ export const CtaSection = () => {
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Layer 02
             </p>
-            <p className="mt-1 text-sm font-medium text-slate-800">
+            <p className="mt-1 text-sm font-medium text-foreground">
               Layout engine enforces hierarchy and balance
             </p>
           </div>
@@ -71,7 +71,7 @@ export const CtaSection = () => {
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Layer 03
             </p>
-            <p className="mt-1 text-sm font-medium text-slate-800">
+            <p className="mt-1 text-sm font-medium text-foreground">
               Canvas runtime delivers precise interactions
             </p>
           </div>

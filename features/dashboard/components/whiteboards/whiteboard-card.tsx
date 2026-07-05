@@ -1,45 +1,9 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  MoreVertical,
   Clock,
-  Edit3,
-  Trash2,
-  Copy,
-  Folder,
-  User,
-  Upload,
-  Pencil,
+  Edit3, User
 } from "lucide-react";
-
-// Simple loading spinner component
-const LoadingSpinner = ({ className = "w-4 h-4" }: { className?: string }) => (
-  <div
-    className={`${className} border-2 border-current border-t-transparent rounded-full animate-spin`}
-  />
-);
-
-// Simple skeleton loader component
-const SkeletonLoader = ({ className = "" }: { className?: string }) => (
-  <div className={`bg-muted animate-pulse rounded ${className}`} />
-);
-import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
@@ -48,12 +12,18 @@ import { toast } from "sonner";
 import { useApiMutation } from "@/hooks/use-api-mutation";
 import { useState } from "react";
 import RenameDialog from "@/features/dashboard/dialogs/rename-dialog";
-import { Borel } from "next/font/google";
 import DeleteDialog from "@/features/dashboard/dialogs/delete-dialog";
 import { ImageUploadDialog } from "@/features/dashboard/dialogs/image-upload-dialog";
 import WhiteboardDropdown from "@/features/dashboard/components/whiteboard-dropdown";
+import { Doc } from "@/convex/_generated/dataModel";
+import Image from "next/image";
 
-const WhiteboardCard = ({ board }: { board: any }) => {
+
+// Simple skeleton loader component
+const SkeletonLoader = ({ className = "" }: { className?: string }) => (
+  <div className={`bg-muted animate-pulse rounded ${className}`} />
+);
+const WhiteboardCard = ({ board }: { board: Doc<"whiteboards"> }) => {
   const { user } = useUser();
   const creator = useQuery(api.users.getById, { id: board.createdBy });
   const { mutate, isPending } = useApiMutation(api.whiteboard.remove);
@@ -105,7 +75,7 @@ const WhiteboardCard = ({ board }: { board: any }) => {
   const handleDelete = async (id: string) => {
     try {
       setIsDeleteLoading(true);
-      const whiteboard = await mutate({ id });
+      await mutate({ id });
       toast.success("Whiteboard deleted successfully.");
     } catch (error: any) {
       toast.error(error.message);
@@ -152,10 +122,10 @@ const WhiteboardCard = ({ board }: { board: any }) => {
       <div className="relative h-48 bg-gradient-to-br from-blue-50 to-purple-50 border-b border-border">
         {/* Show preview image if available, otherwise show placeholder */}
         {board.imageUrl ? (
-          <img
+          <Image
             src={board.imageUrl}
             alt={board.title}
-            className="w-full h-full"
+            fill
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">

@@ -103,9 +103,9 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
     <Sheet open={isOpen} onOpenChange={(open:boolean) => !open && onClose()}>
       <SheetContent
         side="right"
-        className="z-[80] w-[420px] gap-0 border-l border-slate-300 bg-background p-0 sm:max-w-[420px] [&>[data-slot=sheet-close]]:top-4 [&>[data-slot=sheet-close]]:right-4 [&>[data-slot=sheet-close]]:rounded-md [&>[data-slot=sheet-close]]:text-white/85 [&>[data-slot=sheet-close]]:hover:bg-white/15 [&>[data-slot=sheet-close]]:hover:text-white [&>[data-slot=sheet-close]]:focus:ring-white/40"
+        className="z-[80] w-[420px] gap-0 border-l border-border bg-background p-0 sm:max-w-[420px] [&>[data-slot=sheet-close]]:top-4 [&>[data-slot=sheet-close]]:right-4 [&>[data-slot=sheet-close]]:rounded-md [&>[data-slot=sheet-close]]:text-foreground/85 [&>[data-slot=sheet-close]]:hover:bg-surface-secondary [&>[data-slot=sheet-close]]:hover:text-foreground [&>[data-slot=sheet-close]]:focus:ring-ring/40"
       >
-        <SheetHeader className="space-y-0 border-b border-slate-300 bg-primary px-5 py-5 text-left">
+        <SheetHeader className="space-y-0 border-b border-border bg-primary px-5 py-5 text-left">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-foreground/15">
               <Wand2 size={20} className="text-primary-foreground" />
@@ -124,7 +124,7 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
         <ScrollArea className="h-[calc(100vh-220px)]">
           <div className="space-y-5 px-5 py-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label className="mb-2 block text-sm font-medium text-text-secondary">
                 Describe your diagram
               </label>
               <textarea
@@ -135,7 +135,7 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
                 placeholder="e.g. E-commerce system with API gateway, auth service, order service, payment provider, and database."
                 rows={5}
                 disabled={isLoading}
-                className="w-full resize-none rounded-xl border border-slate-300 bg-card px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400/30 disabled:opacity-60"
+                className="w-full resize-none rounded-xl border border-input bg-surface px-4 py-3 text-sm text-text placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:opacity-60"
               />
               <p className="mt-2 text-xs text-muted-foreground">
                 Tip: press <kbd className="rounded bg-muted px-1.5 py-0.5">⌘ Enter</kbd> to generate.
@@ -152,11 +152,11 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
                     key={s}
                     onClick={() => setPrompt(s)}
                     disabled={isLoading}
-                    className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-slate-200/70 hover:text-slate-900 disabled:opacity-50"
+                    className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-surface-secondary hover:text-text disabled:opacity-50"
                   >
                     <ChevronRight
                       size={14}
-                      className="shrink-0 text-muted-foreground group-hover:text-slate-700"
+                      className="shrink-0 text-muted-foreground group-hover:text-text"
                     />
                     <span>{s}</span>
                   </button>
@@ -183,7 +183,7 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
           <button
             onClick={handleGenerate}
             disabled={!prompt.trim() || isLoading || disabled}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? (
               <>

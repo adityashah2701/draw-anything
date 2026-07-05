@@ -3,6 +3,8 @@ import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-util
 import { renderRichTextLines } from "@/features/whiteboard/utils/rich-text-renderer";
 import { TextShape } from "@/core/shapes/text/types";
 
+import { resolveTextStyle } from "./text-metrics";
+
 export const renderTextToCanvas = (
   shape: TextShape,
   context: ShapeRenderCanvasContext,
@@ -10,23 +12,7 @@ export const renderTextToCanvas = (
   if (!shape.text || !shape.fontSize || shape.id === context.editingTextId) return;
 
   const { ctx, zoom, panOffset } = context;
-  const weight =
-    shape.fontWeight ||
-    (shape.fontSize >= 36
-      ? "800"
-      : shape.fontSize >= 26
-        ? "700"
-        : shape.fontSize >= 20
-          ? "600"
-          : "400");
-  const style = shape.fontStyle || "normal";
-  const baseSize = shape.fontSize;
-  let effectiveSize = baseSize;
-  if (weight === "800") effectiveSize = Math.max(baseSize, 36);
-  else if (weight === "700") effectiveSize = Math.max(baseSize, 26);
-  else if (weight === "600" && baseSize >= 20) {
-    effectiveSize = Math.max(baseSize, 20);
-  }
+  const { fontSize: effectiveSize, fontWeight: weight, fontStyle: style, lineHeight, fontString } = resolveTextStyle(shape.fontSize, shape.fontWeight, shape.fontStyle);
 
   ctx.textBaseline = "top";
   ctx.font = `${style} ${weight} ${effectiveSize * zoom}px Inter, sans-serif`;
@@ -40,17 +26,19 @@ export const renderTextToCanvas = (
 
   const startX = shape.points[0].x * zoom + panOffset.x;
   const startY = shape.points[0].y * zoom + panOffset.y;
-  const lineHeight = effectiveSize * zoom * 1.2;
+  
+  // Align canvas top-baseline with CSS line-box centering
+  const halfLeading = (lineHeight - effectiveSize) * zoom / 2;
 
   renderRichTextLines(
     ctx,
     shape.text,
     startX,
-    startY,
+    startY + halfLeading,
     effectiveSize * zoom,
     weight,
     style,
-    lineHeight,
+    lineHeight * zoom,
     color,
     "left"
   );
