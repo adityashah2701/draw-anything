@@ -1,24 +1,5 @@
 "use client";
 
-/**
- * CanvasTextBlock — production-grade canvas-native text editing
- *
- * Architecture:
- * - DRAFT MODE: text stays in local state while typing. Storage is NOT updated on every keystroke.
- * - COMMIT: only on Enter or Escape. Empty commit = notify parent to discard.
- * - BLUR: never auto-commits or auto-deletes.
- * - UNMOUNT: never auto-commits. Parent controls lifecycle.
- * - TOOLBAR: formatting toolbar appears above focused block; mousedown=preventDefault keeps editor focused.
- *
- * Pixel-perfect overlay strategy:
- * - The canvas renders text at (startX, startY) with ctx.textBaseline = "top".
- * - The overlay div must have its first visible glyph at exactly the same screen position.
- * - We measure the exact offset between "CSS div top" and "first glyph top" at runtime
- *   using a hidden measurement element, then apply that offset as a correction.
- * - We do NOT apply transform:scale(zoom) on the wrapper — the font size is already
- *   pre-zoomed (effectiveSize = base * zoom).
- */
-
 import React, {
   useRef,
   useEffect,
@@ -35,7 +16,6 @@ import {
   normalizeRichTextInput,
 } from "@/features/whiteboard/utils/rich-text-renderer";
 
-// ─── One-time global style injection ─────────────────────────────────────────
 
 let _injected = false;
 function ensureStyles() {

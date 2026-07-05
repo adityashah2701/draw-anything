@@ -569,7 +569,6 @@ export const useArrowConnections = ({
     },
     [
       buildRouteDescriptor,
-      baseRoutingObstacleSignature,
       adjacencyMap,
       elements,
       getAllParallelCandidates,
