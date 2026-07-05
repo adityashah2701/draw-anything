@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Button } from '@/components/ui/button'
 import { OrganizationProfile } from '@clerk/nextjs'
 import { ArrowLeft } from 'lucide-react'
