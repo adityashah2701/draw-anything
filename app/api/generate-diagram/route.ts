@@ -2153,7 +2153,7 @@ export async function POST(req: NextRequest) {
           }
         } else {
           const completionStream = await groq.chat.completions.create({
-            model: "qwen/qwen3-32b",
+            model: "qwen/qwen3.6-27b",
             temperature: 0,
             max_tokens: 4096,
             stream: true,
