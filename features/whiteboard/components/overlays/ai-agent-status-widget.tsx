@@ -2,6 +2,11 @@
 
 import React from "react";
 import { Loader2 } from "lucide-react";
+import {
+  AIFrameCheckpoint,
+  AIDiagramValidationReport,
+  AICriticNote,
+} from "@/features/ai/types";
 
 interface AIAgentStatusWidgetProps {
   isGenerating: boolean;
@@ -9,6 +14,11 @@ interface AIAgentStatusWidgetProps {
   placedCount: number;
   currentNodeLabel: string | null;
   error: string | null;
+  frameId?: string | null;
+  validationReport?: AIDiagramValidationReport | null;
+  checkpoints?: AIFrameCheckpoint[];
+  repairPasses?: number;
+  criticNotes?: AICriticNote[];
 }
 
 export const AIAgentStatusWidget: React.FC<AIAgentStatusWidgetProps> = ({
@@ -17,8 +27,17 @@ export const AIAgentStatusWidget: React.FC<AIAgentStatusWidgetProps> = ({
   placedCount,
   currentNodeLabel,
   error,
+  frameId,
+  validationReport,
+  checkpoints = [],
+  repairPasses = 0,
+  criticNotes = [],
 }) => {
   if (!isGenerating && !error) return null;
+  const latestCheckpoint = checkpoints[checkpoints.length - 1];
+  const warningCount =
+    validationReport?.issues.filter((issue) => issue.severity !== "info")
+      .length ?? 0;
 
   return (
     <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 duration-300">
@@ -56,12 +75,47 @@ export const AIAgentStatusWidget: React.FC<AIAgentStatusWidgetProps> = ({
               <div className="flex justify-between items-center text-xs text-muted-foreground">
                 <span className="italic truncate pr-2">{thoughtPhase || "Initializing..."}</span>
               </div>
+
+              {latestCheckpoint && (
+                <div className="text-[11px] text-muted-foreground">
+                  Phase: <span className="text-foreground">{latestCheckpoint.phase}</span>
+                </div>
+              )}
+
+              {validationReport && (
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    Validation:{" "}
+                    <span className="text-foreground">
+                      {validationReport.valid ? "passed" : "needs repair"}
+                    </span>
+                  </span>
+                  {warningCount > 0 && <span>{warningCount} notes</span>}
+                </div>
+              )}
+
+              {(repairPasses > 0 || criticNotes.length > 0) && (
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    Repairs: <span className="text-foreground">{repairPasses}</span>
+                  </span>
+                  <span>
+                    Critic: <span className="text-foreground">{criticNotes.length}</span>
+                  </span>
+                </div>
+              )}
               
               {currentNodeLabel && (
                 <div className="flex justify-between items-center text-[11px] text-muted-foreground pt-2 border-t border-border">
                   <span className="truncate">
                     Current: <span className="text-foreground font-medium">{currentNodeLabel}</span>
                   </span>
+                </div>
+              )}
+
+              {frameId && (
+                <div className="truncate pt-1 font-mono text-[10px] text-muted-foreground/70">
+                  {frameId}
                 </div>
               )}
             </div>

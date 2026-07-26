@@ -54,6 +54,13 @@ export interface BaseDrawingElement {
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
+  ai?: {
+    frameId?: string;
+    generationId?: string;
+    semanticId?: string;
+    semanticKind?: string;
+    diagramType?: string;
+  };
 }
 
 export interface FreehandShape extends BaseDrawingElement {
@@ -88,6 +95,10 @@ export interface TextShape extends BaseDrawingElement {
   fontStyle?: string;
 }
 
+export interface SemanticNodeShape extends BaseDrawingElement {
+  type: "semantic-node";
+}
+
 export interface ArrowBaseShape extends BaseDrawingElement {
   type: "arrow" | "arrow-bidirectional";
   startConnection?: ArrowConnection;
@@ -118,6 +129,7 @@ export type DrawingElement =
   | TriangleShape
   | LineShape
   | TextShape
+  | SemanticNodeShape
   | ArrowShape
   | BidirectionalArrowShape;
 

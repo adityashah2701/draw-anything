@@ -454,6 +454,11 @@ export const WhiteboardEditingOverlays = ({
         placedCount={controller.aiPlacedCount}
         currentNodeLabel={controller.aiCurrentNodeLabel}
         error={controller.aiError}
+        frameId={controller.aiFrameId}
+        validationReport={controller.aiValidationReport}
+        checkpoints={controller.aiCheckpoints}
+        repairPasses={controller.aiRepairPasses}
+        criticNotes={controller.aiCriticNotes}
       />
 
       <CommandMenu

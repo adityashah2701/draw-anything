@@ -8,6 +8,7 @@ import { bidirectionalArrowDefinition } from "@/core/shapes/bidirectional-arrow/
 import { lineDefinition } from "@/core/shapes/line/definition";
 import { freehandDefinition } from "@/core/shapes/freehand/definition";
 import { textDefinition } from "@/core/shapes/text/definition";
+import { semanticNodeDefinition } from "@/core/shapes/semantic-node/definition";
 
 let initialized = false;
 
@@ -18,6 +19,7 @@ export const initializeShapeRegistry = () => {
   shapeRegistry.register(circleDefinition);
   shapeRegistry.register(diamondDefinition);
   shapeRegistry.register(triangleDefinition);
+  shapeRegistry.register(semanticNodeDefinition);
   shapeRegistry.register(lineDefinition);
   shapeRegistry.register(textDefinition);
   shapeRegistry.register(arrowDefinition);
@@ -25,4 +27,3 @@ export const initializeShapeRegistry = () => {
   initialized = true;
   return shapeRegistry;
 };
-

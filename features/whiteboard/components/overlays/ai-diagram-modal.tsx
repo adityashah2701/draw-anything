@@ -64,22 +64,55 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
       const res = await fetch("/api/generate-diagram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: prompt.trim(), model: "gemini" }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error || "Failed to generate diagram.");
+        throw new Error("Failed to generate diagram.");
       }
 
-      if (!Array.isArray(data.elements) || data.elements.length === 0) {
+      if (!res.body) {
+        throw new Error("No response body received from server.");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      const elements: DrawingElement[] = [];
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+          const parsed = JSON.parse(jsonStr);
+          if (parsed.type === "element.batch") {
+            elements.push(...(parsed.elements as DrawingElement[]));
+          } else if (parsed.type === "element") {
+            elements.push(parsed.element as DrawingElement);
+          } else if (parsed.type === "frame.error" || parsed.type === "error") {
+            throw new Error(parsed.message || "Failed to generate diagram.");
+          }
+        }
+      }
+
+      if (elements.length === 0) {
         throw new Error(
           "The AI returned an empty diagram. Try a different description.",
         );
       }
 
-      onGenerate(data.elements as DrawingElement[]);
+      const unique = Array.from(
+        new Map(elements.map((element) => [element.id, element])).values(),
+      );
+      onGenerate(unique);
       onClose();
     } catch (err) {
       setError(
