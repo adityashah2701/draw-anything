@@ -175,8 +175,8 @@ export const aiDiagramGroupSchema = z.object({
 
 export const aiPlanSchema = z.object({
   diagramType: aiDiagramTypeSchema,
-  summary: z.string().min(1).max(500),
-  requirements: z.array(aiRequirementSchema).max(24).default([]),
+  summary: z.string().min(1).max(300),
+  requirements: z.array(aiRequirementSchema).max(12).default([]),
   actors: optionalStringArraySchema,
   systems: optionalStringArraySchema,
   nonFunctionalRequirements: optionalStringArraySchema,
@@ -193,21 +193,22 @@ export const aiPlanSchema = z.object({
 
 export const modelPlanSchema = z.object({
   diagramType: z.string(),
-  summary: z.string(),
+  summary: z.string().max(300),
   requirements: z
     .array(
       z.object({
         id: z.string(),
-        text: z.string(),
+        text: z.string().max(200),
         priority: z.string().optional(),
         source: z.string().optional(),
       }),
     )
+    .max(12)
     .optional(),
-  actors: z.array(z.string()).optional(),
-  systems: z.array(z.string()).optional(),
-  nonFunctionalRequirements: z.array(z.string()).optional(),
-  risks: z.array(z.string()).optional(),
+  actors: z.array(z.string().max(60)).max(8).optional(),
+  systems: z.array(z.string().max(60)).max(8).optional(),
+  nonFunctionalRequirements: z.array(z.string().max(100)).max(6).optional(),
+  risks: z.array(z.string().max(100)).max(6).optional(),
   layoutStrategy: z.string().optional(),
   direction: z.string().optional(),
   styleTheme: z.string().optional(),
@@ -268,9 +269,9 @@ export const normalizeModelPlan = (value: unknown): AIPlanOutput => {
 };
 
 export const aiGraphDraftSchema = z.object({
-  nodes: z.array(aiDiagramNodeSchema).min(1).max(60),
-  edges: z.array(aiDiagramEdgeSchema).max(120).default([]),
-  groups: z.array(aiDiagramGroupSchema).max(20).default([]),
+  nodes: z.array(aiDiagramNodeSchema).min(1).max(25),
+  edges: z.array(aiDiagramEdgeSchema).max(50).default([]),
+  groups: z.array(aiDiagramGroupSchema).max(10).default([]),
 });
 
 const modelDiagramEdgeSchema = z
@@ -278,36 +279,37 @@ const modelDiagramEdgeSchema = z
     id: z.string().optional(),
     from: z.string(),
     to: z.string(),
-    label: z.string().optional(),
-    relationship: z.string().optional(),
+    label: z.string().max(60).optional(),
+    relationship: z.string().max(80).optional(),
   })
   .passthrough();
 
 const modelDiagramNodeSchema = z
   .object({
     id: z.string(),
-    label: z.string(),
+    label: z.string().max(60),
     kind: z.string().optional(),
     layer: z.string().optional(),
     column: z.number().optional(),
     parentId: z.string().optional(),
-    description: z.string().optional(),
+    description: z.string().max(160).optional(),
     priority: z.number().optional(),
   })
   .passthrough();
 
 export const modelGraphDraftSchema = z.object({
-  nodes: z.array(modelDiagramNodeSchema),
-  edges: z.array(modelDiagramEdgeSchema).optional(),
+  nodes: z.array(modelDiagramNodeSchema).max(25),
+  edges: z.array(modelDiagramEdgeSchema).max(50).optional(),
   groups: z
     .array(
       z.object({
         id: z.string(),
-        label: z.string(),
+        label: z.string().max(60),
         nodeIds: z.array(z.string()).optional(),
         kind: z.string().optional(),
       }),
     )
+    .max(10)
     .optional(),
 });
 
@@ -438,3 +440,26 @@ export const aiDiagramDocumentV1Schema = z.object({
 
 export type AIPlanOutput = z.infer<typeof aiPlanSchema>;
 export type AIGraphDraftOutput = z.infer<typeof aiGraphDraftSchema>;
+
+export const aiMissingComponentSchema = z.object({
+  label: z.string().min(1).max(80),
+  kind: aiSemanticNodeKindSchema,
+  layer: z.enum(["edge", "application", "data", "observability", "external"]),
+  reason: z.string().min(1).max(240),
+});
+
+export const aiCompletenessReportSchema = z.object({
+  isComplete: z.boolean(),
+  completenessScore: z.number().min(0).max(10),
+  missingComponents: z.array(aiMissingComponentSchema),
+  layerCoverage: z.object({
+    edge: z.boolean(),
+    application: z.boolean(),
+    data: z.boolean(),
+    observability: z.boolean(),
+    external: z.boolean(),
+  }),
+  notes: z.array(z.string()),
+});
+
+export type AICompletenessReport = z.infer<typeof aiCompletenessReportSchema>;

@@ -12,20 +12,28 @@ const needsRepair = (state: AIWorkflowState) =>
         state.document.nodes.length < 3),
   );
 
+const needsExpansion = (state: AIWorkflowState) =>
+  Boolean(
+    state.missingComponents &&
+      state.missingComponents.length > 0 &&
+      !state.isComplete &&
+      state.expansionRound < 3,
+  );
+
 export const repairAgent = async (
   state: AIWorkflowState,
   runtime: AgentRuntime,
 ): Promise<AIWorkflowUpdate> => {
   if (!state.document || !state.plan) throw new Error("Repair agent needs a document.");
   const frame = { ...state.frame, currentPhase: "repairAgent" as const };
-  logAIPhase(frame.frameId, "repairAgent", "Evaluating repair pass");
+  logAIPhase(frame.frameId, "repairAgent", "Evaluating repair and expansion needs");
 
-  if (!needsRepair(state) || state.improvementPasses >= 2) {
+  if (!needsRepair(state) && !needsExpansion(state)) {
     return {
       frame,
       events: [
         phaseStarted(frame.frameId, "repairAgent", "Reviewing repair need"),
-        phaseCompleted(frame.frameId, "repairAgent", "No additional repair required"),
+        phaseCompleted(frame.frameId, "repairAgent", "No additional repair or expansion required"),
       ],
       checkpoints: [checkpoint("repairAgent", "No further repair required")],
     };
@@ -36,11 +44,17 @@ export const repairAgent = async (
   let document = state.document;
   let improvementPasses = state.improvementPasses;
   const events: AIWorkflowUpdate["events"] = [
-    phaseStarted(frame.frameId, "repairAgent", "Repairing generated diagram"),
+    phaseStarted(frame.frameId, "repairAgent", "Repairing and expanding diagram"),
   ];
 
-  while (needsRepair({ ...state, document, improvementPasses }) && improvementPasses < 2) {
-    const messages = await buildImprovementMessages(state.request, document);
+  const maxPasses = needsExpansion(state) ? 3 : 2;
+
+  while ((needsRepair({ ...state, document, improvementPasses }) || needsExpansion({ ...state, document, improvementPasses })) && improvementPasses < maxPasses) {
+    const messages = await buildImprovementMessages(
+      state.request,
+      document,
+      needsExpansion({ ...state, document, improvementPasses }) ? state.missingComponents : undefined,
+    );
     const rawGraph = await callStructured<Record<string, unknown>>(
       runtime.model,
       modelGraphDraftSchema,
@@ -69,7 +83,9 @@ export const repairAgent = async (
         type: "repair.applied",
         frameId: frame.frameId,
         pass: improvementPasses,
-        summary: "Applied model-guided graph repair",
+        summary: needsExpansion({ ...state, document, improvementPasses })
+          ? `Expanded graph with missing components (pass ${improvementPasses})`
+          : `Applied model-guided graph repair (pass ${improvementPasses})`,
       },
       {
         type: "graph.delta",
@@ -86,7 +102,11 @@ export const repairAgent = async (
     );
   }
 
-  events.push(phaseCompleted(frame.frameId, "repairAgent", "Repair pass completed"));
+  events.push(phaseCompleted(
+    frame.frameId,
+    "repairAgent",
+    `Completed ${improvementPasses} pass(es): ${document.nodes.length} nodes, ${document.edges.length} edges`,
+  ));
 
   return {
     frame,
@@ -94,6 +114,6 @@ export const repairAgent = async (
     document,
     improvementPasses,
     events,
-    checkpoints: [checkpoint("repairAgent", "Applied repair pass")],
+    checkpoints: [checkpoint("repairAgent", `Applied ${improvementPasses} repair/expansion pass(es)`)],
   };
 };

@@ -5,7 +5,6 @@ import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-util
 import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
 import { AIPanel } from "@/features/whiteboard/components/overlays/ai-panel";
 import { CommandMenu } from "@/features/whiteboard/components/overlays/command-menu";
-import { AIAgentStatusWidget } from "@/features/whiteboard/components/overlays/ai-agent-status-widget";
 import { DrawingElementJson } from "@/liveblocks.config";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import {
@@ -445,20 +444,9 @@ export const WhiteboardEditingOverlays = ({
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
         triggerAIGeneration={controller.triggerAIGeneration}
-        disabled={!whiteboardAccess.hasEditAccess}
-      />
-
-      <AIAgentStatusWidget
         isGenerating={controller.isAIGenerating}
-        thoughtPhase={controller.aiThoughtPhase}
-        placedCount={controller.aiPlacedCount}
-        currentNodeLabel={controller.aiCurrentNodeLabel}
-        error={controller.aiError}
-        frameId={controller.aiFrameId}
-        validationReport={controller.aiValidationReport}
-        checkpoints={controller.aiCheckpoints}
-        repairPasses={controller.aiRepairPasses}
-        criticNotes={controller.aiCriticNotes}
+        messages={controller.aiMessages}
+        disabled={!whiteboardAccess.hasEditAccess}
       />
 
       <CommandMenu

@@ -20,6 +20,8 @@ import { layoutAgent } from "@/features/ai/server/agents/layout-agent";
 import { validationAgent } from "@/features/ai/server/agents/validation-agent";
 import { criticAgent } from "@/features/ai/server/agents/critic-agent";
 import { repairAgent } from "@/features/ai/server/agents/repair-agent";
+import { expansionAgent } from "@/features/ai/server/agents/expansion-agent";
+import { intermediateCompileAgent } from "@/features/ai/server/agents/intermediate-compile-agent";
 import { canvasCompilerAgent } from "@/features/ai/server/agents/canvas-compiler-agent";
 
 export interface AIWorkflowOptions {
@@ -51,6 +53,12 @@ const StateAnnotation = Annotation.Root({
   document: Annotation<AIWorkflowState["document"]>(),
   elements: Annotation<AIWorkflowState["elements"]>(),
   improvementPasses: Annotation<number>(),
+  expansionRound: Annotation<number>(),
+  isComplete: Annotation<boolean>(),
+  missingComponents: Annotation<AIWorkflowState["missingComponents"]>({
+    reducer: (_left, right) => right,
+    default: () => [],
+  }),
   requirements: Annotation<AIWorkflowState["requirements"]>({
     reducer: (_left, right) => right,
     default: () => [],
@@ -129,6 +137,16 @@ const withoutRuntime =
   (state: GraphState) =>
     agent(state as AIWorkflowState);
 
+const shouldExpand = (state: GraphState): "expand" | "finalize" => {
+  const s = state as AIWorkflowState;
+  const canExpand =
+    !s.isComplete &&
+    s.missingComponents &&
+    s.missingComponents.length > 0 &&
+    (s.expansionRound ?? 0) < 1;
+  return canExpand ? "expand" : "finalize";
+};
+
 export const createAIDiagramWorkflow = (model: StructuredChatModel) => {
   const runtime: AgentRuntime = {
     model,
@@ -150,7 +168,11 @@ export const createAIDiagramWorkflow = (model: StructuredChatModel) => {
     .addNode("diagramComposer", withoutRuntime(diagramComposerAgent))
     .addNode("layoutAgent", withoutRuntime(layoutAgent))
     .addNode("validationAgent", withRuntime(runtime, validationAgent))
-    .addNode("criticAgent", withoutRuntime(criticAgent))
+    .addNode("criticAgent", withRuntime(runtime, criticAgent))
+    .addNode("intermediateCompile", withoutRuntime(intermediateCompileAgent))
+    .addNode("expansionAgent", withRuntime(runtime, expansionAgent), {
+      retryPolicy: { maxAttempts: 2 },
+    })
     .addNode("repairAgent", withRuntime(runtime, repairAgent), {
       retryPolicy: { maxAttempts: 2 },
     })
@@ -163,8 +185,13 @@ export const createAIDiagramWorkflow = (model: StructuredChatModel) => {
     .addEdge("relationshipAgent", "diagramComposer")
     .addEdge("diagramComposer", "layoutAgent")
     .addEdge("layoutAgent", "validationAgent")
-    .addEdge("validationAgent", "criticAgent")
-    .addEdge("criticAgent", "repairAgent")
+    .addEdge("validationAgent", "intermediateCompile")
+    .addEdge("intermediateCompile", "criticAgent")
+    .addConditionalEdges("criticAgent", shouldExpand, {
+      expand: "expansionAgent",
+      finalize: "repairAgent",
+    })
+    .addEdge("expansionAgent", "relationshipAgent")
     .addEdge("repairAgent", "canvasCompiler")
     .addEdge("canvasCompiler", END)
     .compile({
@@ -181,6 +208,9 @@ export const createAIWorkflowInput = (request: AIGenerateDiagramRequest) => {
       events: [],
       checkpoints: [],
       improvementPasses: 0,
+      expansionRound: 0,
+      isComplete: false,
+      missingComponents: [],
       requirements: [],
       actors: [],
       systems: [],

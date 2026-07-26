@@ -272,9 +272,19 @@ export type AIWorkflowPhase =
   | "diagramComposer"
   | "layoutAgent"
   | "validationAgent"
+  | "intermediateCompile"
   | "criticAgent"
   | "repairAgent"
+  | "expansionAgent"
+  | "completenessCheck"
   | "canvasCompiler";
+
+export interface AIMissingComponent {
+  label: string;
+  kind: AISemanticNodeKind;
+  layer: "edge" | "application" | "data" | "observability" | "external";
+  reason: string;
+}
 
 export interface AIFrameCheckpoint {
   phase: AIWorkflowPhase;

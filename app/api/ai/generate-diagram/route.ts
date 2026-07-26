@@ -15,22 +15,30 @@ const writeEvent = (
 };
 
 const toSafeErrorMessage = (error: unknown) => {
-  const message =
-    error instanceof Error ? error.message : "Failed to generate diagram.";
+  const raw =
+    error instanceof Error ? error.message : String(error);
 
   if (
-    message.includes("tool call validation failed") ||
-    message.includes("parameters for tool") ||
-    message.includes("failed_generation")
+    raw.includes("tool call validation failed") ||
+    raw.includes("parameters for tool") ||
+    raw.includes("failed_generation")
   ) {
-    return "The AI provider returned a malformed diagram graph. I adjusted the schema to tolerate missing edge style fields; please try again.";
+    return "The AI provider returned a malformed diagram graph. Please try again with a different model.";
   }
 
-  if (message.includes("Missing ") && message.includes("AI provider")) {
-    return message;
+  if (raw.includes("Missing ") && raw.includes("AI provider")) {
+    return raw;
   }
 
-  return message.length > 240 ? "Failed to generate diagram." : message;
+  if (raw.includes("timeout") || raw.includes("TIMEOUT")) {
+    return "The AI provider timed out. Please try again with a simpler request.";
+  }
+
+  if (raw.includes("rate") && raw.includes("limit")) {
+    return "Rate limited by the AI provider. Please wait a moment and try again.";
+  }
+
+  return raw.length > 300 ? raw.slice(0, 300) + "..." : raw;
 };
 
 export async function POST(req: NextRequest) {
@@ -72,10 +80,11 @@ export async function POST(req: NextRequest) {
             writeEvent(controller, compat);
           }
           if (event.type === "element.batch") {
-            await new Promise((resolve) => setTimeout(resolve, 20));
+            await new Promise((resolve) => setTimeout(resolve, 50));
           }
         }
       } catch (error) {
+        console.error("[ai-generate-diagram] Workflow error:", error);
         const message = toSafeErrorMessage(error);
         const event = {
           type: "frame.error",

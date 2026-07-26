@@ -11,6 +11,9 @@ export const contextRetrieverAgent = async (
   };
   logAIPhase(frame.frameId, "contextRetriever", "Loading canvas, registry, and memory context");
   const context = await retrieveAIContext(state.request);
+  const promptPreview = state.request.prompt.length > 120
+    ? state.request.prompt.slice(0, 120) + "..."
+    : state.request.prompt;
   return {
     frame,
     memoryContext: context.memory,
@@ -33,9 +36,9 @@ export const contextRetrieverAgent = async (
           status: frame.status,
         },
       },
-      phaseStarted(frame.frameId, "contextRetriever", "Retrieving canvas and memory context"),
+      phaseStarted(frame.frameId, "contextRetriever", `Analyzing prompt: "${promptPreview}"`),
       { type: "memory.loaded", frameId: frame.frameId, memory: context.memory },
-      phaseCompleted(frame.frameId, "contextRetriever", "Context ready"),
+      phaseCompleted(frame.frameId, "contextRetriever", "Context ready — planning architecture"),
     ],
     checkpoints: [checkpoint("contextRetriever", "Loaded canvas summary, memory fallback, and shape registry")],
   };

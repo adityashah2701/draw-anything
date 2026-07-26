@@ -9,14 +9,25 @@ import {
   AIFrameCheckpoint,
   AIDiagramValidationReport,
   AICriticNote,
+  AIWorkflowPhase,
 } from "@/features/ai/types";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { toUserFacingMessage } from "@/features/ai/server/errors";
 
 type LegacyAIEvent =
   | { type: "thought"; message: string }
   | { type: "element"; element: DrawingElement }
   | { type: "done"; count: number }
   | { type: "error"; message: string };
+
+export interface AIChatMessage {
+  id: string;
+  role: "user" | "agent";
+  content: string;
+  phase?: AIWorkflowPhase;
+  timestamp: number;
+  kind: "prompt" | "phase" | "element" | "error" | "success" | "thought";
+}
 
 interface UseAIGenerationOptions {
   onAddElement: (element: DrawingElement) => void;
@@ -44,8 +55,44 @@ export const useAIGeneration = ({
   const [aiCheckpoints, setAiCheckpoints] = useState<AIFrameCheckpoint[]>([]);
   const [aiRepairPasses, setAiRepairPasses] = useState(0);
   const [aiCriticNotes, setAiCriticNotes] = useState<AICriticNote[]>([]);
+  const [aiMessages, setAiMessages] = useState<AIChatMessage[]>([]);
   const seenElementIdsRef = useRef<Set<string>>(new Set());
   const activeFrameIdRef = useRef<string | null>(null);
+  const messageIdCounterRef = useRef(0);
+
+  const nextMessageId = useCallback(() => {
+    messageIdCounterRef.current += 1;
+    return `msg-${messageIdCounterRef.current}`;
+  }, []);
+
+  const addChatMessage = useCallback(
+    (msg: Omit<AIChatMessage, "id" | "timestamp">) => {
+      setAiMessages((prev) => [
+        ...prev,
+        { ...msg, id: nextMessageId(), timestamp: Date.now() },
+      ]);
+    },
+    [nextMessageId],
+  );
+
+  const updateLastAgentMessage = useCallback(
+    (updater: (msg: AIChatMessage) => AIChatMessage) => {
+      setAiMessages((prev) => {
+        const lastIdx = prev.length - 1;
+        if (lastIdx < 0) return prev;
+        const last = prev[lastIdx];
+        if (last.role !== "agent") return prev;
+        const updated = updater(last);
+        return [...prev.slice(0, lastIdx), updated];
+      });
+    },
+    [],
+  );
+
+  const clearAIMessages = useCallback(() => {
+    setAiMessages([]);
+    messageIdCounterRef.current = 0;
+  }, []);
   const createAIFrame = useMutation(api.aiFrames.create);
   const appendAICheckpoint = useMutation(api.aiFrames.appendCheckpoint);
   const completeAIFrame = useMutation(api.aiFrames.complete);
@@ -61,21 +108,6 @@ export const useAIGeneration = ({
     (value: unknown) => JSON.parse(JSON.stringify(value)),
     [],
   );
-
-  const toUserFacingError = useCallback((error: unknown) => {
-    const message =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-
-    if (
-      message.includes("tool call validation failed") ||
-      message.includes("parameters for tool") ||
-      message.includes("failed_generation")
-    ) {
-      return "The AI provider returned a malformed diagram graph. Please try again.";
-    }
-
-    return message.length > 260 ? "AI generation failed. Please try again." : message;
-  }, []);
 
   const addGeneratedElement = useCallback(
     (element: DrawingElement) => {
@@ -97,6 +129,11 @@ export const useAIGeneration = ({
           setAiFrameId(event.frame.frameId);
           activeFrameIdRef.current = event.frame.frameId;
           setAiThoughtPhase("AI frame created");
+          addChatMessage({
+            role: "agent",
+            content: "AI Agent started. Analyzing your request...",
+            kind: "phase",
+          });
           persist(
             createAIFrame({
               frameId: event.frame.frameId,
@@ -119,6 +156,12 @@ export const useAIGeneration = ({
               summary: event.message,
             };
             setAiCheckpoints((current) => [...current, checkpoint]);
+            addChatMessage({
+              role: "agent",
+              content: event.message,
+              phase: event.phase,
+              kind: "phase",
+            });
             persist(
               appendAICheckpoint({
                 frameId: event.frameId,
@@ -138,6 +181,13 @@ export const useAIGeneration = ({
               ? "Validation passed"
               : "Repairing validation issues",
           );
+          addChatMessage({
+            role: "agent",
+            content: event.report.valid
+              ? "Diagram validation passed."
+              : `Validation found ${event.report.issues.length} issue(s). Repairing...`,
+            kind: "phase",
+          });
           return false;
         case "memory.loaded":
           setAiFrameId(event.frameId);
@@ -173,28 +223,68 @@ export const useAIGeneration = ({
               ? `Review found ${event.notes.length} notes`
               : "Architecture review passed",
           );
+          addChatMessage({
+            role: "agent",
+            content:
+              event.notes.length > 0
+                ? `Architecture review: ${event.notes.length} improvement note(s) found.`
+                : "Architecture review passed.",
+            kind: "phase",
+          });
           return false;
         case "repair.applied":
           setAiFrameId(event.frameId);
           activeFrameIdRef.current = event.frameId;
           setAiRepairPasses(event.pass);
           setAiThoughtPhase(event.summary);
+          addChatMessage({
+            role: "agent",
+            content: event.summary,
+            kind: "phase",
+          });
           return false;
         case "node.created":
           setAiFrameId(event.frameId);
           activeFrameIdRef.current = event.frameId;
           setAiCurrentNodeLabel(event.node.label);
           setAiThoughtPhase(`Created ${event.node.label}`);
+          updateLastAgentMessage((msg) => {
+            if (msg.kind === "element") {
+              return {
+                ...msg,
+                content: `Placing elements (${msg.content.match(/\d+/)?.[0] ?? 0} done, now: ${event.node.label})...`,
+              };
+            }
+            return msg;
+          });
           return false;
-        case "element.batch":
+        case "element.batch": {
           setAiFrameId(event.frameId);
           activeFrameIdRef.current = event.frameId;
           event.elements.forEach(addGeneratedElement);
+          const batchCount = event.elements.length;
+          setAiMessages((prev) => {
+            const lastIdx = prev.length - 1;
+            if (lastIdx >= 0 && prev[lastIdx].kind === "element" && prev[lastIdx].role === "agent") {
+              const updated = {
+                ...prev[lastIdx],
+                content: `Placing elements on canvas (${aiPlacedCount + batchCount} total)...`,
+              };
+              return [...prev.slice(0, lastIdx), updated];
+            }
+            return prev;
+          });
           return false;
+        }
         case "frame.done":
           setAiFrameId(event.frameId);
           activeFrameIdRef.current = event.frameId;
           setIsAIGenerating(false);
+          addChatMessage({
+            role: "agent",
+            content: `Done! ${event.count} elements placed on the canvas.`,
+            kind: "success",
+          });
           persist(
             completeAIFrame({
               frameId: event.frameId,
@@ -207,6 +297,11 @@ export const useAIGeneration = ({
           return true;
         case "frame.error":
           activeFrameIdRef.current = event.frameId;
+          addChatMessage({
+            role: "agent",
+            content: event.message || "Error generating elements.",
+            kind: "error",
+          });
           persist(
             failAIFrame({
               frameId: event.frameId,
@@ -222,17 +317,29 @@ export const useAIGeneration = ({
           return false;
         case "done":
           setIsAIGenerating(false);
+          addChatMessage({
+            role: "agent",
+            content: `Done! ${event.count} elements placed on the canvas.`,
+            kind: "success",
+          });
           toast.success(`AI successfully placed ${event.count} elements.`);
           onGenerationEnd?.();
           return true;
         case "error":
+          addChatMessage({
+            role: "agent",
+            content: event.message || "Error generating elements.",
+            kind: "error",
+          });
           throw new Error(event.message || "Error generating elements.");
         default:
           return false;
       }
     },
     [
+      addChatMessage,
       addGeneratedElement,
+      aiPlacedCount,
       appendAICheckpoint,
       completeAIFrame,
       createAIFrame,
@@ -240,6 +347,7 @@ export const useAIGeneration = ({
       onGenerationEnd,
       persist,
       toConvexJson,
+      updateLastAgentMessage,
     ],
   );
 
@@ -257,9 +365,17 @@ export const useAIGeneration = ({
       setAiPlacedCount(0);
       setAiCurrentNodeLabel(null);
       setAiThoughtPhase("Analyzing prompt...");
+      setAiMessages([]);
+      messageIdCounterRef.current = 0;
       seenElementIdsRef.current = new Set();
       activeFrameIdRef.current = null;
       onGenerationStart?.();
+
+      addChatMessage({
+        role: "user",
+        content: prompt.trim(),
+        kind: "prompt",
+      });
 
       try {
         const response = await fetch("/api/ai/generate-diagram", {
@@ -315,9 +431,14 @@ export const useAIGeneration = ({
           }
         }
       } catch (err) {
-        const message = toUserFacingError(err);
+        const message = toUserFacingMessage(err);
         setAiError(message);
         setIsAIGenerating(false);
+        addChatMessage({
+          role: "agent",
+          content: message,
+          kind: "error",
+        });
         if (activeFrameIdRef.current) {
           persist(
             failAIFrame({
@@ -331,12 +452,14 @@ export const useAIGeneration = ({
       }
     },
     [
+      addChatMessage,
+      failAIFrame,
       getCanvasContext,
       handleEvent,
       isAIGenerating,
-      onGenerationStart,
       onGenerationEnd,
-      toUserFacingError,
+      onGenerationStart,
+      persist,
       whiteboardId,
     ]
   );
@@ -352,6 +475,8 @@ export const useAIGeneration = ({
     aiCheckpoints,
     aiRepairPasses,
     aiCriticNotes,
+    aiMessages,
+    clearAIMessages,
     triggerAIGeneration,
   };
 };

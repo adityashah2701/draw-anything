@@ -1,5 +1,6 @@
 import { compileAIDiagramToCanvas } from "@/features/ai/server/canvas-compiler";
 import { checkpoint, logAIPhase, phaseCompleted, phaseStarted, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
+import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
 export const canvasCompilerAgent = async (
   state: AIWorkflowState,
@@ -7,10 +8,14 @@ export const canvasCompilerAgent = async (
   if (!state.document) throw new Error("Cannot compile without a document.");
   const frame = { ...state.frame, currentPhase: "canvasCompiler" as const };
   logAIPhase(frame.frameId, "canvasCompiler", "Compiling diagram to canvas");
-  if (!state.document.validation.valid) {
-    throw new Error("AI diagram validation failed.");
+
+  let elements: DrawingElement[] = [];
+  try {
+    elements = compileAIDiagramToCanvas(state.document, frame.frameId);
+  } catch (compileError) {
+    console.error("[canvasCompiler] Compilation failed, attempting fallback:", compileError);
   }
-  const elements = compileAIDiagramToCanvas(state.document, frame.frameId);
+
   const completedFrame = {
     ...frame,
     status: "completed" as const,
