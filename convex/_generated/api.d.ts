@@ -13,6 +13,8 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as aiFrames from "../aiFrames.js";
+import type * as aiMemory from "../aiMemory.js";
 import type * as users from "../users.js";
 import type * as whiteboard from "../whiteboard.js";
 
@@ -25,6 +27,8 @@ import type * as whiteboard from "../whiteboard.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  aiFrames: typeof aiFrames;
+  aiMemory: typeof aiMemory;
   users: typeof users;
   whiteboard: typeof whiteboard;
 }>;

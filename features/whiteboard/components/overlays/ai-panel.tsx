@@ -1,15 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
-import { Loader2, Sparkles, X, ChevronRight, Wand2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "sonner";
+import { Sparkles, X, ChevronRight, Wand2 } from "lucide-react";
+import { AIModelProvider } from "@/features/ai/types";
 
 interface AIPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  triggerAIGeneration: (prompt: string, model: "gemini" | "groq") => void;
+  triggerAIGeneration: (prompt: string, model: AIModelProvider) => void;
   disabled?: boolean;
 }
 
@@ -28,7 +26,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   triggerAIGeneration,
   disabled = false,
 }) => {
-  const [model, setModel] = React.useState<"gemini" | "groq">("gemini");
+  const [model, setModel] = React.useState<AIModelProvider>("gemini");
   const [prompt, setPrompt] = React.useState("");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -86,11 +84,15 @@ export const AIPanel: React.FC<AIPanelProps> = ({
               </h2>
               <select
                 value={model}
-                onChange={(e) => setModel(e.target.value as "gemini" | "groq")}
+                onChange={(e) => setModel(e.target.value as AIModelProvider)}
                 className="text-[11px] bg-transparent text-muted-foreground border-none outline-none cursor-pointer hover:text-foreground p-0 mt-0.5"
               >
                 <option value="gemini">Gemini 2.5 Flash</option>
                 <option value="groq">Groq (Llama-3 70B)</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="local">Local</option>
               </select>
             </div>
           </div>

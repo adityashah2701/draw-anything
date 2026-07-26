@@ -26,4 +26,74 @@ export default defineSchema({
     .index("by_createdBy", ["createdBy"])
     .index("by_organizationId", ["orgId"])
     .index("by_createdBy_orgId", ["createdBy", "orgId"]),
+
+  aiFrames: defineTable({
+    frameId: v.string(),
+    whiteboardId: v.optional(v.string()),
+    prompt: v.string(),
+    provider: v.string(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    currentPhase: v.optional(v.string()),
+    finalElementIds: v.optional(v.array(v.string())),
+    finalGraph: v.optional(v.any()),
+    errorMessage: v.optional(v.string()),
+    createdBy: v.id("users"),
+    orgId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_frameId", ["frameId"])
+    .index("by_whiteboardId", ["whiteboardId"])
+    .index("by_createdBy", ["createdBy"]),
+
+  aiFrameCheckpoints: defineTable({
+    frameId: v.string(),
+    phase: v.string(),
+    summary: v.string(),
+    at: v.string(),
+    createdBy: v.id("users"),
+  }).index("by_frameId", ["frameId"]),
+
+  aiMemories: defineTable({
+    whiteboardId: v.optional(v.string()),
+    userId: v.id("users"),
+    orgId: v.optional(v.string()),
+    summary: v.string(),
+    prompt: v.optional(v.string()),
+    finalGraphSummary: v.optional(v.string()),
+    userCorrections: v.optional(v.string()),
+    provider: v.optional(v.string()),
+    model: v.optional(v.string()),
+    status: v.union(v.literal("accepted"), v.literal("rejected"), v.literal("generated")),
+    tags: v.array(v.string()),
+    payload: v.optional(v.any()),
+    sourceFrameId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_whiteboardId", ["whiteboardId"])
+    .index("by_userId", ["userId"])
+    .index("by_orgId", ["orgId"])
+    .index("by_sourceFrameId", ["sourceFrameId"]),
+
+  aiDecisions: defineTable({
+    frameId: v.string(),
+    whiteboardId: v.optional(v.string()),
+    decisionType: v.string(),
+    summary: v.string(),
+    rationale: v.optional(v.string()),
+    payload: v.optional(v.any()),
+    createdBy: v.id("users"),
+    orgId: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_frameId", ["frameId"])
+    .index("by_whiteboardId", ["whiteboardId"])
+    .index("by_createdBy", ["createdBy"]),
 });

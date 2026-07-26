@@ -38,6 +38,7 @@ export type DrawingElementJson = JsonObject & {
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
+  ai?: JsonObject;
   dashed?: boolean;
   arrowHeadStart?: boolean;
   arrowHeadEnd?: boolean;

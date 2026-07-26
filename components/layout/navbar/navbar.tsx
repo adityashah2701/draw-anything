@@ -4,7 +4,7 @@ import { UserButton, useUser } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
 import { Menu, X, Moon, Sun } from "lucide-react";
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import MobileNavbar from "./mobile-navbar";
 import DesktopNavbar from "./desktop-navbar";
 

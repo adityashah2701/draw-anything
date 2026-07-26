@@ -760,11 +760,34 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [addElement, canvasViewport],
   );
 
+  const getAICanvasContext = useCallback(
+    () => ({
+      elements,
+      selectedElementIds: selectedElements,
+      viewport: {
+        zoom: canvasViewport.zoom,
+        panOffset: canvasViewport.panOffset,
+        width: canvasViewport.canvasSize.width,
+        height: canvasViewport.canvasSize.height,
+      },
+    }),
+    [
+      canvasViewport.canvasSize.height,
+      canvasViewport.canvasSize.width,
+      canvasViewport.panOffset,
+      canvasViewport.zoom,
+      elements,
+      selectedElements,
+    ],
+  );
+
   const aiState = useAIGeneration({
     onAddElement: handleAddAIElement,
     onGenerationStart: () => {
       aiShiftRef.current = null;
     },
+    whiteboardId,
+    getCanvasContext: getAICanvasContext,
   });
 
   const handleGenerateAIDiagram = useCallback(
