@@ -4,256 +4,74 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Draw-Anything** is a production-grade diagramming engine built with Next.js 15, React 19, TypeScript, and Liveblocks for real-time collaboration. It features a sophisticated orthogonal routing engine for arrows/connections with advanced algorithms for parallel edge spacing, lane assignment, crossing minimization, and congestion-aware routing.
+**Draw-Anything** is a collaborative whiteboard / diagramming app: Next.js 15 (App Router), React 19, TypeScript, Tailwind 4. Real-time editing runs on Liveblocks, persistence and users on Convex, auth on Clerk. It has a custom orthogonal arrow-routing engine (`core/routing`) and an AI diagram generator built as a LangGraph multi-agent pipeline (`features/ai/server`).
 
-**Tech Stack:**
-- **Frontend:** Next.js 15 (App Router), React 19, TypeScript
-- **Real-time:** Liveblocks (presence, storage, Yjs)
-- **Database/Auth:** Convex (backend), Clerk (auth)
-- **Styling:** Tailwind CSS 4
-- **Testing:** Vitest
-- **AI:** LangChain with multiple LLM providers (Anthropic, Google, Groq, OpenAI)
-
----
-
-## Common Development Commands
+## Commands
 
 ```bash
-# Development
-npm run dev              # Start dev server with Turbopack
-npm run build            # Production build
-npm run start            # Start production server
-npm run lint             # Run ESLint
+npm run dev              # Dev server (Turbopack was removed from the script)
+npm run build
+npm run lint             # next lint
+npx tsc --noEmit         # Type check
 
-# Testing
-npm run test             # Run all tests (vitest run)
-npx vitest               # Watch mode
-npx vitest run <file>    # Run specific test file
+npx vitest run                       # All tests (there is no `npm run test` script)
+npx vitest run <file>                # One file
+npx vitest run -t "<test name>"      # One test by name
 
-# Type checking
-npx tsc --noEmit         # TypeScript type check
-
-# Database (Convex)
-npx convex dev           # Local Convex dev server
-npx convex deploy        # Deploy to Convex
+npx convex dev           # Convex dev server; regenerates convex/_generated
+npx convex deploy
 ```
 
----
+Tests live next to source (`*.test.ts`); today they exist only in `features/ai/server`. There is no `vitest.config.ts`, so the `@/` path alias does not resolve and every test file fails to import until a config with `resolve.alias: { "@": <repo root> }` is added. `core/routing` has no tests.
 
-## High-Level Architecture
+## Architecture
 
-### Core Directory Structure
+### Directory layout
+- `app/` — routes: `(main-page)` dashboard/billing/org creation, `whiteboard/[id]` editor, `api/` (AI generation, Clerk webhook, Liveblocks auth), `actions/` server actions.
+- `features/` — feature modules: `whiteboard` (editor UI + hooks), `dashboard`, `billing`, `ai` (client types/schemas + `server/` pipeline).
+- `core/` — framework-free engine code: `shapes` (shape registry, per-shape definition/render/hit-test), `routing`, `arrow` (React hook bridging elements → routing), `anchors`, `snap`, `layout`, `collision`.
+- `convex/` — schema and queries/mutations. `liveblocks.config.ts` — Liveblocks room types and hooks.
 
+### Whiteboard data flow
+- **Liveblocks storage is the live document**: `elements: LiveList<LiveObject<DrawingElementJson>>`, plus presence (cursor, selection, pencil draft). See `liveblocks.config.ts`.
+- **Convex `whiteboards.content`** is a JSON snapshot. On load, `use-whiteboard-page-controller.ts` seeds an empty Liveblocks room from it and restores the viewport; `features/whiteboard/hooks/data/use-whiteboard-auto-save.ts` writes it back.
+- Room access is granted in `app/api/liveblocks-auth/route.ts`; Convex auth uses Clerk JWTs (`convex/auth.config.ts`). Users are created both by the Clerk webhook (`users.createUser`) and on client login (`users.storeUser`).
+
+### Shapes
+`core/shapes/<shape>/` each export a definition built with `createShapeDefinition` (bounds, hit-test, resize handles, canvas render, anchors). They are registered in `core/shapes/register-shapes.ts` / `shape-registry.ts`; add new shapes there.
+
+### Routing engine (`core/routing`)
+Public API is `orthogonal-router.ts` (`routeArrowPoints`, `routeArrowBatch`); `route-engine.ts` (`routeWithEngine`) runs the pipeline:
+1. Sanitize inputs (`routing-guards.ts`: `sanitizeEdges`, `sanitizeObstacles`, `isFullyConnectedEdge`)
+2. Dirty tracking against `RouteEngineState` (route cache, path-hash cache, congestion map)
+3. Parallel-edge offsets (`parallel-edge-manager.ts`)
+4. Per-edge A* obstacle avoidance + candidate scoring (`obstacle-avoidance.ts`, `path-scoring.ts`, `congestion-map.ts`)
+5. Segment conflict resolution (`segment-conflict-resolver.ts`, spatial index)
+6. Lane assignment (`lane-manager.ts`) and crossing minimization (`crossing-minimizer.ts`)
+7. Normalization (`path-normalizer.ts`) and endpoint stabilization to connection handles
+
+`core/arrow/use-arrow-connections.ts` feeds it from React: it only routes descriptors passing `isRouteDescriptorReady` (arrows mid-drag can lack `sourceId`/`targetId`/points), and keeps a second module-level cache, `globalPathCache` (`path-cache.ts`), keyed by arrow id + rounded endpoints + obstacle signature.
+
+Rule: always guard points with `isValidPoint` / `toValidPoint` from `routing-guards.ts` before reading `.x`/`.y`. Routing must fall back to a straight path, never throw.
+
+Point = `{ x, y }`; ConnectionHandle = `"top" | "right" | "bottom" | "left"`; descriptor type is `RouteArrowDescriptor` in `orthogonal-router.ts`.
+
+### AI diagram generation (`features/ai/server`)
+- Client (`features/whiteboard/hooks/controller/use-ai-generation.ts`) POSTs to `/api/ai/generate-diagram` and reads a Server-Sent Events stream. It also records frame progress in Convex (`convex/aiFrames.ts`).
+- `workflow.ts` builds a LangGraph `StateGraph`: contextRetriever → architecturePlanner → domainModeler → infrastructureExpander → relationshipAgent → diagramComposer → layoutAgent → validationAgent → intermediateCompile → criticAgent → (one optional expansion loop back to relationshipAgent) → repairAgent → canvasCompiler. Agents are in `agents/`, prompts in `prompts/`, deterministic helpers in `tools/`.
+- Agents emit `AIStreamEvent`s in their state updates; the route forwards them and also emits v1 compatibility events (`sse.ts`).
+- `model-providers.ts` picks the LLM from the request's `provider`: gemini (default), groq, openai, anthropic, openrouter, local. Each reads `<PROVIDER>_API_KEY` and an optional `<PROVIDER>_MODEL` override (`LOCAL_AI_*` for local).
+
+## Environment Variables (`.env.local`)
 ```
-/core
-├── arrow/                    # Arrow routing & connection logic
-│   └── use-arrow-connections.ts  # Main hook for arrow routing
-├── routing/                  # Routing engine (core algorithmic work)
-│   ├── orthogonal-router.ts      # Public API: routeArrowPoints, routeArrowBatch
-│   ├── route-engine.ts           # Main pipeline orchestrator (dirty tracking, caching)
-│   ├── parallel-edge-manager.ts  # Parallel edge offset computation
-│   ├── lane-manager.ts           # Lane assignment & grid snapping
-│   ├── crossing-minimizer.ts     # Crossing reduction post-pass
-│   ├── segment-conflict-resolver.ts # Spatial index for segment conflicts
-│   ├── congestion-map.ts         # Segment traffic tracking
-│   ├── obstacle-avoidance.ts     # A* pathfinding around obstacles
-│   ├── path-normalizer.ts        # Final path cleanup (Manhattan, grid snap)
-│   ├── spatial-hash-grid.ts      # O(1) spatial queries
-│   ├── adjacency-map.ts          # Graph structure for incremental routing
-│   ├── path-cache.ts             # Path memoization
-│   ├── routing-guards.ts         # Runtime type guards (Task 1/5)
-│   └── routing-utils.ts          # Geometry utilities
-├── anchors/                  # Anchor generation for shape connections
-├── shapes/                   # Shape registry & rendering
-├── snap/                     # Magnetic snap logic
-├── layout/                   # Layered layout algorithms
-└── utils/                    # Shared utilities
-
-/app                          # Next.js App Router pages
-├── (main-page)/              # Dashboard, billing, org creation
-├── whiteboard/[id]/          # Main whiteboard editor
-└── api/                      # API routes (AI generation, auth)
-
-/hooks                        # React hooks
-/convex                       # Convex backend (schema, mutations, queries)
-/components                   # UI components (Radix UI + custom)
-```
-
----
-
-## Routing Engine Architecture
-
-The routing engine is the most complex part of the codebase. Key concepts:
-
-### Pipeline Stages (route-engine.ts)
-1. **Input Sanitization** - `sanitizeEdges` / `sanitizeObstacles` (guards)
-2. **Dirty Tracking** - Only re-route edges marked dirty
-3. **Parallel Offset Computation** - Group edges by source/target, assign offsets
-4. **Spatial Index Build** - Segment spatial index for O(log n) conflict detection
-5. **Per-Edge Routing** - A* obstacle avoidance + candidate scoring
-6. **Segment Conflict Resolution** - Push paths off overlapping segments
-6. **Lane Assignment** - Grid-snapped lane offsets for collinear edges
-7. **Crossing Minimization** - Local swaps to reduce crossings
-8. **Path Normalization** - Manhattan enforcement, grid snap, corridor unification
-9. **Endpoint Stabilization** - Pin stubs to connection handles
-10. **Validation** - Hard overlap guarantee
-
-### Data Structures for Performance (Task 2)
-- **SpatialHashGrid** (`spatial-hash-grid.ts`) - O(1) spatial queries for obstacles/segments
-- **AdjacencyMap** (`adjacency-map.ts`) - `Map<nodeId, Set<edgeId>>` for local re-routing
-- **CongestionMap** (`congestion-map.ts`) - Segment traffic heatmap
-- **PathCache** (`path-cache.ts`) - Memoization keyed by geometry hash
-- **RouteEngineState** - Dirty edges, route cache, path hash cache, congestion map
-
-### Critical Types
-
-```typescript
-// Point = { x: number, y: number }
-// ConnectionHandle = "top" | "right" | "bottom" | "left"
-
-RouteArrowDescriptor {
-  arrowId: string
-  start: Point
-  end: Point
-  startHandle?: ConnectionHandle
-  endHandle?: ConnectionHandle
-  routePreference?: "vh" | "hv"
-  routingMode?: "straight" | "orthogonal"
-  existingPoints?: Point[]
-  preserveManualBends?: boolean
-  sourceId?: string        // Required for full routing
-  targetId?: string        // Required for full routing
-}
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=  CLERK_SECRET_KEY=  CLERK_WEBHOOK_SECRET=
+NEXT_PUBLIC_CONVEX_URL=  CONVEX_DEPLOY_KEY=
+LIVEBLOCKS_SECRET_KEY=  NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY=
+GEMINI_API_KEY=  GROQ_API_KEY=  OPENAI_API_KEY=  ANTHROPIC_API_KEY=  OPENROUTER_API_KEY=   # at least one
+# optional: GEMINI_MODEL, GROQ_MODEL, OPENAI_MODEL, ANTHROPIC_MODEL, OPENROUTER_MODEL, LOCAL_AI_BASE_URL/MODEL/API_KEY
 ```
 
----
-
-## Known Issues & Fixes (from CLAUDE.md task list)
-
-### 🔴 TASK 1 — Runtime Crash Fix (DEFENSIVE ROUTING)
-**Problem:** `TypeError: Cannot read properties of undefined (reading 'x')`
-**Stack:** `getDirectionBucket` → `getGroupKey` → `computeParallelOffsets` → `routeArrowBatch` → `useArrowConnections`
-
-**Root Cause:** During drag state, arrows may have undefined `sourceId`, `targetId`, `startPoint`, or `endPoint`. Routing pipeline assumes fully resolved edges.
-
-**Fix locations:**
-- `parallel-edge-manager.ts`: `getDirectionBucket`, `getGroupKey`, `computeParallelOffsets` - add stricter guards
-- `orthogonal-router.ts`: `routeArrowBatch` - filter incomplete edges earlier
-- `use-arrow-connections.ts`: Only run full routing when `isRouteDescriptorReady` passes
-
-### 🔵 TASK 2 — Data Structure Upgrade (1000+ arrows)
-- Spatial Hash Grid for segments/obstacles (✓ `spatial-hash-grid.ts`)
-- R-Tree/interval tree for obstacle bounds (✓ partially in `congestion-map.ts`)
-- Adjacency Map for local re-routing (✓ `adjacency-map.ts`)
-- Edge Dirty Tracking (✓ `route-engine.ts`: `markEdgeDirty`, `clearEdgeDirty`)
-- Path Memoization Cache (✓ `path-cache.ts` + `route-engine.ts` pathHashCache)
-
-### 🟢 TASK 3 — Complexity Optimization
-- Replace O(n²) loops with spatial bucketing (✓ `segment-conflict-resolver.ts` uses spatial index)
-- Avoid cloning large maps (use structural sharing)
-
-### 🟣 TASK 4 — Canvas System
-- Viewport virtualization (✗ not implemented)
-- Incremental layout (✓ adjacency map enables this)
-- Interaction/Render/Routing separation (✓ mostly separated)
-- Event batching/throttling (✗ `use-raf-throttle.ts` exists but not fully integrated)
-
-### 🟡 TASK 5 — Engine Stability
-- Global invariant checks (✓ `routing-guards.ts`: `sanitizeEdges`, `sanitizeObstacles`)
-- Runtime type guards (✓ `isValidPoint`, `isFullyConnectedEdge`, `toValidPoint`)
-- Fail-safe routing (✓ try/catch in `routeArrowPoints` with straight-line fallback)
-
----
-
-## Key Files to Understand
-
-| File | Purpose |
-|------|---------|
-| `core/routing/route-engine.ts` | Main pipeline, dirty tracking, caching |
-| `core/routing/orthogonal-router.ts` | Public API, batch routing, single-edge routing |
-| `core/routing/parallel-edge-manager.ts` | Parallel edge grouping & offsets |
-| `core/routing/routing-guards.ts` | **Critical** - all runtime type guards |
-| `core/arrow/use-arrow-connections.ts` | React hook connecting elements to routing engine |
-| `core/routing/spatial-hash-grid.ts` | O(1) spatial indexing |
-| `core/routing/adjacency-map.ts` | Graph adjacency for incremental updates |
-
----
-
-## Testing Strategy
-
-```bash
-# Unit tests for routing guards
-npx vitest run core/routing/routing-guards.test.ts
-
-# Integration tests for routing pipeline
-npx vitest run core/routing/route-engine.test.ts
-
-# All routing tests
-npx vitest run core/routing/
-```
-
----
-
-## Important Patterns
-
-### Defensive Coding (Task 1/5)
-```typescript
-// ALWAYS use routing guards before accessing point properties
-import { isValidPoint, isValidPointArray, toValidPoint } from "@/core/routing/routing-guards";
-
-if (!isValidPoint(start) || !isValidPoint(end)) {
-  return getFallbackPath(start, end);  // Never crash
-}
-```
-
-### Dirty Tracking Pattern
-```typescript
-// In route-engine.ts
-markEdgeDirty(state, arrowId);      // Mark for re-routing
-clearEdgeDirty(state, arrowId);     // After successful cache hit
-```
-
-### Path Memoization
-```typescript
-// Key = geometry hash of (sourceId|targetId|start|end|handles|preference|...)
-const pathHash = computePathHash(edge);
-if (state.pathHashCache.get(edge.arrowId) === pathHash && state.routeCache.has(edge.arrowId)) {
-  return state.routeCache.get(edge.arrowId);  // Reuse cached route
-}
-```
-
----
-
-## AI Integration Notes
-
-- Diagram generation: `app/api/generate-diagram/route.ts` & `app/api/ai/generate-diagram/route.ts`
-- Uses LangChain with multiple providers
-- Convex stores AI memory in `convex/aiMemory.ts` and `convex/aiFrames.ts`
-
----
-
-## Environment Variables
-
-Required in `.env.local`:
-```
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-NEXT_PUBLIC_CONVEX_URL=
-CONVEX_DEPLOY_KEY=
-LIVEBLOCKS_SECRET_KEY=
-NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY=
-# AI providers (at least one)
-ANTHROPIC_API_KEY=
-GEMINI_API_KEY=
-GROQ_API_KEY=
-OPENAI_API_KEY=
-```
-
----
-
-## Git Workflow
-
-- Main branch: `main`
-- PRs target `main`
-- Run `npm run lint` and `npm run test` before committing
-- Conventional commits preferred
+## Git
+- PRs target `main`; conventional commits preferred.
+- Run `npm run lint` and `npx vitest run` before committing.
+- `AGENTS.md` is an old task prompt (routing crash fix + perf upgrades), not current guidance.

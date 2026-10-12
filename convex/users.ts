@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 export const storeUser = mutation({
@@ -43,7 +43,7 @@ export const storeUser = mutation({
   },
 });
 
-export const createUser = mutation({
+export const createUser = internalMutation({
   args: {
     clerkId: v.string(),
     email: v.string(),
@@ -61,7 +61,7 @@ export const createUser = mutation({
     });
   },
 });
-export const deleteUser = mutation({
+export const deleteUser = internalMutation({
   args: {
     clerkId: v.string(),
   },
@@ -114,7 +114,7 @@ export const getByClerkId = query({
   },
 });
 
-export const updateSubscription = mutation({
+export const updateSubscription = internalMutation({
   args: {
     clerkId: v.string(),
     plan: v.union(v.literal("free"), v.literal("pro")),
@@ -132,12 +132,5 @@ export const updateSubscription = mutation({
         clerkSubscriptionId: args.clerkSubscriptionId,
       });
     }
-  },
-});
-
-export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db.query("users").collect();
   },
 });
