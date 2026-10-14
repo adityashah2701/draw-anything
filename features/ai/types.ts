@@ -272,7 +272,6 @@ export type AIWorkflowPhase =
   | "diagramComposer"
   | "layoutAgent"
   | "validationAgent"
-  | "intermediateCompile"
   | "criticAgent"
   | "repairAgent"
   | "expansionAgent"

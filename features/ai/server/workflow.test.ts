@@ -178,4 +178,38 @@ describe("AI LangGraph workflow", () => {
     }
     expect(callCount()).toBe(3); // plan, graph, relationships: no expansion, no repair
   });
+
+  it.each([
+    ["a clean run", "flowchart", "flow"],
+    ["a repair run", "flowchart", "repair"],
+    ["an expansion run", "architecture", "repair"],
+  ])("puts each node on the canvas once, with no leftover draft (%s)", async (_name, diagramType, mode) => {
+    const flow = {
+      nodes: [
+        { id: "client", label: "Client", kind: "browser" },
+        { id: "api", label: "API", kind: "api" },
+        { id: "database", label: "Database", kind: "database" },
+      ],
+      edges: [
+        { from: "client", to: "api" },
+        { from: "api", to: "database" },
+      ],
+      groups: [],
+    };
+    const responses =
+      mode === "flow"
+        ? [plan(diagramType), flow, flow]
+        : [plan(diagramType), brokenGraph, brokenGraph, flow];
+    const { model } = scripted(...responses);
+    const events = await run(model);
+
+    const batches = events.filter((event) => event.type === "element.batch");
+    // Streaming a draft and then the final diagram left both on the canvas
+    // whenever repair or expansion rebuilt the graph (new generation id).
+    expect(batches).toHaveLength(1);
+    const elements = batches[0].type === "element.batch" ? batches[0].elements : [];
+    const labels = elements.filter((e) => e.type === "semantic-node").map((e) => e.label);
+    expect(labels.sort()).toEqual(["API", "Client", "Database"]);
+    expect(new Set(elements.map((e) => e.id)).size).toBe(elements.length);
+  });
 });

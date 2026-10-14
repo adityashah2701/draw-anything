@@ -37,7 +37,6 @@ const PHASE_LABELS: Record<string, string> = {
   domainModeler: "Modeling domains",
   infrastructureExpander: "Expanding infrastructure",
   relationshipAgent: "Mapping relationships",
-  intermediateCompile: "Rendering elements",
   criticAgent: "Reviewing architecture",
   expansionAgent: "Expanding diagram",
   repairAgent: "Repairing issues",

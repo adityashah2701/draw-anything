@@ -753,20 +753,32 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
 
   const aiShiftRef = useRef<{ x: number; y: number } | null>(null);
 
+  // Anchor the diagram's top-left corner just inside the viewport. The anchor
+  // must come from the whole diagram: taking it from whichever element happens
+  // to arrive first leaves wider rows hanging off the left edge.
+  const anchorAIShift = useCallback(
+    (elements: DrawingElement[]) => {
+      if (aiShiftRef.current) return;
+      const points = elements.flatMap((element) => element.points);
+      if (points.length === 0) return;
+      let minX = Infinity;
+      let minY = Infinity;
+      for (const point of points) {
+        minX = Math.min(minX, point.x);
+        minY = Math.min(minY, point.y);
+      }
+      aiShiftRef.current = {
+        x: -canvasViewport.panOffset.x / canvasViewport.zoom + 80 - minX,
+        y: -canvasViewport.panOffset.y / canvasViewport.zoom + 80 - minY,
+      };
+    },
+    [canvasViewport.panOffset, canvasViewport.zoom],
+  );
+
   const handleAddAIElement = useCallback(
     (element: DrawingElement) => {
-      if (!aiShiftRef.current) {
-        const viewWorldMinX = -canvasViewport.panOffset.x / canvasViewport.zoom;
-        const viewWorldMinY = -canvasViewport.panOffset.y / canvasViewport.zoom;
-        const allX = element.points.map((p) => p.x);
-        const allY = element.points.map((p) => p.y);
-        const minX = Math.min(...allX);
-        const minY = Math.min(...allY);
-        aiShiftRef.current = {
-          x: viewWorldMinX + 80 - minX,
-          y: viewWorldMinY + 80 - minY,
-        };
-      }
+      anchorAIShift([element]);
+      if (!aiShiftRef.current) return;
 
       const shifted = {
         ...element,
@@ -777,7 +789,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       };
       addElement(shifted as unknown as DrawingElementJson);
     },
-    [addElement, canvasViewport],
+    [addElement, anchorAIShift],
   );
 
   const getAICanvasContext = useCallback(
@@ -803,6 +815,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
 
   const aiState = useAIGeneration({
     onAddElement: handleAddAIElement,
+    onBeforeBatch: anchorAIShift,
     onGenerationStart: () => {
       aiShiftRef.current = null;
     },

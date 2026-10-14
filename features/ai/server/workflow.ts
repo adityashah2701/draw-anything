@@ -21,7 +21,6 @@ import { validationAgent } from "@/features/ai/server/agents/validation-agent";
 import { criticAgent } from "@/features/ai/server/agents/critic-agent";
 import { repairAgent } from "@/features/ai/server/agents/repair-agent";
 import { expansionAgent } from "@/features/ai/server/agents/expansion-agent";
-import { intermediateCompileAgent } from "@/features/ai/server/agents/intermediate-compile-agent";
 import { canvasCompilerAgent } from "@/features/ai/server/agents/canvas-compiler-agent";
 
 export interface AIWorkflowOptions {
@@ -169,7 +168,6 @@ export const createAIDiagramWorkflow = (model: StructuredChatModel) => {
     .addNode("layoutAgent", withoutRuntime(layoutAgent))
     .addNode("validationAgent", withRuntime(runtime, validationAgent))
     .addNode("criticAgent", withRuntime(runtime, criticAgent))
-    .addNode("intermediateCompile", withoutRuntime(intermediateCompileAgent))
     .addNode("expansionAgent", withRuntime(runtime, expansionAgent), {
       retryPolicy: { maxAttempts: 2 },
     })
@@ -185,8 +183,7 @@ export const createAIDiagramWorkflow = (model: StructuredChatModel) => {
     .addEdge("relationshipAgent", "diagramComposer")
     .addEdge("diagramComposer", "layoutAgent")
     .addEdge("layoutAgent", "validationAgent")
-    .addEdge("validationAgent", "intermediateCompile")
-    .addEdge("intermediateCompile", "criticAgent")
+    .addEdge("validationAgent", "criticAgent")
     .addConditionalEdges("criticAgent", shouldExpand, {
       expand: "expansionAgent",
       finalize: "repairAgent",

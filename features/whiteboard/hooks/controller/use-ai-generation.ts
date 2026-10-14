@@ -31,6 +31,8 @@ export interface AIChatMessage {
 
 interface UseAIGenerationOptions {
   onAddElement: (element: DrawingElement) => void;
+  /** Called with a whole batch before its elements are added one by one. */
+  onBeforeBatch?: (elements: DrawingElement[]) => void;
   onGenerationStart?: () => void;
   onGenerationEnd?: () => void;
   whiteboardId?: string;
@@ -39,6 +41,7 @@ interface UseAIGenerationOptions {
 
 export const useAIGeneration = ({
   onAddElement,
+  onBeforeBatch,
   onGenerationStart,
   onGenerationEnd,
   whiteboardId,
@@ -261,6 +264,7 @@ export const useAIGeneration = ({
         case "element.batch": {
           setAiFrameId(event.frameId);
           activeFrameIdRef.current = event.frameId;
+          onBeforeBatch?.(event.elements);
           event.elements.forEach(addGeneratedElement);
           const batchCount = event.elements.length;
           setAiMessages((prev) => {
@@ -339,6 +343,7 @@ export const useAIGeneration = ({
     [
       addChatMessage,
       addGeneratedElement,
+      onBeforeBatch,
       aiPlacedCount,
       appendAICheckpoint,
       completeAIFrame,
