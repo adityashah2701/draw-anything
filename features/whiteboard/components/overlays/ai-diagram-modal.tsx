@@ -68,7 +68,8 @@ export const AIDiagramModal: React.FC<AIDiagramModalProps> = ({
       });
 
       if (!res.ok) {
-        throw new Error("Failed to generate diagram.");
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to generate diagram.");
       }
 
       if (!res.body) {
