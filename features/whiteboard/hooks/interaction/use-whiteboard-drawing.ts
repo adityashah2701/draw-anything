@@ -68,7 +68,9 @@ interface UseWhiteboardDrawingProps {
   ) => void;
   elements: DrawingElement[];
   completeCurrentElement: () => void;
-  saveToHistory: () => void;
+  /** Group everything between begin and end into one undo step. */
+  beginGesture?: () => void;
+  endGesture?: () => void;
   findNearestAnchorSnap?: (input: {
     point: Point;
     dragVector?: Point;
@@ -115,7 +117,8 @@ export const useWhiteboardDrawing = ({
   setSelectedElements,
   elements,
   completeCurrentElement,
-  saveToHistory,
+  beginGesture,
+  endGesture,
   findNearestAnchorSnap,
   bindArrowEndpoint,
   routeConnectedArrow,
@@ -216,6 +219,7 @@ export const useWhiteboardDrawing = ({
           if (element) {
             const handle = getResizeHandle(point, element);
             if (handle && hasEditAccess) {
+              beginGesture?.();
               setIsResizing(true);
               setResizeHandle(handle);
               setDragStart(point);
@@ -239,6 +243,7 @@ export const useWhiteboardDrawing = ({
 
           if (selectedElements.includes(topElement.id)) {
             if (hasEditAccess) {
+              beginGesture?.();
               setIsDragging(true);
               setDragStart(point);
             }
@@ -252,6 +257,7 @@ export const useWhiteboardDrawing = ({
             );
 
             if (hasEditAccess) {
+              beginGesture?.();
               setIsDragging(true);
               setDragStart(point);
             }
@@ -271,6 +277,7 @@ export const useWhiteboardDrawing = ({
       if (currentTool === "eraser") {
         if (!hasEditAccess) return;
         const elementsToDelete = getElementsAtPoint(point, eraserSize / 2);
+        beginGesture?.();
         if (elementsToDelete.length > 0) {
           deleteElements(elementsToDelete.map((el) => el.id));
         }
@@ -285,10 +292,10 @@ export const useWhiteboardDrawing = ({
 
       const shapeType = TOOL_TO_SHAPE_TYPE[currentTool] || currentTool;
       
-      const shapeDef = shapeRegistry.get(shapeType as any);
+      const shapeDef = shapeRegistry.get(shapeType as DrawingElement["type"]);
       if (!shapeDef) return;
 
-      const newElement = createShape(shapeType as any, {
+      const newElement = createShape(shapeType as DrawingElement["type"], {
         id: generateId(),
         points: [point],
         color: currentColor,
@@ -335,6 +342,7 @@ export const useWhiteboardDrawing = ({
       getElementBounds,
       hoveredElementId,
       getElementConnectionHandles,
+      beginGesture,
     ],
   );
 
@@ -703,9 +711,9 @@ export const useWhiteboardDrawing = ({
       pendingArrowRerouteRef.current = null;
     }
 
-    if ((isDragging || isResizing) && hasEditAccess) {
-      saveToHistory();
-    }
+    // Everything the gesture wrote (including the final arrow reroute above) is
+    // now one undo step.
+    endGesture?.();
 
     setIsDrawing(false);
     setCurrentElement(null);
@@ -726,13 +734,11 @@ export const useWhiteboardDrawing = ({
     currentElement,
     completeCurrentElement,
     currentTool,
-    isDragging,
-    isResizing,
     isSelectingArea,
     selectionBox,
     getElementsInBounds,
     hasEditAccess,
-    saveToHistory,
+    endGesture,
     setCurrentElement,
     setSelectedElements,
     stopPanning,
