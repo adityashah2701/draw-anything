@@ -54,12 +54,16 @@ export interface BaseDrawingElement {
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
+  /** Annotations (group frames, labels) that are not shapes to connect to or route around. */
+  isGuide?: boolean;
   ai?: {
     frameId?: string;
     generationId?: string;
     semanticId?: string;
     semanticKind?: string;
     diagramType?: string;
+    /** What a generated element is, so later edits can find or replace it. */
+    role?: "node" | "edge" | "group" | "group-label" | "edge-label";
   };
 }
 
