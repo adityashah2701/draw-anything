@@ -4,17 +4,25 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
-
 export async function createCustomOrganization(name: string) {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
 
   if (!userId) {
     throw new Error("Unauthorized");
   }
 
+  // Read the caller's own record with the caller's own Convex token. The client
+  // is created per call: setAuth() on a shared instance would let concurrent
+  // requests borrow each other's identity.
+  const token = await getToken({ template: "convex" });
+  if (!token) {
+    throw new Error("Unauthorized");
+  }
+  const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+  convex.setAuth(token);
+
   // Get user from Convex to check their plan
-  const user = await convex.query(api.users.getByClerkId, { clerkId: userId });
+  const user = await convex.query(api.users.getCurrentUser, {});
   if (!user) {
     throw new Error("User not found in database");
   }

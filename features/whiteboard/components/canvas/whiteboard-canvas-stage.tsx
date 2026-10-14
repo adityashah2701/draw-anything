@@ -15,7 +15,6 @@ export const WhiteboardCanvasStage = ({
 }: WhiteboardCanvasStageProps) => {
   const {
     canvasRef,
-    whiteboard,
     whiteboardId,
     whiteboardAccess,
     canvasViewport,
@@ -86,18 +85,7 @@ export const WhiteboardCanvasStage = ({
     >
       <Cursors />
 
-      {!whiteboardAccess.hasEditAccess && (
-        <div className="absolute left-1/2 top-20 z-20 max-w-[90vw] -translate-x-1/2 rounded-lg border border-yellow-300 bg-yellow-100 p-2">
-          <div className="flex items-center space-x-2">
-            <div className="h-2 w-2 flex-shrink-0 rounded-full bg-yellow-500"></div>
-            <span className="truncate text-sm text-yellow-800">
-              Read-only mode - You don&apos;t have edit access to this whiteboard
-            </span>
-          </div>
-        </div>
-      )}
-
-      {!whiteboard && whiteboardId && (
+      {whiteboardAccess.status === "loading" && whiteboardId && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background bg-opacity-75">
           <div className="text-center">
             <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500"></div>
@@ -163,7 +151,7 @@ export const WhiteboardCanvasStage = ({
             }
           }
 
-          const shapeDef = shapeRegistry.get(topEl.type as any);
+          const shapeDef = shapeRegistry.get(topEl.type as DrawingElement["type"]);
 
           if (shapeDef?.labelConfig?.anchor === "center") {
             setEditingShapeLabelId(topEl.id);

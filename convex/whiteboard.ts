@@ -1,5 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import {
+  getAccessibleWhiteboard,
+  getCaller,
+  requireCaller,
+  requireWhiteboardAccess,
+} from "./lib/access";
+import { canCreateInOrg } from "./lib/accessRules";
 
 const images = [
   "/placeholders/1.svg",
@@ -44,24 +52,15 @@ export const create = mutation({
     orgId: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthorized!");
-    }
-
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    if (!currentUser) {
-      throw new Error("Unauthorized");
+    const caller = await requireCaller(ctx);
+    if (!canCreateInOrg(caller, args.orgId)) {
+      throw new Error("Unauthorized to create a whiteboard in this organization");
     }
     const randomImage = images[Math.floor(Math.random() * images.length)];
 
     const whiteboard = await ctx.db.insert("whiteboards", {
       title: args.title,
-      createdBy: currentUser._id,
+      createdBy: caller.userId,
       orgId: args.orgId,
       imageUrl: randomImage,
     });
@@ -75,25 +74,22 @@ export const getAll = query({
     orgId: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthorized!");
-    }
+    const caller = await requireCaller(ctx);
 
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    if (!currentUser) {
-      throw new Error("Unauthorized");
-    }
-    
-
-    const whiteboards = await ctx.db
-      .query("whiteboards")
-      .withIndex("by_organizationId", (q) => q.eq("orgId", args.orgId))
-      .collect();
+    // Members of the requested organization see all of its whiteboards; anyone
+    // else only sees the ones they created there.
+    const whiteboards =
+      caller.orgId === args.orgId
+        ? await ctx.db
+            .query("whiteboards")
+            .withIndex("by_organizationId", (q) => q.eq("orgId", args.orgId))
+            .collect()
+        : await ctx.db
+            .query("whiteboards")
+            .withIndex("by_createdBy_orgId", (q) =>
+              q.eq("createdBy", caller.userId).eq("orgId", args.orgId),
+            )
+            .collect();
 
     // Sort by _creationTime (latest first)
     return whiteboards.sort((a, b) => b._creationTime - a._creationTime);
@@ -105,27 +101,15 @@ export const remove = mutation({
     id: v.id("whiteboards"),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthorized!");
-    }
+    const caller = await requireCaller(ctx);
 
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    if (!currentUser) {
-      throw new Error("Unauthorized");
-    }
-
-    // Check if whiteboard exists and user has permission
     const whiteboard = await ctx.db.get(args.id);
     if (!whiteboard) {
       throw new Error("Whiteboard not found");
     }
 
-    if (whiteboard.createdBy !== currentUser._id) {
+    // Deleting is limited to the creator.
+    if (whiteboard.createdBy !== caller.userId) {
       throw new Error("Unauthorized to delete this whiteboard");
     }
 
@@ -153,63 +137,60 @@ export const update = mutation({
     tags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthorized!");
-    }
-
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    if (!currentUser) {
-      throw new Error("Unauthorized");
-    }
-    const whiteboard = await ctx.db.get(args.id);
-    if (!whiteboard) {
-      throw new Error("Whiteboard not found");
-    }
-    const userOrgId = identity.org_id || identity.organization_id;
-    const hasAccess =
-      whiteboard.createdBy === currentUser._id ||
-      (userOrgId && whiteboard.orgId === userOrgId);
-
-    if (!hasAccess) {
-      throw new Error("Unauthorized to update this whiteboard");
-    }
+    const caller = await requireCaller(ctx);
+    await requireWhiteboardAccess(
+      ctx,
+      caller,
+      args.id,
+      "Unauthorized to update this whiteboard",
+    );
 
     const { id, ...updateFields } = args;
 
     const fieldsToUpdate = Object.fromEntries(
-      Object.entries(updateFields).filter(([_, value]) => value !== undefined)
+      Object.entries(updateFields).filter(([, value]) => value !== undefined),
     );
 
-    fieldsToUpdate.lastModifiedBy = currentUser._id;
+    fieldsToUpdate.lastModifiedBy = caller.userId;
 
-    await ctx.db.patch(args.id, fieldsToUpdate);
-    return args.id;
+    await ctx.db.patch(id, fieldsToUpdate);
+    return id;
   },
 });
 
+/** The whiteboard when the caller may use it; null when missing or not theirs. */
 export const getById = query({
   args: {
     id: v.id("whiteboards"),
   },
   handler: async (ctx, args) => {
-    const whiteboard = await ctx.db.get(args.id);
-    return whiteboard;
+    const caller = await getCaller(ctx);
+    if (!caller) return null;
+    return await getAccessibleWhiteboard(ctx, caller, args.id);
+  },
+});
+
+/**
+ * Used by the realtime server to decide whether a signed-in user may join a
+ * whiteboard's room. Returns null instead of throwing so callers cannot probe
+ * which ids exist.
+ */
+export const getAccess = query({
+  args: {
+    id: v.id("whiteboards"),
+  },
+  handler: async (ctx, args) => {
+    const caller = await getCaller(ctx);
+    if (!caller) return null;
+    const whiteboard = await getAccessibleWhiteboard(ctx, caller, args.id);
+    return whiteboard ? { canEdit: true as const } : null;
   },
 });
 
 export const generateUploadUrl = mutation({
   args: {},
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthorized");
-    }
-
+  handler: async (ctx) => {
+    await requireCaller(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -221,28 +202,13 @@ export const updateImage = mutation({
     tags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
-
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    if (!currentUser) throw new Error("User not found");
-
-    const whiteboard = await ctx.db.get(args.id);
-    if (!whiteboard) throw new Error("Whiteboard not found");
-
-    // Check permissions (same logic as your update mutation)
-    const userOrgId = identity.org_id || identity.organization_id;
-    const hasAccess =
-      whiteboard.createdBy === currentUser._id ||
-      (userOrgId && whiteboard.orgId === userOrgId);
-
-    if (!hasAccess) {
-      throw new Error("You don't have permission to edit this whiteboard");
-    }
+    const caller = await requireCaller(ctx);
+    const whiteboard = await requireWhiteboardAccess(
+      ctx,
+      caller,
+      args.id,
+      "You don't have permission to edit this whiteboard",
+    );
 
     // If there's a new image, delete the old one
     if (args.imageFileId && whiteboard.imageFileId) {
@@ -254,18 +220,18 @@ export const updateImage = mutation({
     }
 
     // Get the image URL if imageFileId is provided
-    let imageUrl: any = whiteboard.imageUrl;
+    let imageUrl: string | null | undefined = whiteboard.imageUrl;
     if (args.imageFileId) {
       imageUrl = await ctx.storage.getUrl(args.imageFileId);
     }
 
-    const updateData: any = {
-      lastModifiedBy: currentUser._id,
+    const updateData: Partial<Doc<"whiteboards">> = {
+      lastModifiedBy: caller.userId,
     };
 
     if (args.imageFileId !== undefined) {
       updateData.imageFileId = args.imageFileId;
-      updateData.imageUrl = imageUrl;
+      updateData.imageUrl = imageUrl ?? undefined;
     }
 
     if (args.tags !== undefined) {
@@ -284,28 +250,13 @@ export const removeImage = mutation({
     id: v.id("whiteboards"),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
-
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    if (!currentUser) throw new Error("User not found");
-
-    const whiteboard = await ctx.db.get(args.id);
-    if (!whiteboard) throw new Error("Whiteboard not found");
-
-    // Check permissions (same logic as your update mutation)
-    const userOrgId = identity.org_id || identity.organization_id;
-    const hasAccess =
-      whiteboard.createdBy === currentUser._id ||
-      (userOrgId && whiteboard.orgId === userOrgId);
-
-    if (!hasAccess) {
-      throw new Error("You don't have permission to edit this whiteboard");
-    }
+    const caller = await requireCaller(ctx);
+    const whiteboard = await requireWhiteboardAccess(
+      ctx,
+      caller,
+      args.id,
+      "You don't have permission to edit this whiteboard",
+    );
 
     // Delete the stored file if it exists
     if (whiteboard.imageFileId) {
@@ -322,20 +273,10 @@ export const removeImage = mutation({
     await ctx.db.patch(args.id, {
       imageFileId: undefined,
       imageUrl: randomImage, // Set back to placeholder instead of undefined
-      lastModifiedBy: currentUser._id,
+      lastModifiedBy: caller.userId,
     });
 
     return { success: true };
-  },
-});
-
-// Get image URL (query for real-time updates)
-export const getImageUrl = query({
-  args: {
-    fileId: v.id("_storage"),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.storage.getUrl(args.fileId);
   },
 });
 
@@ -347,31 +288,16 @@ export const editImage = mutation({
     tags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    const caller = await requireCaller(ctx);
+    await requireWhiteboardAccess(
+      ctx,
+      caller,
+      args.id,
+      "You don't have permission to edit this whiteboard",
+    );
 
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    if (!currentUser) throw new Error("User not found");
-
-    const whiteboard = await ctx.db.get(args.id);
-    if (!whiteboard) throw new Error("Whiteboard not found");
-
-    // Check permissions
-    const userOrgId = identity.org_id || identity.organization_id;
-    const hasAccess =
-      whiteboard.createdBy === currentUser._id ||
-      (userOrgId && whiteboard.orgId === userOrgId);
-
-    if (!hasAccess) {
-      throw new Error("You don't have permission to edit this whiteboard");
-    }
-
-    const updateData: any = {
-      lastModifiedBy: currentUser._id,
+    const updateData: Partial<Doc<"whiteboards">> = {
+      lastModifiedBy: caller.userId,
     };
 
     if (args.image !== undefined) {
@@ -386,32 +312,5 @@ export const editImage = mutation({
 
     await ctx.db.patch(args.id, updateData);
     return { success: true };
-  },
-});
-
-// Utility to get whiteboard with image URL resolved
-export const getWithImageUrl = query({
-  args: {
-    id: v.id("whiteboards"),
-  },
-  handler: async (ctx, args) => {
-    const whiteboard = await ctx.db.get(args.id);
-    if (!whiteboard) return null;
-
-    // If there's a file ID, get the current URL
-    if (whiteboard.imageFileId) {
-      try {
-        const imageUrl = await ctx.storage.getUrl(whiteboard.imageFileId);
-        return {
-          ...whiteboard,
-          imageUrl,
-        };
-      } catch (error) {
-        console.error("Failed to get image URL:", error);
-        // Fall back to stored URL or placeholder
-      }
-    }
-
-    return whiteboard;
   },
 });

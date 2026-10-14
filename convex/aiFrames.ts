@@ -1,23 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-
-const getCurrentUser = async (ctx: any) => {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    throw new Error("Unauthorized");
-  }
-
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerkId", (q: any) => q.eq("clerkId", identity.subject))
-    .unique();
-
-  if (!user) {
-    throw new Error("Unauthorized");
-  }
-
-  return { user, identity };
-};
+import {
+  getAccessibleWhiteboardByRawId,
+  getCaller,
+  requireCaller,
+} from "./lib/access";
 
 export const create = mutation({
   args: {
@@ -34,15 +21,25 @@ export const create = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const { user, identity } = await getCurrentUser(ctx);
+    const caller = await requireCaller(ctx);
+    if (args.whiteboardId) {
+      const whiteboard = await getAccessibleWhiteboardByRawId(
+        ctx,
+        caller,
+        args.whiteboardId,
+      );
+      if (!whiteboard) throw new Error("Unauthorized");
+    }
+
     const existing = await ctx.db
       .query("aiFrames")
       .withIndex("by_frameId", (q) => q.eq("frameId", args.frameId))
       .unique();
     const now = Date.now();
-    const orgId = identity.org_id || identity.organization_id;
 
     if (existing) {
+      // A frame id is a capability for its creator only; never adopt someone else's.
+      if (existing.createdBy !== caller.userId) throw new Error("Unauthorized");
       await ctx.db.patch(existing._id, {
         status: args.status,
         currentPhase: "contextRetriever",
@@ -58,13 +55,27 @@ export const create = mutation({
       provider: args.provider,
       status: args.status,
       currentPhase: "contextRetriever",
-      createdBy: user._id,
-      orgId,
+      createdBy: caller.userId,
+      orgId: caller.orgId,
       createdAt: now,
       updatedAt: now,
     });
   },
 });
+
+/** Loads a frame the caller created; null if it does not exist. Throws if it is someone else's. */
+const loadOwnedFrame = async (
+  ctx: Parameters<typeof requireCaller>[0],
+  callerId: string,
+  frameId: string,
+) => {
+  const frame = await ctx.db
+    .query("aiFrames")
+    .withIndex("by_frameId", (q) => q.eq("frameId", frameId))
+    .unique();
+  if (frame && frame.createdBy !== callerId) throw new Error("Unauthorized");
+  return frame;
+};
 
 export const appendCheckpoint = mutation({
   args: {
@@ -74,11 +85,8 @@ export const appendCheckpoint = mutation({
     at: v.string(),
   },
   handler: async (ctx, args) => {
-    const { user } = await getCurrentUser(ctx);
-    const frame = await ctx.db
-      .query("aiFrames")
-      .withIndex("by_frameId", (q) => q.eq("frameId", args.frameId))
-      .unique();
+    const caller = await requireCaller(ctx);
+    const frame = await loadOwnedFrame(ctx, caller.userId, args.frameId);
     if (!frame) return null;
 
     await ctx.db.insert("aiFrameCheckpoints", {
@@ -86,7 +94,7 @@ export const appendCheckpoint = mutation({
       phase: args.phase,
       summary: args.summary,
       at: args.at,
-      createdBy: user._id,
+      createdBy: caller.userId,
     });
     await ctx.db.patch(frame._id, {
       currentPhase: args.phase,
@@ -104,11 +112,8 @@ export const complete = mutation({
     finalGraph: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await getCurrentUser(ctx);
-    const frame = await ctx.db
-      .query("aiFrames")
-      .withIndex("by_frameId", (q) => q.eq("frameId", args.frameId))
-      .unique();
+    const caller = await requireCaller(ctx);
+    const frame = await loadOwnedFrame(ctx, caller.userId, args.frameId);
     if (!frame) return null;
 
     await ctx.db.patch(frame._id, {
@@ -128,11 +133,8 @@ export const fail = mutation({
     message: v.string(),
   },
   handler: async (ctx, args) => {
-    await getCurrentUser(ctx);
-    const frame = await ctx.db
-      .query("aiFrames")
-      .withIndex("by_frameId", (q) => q.eq("frameId", args.frameId))
-      .unique();
+    const caller = await requireCaller(ctx);
+    const frame = await loadOwnedFrame(ctx, caller.userId, args.frameId);
     if (!frame) return null;
 
     await ctx.db.patch(frame._id, {
@@ -149,7 +151,14 @@ export const listByWhiteboard = query({
     whiteboardId: v.string(),
   },
   handler: async (ctx, args) => {
-    await getCurrentUser(ctx);
+    const caller = await getCaller(ctx);
+    if (!caller) return [];
+    const whiteboard = await getAccessibleWhiteboardByRawId(
+      ctx,
+      caller,
+      args.whiteboardId,
+    );
+    if (!whiteboard) return [];
     return await ctx.db
       .query("aiFrames")
       .withIndex("by_whiteboardId", (q) =>
