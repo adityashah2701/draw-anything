@@ -38,6 +38,7 @@ import {
   removeBendPoint,
 } from "@/core/routing/orthogonal-router";
 import { createGestureHistory } from "@/features/whiteboard/hooks/interaction/gesture-history";
+import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
 import { useAIGeneration } from "./use-ai-generation";
 
@@ -823,44 +824,83 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     getCanvasContext: getAICanvasContext,
   });
 
-  const handleGenerateAIDiagram = useCallback(
-    (newElements: DrawingElement[]) => {
-      const viewWorldMinX = -canvasViewport.panOffset.x / canvasViewport.zoom;
-      const viewWorldMinY = -canvasViewport.panOffset.y / canvasViewport.zoom;
+  /**
+   * Draw diagram code on the canvas as one undo step. When updating, the
+   * diagram it was loaded from is removed and the new one takes its place, so
+   * editing code feels like editing the diagram.
+   */
+  const applyDiagramCode = useCallback(
+    ({ elements: next, replaceIds }: ApplyDiagramCodePayload) => {
+      if (!whiteboardAccess.hasEditAccess || next.length === 0) return;
 
-      const allX = newElements.flatMap((el) => el.points.map((p) => p.x));
-      const allY = newElements.flatMap((el) => el.points.map((p) => p.y));
-      const minX = Math.min(...allX);
-      const minY = Math.min(...allY);
-      const maxX = Math.max(...allX);
-      const maxY = Math.max(...allY);
-
-      const shiftX = viewWorldMinX + 80 - minX;
-      const shiftY = viewWorldMinY + 80 - minY;
-
-      newElements.forEach((el) => {
-        const shifted = {
-          ...el,
-          points: el.points.map((p) => ({
-            x: p.x + shiftX,
-            y: p.y + shiftY,
-          })),
-        };
-        addElement(shifted as unknown as DrawingElementJson);
-      });
-      toast.success(`✨ AI added ${newElements.length} elements to the canvas!`);
-
-      const shiftedBounds = {
-        minX: minX + shiftX,
-        minY: minY + shiftY,
-        maxX: maxX + shiftX,
-        maxY: maxY + shiftY,
+      const cornerOf = (list: DrawingElement[]) => {
+        let minX = Infinity;
+        let minY = Infinity;
+        for (const element of list) {
+          for (const point of element.points) {
+            minX = Math.min(minX, point.x);
+            minY = Math.min(minY, point.y);
+          }
+        }
+        return { x: minX, y: minY };
       };
-      setTimeout(() => {
-        canvasViewport.fitToBounds(shiftedBounds);
-      }, 0);
+
+      const replaced = elements.filter((element) => replaceIds.includes(element.id));
+      const from = cornerOf(next);
+      const to =
+        replaced.length > 0
+          ? cornerOf(replaced)
+          : {
+              x: -canvasViewport.panOffset.x / canvasViewport.zoom + 80,
+              y: -canvasViewport.panOffset.y / canvasViewport.zoom + 80,
+            };
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+
+      gestureHistory.begin();
+      try {
+        if (replaced.length > 0) deleteElementsLive(replaced.map((element) => element.id));
+        next.forEach((element) =>
+          addElement({
+            ...element,
+            points: element.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+          } as unknown as DrawingElementJson),
+        );
+      } finally {
+        gestureHistory.end();
+      }
+
+      setSelectedElements((prev) => prev.filter((id) => !replaceIds.includes(id)));
+      if (replaced.length === 0) {
+        const corner = cornerOf(next);
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        next.forEach((element) =>
+          element.points.forEach((p) => {
+            maxX = Math.max(maxX, p.x);
+            maxY = Math.max(maxY, p.y);
+          }),
+        );
+        setTimeout(
+          () =>
+            canvasViewport.fitToBounds({
+              minX: corner.x + dx,
+              minY: corner.y + dy,
+              maxX: maxX + dx,
+              maxY: maxY + dy,
+            }),
+          0,
+        );
+      }
     },
-    [addElement, canvasViewport],
+    [
+      addElement,
+      canvasViewport,
+      deleteElementsLive,
+      elements,
+      gestureHistory,
+      whiteboardAccess.hasEditAccess,
+    ],
   );
 
   const handleEditingTextChange = useCallback(
@@ -994,7 +1034,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleArrowHeadEndChange,
     updateSelectedArrow,
     updateArrowBendsAtPoint,
-    handleGenerateAIDiagram,
+    applyDiagramCode,
     handleAddAIElement,
     ...aiState,
     handleEditingTextChange,

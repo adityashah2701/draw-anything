@@ -429,7 +429,6 @@ export const WhiteboardEditingOverlays = ({
     handleEditingTextChange,
     handleEditingTextCommit,
     handleEditingTextMove,
-    handleGenerateAIDiagram,
     updateElement,
   } = controller;
 
@@ -447,6 +446,9 @@ export const WhiteboardEditingOverlays = ({
         isGenerating={controller.isAIGenerating}
         messages={controller.aiMessages}
         disabled={!whiteboardAccess.hasEditAccess}
+        elements={controller.elements}
+        selectedElementIds={controller.selectedElements}
+        onApplyDiagramCode={controller.applyDiagramCode}
       />
 
       <CommandMenu

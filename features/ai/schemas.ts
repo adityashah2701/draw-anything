@@ -122,16 +122,20 @@ const DIAGRAM_TYPE_ALIASES: Record<string, AIDiagramType> = {
   "system-architecture": "architecture",
 };
 
-const normalizeDiagramType = (diagramType: unknown): AIDiagramType => {
-  if (typeof diagramType !== "string") return "architecture";
+/** The diagram type a free-form string names, or null if it names none. */
+export const parseDiagramType = (diagramType: unknown): AIDiagramType | null => {
+  if (typeof diagramType !== "string") return null;
   const key = diagramType
     .trim()
     .toLowerCase()
     .replace(/[\s_]+/g, "-")
     .replace(/-diagram$/, "");
   if (diagramTypeValues.has(key)) return key as AIDiagramType;
-  return DIAGRAM_TYPE_ALIASES[key] ?? "architecture";
+  return DIAGRAM_TYPE_ALIASES[key] ?? null;
 };
+
+const normalizeDiagramType = (diagramType: unknown): AIDiagramType =>
+  parseDiagramType(diagramType) ?? "architecture";
 
 export const aiDiagramNodeSchema = z.object({
   id: z.string().min(1).max(80),

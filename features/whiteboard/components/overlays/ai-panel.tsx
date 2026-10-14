@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { AIModelProvider } from "@/features/ai/types";
 import type { AIChatMessage } from "@/features/whiteboard/hooks/controller/use-ai-generation";
+import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
+import { DiagramCodeEditor } from "@/features/whiteboard/components/overlays/diagram-code-editor";
 
 interface AIPanelProps {
   isOpen: boolean;
@@ -20,6 +23,10 @@ interface AIPanelProps {
   isGenerating: boolean;
   messages: AIChatMessage[];
   disabled?: boolean;
+  /** For the Code tab: read the canvas, and write a diagram back to it. */
+  elements: DrawingElement[];
+  selectedElementIds: string[];
+  onApplyDiagramCode: (payload: ApplyDiagramCodePayload) => void;
 }
 
 const SUGGESTIONS = [
@@ -55,7 +62,11 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   isGenerating,
   messages,
   disabled = false,
+  elements,
+  selectedElementIds,
+  onApplyDiagramCode,
 }) => {
+  const [mode, setMode] = React.useState<"describe" | "code">("describe");
   const [model, setModel] = React.useState<AIModelProvider>("gemini");
   const [input, setInput] = React.useState("");
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
@@ -136,6 +147,35 @@ export const AIPanel: React.FC<AIPanelProps> = ({
         </button>
       </div>
 
+      {/* Mode tabs */}
+      <div role="tablist" className="flex shrink-0 gap-1 border-b border-border px-3 pt-2">
+        {(["describe", "code"] as const).map((tab) => (
+          <button
+            key={tab}
+            role="tab"
+            type="button"
+            aria-selected={mode === tab}
+            onClick={() => setMode(tab)}
+            className={`rounded-t-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              mode === tab
+                ? "border-b-2 border-violet-500 text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab === "describe" ? "Describe" : "Code"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "code" ? (
+        <DiagramCodeEditor
+          elements={elements}
+          selectedElementIds={selectedElementIds}
+          onApply={onApplyDiagramCode}
+          disabled={disabled}
+        />
+      ) : (
+      <>
       {/* Messages / Suggestions */}
       <div className="flex-1 flex flex-col min-h-0">
         {!hasMessages ? (
@@ -219,6 +259,8 @@ export const AIPanel: React.FC<AIPanelProps> = ({
           Press <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[9px] border border-border">Enter</kbd> to send, <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[9px] border border-border">Shift+Enter</kbd> for newline
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 };

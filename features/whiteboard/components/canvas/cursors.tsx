@@ -48,7 +48,7 @@ const Cursor = memo(
     connectionId: number;
     x: number;
     y: number;
-    info?: any;
+    info?: { name?: string };
   }) => {
     const color = COLORS[connectionId % COLORS.length];
 
