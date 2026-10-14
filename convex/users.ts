@@ -1,5 +1,7 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getCaller } from "./lib/access";
+import { toUserView } from "./lib/accessRules";
 
 export const storeUser = mutation({
   args: {},
@@ -83,7 +85,6 @@ export const getCurrentUser = query({
     if (!identity) {
       return null;
     }
-    console.log("organization Id", identity.org_id);
     const currentUser = await ctx.db
       .query("users")
       .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
@@ -92,25 +93,19 @@ export const getCurrentUser = query({
     return currentUser || null;
   },
 });
+/**
+ * Other users are visible only as an author chip (name, picture, Clerk id).
+ * Email, plan and billing ids are returned for the caller's own record only.
+ */
 export const getById = query({
   args: {
     id: v.id("users"),
   },
   handler: async (ctx, args) => {
+    const caller = await getCaller(ctx);
+    if (!caller) return null;
     const user = await ctx.db.get(args.id);
-    return user;
-  },
-});
-export const getByClerkId = query({
-  args: {
-    clerkId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
-      .unique();
-    return user;
+    return user ? toUserView(user, caller.userId) : null;
   },
 });
 

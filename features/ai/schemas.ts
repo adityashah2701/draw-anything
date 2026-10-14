@@ -3,6 +3,7 @@ import {
   AIDiagramDocumentV1,
   AIDiagramEdge,
   AIDiagramNode,
+  AIDiagramType,
   AISemanticNodeKind,
 } from "@/features/ai/types";
 
@@ -61,11 +62,38 @@ export const aiSemanticNodeKindSchema = z.enum([
 
 const semanticNodeKindValues = new Set<string>(aiSemanticNodeKindSchema.options);
 
-const normalizeSemanticKind = (kind: unknown): AISemanticNodeKind => {
-  if (typeof kind === "string" && semanticNodeKindValues.has(kind)) {
-    return kind as AISemanticNodeKind;
-  }
-  return "generic";
+// Words models commonly use for kinds the schema spells differently.
+const KIND_ALIASES: Record<string, AISemanticNodeKind> = {
+  auth: "authentication",
+  authn: "authentication",
+  authz: "authentication",
+  identity: "authentication",
+  monitoring: "dashboard",
+  observability: "dashboard",
+  metrics: "dashboard",
+  logging: "dashboard",
+  db: "database",
+  sql: "database",
+  datastore: "database",
+  "data-store": "database",
+  redis: "cache",
+  lb: "load-balancer",
+  loadbalancer: "load-balancer",
+  k8s: "kubernetes",
+  "message-queue": "queue",
+  mq: "queue",
+  broker: "message-broker",
+  "object-storage": "storage",
+  bucket: "storage",
+  function: "lambda",
+  serverless: "lambda",
+};
+
+export const normalizeSemanticKind = (kind: unknown): AISemanticNodeKind => {
+  if (typeof kind !== "string") return "generic";
+  const key = kind.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  if (semanticNodeKindValues.has(key)) return key as AISemanticNodeKind;
+  return KIND_ALIASES[key] ?? "generic";
 };
 
 export const aiDiagramTypeSchema = z.enum([
@@ -84,12 +112,30 @@ export const aiDiagramTypeSchema = z.enum([
 
 const diagramTypeValues = new Set<string>(aiDiagramTypeSchema.options);
 
-const normalizeDiagramType = (diagramType: unknown) => {
-  if (typeof diagramType === "string" && diagramTypeValues.has(diagramType)) {
-    return diagramType;
-  }
-  return "architecture";
+const DIAGRAM_TYPE_ALIASES: Record<string, AIDiagramType> = {
+  erd: "entity-relationship",
+  mindmap: "mind-map",
+  "flow-chart": "flowchart",
+  "org-chart": "organization",
+  "uml-class": "class",
+  "class-diagram": "class",
+  "system-architecture": "architecture",
 };
+
+/** The diagram type a free-form string names, or null if it names none. */
+export const parseDiagramType = (diagramType: unknown): AIDiagramType | null => {
+  if (typeof diagramType !== "string") return null;
+  const key = diagramType
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/-diagram$/, "");
+  if (diagramTypeValues.has(key)) return key as AIDiagramType;
+  return DIAGRAM_TYPE_ALIASES[key] ?? null;
+};
+
+const normalizeDiagramType = (diagramType: unknown): AIDiagramType =>
+  parseDiagramType(diagramType) ?? "architecture";
 
 export const aiDiagramNodeSchema = z.object({
   id: z.string().min(1).max(80),
@@ -215,63 +261,94 @@ export const modelPlanSchema = z.object({
   density: z.string().optional(),
 });
 
+// ── Tolerant coercion helpers: models routinely send nulls, wrong types and
+// over-long strings. These shorten or drop; they never throw. ──
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const text = (value: unknown, max: number): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+};
+
+const stringList = (value: unknown, maxItems: number, maxLength: number): string[] =>
+  Array.isArray(value)
+    ? value
+        .map((item) => text(item, maxLength))
+        .filter((item): item is string => item !== undefined)
+        .slice(0, maxItems)
+    : [];
+
+const slug = (value: string, fallback: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64) || fallback;
+
+const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+  typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback;
+
 export const normalizeModelPlan = (value: unknown): AIPlanOutput => {
-  const plan = modelPlanSchema.parse(value);
+  const plan = isRecord(value) ? value : {};
+  const requirements = (Array.isArray(plan.requirements) ? plan.requirements : [])
+    .filter(isRecord)
+    .map((requirement, index) => ({
+      id: text(requirement.id, 80) ?? `requirement-${index + 1}`,
+      text: text(requirement.text, 240),
+      priority: pick(requirement.priority, ["must", "should", "could"] as const, "should"),
+      source: pick(
+        requirement.source,
+        ["prompt", "canvas", "memory", "inferred"] as const,
+        "prompt",
+      ),
+    }))
+    .filter(
+      (requirement): requirement is typeof requirement & { text: string } =>
+        requirement.text !== undefined,
+    )
+    .slice(0, 12);
+
   return aiPlanSchema.parse({
     diagramType: normalizeDiagramType(plan.diagramType),
-    summary: plan.summary,
-    requirements: plan.requirements?.map((requirement, index) => ({
-      id: requirement.id || `requirement-${index + 1}`,
-      text: requirement.text,
-      priority:
-        requirement.priority === "must" ||
-        requirement.priority === "should" ||
-        requirement.priority === "could"
-          ? requirement.priority
-          : "should",
-      source:
-        requirement.source === "prompt" ||
-        requirement.source === "canvas" ||
-        requirement.source === "memory" ||
-        requirement.source === "inferred"
-          ? requirement.source
-          : "prompt",
-    })),
-    actors: plan.actors ?? [],
-    systems: plan.systems ?? [],
-    nonFunctionalRequirements: plan.nonFunctionalRequirements ?? [],
-    risks: plan.risks ?? [],
-    layoutStrategy: [
+    summary: text(plan.summary, 300) ?? "Generated diagram",
+    requirements,
+    actors: stringList(plan.actors, 8, 60),
+    systems: stringList(plan.systems, 8, 60),
+    nonFunctionalRequirements: stringList(plan.nonFunctionalRequirements, 6, 100),
+    risks: stringList(plan.risks, 6, 100),
+    layoutStrategy: pick(
+      plan.layoutStrategy,
+      ["layered", "hierarchical", "radial", "tree", "grid", "dag", "swimlane"] as const,
       "layered",
-      "hierarchical",
-      "radial",
-      "tree",
-      "grid",
-      "dag",
-      "swimlane",
-    ].includes(plan.layoutStrategy ?? "")
-      ? plan.layoutStrategy
-      : "layered",
-    direction: ["left-to-right", "top-to-bottom", "radial"].includes(
-      plan.direction ?? "",
-    )
-      ? plan.direction
-      : "top-to-bottom",
-    styleTheme: ["default", "technical", "product", "minimal"].includes(
-      plan.styleTheme ?? "",
-    )
-      ? plan.styleTheme
-      : "technical",
-    density: ["compact", "balanced", "spacious"].includes(plan.density ?? "")
-      ? plan.density
-      : "balanced",
+    ),
+    direction: pick(
+      plan.direction,
+      ["left-to-right", "top-to-bottom", "radial"] as const,
+      "top-to-bottom",
+    ),
+    styleTheme: pick(
+      plan.styleTheme,
+      ["default", "technical", "product", "minimal"] as const,
+      "technical",
+    ),
+    density: pick(plan.density, ["compact", "balanced", "spacious"] as const, "balanced"),
   });
 };
 
+/** Hard caps on a generated graph; anything beyond is dropped with a warning. */
+export const MAX_GRAPH_NODES = 40;
+export const MAX_GRAPH_EDGES = 80;
+export const MAX_GRAPH_GROUPS = 12;
+
 export const aiGraphDraftSchema = z.object({
-  nodes: z.array(aiDiagramNodeSchema).min(1).max(25),
-  edges: z.array(aiDiagramEdgeSchema).max(50).default([]),
-  groups: z.array(aiDiagramGroupSchema).max(10).default([]),
+  nodes: z.array(aiDiagramNodeSchema).min(1).max(MAX_GRAPH_NODES),
+  edges: z.array(aiDiagramEdgeSchema).max(MAX_GRAPH_EDGES).default([]),
+  groups: z.array(aiDiagramGroupSchema).max(MAX_GRAPH_GROUPS).default([]),
 });
 
 const modelDiagramEdgeSchema = z
@@ -313,49 +390,142 @@ export const modelGraphDraftSchema = z.object({
     .optional(),
 });
 
-export const normalizeModelGraphDraft = (value: unknown): AIGraphDraftOutput => {
-  const draft = modelGraphDraftSchema.parse(value);
-  return aiGraphDraftSchema.parse({
-    nodes: draft.nodes.map((node) => ({
-      id: node.id,
-      label: node.label,
-      kind: normalizeSemanticKind(node.kind),
-      layer: ["edge", "application", "data", "observability", "external"].includes(
-        node.layer ?? "",
-      )
-        ? node.layer
-        : undefined,
-      column: Number.isFinite(node.column) ? Math.floor(node.column ?? 0) : undefined,
-      parentId: node.parentId,
-      description: node.description,
-      priority: Number.isFinite(node.priority)
-        ? Math.min(10, Math.max(0, node.priority ?? 0))
-        : undefined,
-    })),
-    edges: (draft.edges ?? []).map((edge, index) => {
-      const looseEdge = edge as typeof edge & {
-        bidirectional?: unknown;
-        dashed?: unknown;
-      };
-      return {
-        id: edge.id ?? `edge-${index + 1}`,
-        from: edge.from,
-        to: edge.to,
-        label: edge.label,
-        relationship: edge.relationship,
-        bidirectional:
-          typeof looseEdge.bidirectional === "boolean"
-            ? looseEdge.bidirectional
-            : undefined,
-        dashed: typeof looseEdge.dashed === "boolean" ? looseEdge.dashed : undefined,
-      };
-    }),
-    groups: (draft.groups ?? []).map((group) => ({
-      ...group,
-      nodeIds: group.nodeIds ?? [],
-    })),
-  });
+const ARROW = /^\s*(.+?)\s*(?:-+>|=+>|→|->)\s*(.+?)\s*$/;
+
+const toEdgeEndpoints = (raw: unknown): { from: string; to: string; source: Record<string, unknown> } | null => {
+  if (typeof raw === "string") {
+    const match = ARROW.exec(raw);
+    return match ? { from: match[1], to: match[2], source: {} } : null;
+  }
+  if (!isRecord(raw)) return null;
+  const from = text(raw.from ?? raw.source ?? raw.start ?? raw.src, 80);
+  const to = text(raw.to ?? raw.target ?? raw.end ?? raw.dst, 80);
+  return from && to ? { from, to, source: raw } : null;
 };
+
+export interface NormalizedGraphDraft {
+  graph: AIGraphDraftOutput;
+  /** Things that were clamped, dropped or defaulted; surface them as issues. */
+  warnings: string[];
+}
+
+/**
+ * Turn whatever the model returned into a valid graph. Sizes are clamped,
+ * nulls and wrong types are ignored, common alternative shapes are accepted
+ * (string nodes, `source`/`target`, `"A -> B"`), and only output with no
+ * usable nodes at all is an error.
+ */
+export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGraphDraft => {
+  const raw = isRecord(value) ? value : {};
+  const warnings: string[] = [];
+
+  const rawNodes = Array.isArray(raw.nodes) ? raw.nodes : [];
+  const nodes: AIDiagramNode[] = [];
+  let unusableNodes = 0;
+  let shortened = 0;
+  rawNodes.forEach((rawNode, index) => {
+    const record = typeof rawNode === "string" ? { label: rawNode } : rawNode;
+    if (!isRecord(record)) {
+      unusableNodes += 1;
+      return;
+    }
+    const fullLabel = text(record.label ?? record.name ?? record.title, 10_000);
+    if (!fullLabel) {
+      unusableNodes += 1;
+      return;
+    }
+    if (fullLabel.length > 80) shortened += 1;
+    const label = fullLabel.slice(0, 80);
+    const column = typeof record.column === "number" && Number.isFinite(record.column)
+      ? Math.min(24, Math.max(0, Math.floor(record.column)))
+      : undefined;
+    const priority = typeof record.priority === "number" && Number.isFinite(record.priority)
+      ? Math.min(10, Math.max(0, record.priority))
+      : undefined;
+    nodes.push({
+      id: text(record.id, 80) ?? slug(label, `node-${index + 1}`),
+      label,
+      kind: normalizeSemanticKind(record.kind ?? record.type),
+      layer: pick(
+        record.layer,
+        ["edge", "application", "data", "observability", "external"] as const,
+        undefined as unknown as "edge",
+      ),
+      column,
+      parentId: text(record.parentId, 80),
+      description: text(record.description, 240),
+      priority,
+    });
+  });
+
+  if (nodes.length === 0) {
+    throw new Error(
+      "The model returned no usable nodes. Expected an object with a non-empty `nodes` array of { id, label, kind }.",
+    );
+  }
+  if (unusableNodes > 0) warnings.push(`Ignored ${unusableNodes} unusable node(s).`);
+  if (shortened > 0) warnings.push(`Shortened ${shortened} long label(s).`);
+  if (nodes.length > MAX_GRAPH_NODES) {
+    warnings.push(`Dropped ${nodes.length - MAX_GRAPH_NODES} node(s) beyond the limit of ${MAX_GRAPH_NODES}.`);
+    nodes.length = MAX_GRAPH_NODES;
+  }
+
+  const rawEdges = Array.isArray(raw.edges)
+    ? raw.edges
+    : Array.isArray(raw.connections)
+      ? raw.connections
+      : Array.isArray(raw.links)
+        ? raw.links
+        : [];
+  const edges: AIDiagramEdge[] = [];
+  let unusableEdges = 0;
+  rawEdges.forEach((rawEdge, index) => {
+    const endpoints = toEdgeEndpoints(rawEdge);
+    if (!endpoints) {
+      unusableEdges += 1;
+      return;
+    }
+    const { source } = endpoints;
+    edges.push({
+      id: text(source.id, 100) ?? `edge-${index + 1}`,
+      from: endpoints.from,
+      to: endpoints.to,
+      label: text(source.label, 80),
+      relationship: text(source.relationship, 120),
+      bidirectional: typeof source.bidirectional === "boolean" ? source.bidirectional : undefined,
+      dashed: typeof source.dashed === "boolean" ? source.dashed : undefined,
+    });
+  });
+  if (unusableEdges > 0) warnings.push(`Ignored ${unusableEdges} unusable edge(s).`);
+  if (edges.length > MAX_GRAPH_EDGES) {
+    warnings.push(`Dropped ${edges.length - MAX_GRAPH_EDGES} edge(s) beyond the limit of ${MAX_GRAPH_EDGES}.`);
+    edges.length = MAX_GRAPH_EDGES;
+  }
+
+  const groups = (Array.isArray(raw.groups) ? raw.groups : [])
+    .filter(isRecord)
+    .map((group, index) => {
+      const label = text(group.label ?? group.name ?? group.title, 80);
+      return label
+        ? {
+            id: text(group.id, 80) ?? slug(label, `group-${index + 1}`),
+            label,
+            nodeIds: stringList(group.nodeIds ?? group.nodes, MAX_GRAPH_NODES, 80),
+            kind: text(group.kind, 80),
+          }
+        : null;
+    })
+    .filter((group): group is NonNullable<typeof group> => group !== null);
+  if (groups.length > MAX_GRAPH_GROUPS) {
+    warnings.push(`Dropped ${groups.length - MAX_GRAPH_GROUPS} group(s) beyond the limit of ${MAX_GRAPH_GROUPS}.`);
+    groups.length = MAX_GRAPH_GROUPS;
+  }
+
+  return { graph: aiGraphDraftSchema.parse({ nodes, edges, groups }), warnings };
+};
+
+export const normalizeModelGraphDraft = (value: unknown): AIGraphDraftOutput =>
+  normalizeModelGraphDraftDetailed(value).graph;
 
 const validationIssueSchema = z.object({
   code: z.string(),

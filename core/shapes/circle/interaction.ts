@@ -1,4 +1,5 @@
 import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
+import { resizePaddedBox } from "@/core/shapes/base/resize-box";
 import { CircleShape } from "@/core/shapes/circle/types";
 import { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
 import { getCircleRadius } from "@/core/shapes/circle/geometry";
@@ -46,63 +47,15 @@ export const resizeCircle = (
   point: Point,
   originalBounds?: Bounds,
 ): CircleShape => {
-  const bounds = originalBounds;
-  if (!bounds) return shape;
+  if (!originalBounds) return shape;
 
   const padding = (shape.strokeWidth || 2) / 2;
-  let paddedMinX = bounds.minX - padding;
-  let paddedMinY = bounds.minY - padding;
-  let paddedMaxX = bounds.maxX + padding;
-  let paddedMaxY = bounds.maxY + padding;
+  const box = resizePaddedBox(originalBounds, padding, handle, point, MIN_DIAMETER);
+  if (!box) return shape;
 
-  switch (handle) {
-    case "nw":
-      paddedMinX = point.x;
-      paddedMinY = point.y;
-      break;
-    case "ne":
-      paddedMaxX = point.x;
-      paddedMinY = point.y;
-      break;
-    case "se":
-      paddedMaxX = point.x;
-      paddedMaxY = point.y;
-      break;
-    case "sw":
-      paddedMinX = point.x;
-      paddedMaxY = point.y;
-      break;
-    case "n":
-      paddedMinY = point.y;
-      break;
-    case "s":
-      paddedMaxY = point.y;
-      break;
-    case "e":
-      paddedMaxX = point.x;
-      break;
-    case "w":
-      paddedMinX = point.x;
-      break;
-    default:
-      return shape;
-  }
-
-  if (paddedMaxX - paddedMinX < MIN_DIAMETER) {
-    paddedMaxX = paddedMinX + MIN_DIAMETER;
-  }
-  if (paddedMaxY - paddedMinY < MIN_DIAMETER) {
-    paddedMaxY = paddedMinY + MIN_DIAMETER;
-  }
-
-  const minX = paddedMinX + padding;
-  const minY = paddedMinY + padding;
-  const maxX = paddedMaxX - padding;
-  const maxY = paddedMaxY - padding;
-
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const radius = Math.max(1, Math.min(maxX - minX, maxY - minY) / 2);
+  const centerX = (box.minX + box.maxX) / 2;
+  const centerY = (box.minY + box.maxY) / 2;
+  const radius = Math.max(1, Math.min(box.maxX - box.minX, box.maxY - box.minY) / 2);
 
   return {
     ...shape,

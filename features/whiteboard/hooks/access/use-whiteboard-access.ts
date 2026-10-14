@@ -1,20 +1,15 @@
-import { useEffect, useState } from "react";
-import { useOrganization } from "@clerk/nextjs";
+import { useMemo } from "react";
+import { resolveWhiteboardAccess } from "./whiteboard-access";
 
-export const useWhiteboardAccess = (whiteboard: any) => {
-  const [hasEditAccess, setHasEditAccess] = useState(true);
-  const { organization } = useOrganization();
-
-  useEffect(() => {
-    if (whiteboard && organization) {
-      const hasAccess = whiteboard.orgId === organization.id;
-      setHasEditAccess(hasAccess);
-
-      if (!hasAccess) {
-        console.warn("You don't have edit access to this whiteboard");
-      }
-    }
-  }, [whiteboard, organization]);
+/**
+ * Access is decided by the server (see `convex/lib/accessRules.ts`); this hook
+ * only translates "did Convex hand me the whiteboard?" into UI state.
+ */
+export const useWhiteboardAccess = (whiteboard: object | null | undefined) => {
+  const { status, hasEditAccess } = useMemo(
+    () => resolveWhiteboardAccess(whiteboard),
+    [whiteboard],
+  );
 
   const checkAccess = (action: string): boolean => {
     if (!hasEditAccess) {
@@ -32,8 +27,8 @@ export const useWhiteboardAccess = (whiteboard: any) => {
   };
 
   return {
+    status,
     hasEditAccess,
-    organization,
     checkAccess,
     requireAccess,
   };

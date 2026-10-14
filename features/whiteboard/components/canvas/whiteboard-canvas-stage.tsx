@@ -15,7 +15,6 @@ export const WhiteboardCanvasStage = ({
 }: WhiteboardCanvasStageProps) => {
   const {
     canvasRef,
-    whiteboard,
     whiteboardId,
     whiteboardAccess,
     canvasViewport,
@@ -86,18 +85,7 @@ export const WhiteboardCanvasStage = ({
     >
       <Cursors />
 
-      {!whiteboardAccess.hasEditAccess && (
-        <div className="absolute left-1/2 top-20 z-20 max-w-[90vw] -translate-x-1/2 rounded-lg border border-yellow-300 bg-yellow-100 p-2">
-          <div className="flex items-center space-x-2">
-            <div className="h-2 w-2 flex-shrink-0 rounded-full bg-yellow-500"></div>
-            <span className="truncate text-sm text-yellow-800">
-              Read-only mode - You don&apos;t have edit access to this whiteboard
-            </span>
-          </div>
-        </div>
-      )}
-
-      {!whiteboard && whiteboardId && (
+      {whiteboardAccess.status === "loading" && whiteboardId && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background bg-opacity-75">
           <div className="text-center">
             <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500"></div>
@@ -116,9 +104,20 @@ export const WhiteboardCanvasStage = ({
           canvasViewport.canvasSize.height *
           (typeof window !== "undefined" ? window.devicePixelRatio : 1)
         }
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
+          // Left button / touch / pen only, and only the first finger: a second
+          // finger or a right click must not start a second gesture.
+          if (e.button !== 0 || !e.isPrimary) return;
           if (editingShapeLabelId) {
             return;
+          }
+          // Keep receiving move/up events when the pointer leaves the canvas
+          // (over a toolbar, outside the window), so a drag finishes where the
+          // user released instead of being cut off at the edge.
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // Capture is best effort; the gesture still works without it.
           }
           if (currentTool === "text" && whiteboardAccess.hasEditAccess) {
             const pos = canvasViewport.getMousePosition(e);
@@ -163,7 +162,7 @@ export const WhiteboardCanvasStage = ({
             }
           }
 
-          const shapeDef = shapeRegistry.get(topEl.type as any);
+          const shapeDef = shapeRegistry.get(topEl.type as DrawingElement["type"]);
 
           if (shapeDef?.labelConfig?.anchor === "center") {
             setEditingShapeLabelId(topEl.id);
@@ -177,13 +176,22 @@ export const WhiteboardCanvasStage = ({
             setCurrentTool("select");
           }
         }}
-        onMouseMove={(e) => {
+        onPointerMove={(e) => {
+          if (!e.isPrimary) return;
           whiteboardDrawing.draw(e);
         }}
         onWheel={canvasViewport.handleWheelZoom}
-        onMouseUp={whiteboardDrawing.stopDrawing}
-        onMouseLeave={whiteboardDrawing.stopDrawing}
-        onMouseEnter={() => {}}
+        onPointerUp={(e) => {
+          if (!e.isPrimary) return;
+          if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          }
+          whiteboardDrawing.stopDrawing();
+        }}
+        onPointerCancel={(e) => {
+          if (!e.isPrimary) return;
+          whiteboardDrawing.stopDrawing();
+        }}
         className="cursor-crosshair"
         style={{
           width: canvasViewport.canvasSize.width,

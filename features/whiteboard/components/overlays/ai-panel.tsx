@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { AIModelProvider } from "@/features/ai/types";
 import type { AIChatMessage } from "@/features/whiteboard/hooks/controller/use-ai-generation";
+import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
+import { DiagramCodeEditor } from "@/features/whiteboard/components/overlays/diagram-code-editor";
 
 interface AIPanelProps {
   isOpen: boolean;
@@ -20,7 +23,20 @@ interface AIPanelProps {
   isGenerating: boolean;
   messages: AIChatMessage[];
   disabled?: boolean;
+  /** For the Code tab: read the canvas, and write a diagram back to it. */
+  elements: DrawingElement[];
+  selectedElementIds: string[];
+  onApplyDiagramCode: (payload: ApplyDiagramCodePayload) => void;
 }
+
+const PROVIDER_OPTIONS: Array<{ value: AIModelProvider; label: string }> = [
+  { value: "gemini", label: "Gemini 3.5 Flash" },
+  { value: "groq", label: "Groq (Llama-3 70B)" },
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "local", label: "Local" },
+];
 
 const SUGGESTIONS = [
   "Flowchart for a user login process",
@@ -37,7 +53,6 @@ const PHASE_LABELS: Record<string, string> = {
   domainModeler: "Modeling domains",
   infrastructureExpander: "Expanding infrastructure",
   relationshipAgent: "Mapping relationships",
-  intermediateCompile: "Rendering elements",
   criticAgent: "Reviewing architecture",
   expansionAgent: "Expanding diagram",
   repairAgent: "Repairing issues",
@@ -56,8 +71,38 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   isGenerating,
   messages,
   disabled = false,
+  elements,
+  selectedElementIds,
+  onApplyDiagramCode,
 }) => {
+  const [mode, setMode] = React.useState<"describe" | "code">("describe");
   const [model, setModel] = React.useState<AIModelProvider>("gemini");
+  // Providers the server has credentials for; null until known (then show all).
+  const [available, setAvailable] = React.useState<AIModelProvider[] | null>(null);
+
+  React.useEffect(() => {
+    if (!isOpen || available !== null) return;
+    let cancelled = false;
+    fetch("/api/ai/generate-diagram")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { providers?: AIModelProvider[] } | null) => {
+        if (cancelled || !Array.isArray(data?.providers)) return;
+        setAvailable(data.providers);
+        setModel((current) =>
+          data.providers!.includes(current) ? current : (data.providers![0] ?? current),
+        );
+      })
+      .catch(() => {
+        /* keep showing every provider; the server still validates */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, available]);
+
+  const providerOptions = PROVIDER_OPTIONS.filter(
+    (option) => available === null || available.includes(option.value),
+  );
   const [input, setInput] = React.useState("");
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -118,14 +163,17 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             <select
               value={model}
               onChange={(e) => setModel(e.target.value as AIModelProvider)}
+              disabled={providerOptions.length === 0}
               className="text-[11px] bg-transparent text-muted-foreground border-none outline-none cursor-pointer hover:text-foreground p-0 mt-0.5"
             >
-                <option value="gemini">Gemini 3.5 Flash</option>
-              <option value="groq">Groq (Llama-3 70B)</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="openrouter">OpenRouter</option>
-              <option value="local">Local</option>
+              {providerOptions.length === 0 && (
+                <option value="">No AI provider configured</option>
+              )}
+              {providerOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -137,6 +185,35 @@ export const AIPanel: React.FC<AIPanelProps> = ({
         </button>
       </div>
 
+      {/* Mode tabs */}
+      <div role="tablist" className="flex shrink-0 gap-1 border-b border-border px-3 pt-2">
+        {(["describe", "code"] as const).map((tab) => (
+          <button
+            key={tab}
+            role="tab"
+            type="button"
+            aria-selected={mode === tab}
+            onClick={() => setMode(tab)}
+            className={`rounded-t-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              mode === tab
+                ? "border-b-2 border-violet-500 text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab === "describe" ? "Describe" : "Code"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "code" ? (
+        <DiagramCodeEditor
+          elements={elements}
+          selectedElementIds={selectedElementIds}
+          onApply={onApplyDiagramCode}
+          disabled={disabled}
+        />
+      ) : (
+      <>
       {/* Messages / Suggestions */}
       <div className="flex-1 flex flex-col min-h-0">
         {!hasMessages ? (
@@ -220,6 +297,8 @@ export const AIPanel: React.FC<AIPanelProps> = ({
           Press <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[9px] border border-border">Enter</kbd> to send, <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[9px] border border-border">Shift+Enter</kbd> for newline
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 };

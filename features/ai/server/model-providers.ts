@@ -4,7 +4,9 @@ import { ChatGroq } from "@langchain/groq";
 import { ChatOpenAI } from "@langchain/openai";
 import { AIModelProvider } from "@/features/ai/types";
 import { MODELS, ModelRole } from "./models";
-import { GoogleGenAI, Schema, Type, Content } from "@google/genai";
+import { GoogleGenAI, Content } from "@google/genai";
+import { z } from "zod";
+import { extractJsonFromText } from "./json-extract";
 
 export interface AIModelProviderConfig {
   provider: AIModelProvider;
@@ -86,42 +88,6 @@ function toGenAIMessages(
   return { systemInstruction, contents };
 }
 
-/** Convert a JSON Schema object to the Google GenAI Schema type. */
-function jsonSchemaToGeminiSchema(jsonSchema: Record<string, unknown>): Schema {
-  const schema: Schema = {};
-
-  if (jsonSchema.type === "object" && jsonSchema.properties) {
-    schema.type = Type.OBJECT;
-    schema.properties = {};
-    for (const [key, prop] of Object.entries(jsonSchema.properties as Record<string, Record<string, unknown>>)) {
-      (schema.properties as Record<string, Schema>)[key] = jsonSchemaToGeminiSchema(prop);
-    }
-    if (Array.isArray(jsonSchema.required)) {
-      schema.required = jsonSchema.required as string[];
-    }
-    if (jsonSchema.description) schema.description = jsonSchema.description as string;
-  } else if (jsonSchema.type === "array" && jsonSchema.items) {
-    schema.type = Type.ARRAY;
-    schema.items = jsonSchemaToGeminiSchema(jsonSchema.items as Record<string, unknown>);
-    if (jsonSchema.description) schema.description = jsonSchema.description as string;
-  } else if (jsonSchema.type === "string") {
-    schema.type = Type.STRING;
-    if (jsonSchema.description) schema.description = jsonSchema.description as string;
-    if (jsonSchema.enum) schema.enum = jsonSchema.enum as string[];
-  } else if (jsonSchema.type === "number" || jsonSchema.type === "integer") {
-    schema.type = jsonSchema.type === "integer" ? Type.INTEGER : Type.NUMBER;
-    if (jsonSchema.description) schema.description = jsonSchema.description as string;
-  } else if (jsonSchema.type === "boolean") {
-    schema.type = Type.BOOLEAN;
-    if (jsonSchema.description) schema.description = jsonSchema.description as string;
-  } else {
-    schema.type = Type.STRING;
-    if (jsonSchema.description) schema.description = jsonSchema.description as string;
-  }
-
-  return schema;
-}
-
 class GeminiChatModel {
   private client: GoogleGenAI;
   private model: string;
@@ -158,9 +124,7 @@ class GeminiChatModel {
   withStructuredOutput<T extends Record<string, any>>(
     schema: unknown,
   ): { invoke: (input: unknown) => Promise<T> } {
-    const jsonSchema = schemaToJSONSchema(schema);
-    const geminiSchema = jsonSchemaToGeminiSchema(jsonSchema);
-    const schemaDescription = JSON.stringify(geminiSchema);
+    const schemaDescription = describeSchemaForPrompt(schema);
 
     const client = this.client;
     const model = this.model;
@@ -189,15 +153,23 @@ class GeminiChatModel {
         });
 
         const raw = response.text ?? "";
-        const parsed = JSON.parse(raw);
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          // Fenced or chatty output despite responseMimeType: dig the object out.
+          const extracted = extractJsonFromText(raw);
+          if (extracted) return extracted as T;
+          throw new Error(`Failed to parse model output as JSON (${raw.length} chars)`);
+        }
         if (typeof parsed === "object" && parsed !== null) {
           return parsed as T;
         }
         // If model returned a JSON string literal (e.g. "..." instead of {...}),
         // try parsing the inner value.
         if (typeof parsed === "string") {
-          const inner = JSON.parse(parsed);
-          if (typeof inner === "object" && inner !== null) return inner as T;
+          const inner = extractJsonFromText(parsed);
+          if (inner) return inner as T;
         }
         throw new Error(`Expected JSON object but got: ${typeof parsed}`);
       },
@@ -206,90 +178,37 @@ class GeminiChatModel {
 }
 
 // ---------------------------------------------------------------------------
-// Schema conversion
+// Schema description
 // ---------------------------------------------------------------------------
 
-/** Convert a Zod schema or plain object to a standard JSON Schema. */
-function schemaToJSONSchema(schema: unknown): Record<string, unknown> {
-  if (!schema || typeof schema !== "object") {
-    return { type: "object", properties: {} };
-  }
+const isZodSchema = (schema: unknown): schema is z.ZodType =>
+  typeof schema === "object" &&
+  schema !== null &&
+  typeof (schema as { safeParse?: unknown }).safeParse === "function" &&
+  "_zod" in schema;
 
-  const s = schema as Record<string, unknown>;
-
-  if (s.type || s.properties || s.$schema) {
-    return s as Record<string, unknown>;
-  }
-
-  if (typeof s.parse === "function" && typeof s.shape === "object" && s.shape !== null) {
-    return zodToJSONSchema(s);
-  }
-
-  if (s.name && s.parameters) {
-    return s.parameters as Record<string, unknown>;
-  }
-
-  return s as Record<string, unknown>;
-}
-
-/** Minimal Zod-to-JSON-Schema converter for the schemas used in our agents. */
-function zodToJSONSchema(zodSchema: Record<string, unknown>): Record<string, unknown> {
-  const shape = zodSchema.shape as Record<string, unknown> | undefined;
-  if (!shape) {
-    return { type: "object", properties: {} };
-  }
-
-  const properties: Record<string, Record<string, unknown>> = {};
-  const required: string[] = [];
-
-  for (const [key, zodField] of Object.entries(shape)) {
-    const field = zodField as Record<string, unknown>;
-    const def = (field._def ?? field) as Record<string, unknown>;
-    const typeName = String(def.typeName ?? def.type ?? "");
-    const description = String(field.description ?? def.description ?? "");
-
-    let jsonProp: Record<string, unknown> = {};
-
-    if (typeName === "ZodString" || typeName === "string") {
-      jsonProp = { type: "string" };
-    } else if (typeName === "ZodNumber" || typeName === "number") {
-      jsonProp = { type: "number" };
-    } else if (typeName === "ZodBoolean" || typeName === "boolean") {
-      jsonProp = { type: "boolean" };
-    } else if (typeName === "ZodArray" || typeName === "array") {
-      jsonProp = { type: "array", items: { type: "string" } };
-      const innerDef = (def.type ?? def) as Record<string, unknown>;
-      if (innerDef._def) {
-        const innerTypeName = String((innerDef._def as Record<string, unknown>).typeName ?? "");
-        if (innerTypeName === "ZodObject") {
-          jsonProp.items = zodToJSONSchema(innerDef);
-        }
-      }
-    } else if (typeName === "ZodObject" || typeName === "object") {
-      jsonProp = zodToJSONSchema(field);
-    } else if (typeName === "ZodEnum") {
-      jsonProp = { type: "string", enum: (def.values ?? []) as string[] };
-    } else if (typeName === "ZodOptional") {
-      jsonProp = { type: "string" };
-      const innerDef2 = (def.innerType ?? def.type ?? def) as Record<string, unknown>;
-      if (innerDef2._def) {
-        const innerTypeName = String((innerDef2._def as Record<string, unknown>).typeName ?? "");
-        if (innerTypeName === "ZodString") jsonProp = { type: "string" };
-        else if (innerTypeName === "ZodNumber") jsonProp = { type: "number" };
-        else if (innerTypeName === "ZodBoolean") jsonProp = { type: "boolean" };
-      }
-    } else {
-      jsonProp = { type: "string" };
+/**
+ * JSON Schema for a structured-output request, as text for the prompt.
+ *
+ * Zod 4 schemas expose a `.type` property, so the previous converter mistook
+ * them for ready-made JSON Schema and ended up telling Gemini the answer was
+ * `{"type":"STRING"}`. Use Zod's own converter, and accept plain JSON Schema
+ * objects for callers that already have one.
+ */
+export const describeSchemaForPrompt = (schema: unknown): string => {
+  let json: Record<string, unknown> = { type: "object" };
+  try {
+    if (isZodSchema(schema)) {
+      json = z.toJSONSchema(schema) as Record<string, unknown>;
+    } else if (typeof schema === "object" && schema !== null) {
+      json = schema as Record<string, unknown>;
     }
-
-    if (description) jsonProp.description = description;
-
-    properties[key] = jsonProp;
-    required.push(key);
+  } catch {
+    // Unrepresentable schema: fall back to "some object"; the caller validates anyway.
   }
-
-  return { type: "object", properties, required };
-}
+  const { $schema: _ignored, ...rest } = json;
+  return JSON.stringify(rest);
+};
 
 // ---------------------------------------------------------------------------
 // Provider factory

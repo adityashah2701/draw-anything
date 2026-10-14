@@ -1,4 +1,10 @@
 import { buildAnchorId } from "@/core/anchors/generate-anchors";
+import {
+  assignCenters,
+  orderRows,
+  type LayoutEdge,
+  type LayoutNode,
+} from "@/features/ai/server/layout/layered-order";
 import { getConnectionHandlePoint } from "@/core/routing/connection-handles";
 import {
   RouteArrowDescriptor,
@@ -7,12 +13,14 @@ import {
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import {
   AIDiagramDocumentV1,
+  AIDiagramGroup,
   AIDiagramNode,
 } from "@/features/ai/types";
 import {
   Bounds,
   ConnectionHandle,
   DrawingElement,
+  Point,
 } from "@/features/whiteboard/types/whiteboard.types";
 
 interface PositionedNode {
@@ -134,89 +142,280 @@ const asObstacle = (positioned: PositionedNode): RoutingObstacle => ({
   },
 });
 
+// ── Groups ────────────────────────────────────────────────────────────────
+
+interface GroupBox {
+  group: AIDiagramGroup;
+  members: PositionedNode[];
+  depth: number;
+}
+
+const FRAME_PADDING = 20;
+const FRAME_NEST_STEP = 16;
+const FRAME_TITLE_HEIGHT = 22;
+
+/** Groups worth drawing: known members only, at least two, deduplicated by member set. */
+const usableGroups = (
+  document: AIDiagramDocumentV1,
+  positioned: Map<string, PositionedNode>,
+): Array<{ group: AIDiagramGroup; members: PositionedNode[] }> => {
+  const seen = new Set<string>();
+  return document.groups
+    .map((group) => ({
+      group,
+      members: Array.from(new Set(group.nodeIds))
+        .map((id) => positioned.get(id))
+        .filter((member): member is PositionedNode => member !== undefined),
+    }))
+    .filter(({ group, members }) => {
+      if (members.length < 2) return false;
+      const key = members.map((m) => m.node.id).sort().join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return group.label.trim().length > 0;
+    })
+    // outer (larger) groups first so they are drawn underneath
+    .sort((a, b) => b.members.length - a.members.length || a.group.id.localeCompare(b.group.id));
+};
+
+const nestingDepths = (
+  groups: Array<{ group: AIDiagramGroup; members: PositionedNode[] }>,
+): GroupBox[] => {
+  const ids = groups.map((g) => new Set(g.members.map((m) => m.node.id)));
+  const depth: number[] = new Array(groups.length).fill(0);
+  // groups are sorted largest first, so every strict subset comes later
+  for (let i = groups.length - 1; i >= 0; i -= 1) {
+    for (let j = i + 1; j < groups.length; j += 1) {
+      const isSubset = [...ids[j]].every((id) => ids[i].has(id)) && ids[j].size < ids[i].size;
+      if (isSubset) depth[i] = Math.max(depth[i], depth[j] + 1);
+    }
+  }
+  return groups.map((g, i) => ({ ...g, depth: depth[i] }));
+};
+
+const frameBounds = ({ members, depth }: GroupBox) => {
+  const pad = FRAME_PADDING + depth * FRAME_NEST_STEP;
+  return {
+    minX: Math.min(...members.map((m) => m.bounds.minX)) - pad,
+    maxX: Math.max(...members.map((m) => m.bounds.maxX)) + pad,
+    minY: Math.min(...members.map((m) => m.bounds.minY)) - pad - FRAME_TITLE_HEIGHT,
+    maxY: Math.max(...members.map((m) => m.bounds.maxY)) + pad,
+  };
+};
+
+const intersects = (
+  a: { minX: number; maxX: number; minY: number; maxY: number },
+  b: { minX: number; maxX: number; minY: number; maxY: number },
+) => a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
+
+const contains = (
+  outer: { minX: number; maxX: number; minY: number; maxY: number },
+  inner: { minX: number; maxX: number; minY: number; maxY: number },
+) =>
+  outer.minX <= inner.minX &&
+  outer.maxX >= inner.maxX &&
+  outer.minY <= inner.minY &&
+  outer.maxY >= inner.maxY;
+
+/**
+ * Frames drawn under the nodes of each group. A frame is only drawn when it
+ * encloses exactly its members: one that would also cover an unrelated node, or
+ * partly overlap another frame, would say something the graph does not, so it
+ * is left out instead.
+ */
+const buildGroupFrames = (
+  document: AIDiagramDocumentV1,
+  positioned: Map<string, PositionedNode>,
+  frameId: string,
+): DrawingElement[] => {
+  const boxes = nestingDepths(usableGroups(document, positioned));
+  const accepted: Array<{ box: GroupBox; bounds: ReturnType<typeof frameBounds> }> = [];
+
+  for (const box of boxes) {
+    const bounds = frameBounds(box);
+    const memberIds = new Set(box.members.map((m) => m.node.id));
+    const swallowsStranger = [...positioned.values()].some(
+      (p) => !memberIds.has(p.node.id) && intersects(bounds, p.bounds),
+    );
+    const clashes = accepted.some(
+      ({ bounds: other }) =>
+        intersects(bounds, other) && !contains(other, bounds) && !contains(bounds, other),
+    );
+    if (!swallowsStranger && !clashes) accepted.push({ box, bounds });
+  }
+
+  return accepted.flatMap(({ box, bounds }) => {
+    const base = `${document.metadata.generationId}-group-${box.group.id}`;
+    const ai = {
+      frameId,
+      generationId: document.metadata.generationId,
+      semanticId: box.group.id,
+      diagramType: document.diagramType,
+    };
+    const frame: DrawingElement = {
+      id: base,
+      type: "rectangle",
+      points: [
+        { x: bounds.minX, y: bounds.minY },
+        { x: bounds.maxX, y: bounds.maxY },
+      ],
+      color: "#94a3b8",
+      strokeWidth: 1.5,
+      isGuide: true,
+      ai: { ...ai, role: "group" },
+    };
+    const title: DrawingElement = {
+      id: `${base}-label`,
+      type: "text",
+      points: [{ x: bounds.minX + 12, y: bounds.minY + 8 }],
+      color: "#64748b",
+      strokeWidth: 1,
+      text: box.group.label,
+      fontSize: 13,
+      fontWeight: "600",
+      fontStyle: "normal",
+      isGuide: true,
+      ai: { ...ai, role: "group-label" },
+    };
+    return [frame, title];
+  });
+};
+
+// ── Edge labels ───────────────────────────────────────────────────────────
+
+const EDGE_LABEL_FONT_SIZE = 13;
+
+/** Put the label on the longest segment: above a horizontal one, beside a vertical one. */
+const edgeLabelPosition = (points: Point[], label: string): Point | null => {
+  let best: { from: Point; to: Point; length: number } | null = null;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const length = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+    if (length > 0 && (!best || length > best.length)) {
+      best = { from: points[i], to: points[i + 1], length };
+    }
+  }
+  if (!best) return null;
+  const midX = (best.from.x + best.to.x) / 2;
+  const midY = (best.from.y + best.to.y) / 2;
+  const width = Math.ceil(label.length * EDGE_LABEL_FONT_SIZE * 0.56);
+  const horizontal = Math.abs(best.to.y - best.from.y) < Math.abs(best.to.x - best.from.x);
+  return horizontal
+    ? { x: midX - width / 2, y: midY - EDGE_LABEL_FONT_SIZE - 6 }
+    : { x: midX + 8, y: midY - EDGE_LABEL_FONT_SIZE / 2 };
+};
+
+// ── Compile ───────────────────────────────────────────────────────────────
+
 export const compileAIDiagramToCanvas = (
   document: AIDiagramDocumentV1,
   frameId: string,
 ): DrawingElement[] => {
   const depthByNodeId = getDepths(document);
   const density = document.styleHints.density;
-  const horizontalGap = density === "compact" ? 52 : density === "spacious" ? 112 : 78;
-  const verticalGap = density === "compact" ? 112 : density === "spacious" ? 168 : 138;
-  const positionedByNodeId = new Map<string, PositionedNode>();
-  const elements: DrawingElement[] = [];
-  const nodesByDepth = new Map<number, AIDiagramNode[]>();
+  const groups = usableGroups(
+    document,
+    // sizes are not known yet; membership alone decides whether groups exist
+    new Map(document.nodes.map((node) => [node.id, { node } as PositionedNode])),
+  );
+  const maxNesting = Math.max(0, ...nestingDepths(groups).map((g) => g.depth));
+  const frameRoom = groups.length > 0 ? 40 + maxNesting * FRAME_NEST_STEP : 0;
+  const horizontalGap =
+    (density === "compact" ? 52 : density === "spacious" ? 112 : 78) + frameRoom / 2;
+  const verticalGap =
+    (density === "compact" ? 112 : density === "spacious" ? 168 : 138) + frameRoom;
 
-  document.nodes.forEach((node) => {
-    const depth = depthByNodeId.get(node.id) ?? 0;
-    if (!nodesByDepth.has(depth)) nodesByDepth.set(depth, []);
-    nodesByDepth.get(depth)!.push(node);
+  // Nodes ordered as before (column hint, then label) as the starting point.
+  const ordered = [...document.nodes].sort((a, b) => {
+    const ac = a.column ?? Number.MAX_SAFE_INTEGER;
+    const bc = b.column ?? Number.MAX_SAFE_INTEGER;
+    return ac - bc || a.label.localeCompare(b.label);
   });
 
-  Array.from(nodesByDepth.entries())
-    .sort(([a], [b]) => a - b)
-    .forEach(([depth, nodes]) => {
-      const ordered = [...nodes].sort((a, b) => {
-        const ac = a.column ?? Number.MAX_SAFE_INTEGER;
-        const bc = b.column ?? Number.MAX_SAFE_INTEGER;
-        if (ac !== bc) return ac - bc;
-        return a.label.localeCompare(b.label);
-      });
-      const sizes = ordered.map((node) => ({
-        node,
-        width: estimateWidth(node.label, density),
-        height: node.kind === "decision" ? 92 : 78,
-      }));
-      const rowWidth =
-        sizes.reduce((sum, size) => sum + size.width, 0) +
-        Math.max(0, sizes.length - 1) * horizontalGap;
-      let x = 960 - rowWidth / 2;
-      const y = 150 + depth * verticalGap;
-      sizes.forEach(({ node, width, height }) => {
-        const style = KIND_COLORS[node.kind] ?? {
-          fill: depth % 2 === 0 ? "#f8fafc" : "#eef2ff",
-          stroke: "#1f2937",
-        };
-        const importance =
-          document.visualImportance.find((entry) => entry.nodeId === node.id)?.score ?? 5;
-        const id = `${document.metadata.generationId}-${node.id}`;
-        const bounds: Bounds = {
-          minX: x,
-          minY: y,
-          maxX: x + width,
-          maxY: y + height,
-          width,
-          height,
-        };
-        const element: DrawingElement = {
-          id,
-          type: "semantic-node",
-          points: [
-            { x: bounds.minX, y: bounds.minY },
-            { x: bounds.maxX, y: bounds.maxY },
-          ],
-          color: style.stroke,
-          strokeWidth: importance >= 8 ? 3 : 2,
-          fill: style.fill,
-          label: node.label,
-          fontSize: 17,
-          fontWeight: "600",
-          ai: {
-            frameId,
-            generationId: document.metadata.generationId,
-            semanticId: node.id,
-            semanticKind: node.kind,
-            diagramType: document.diagramType,
-          },
-        };
-        elements.push(element);
-        positionedByNodeId.set(node.id, { node, element, bounds, depth });
-        x += width + horizontalGap;
-      });
+  // The outermost group a node belongs to keeps its members side by side.
+  const clusterOf = new Map<string, string>();
+  [...groups].forEach(({ group, members }) =>
+    members.forEach((m) => {
+      if (!clusterOf.has(m.node.id)) clusterOf.set(m.node.id, group.id);
+    }),
+  );
+
+  const layoutNodes: LayoutNode[] = ordered.map((node) => ({
+    id: node.id,
+    depth: depthByNodeId.get(node.id) ?? 0,
+    width: estimateWidth(node.label, density),
+    cluster: clusterOf.get(node.id),
+  }));
+  const knownIds = new Set(layoutNodes.map((n) => n.id));
+  const layoutEdges: LayoutEdge[] = document.edges
+    .filter((edge) => knownIds.has(edge.from) && knownIds.has(edge.to))
+    .map((edge) => ({ from: edge.from, to: edge.to }));
+
+  const rows = orderRows(layoutNodes, layoutEdges);
+  const centers = assignCenters(rows, layoutNodes, layoutEdges, {
+    gap: horizontalGap,
+    centerX: 960,
+  });
+
+  const nodeById = new Map(document.nodes.map((node) => [node.id, node]));
+  const widthById = new Map(layoutNodes.map((n) => [n.id, n.width]));
+  const positionedByNodeId = new Map<string, PositionedNode>();
+  const nodeElements: DrawingElement[] = [];
+
+  rows.forEach((ids, depth) => {
+    const y = 150 + depth * verticalGap;
+    ids.forEach((id) => {
+      const node = nodeById.get(id)!;
+      const width = widthById.get(id)!;
+      const height = node.kind === "decision" ? 92 : 78;
+      const x = (centers.get(id) ?? 960) - width / 2;
+      const style = KIND_COLORS[node.kind] ?? {
+        fill: depth % 2 === 0 ? "#f8fafc" : "#eef2ff",
+        stroke: "#1f2937",
+      };
+      const importance =
+        document.visualImportance.find((entry) => entry.nodeId === node.id)?.score ?? 5;
+      const bounds: Bounds = {
+        minX: x,
+        minY: y,
+        maxX: x + width,
+        maxY: y + height,
+        width,
+        height,
+      };
+      const element: DrawingElement = {
+        id: `${document.metadata.generationId}-${node.id}`,
+        type: "semantic-node",
+        points: [
+          { x: bounds.minX, y: bounds.minY },
+          { x: bounds.maxX, y: bounds.maxY },
+        ],
+        color: style.stroke,
+        strokeWidth: importance >= 8 ? 3 : 2,
+        fill: style.fill,
+        label: node.label,
+        fontSize: 17,
+        fontWeight: "600",
+        ai: {
+          frameId,
+          generationId: document.metadata.generationId,
+          semanticId: node.id,
+          semanticKind: node.kind,
+          diagramType: document.diagramType,
+          role: "node",
+        },
+      };
+      nodeElements.push(element);
+      positionedByNodeId.set(node.id, { node, element, bounds, depth });
     });
+  });
+
+  const groupElements = buildGroupFrames(document, positionedByNodeId, frameId);
+  const elements: DrawingElement[] = [...groupElements, ...nodeElements];
 
   const obstacles = Array.from(positionedByNodeId.values()).map(asObstacle);
   const arrowDrafts: Array<{
     edgeId: string;
+    label?: string;
     descriptor: RouteArrowDescriptor;
     fromHandle: ConnectionHandle;
     toHandle: ConnectionHandle;
@@ -236,6 +435,7 @@ export const compileAIDiagramToCanvas = (
     const edgeId = `${document.metadata.generationId}-${edge.id || `edge-${index + 1}`}`;
     arrowDrafts.push({
       edgeId,
+      label: edge.label?.trim() || undefined,
       fromHandle: handles.from,
       toHandle: handles.to,
       sourceElementId: source.element.id,
@@ -271,6 +471,7 @@ export const compileAIDiagramToCanvas = (
     },
   });
 
+  const labelElements: DrawingElement[] = [];
   arrowDrafts.forEach((draft) => {
     const points =
       routed.get(draft.edgeId) ?? [draft.descriptor.start, draft.descriptor.end];
@@ -299,9 +500,35 @@ export const compileAIDiagramToCanvas = (
         generationId: document.metadata.generationId,
         semanticId: draft.edgeId,
         diagramType: document.diagramType,
+        role: "edge",
       },
     });
+
+    if (draft.label) {
+      const position = edgeLabelPosition(points, draft.label);
+      if (position) {
+        labelElements.push({
+          id: `${draft.edgeId}-label`,
+          type: "text",
+          points: [position],
+          color: "#475569",
+          strokeWidth: 1,
+          text: draft.label,
+          fontSize: EDGE_LABEL_FONT_SIZE,
+          fontWeight: "500",
+          fontStyle: "normal",
+          isGuide: true,
+          ai: {
+            frameId,
+            generationId: document.metadata.generationId,
+            semanticId: `${draft.edgeId}-label`,
+            diagramType: document.diagramType,
+            role: "edge-label",
+          },
+        });
+      }
+    }
   });
 
-  return elements;
+  return [...elements, ...labelElements];
 };
