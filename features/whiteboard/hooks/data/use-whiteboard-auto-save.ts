@@ -1,176 +1,169 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
+import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { toast } from "sonner";
-import { DrawingElement, WhiteboardData } from "@/features/whiteboard/types/whiteboard.types";
+import {
+  DrawingElement,
+  WhiteboardData,
+} from "@/features/whiteboard/types/whiteboard.types";
+import {
+  type AutosaveController,
+  type AutosaveStatus,
+  createAutosaveController,
+} from "./autosave-controller";
 
 interface UseWhiteboardAutoSaveProps {
   whiteboardId: string;
   elements: DrawingElement[];
   hasEditAccess: boolean;
-  isDrawing: boolean;
-  currentElement: DrawingElement | null;
-  
-  // Canvas settings for saving
+  /**
+   * True once the live document is loaded AND the stored snapshot has been
+   * merged into it. Until then the board may look empty without being empty,
+   * so nothing is tracked and nothing can be saved over the stored content.
+   */
+  ready: boolean;
+  /** False while a drag/draw/resize is in progress; saves wait for it to end. */
+  canSave: boolean;
+
+  // Canvas settings saved along with the elements
   zoom: number;
   panOffset: { x: number; y: number };
   showGrid: boolean;
-  
-  // Whiteboard metadata
-  whiteboard?: any
+
+  whiteboard?: { _creationTime?: number } | null;
 }
+
+const isPermissionError = (error: unknown) =>
+  /unauthorized|permission/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
 
 export const useWhiteboardAutoSave = ({
   whiteboardId,
   elements,
   hasEditAccess,
-  isDrawing,
-  currentElement,
+  ready,
+  canSave,
   zoom,
   panOffset,
   showGrid,
   whiteboard,
 }: UseWhiteboardAutoSaveProps) => {
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  
-  // Refs to track state for auto-save logic
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastElementsCountRef = useRef(0);
-  
-  // Convex mutation
+  const [status, setStatus] = useState<AutosaveStatus>({
+    isSaving: false,
+    hasPendingChanges: false,
+    lastSavedAt: null,
+    error: null,
+  });
   const updateWhiteboard = useMutation(api.whiteboard.update);
 
-  // Core save function
-  const saveToConvex = useCallback(async () => {
-    if (!whiteboardId || isSaving || !hasEditAccess) return;
+  // The save callback must always see the newest board, not the one captured
+  // when the controller was created.
+  const latest = useRef({ elements, zoom, panOffset, showGrid, whiteboard });
+  const updateRef = useRef(updateWhiteboard);
+  const statusRef = useRef(status);
+  const controllerRef = useRef<AutosaveController | null>(null);
+  const reportedErrorRef = useRef<unknown>(null);
+  useEffect(() => {
+    latest.current = { elements, zoom, panOffset, showGrid, whiteboard };
+    updateRef.current = updateWhiteboard;
+  });
 
-    setIsSaving(true);
-    try {
-      const whiteboardData: WhiteboardData = {
-        elements,
-        canvasSettings: {
-          zoom,
-          panOffset,
-          showGrid,
-        },
-        metadata: {
-          version: "1.0.0",
-          createdAt: whiteboard?._creationTime || new Date().toISOString(),
-          lastModified: new Date().toISOString(),
-        },
-      };
+  useEffect(() => {
+    if (!whiteboardId || !hasEditAccess) return;
 
-      await updateWhiteboard({
-        id: whiteboardId as Id<"whiteboards">,
-        content: JSON.stringify(whiteboardData),
-      });
+    const controller = createAutosaveController({
+      save: async () => {
+        const current = latest.current;
+        const data: WhiteboardData = {
+          elements: current.elements,
+          canvasSettings: {
+            zoom: current.zoom,
+            panOffset: current.panOffset,
+            showGrid: current.showGrid,
+          },
+          metadata: {
+            version: "1.0.0",
+            createdAt: current.whiteboard?._creationTime ?? new Date().toISOString(),
+            lastModified: new Date().toISOString(),
+          },
+        };
+        await updateRef.current({
+          id: whiteboardId as Id<"whiteboards">,
+          content: JSON.stringify(data),
+        });
+      },
+      isFatal: isPermissionError,
+      onStatus: (next) => {
+        statusRef.current = next;
+        setStatus(next);
+        // Tell the user once per failure, not on every retry.
+        if (next.error && reportedErrorRef.current !== next.error) {
+          reportedErrorRef.current = next.error;
+          if (isPermissionError(next.error)) {
+            toast("You don't have permission to edit this whiteboard. It may belong to a different organization.");
+          } else {
+            toast.error("Couldn't save the whiteboard. Retrying…");
+          }
+        }
+        if (!next.error) reportedErrorRef.current = null;
+      },
+    });
+    controllerRef.current = controller;
 
-      setLastSaved(new Date());
-      lastElementsCountRef.current = elements.length;
-      console.log("Whiteboard saved successfully!");
-    } catch (error: any) {
-      console.error("Failed to save whiteboard:", error);
+    // Last chance to persist: the tab is hiding or closing.
+    const flushNow = () => void controller.flush();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushNow();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flushNow);
 
-      if (error.message?.includes("Unauthorized")) {
-        toast("You don't have permission to edit this whiteboard. It may belong to a different organization.");
-      } else {
-        toast.error("Failed to save whiteboard. Please try again.");
-      }
-    } finally {
-      setIsSaving(false);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flushNow);
+      controllerRef.current = null;
+      void controller.flush().finally(() => controller.dispose());
+    };
+  }, [whiteboardId, hasEditAccess]);
+
+  useEffect(() => {
+    const controller = controllerRef.current;
+    if (!controller) return;
+    if (!ready) {
+      controller.observe(null);
+      return;
     }
-  }, [
-    whiteboardId,
-    elements,
-    zoom,
-    panOffset,
-    showGrid,
-    updateWhiteboard,
-    isSaving,
-    whiteboard,
-    hasEditAccess,
-  ]);
+    controller.setCanSave(canSave);
+    // Serializing a large board on every frame of a drag is wasted work.
+    if (canSave) controller.observe(JSON.stringify(elements));
+  }, [elements, ready, canSave, hasEditAccess, whiteboardId]);
 
-  // Manual save function
+  // Manual save (Ctrl+S / menu): write now, even if nothing looks changed.
   const saveWhiteboard = useCallback(async () => {
     if (!hasEditAccess) {
       toast("You don't have permission to save this whiteboard.");
       return;
     }
-
-    // Cancel auto-save timeout when manually saving
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-      autoSaveTimeoutRef.current = null;
-    }
-
-    await saveToConvex();
-    toast.success("Whiteboard saved successfully!");
-  }, [saveToConvex, hasEditAccess]);
-
-  // Auto-save logic with improved conflict prevention
-  useEffect(() => {
-    if (!whiteboardId || !hasEditAccess || isDrawing || currentElement) {
-      return; // Don't auto-save while drawing or if no edit access
-    }
-
-    // Only auto-save if the elements count has actually changed
-    if (elements.length === lastElementsCountRef.current) {
+    const controller = controllerRef.current;
+    if (!controller || !ready) {
+      toast("The whiteboard is still loading.");
       return;
     }
-
-    // Clear existing timeout
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
+    await controller.flush({ force: true });
+    if (statusRef.current.error) {
+      toast.error("Couldn't save the whiteboard.");
+    } else {
+      toast.success("Whiteboard saved successfully!");
     }
-
-    // Set new timeout for auto-save
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      saveToConvex();
-      lastElementsCountRef.current = elements.length;
-    }, 10); // 10ms debounce to reduce conflicts
-
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, [elements, whiteboardId, hasEditAccess, isDrawing, currentElement, saveToConvex]);
-
-  // Load whiteboard content
-  const loadWhiteboardContent = useCallback((content: string) => {
-    try {
-      const whiteboardData: WhiteboardData = JSON.parse(content);
-      lastElementsCountRef.current = whiteboardData.elements?.length || 0;
-      return whiteboardData;
-    } catch (error) {
-      console.error("Failed to parse whiteboard content:", error);
-      return null;
-    }
-  }, []);
-
-  // Cleanup timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, []);
+  }, [hasEditAccess, ready]);
 
   return {
-    // State
-    isSaving,
-    lastSaved,
-    
-    // Actions
+    isSaving: status.isSaving,
+    lastSaved: status.lastSavedAt === null ? null : new Date(status.lastSavedAt),
+    hasPendingChanges: status.hasPendingChanges,
+    saveError: status.error,
     saveWhiteboard,
-    saveToConvex,
-    loadWhiteboardContent,
-    
-    // Utils
-    isAutoSaveActive: autoSaveTimeoutRef.current !== null,
   };
 };

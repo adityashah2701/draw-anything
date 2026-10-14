@@ -37,6 +37,8 @@ import {
   insertBendPoint,
   removeBendPoint,
 } from "@/core/routing/orthogonal-router";
+import { createGestureHistory } from "@/features/whiteboard/hooks/interaction/gesture-history";
+import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
 import { useAIGeneration } from "./use-ai-generation";
 
 export const useWhiteboardPageController = (whiteboardId: string) => {
@@ -102,6 +104,10 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     },
     [],
   );
+
+  // One undo step per drag / resize / erase stroke instead of one per mouse-move.
+  const gestureHistory = useMemo(() => createGestureHistory(history), [history]);
+  useEffect(() => () => gestureHistory.end(), [gestureHistory]);
 
   const handleUndo = useCallback(() => {
     history.undo();
@@ -245,7 +251,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     setSelectedElements,
     elements,
     completeCurrentElement,
-    saveToHistory: () => {},
+    beginGesture: gestureHistory.begin,
+    endGesture: gestureHistory.end,
     findNearestAnchorSnap: magneticSnap.findNearestSnap,
     bindArrowEndpoint: (arrow, endpoint, point, snap) => {
       if (!isArrowElement(arrow)) return arrow;
@@ -262,12 +269,19 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     stopPanning: canvasViewport.stopPanning,
   });
 
+  // The stored snapshot is merged into an empty live room exactly once. Until
+  // that has happened (or failed) the live board can look empty without being
+  // empty, so autosave must not run: it would overwrite the stored content.
+  const [seedState, setSeedState] = useState<"pending" | "settled" | "failed">(
+    "pending",
+  );
+
   const whiteboardAutoSave = useWhiteboardAutoSave({
     whiteboardId,
     elements,
     hasEditAccess: whiteboardAccess.hasEditAccess,
-    isDrawing: whiteboardDrawing.isDrawing,
-    currentElement,
+    ready: liveElements !== null && seedState === "settled",
+    canSave: !whiteboardDrawing.hasActiveDrawing && !currentElement,
     zoom: canvasViewport.zoom,
     panOffset: canvasViewport.panOffset,
     showGrid: canvasViewport.showGrid,
@@ -277,20 +291,26 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   useEffect(() => {
     seededRef.current = false;
     viewportLoadedRef.current = false;
+    setSeedState("pending");
   }, [whiteboardId]);
 
   useEffect(() => {
-    if (whiteboard?.content && !seededRef.current && liveElements !== null) {
-      seededRef.current = true;
-      try {
-        const parsed = JSON.parse(whiteboard.content);
-        if (parsed?.elements?.length > 0) {
-          seedElements(parsed.elements);
-        }
-      } catch {
-        // ignore parse error
-      }
+    if (seededRef.current || liveElements === null || !whiteboard) return;
+    seededRef.current = true;
+
+    const saved = parseSavedContent(whiteboard.content);
+    if (saved.status === "corrupt") {
+      // Keep autosave off so the unreadable snapshot is not overwritten.
+      setSeedState("failed");
+      toast.error(
+        "This whiteboard's saved data could not be read. Autosave is paused to protect it.",
+      );
+      return;
     }
+    if (saved.status === "ok" && saved.elements.length > 0) {
+      seedElements(saved.elements as unknown as DrawingElementJson[]);
+    }
+    setSeedState("settled");
   }, [whiteboard, liveElements, seedElements]);
 
   useEffect(() => {
