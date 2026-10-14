@@ -52,15 +52,17 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
  * Categorize a raw error into a typed AI error.
  */
 export const categorizeError = (error: unknown): AIServiceError => {
+  // Already typed: keep it. (Matching its message against the signals below
+  // would misread e.g. "... (413 chars)" as an HTTP 413.)
+  if (error instanceof AIServiceError) return error;
+
   const msg = error instanceof Error ? error.message : String(error);
 
   if (isRateLimit(msg)) return new RateLimitError(msg, error);
   if (isQuota(msg)) return new QuotaExceededError(msg, error);
   if (isNetwork(msg)) return new NetworkError(msg, error);
 
-  return error instanceof AIServiceError
-    ? error
-    : new AIServiceError(msg, "UNKNOWN_ERROR", error);
+  return new AIServiceError(msg, "UNKNOWN_ERROR", error);
 };
 
 /**

@@ -6,7 +6,7 @@ import {
 import { getAIModelProviderConfig } from "@/features/ai/server/model-providers";
 import { buildArchitecturePlannerMessages } from "@/features/ai/server/prompts";
 import { extractRequirementsFromPrompt } from "@/features/ai/server/validation";
-import { callStructured, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
+import { callStructuredNormalized, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
 
 export const architecturePlannerAgent = async (
   state: AIWorkflowState,
@@ -16,13 +16,13 @@ export const architecturePlannerAgent = async (
   logAIPhase(frame.frameId, "architecturePlanner", "Planning architecture");
   const providerConfig = getAIModelProviderConfig(frame.provider);
   const messages = await buildArchitecturePlannerMessages(state.request);
-  const rawPlan = await callStructured<Record<string, unknown>>(
+  const plan: AIPlanOutput = await callStructuredNormalized<Record<string, unknown>, AIPlanOutput>(
     runtime.model,
     modelPlanSchema,
     "ai_architecture_plan",
     messages,
+    normalizeModelPlan,
   );
-  const plan: AIPlanOutput = normalizeModelPlan(rawPlan);
   const requirements =
     plan.requirements.length > 0 ? plan.requirements : extractRequirementsFromPrompt(state.request.prompt);
   return {
