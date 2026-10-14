@@ -63,6 +63,7 @@ import { normalizeRoutes } from "@/core/routing/path-normalizer";
 import {
   sanitizeEdges,
   sanitizeObstacles,
+  sanitizeRoutes,
   isFullyConnectedEdge,
   isValidPoint,
 } from "@/core/routing/routing-guards";
@@ -134,12 +135,13 @@ export interface RouteEngineState {
   dirtyEdges: Set<string>;
   /** Congestion map tracking segment traffic. */
   congestionMap: CongestionMap;
-  /** Last obstacle snapshot hash for cache invalidation. */
-  lastObstacleHash: string;
   /**
    * Path geometry hash cache.
-   * Maps arrowId → a hash string of (sourceId|targetId|start|end).
-   * If unchanged between calls, the cached path is reused without re-routing.
+   * Maps arrowId → hash of everything that determines its route: endpoints,
+   * handles, mode, preference, existing points and the obstacle layout.
+   * An edge whose hash is unchanged (and not marked dirty) reuses its cached
+   * route; any mismatch re-routes it, so callers cannot get a stale route by
+   * forgetting to call markEdgeDirty.
    */
   pathHashCache: Map<string, string>;
 }
@@ -153,7 +155,6 @@ export const createRouteEngineState = (
   routeCache: new Map(),
   dirtyEdges: new Set(),
   congestionMap: createCongestionMap(congestionConfig),
-  lastObstacleHash: "",
   pathHashCache: new Map(),
 });
 
@@ -200,6 +201,34 @@ export const invalidateAllRoutes = (state: RouteEngineState): void => {
   state.dirtyEdges = new Set(state.routeCache.keys());
 };
 
+/**
+ * Forget every arrow that is no longer part of the document.
+ *
+ * `routeWithEngine` is routinely called with a *subset* of the arrows (the
+ * canvas reroutes only the arrows touched by a drag), so it cannot infer
+ * deletions from its input. The owner of the state calls this with the full
+ * set of live arrow ids instead; routes, hashes, dirty flags and congestion
+ * contributions of everything else are dropped.
+ */
+export const pruneRouteEngineState = (
+  state: RouteEngineState,
+  liveArrowIds: ReadonlySet<string>,
+): void => {
+  const known = new Set<string>([
+    ...state.routeCache.keys(),
+    ...state.pathHashCache.keys(),
+    ...state.dirtyEdges,
+    ...state.congestionMap.arrowCells.keys(),
+  ]);
+  for (const arrowId of known) {
+    if (liveArrowIds.has(arrowId)) continue;
+    state.routeCache.delete(arrowId);
+    state.pathHashCache.delete(arrowId);
+    state.dirtyEdges.delete(arrowId);
+    removePath(state.congestionMap, arrowId);
+  }
+};
+
 // ─────────────────── Obstacle Hash ───────────────────
 
 const computeObstacleHash = (obstacles: RoutingObstacle[]): string => {
@@ -223,6 +252,23 @@ const hashPoints = (points?: Point[]): string => {
     )
     .join("|");
 };
+
+const roundCoord = (value: number): number => Math.round(value * 1000) / 1000;
+
+/** Everything about an edge (besides the obstacle layout) that determines its route. */
+const computePathHash = (edge: RouteEngineEdge): string =>
+  [
+    edge.sourceId ?? "",
+    edge.targetId ?? "",
+    edge.startHandle ?? "",
+    edge.endHandle ?? "",
+    edge.routePreference ?? "",
+    edge.routingMode ?? "orthogonal",
+    edge.preserveManualBends ? "manual" : "auto",
+    hashPoints(edge.existingPoints),
+    `${roundCoord(edge.start.x)},${roundCoord(edge.start.y)}`,
+    `${roundCoord(edge.end.x)},${roundCoord(edge.end.y)}`,
+  ].join("|");
 
 // ─────────────────── Main Routing Pipeline ───────────────────
 
@@ -263,39 +309,46 @@ export const routeWithEngine = (
     crossingOptions,
     enableCrossingMinimization = true,
     enableCongestionAwareness = true,
-    existingRoutes = [],
     allParallelCandidates,
   } = config;
 
   // ── Stage 0a: Sanitize inputs (Task 5 — Engine Stability) ──
   const safeEdges = sanitizeEdges(edges).filter(isFullyConnectedEdge);
   const obstacles = sanitizeObstacles(config.obstacles);
+  const existingRoutes = sanitizeRoutes(config.existingRoutes ?? []);
 
   // ── Stage 0b: Dirty tracking ──
+  // An edge is re-routed when it was marked dirty, has no cached route, or its
+  // geometry hash (which includes the obstacle layout) no longer matches the
+  // hash it was routed with. Edges outside this call are never touched, so a
+  // caller may route any subset of the document.
   const hasState = !!state;
   const obstacleHash = computeObstacleHash(obstacles);
-  if (hasState && obstacleHash !== state.lastObstacleHash) {
-    invalidateAllRoutes(state);
-    state.lastObstacleHash = obstacleHash;
+  const edgeHashes = new Map<string, string>();
+  for (const edge of safeEdges) {
+    edgeHashes.set(edge.arrowId, `${computePathHash(edge)}#${obstacleHash}`);
   }
 
-  if (hasState) {
-    const activeIds = new Set(safeEdges.map((edge) => edge.arrowId));
-    for (const cachedId of state.routeCache.keys()) {
-      if (activeIds.has(cachedId)) continue;
-      state.routeCache.delete(cachedId);
-      state.pathHashCache.delete(cachedId);
-      state.dirtyEdges.delete(cachedId);
-    }
-  }
-
-  // Determine which edges to route
   const edgesToRoute = hasState
     ? safeEdges.filter(
         (e) =>
-          state.dirtyEdges.has(e.arrowId) || !state.routeCache.has(e.arrowId),
+          state.dirtyEdges.has(e.arrowId) ||
+          !state.routeCache.has(e.arrowId) ||
+          state.pathHashCache.get(e.arrowId) !== edgeHashes.get(e.arrowId),
       )
     : safeEdges;
+  const routedIds = new Set(edgesToRoute.map((e) => e.arrowId));
+  // Cached, still-valid routes of the edges in this batch.
+  const reusableCachedRoutes: Array<{ arrowId: string; points: Point[] }> = [];
+  if (hasState) {
+    for (const edge of safeEdges) {
+      if (routedIds.has(edge.arrowId)) continue;
+      reusableCachedRoutes.push({
+        arrowId: edge.arrowId,
+        points: state.routeCache.get(edge.arrowId)!,
+      });
+    }
+  }
 
   const edgeByArrowId = new Map(
     safeEdges.map((edge) => [edge.arrowId, edge] as const),
@@ -316,14 +369,7 @@ export const routeWithEngine = (
   const offsets = computeParallelOffsets(parallelInputs, parallelSpacing);
 
   // ── Stage 2: Build spatial index from existing + cached routes ──
-  const seedRoutes = [...existingRoutes];
-  if (hasState) {
-    state.routeCache.forEach((points, arrowId) => {
-      if (!state.dirtyEdges.has(arrowId)) {
-        seedRoutes.push({ arrowId, points });
-      }
-    });
-  }
+  const seedRoutes = [...existingRoutes, ...reusableCachedRoutes];
   const occupied = buildSegmentSpatialIndex(seedRoutes);
 
   // ── Stage 3: Congestion map ──
@@ -342,33 +388,14 @@ export const routeWithEngine = (
   const routed = new Map<string, Point[]>();
   const routedArrowIds: string[] = [];
 
-  // Include cached routes for non-dirty edges
-  if (hasState) {
-    state.routeCache.forEach((points, arrowId) => {
-      if (!state.dirtyEdges.has(arrowId)) {
-        routed.set(arrowId, points);
-      }
-    });
+  // Include cached routes for the batch's unchanged edges
+  for (const { arrowId, points } of reusableCachedRoutes) {
+    routed.set(arrowId, points);
   }
 
   // Build layer-aware candidate penalty
   const layerBoundaryYs = config.layerBoundaryYs;
   const hasLayerAwareness = layerBoundaryYs && layerBoundaryYs.length > 0;
-
-  // ── Path hash helper for memoization (Task 2) ──
-  const computePathHash = (edge: RouteEngineEdge): string =>
-    [
-      edge.sourceId ?? "",
-      edge.targetId ?? "",
-      edge.startHandle ?? "",
-      edge.endHandle ?? "",
-      edge.routePreference ?? "",
-      edge.routingMode ?? "orthogonal",
-      edge.preserveManualBends ? "manual" : "auto",
-      hashPoints(edge.existingPoints),
-      `${Math.round(edge.start.x * 1000) / 1000},${Math.round(edge.start.y * 1000) / 1000}`,
-      `${Math.round(edge.end.x * 1000) / 1000},${Math.round(edge.end.y * 1000) / 1000}`,
-    ].join("|");
 
   // Sort for determinism
   const sortedEdges = [...edgesToRoute].sort((a, b) =>
@@ -431,24 +458,6 @@ export const routeWithEngine = (
     if (edge.sourceId) ignoreIds.add(edge.sourceId);
     if (edge.targetId) ignoreIds.add(edge.targetId);
 
-    // ── Path memoization check (Task 2) ──
-    // If geometry hasn't changed and we have a cached result, skip routing.
-    const pathHash = computePathHash(edge);
-    if (
-      hasState &&
-      state.pathHashCache.get(edge.arrowId) === pathHash &&
-      state.routeCache.has(edge.arrowId) &&
-      !state.dirtyEdges.has(edge.arrowId)
-    ) {
-      const cached = state.routeCache.get(edge.arrowId)!;
-      routed.set(edge.arrowId, cached);
-      // Still register in spatial index so subsequent edges see this path
-      addPathToSegmentSpatialIndex(occupied, edge.arrowId, cached);
-      recordPath(congestionMap, edge.arrowId, cached);
-      clearEdgeDirty(state, edge.arrowId);
-      continue;
-    }
-
     // ── Per-edge fail-safe routing (Task 5) ──
     let points: Point[];
     try {
@@ -486,15 +495,25 @@ export const routeWithEngine = (
     routed.set(edge.arrowId, points);
     routedArrowIds.push(edge.arrowId);
 
-    // Update path hash cache
+    // Remember what this route was computed from (see Stage 0b)
     if (hasState) {
-      state.pathHashCache.set(edge.arrowId, computePathHash(edge));
-      clearEdgeDirty(state, edge.arrowId);
+      state.pathHashCache.set(edge.arrowId, edgeHashes.get(edge.arrowId)!);
     }
 
     // Update spatial index and congestion map
     addPathToSegmentSpatialIndex(occupied, edge.arrowId, points);
     recordPath(congestionMap, edge.arrowId, points);
+  }
+
+  // "Straight" arrows are user-chosen diagonals: the post-passes below force
+  // Manhattan geometry, so they are set aside and re-attached untouched.
+  const straightRoutes = new Map<string, Point[]>();
+  for (const edge of safeEdges) {
+    if (edge.routingMode !== "straight") continue;
+    const points = routed.get(edge.arrowId);
+    if (!points) continue;
+    straightRoutes.set(edge.arrowId, points);
+    routed.delete(edge.arrowId);
   }
 
   // ── Stage 5: Lane assignment ──
@@ -526,7 +545,7 @@ export const routeWithEngine = (
   let finalRoutes = routed;
   if (enableCrossingMinimization) {
     const allIgnoreIds = new Set<string>();
-    for (const edge of edges) {
+    for (const edge of safeEdges) {
       if (edge.sourceId) allIgnoreIds.add(edge.sourceId);
       if (edge.targetId) allIgnoreIds.add(edge.targetId);
     }
@@ -541,7 +560,7 @@ export const routeWithEngine = (
   // ── Stage 7: Final validation (hard overlap guarantee) ──
   // Build per-edge ignore IDs for normalizer safety checks
   const ignoreObstacleIdsByArrow = new Map<string, Set<string>>();
-  for (const edge of edges) {
+  for (const edge of safeEdges) {
     const ids = new Set<string>();
     if (edge.sourceId) ids.add(edge.sourceId);
     if (edge.targetId) ids.add(edge.targetId);
@@ -582,6 +601,9 @@ export const routeWithEngine = (
       ),
     );
   });
+  straightRoutes.forEach((points, arrowId) => {
+    stabilizedRoutes.set(arrowId, points);
+  });
   finalRoutes = stabilizedRoutes;
 
   // ── Stage 8: Hard overlap validation ──
@@ -617,7 +639,11 @@ export const routeWithEngine = (
     finalRoutes.forEach((points, arrowId) => {
       state.routeCache.set(arrowId, points);
     });
-    state.dirtyEdges.clear();
+    // Only the edges handled by this call are clean now; dirty flags of arrows
+    // outside the batch must survive until they are routed.
+    for (const edge of safeEdges) {
+      state.dirtyEdges.delete(edge.arrowId);
+    }
     state.congestionMap = congestionMap;
   }
 

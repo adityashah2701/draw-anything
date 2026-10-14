@@ -598,6 +598,17 @@ export const routeArrowBatch = ({
     addPathToSegmentSpatialIndex(occupied, arrow.arrowId, points);
   });
 
+  // "Straight" arrows are user-chosen diagonals; the lane and normalization
+  // passes force Manhattan geometry, so they are set aside and re-attached.
+  const straightRoutes = new Map<string, Point[]>();
+  for (const arrow of routableArrows) {
+    if (arrow.routingMode !== "straight") continue;
+    const points = routed.get(arrow.arrowId);
+    if (!points) continue;
+    straightRoutes.set(arrow.arrowId, points);
+    routed.delete(arrow.arrowId);
+  }
+
   // Post-routing: apply lane assignments to separate collinear segments.
   const routeEntries = Array.from(routed.entries()).map(
     ([arrowId, points]) => ({
@@ -640,6 +651,7 @@ export const routeArrowBatch = ({
     normalized.forEach((points, arrowId) => routed.set(arrowId, points));
   }
 
+  straightRoutes.forEach((points, arrowId) => routed.set(arrowId, points));
   return routed;
 };
 
@@ -738,6 +750,7 @@ export {
   clearEdgeDirty,
   markShapeEdgesDirty,
   invalidateAllRoutes,
+  pruneRouteEngineState,
 } from "@/core/routing/route-engine";
 export type {
   RouteEngineEdge,

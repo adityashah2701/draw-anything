@@ -82,6 +82,22 @@ export const sanitizeEdges = (edges: RouteEngineEdge[]): RouteEngineEdge[] => {
   return edges.filter(validateEdge);
 };
 
+/**
+ * Filter caller-supplied routes (e.g. other arrows' current points) down to
+ * entries that are safe to index: non-empty id and >= 2 finite points.
+ * Arrows mid-creation or loaded from a corrupted snapshot are dropped instead
+ * of crashing the spatial index.
+ */
+export const sanitizeRoutes = <T extends { arrowId: string; points: Point[] }>(
+  routes: readonly (T | null | undefined)[],
+): T[] =>
+  routes.filter(
+    (route): route is T =>
+      !!route &&
+      isNonEmptyString(route.arrowId) &&
+      isValidPointArray(route.points, 2),
+  );
+
 // ─────────────────── Obstacle Validation ───────────────────
 
 /**

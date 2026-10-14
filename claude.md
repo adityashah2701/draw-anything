@@ -22,7 +22,7 @@ npx convex dev           # Convex dev server; regenerates convex/_generated
 npx convex deploy
 ```
 
-Tests live next to source (`*.test.ts`); today they exist only in `features/ai/server`. There is no `vitest.config.ts`, so the `@/` path alias does not resolve and every test file fails to import until a config with `resolve.alias: { "@": <repo root> }` is added. `core/routing` has no tests.
+Tests live next to source (`*.test.ts`) in `features/ai/server` and `core/routing`. `vitest.config.ts` maps the `@/` alias. `features/ai/server/workflow.test.ts` ("applies a repair pass…") fails on a clean checkout and is unrelated to routing. `package-lock.json` is out of sync with `package.json` (`npm ci` fails; use `npm install`).
 
 ## Architecture
 
@@ -43,12 +43,14 @@ Tests live next to source (`*.test.ts`); today they exist only in `features/ai/s
 ### Routing engine (`core/routing`)
 Public API is `orthogonal-router.ts` (`routeArrowPoints`, `routeArrowBatch`); `route-engine.ts` (`routeWithEngine`) runs the pipeline:
 1. Sanitize inputs (`routing-guards.ts`: `sanitizeEdges`, `sanitizeObstacles`, `isFullyConnectedEdge`)
-2. Dirty tracking against `RouteEngineState` (route cache, path-hash cache, congestion map)
+2. Dirty tracking against `RouteEngineState` (route cache, path-hash cache, congestion map). An edge is re-routed if marked dirty, uncached, or its hash (endpoints, handles, mode, existing points, obstacle layout) changed. The engine routes whatever subset it is given and never infers deletions; the state's owner calls `pruneRouteEngineState(state, liveArrowIds)` (the hook does, on every `elements` change)
 3. Parallel-edge offsets (`parallel-edge-manager.ts`)
 4. Per-edge A* obstacle avoidance + candidate scoring (`obstacle-avoidance.ts`, `path-scoring.ts`, `congestion-map.ts`)
 5. Segment conflict resolution (`segment-conflict-resolver.ts`, spatial index)
 6. Lane assignment (`lane-manager.ts`) and crossing minimization (`crossing-minimizer.ts`)
 7. Normalization (`path-normalizer.ts`) and endpoint stabilization to connection handles
+
+`routingMode: "straight"` arrows bypass stages 6–7 (they would otherwise be forced to Manhattan geometry). `normalizeRoutes` checks crossings per arrow via `createCrossingCounter` (one grid, no map clones); do not reintroduce a whole-graph `countTotalCrossings` per arrow.
 
 `core/arrow/use-arrow-connections.ts` feeds it from React: it only routes descriptors passing `isRouteDescriptorReady` (arrows mid-drag can lack `sourceId`/`targetId`/points), and keeps a second module-level cache, `globalPathCache` (`path-cache.ts`), keyed by arrow id + rounded endpoints + obstacle signature.
 

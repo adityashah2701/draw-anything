@@ -22,7 +22,7 @@ import {
   orthogonalizePath,
   EPSILON,
 } from "@/core/routing/routing-utils";
-import { countTotalCrossings } from "@/core/routing/crossing-minimizer";
+import { createCrossingCounter } from "@/core/routing/crossing-minimizer";
 
 // ─────────────────── Types ───────────────────
 
@@ -357,7 +357,7 @@ const isSafeTransform = (
   original: Point[],
   normalized: Point[],
   arrowId: string,
-  allRoutes: Map<string, Point[]>,
+  countCrossingsFor: (arrowId: string, points: Point[]) => number,
   obstacles: RoutingObstacle[],
   ignoreIds: Set<string>,
   obstaclePadding: number,
@@ -385,20 +385,13 @@ const isSafeTransform = (
     return false;
   }
 
-  // Check crossing count hasn't increased
-  const routesBefore = new Map(allRoutes);
-  routesBefore.set(arrowId, original);
-  const routesAfter = new Map(allRoutes);
-  routesAfter.set(arrowId, normalized);
-
-  const crossingsBefore = countTotalCrossings(routesBefore);
-  const crossingsAfter = countTotalCrossings(routesAfter);
-
-  if (crossingsAfter > crossingsBefore) {
-    return false;
-  }
-
-  return true;
+  // Check crossing count hasn't increased. Only this arrow changed, so the
+  // global delta equals the delta of its own crossings with every other arrow
+  // (see createCrossingCounter) – no map clones, no full-graph recount.
+  return (
+    countCrossingsFor(arrowId, normalized) <=
+    countCrossingsFor(arrowId, original)
+  );
 };
 
 // ─────────────────── Public API ───────────────────
@@ -441,6 +434,9 @@ export const normalizeRoutes = (
   // ── Per-arrow normalization ──
   const normalized = new Map<string, Point[]>();
   const arrowIds = Array.from(routes.keys()).sort(); // Deterministic order
+  // Neighbours are judged against the *input* routes for the whole pass, so one
+  // grid serves every arrow.
+  const countInputCrossings = createCrossingCounter(routes);
 
   for (const arrowId of arrowIds) {
     const original = routes.get(arrowId)!;
@@ -466,7 +462,7 @@ export const normalizeRoutes = (
         original,
         path,
         arrowId,
-        routes,
+        countInputCrossings,
         obstacles,
         ignoreIds,
         obstaclePadding,
@@ -483,6 +479,7 @@ export const normalizeRoutes = (
   const unified = unifyCorridors(normalized, corridorTolerance, gridSize);
 
   // ── Re-validate unified routes ──
+  const countUnifiedCrossings = createCrossingCounter(unified);
   const result = new Map<string, Point[]>();
   for (const arrowId of arrowIds) {
     const beforeUnify = normalized.get(arrowId)!;
@@ -499,7 +496,7 @@ export const normalizeRoutes = (
         beforeUnify,
         afterUnify,
         arrowId,
-        unified,
+        countUnifiedCrossings,
         obstacles,
         ignoreIds,
         obstaclePadding,
