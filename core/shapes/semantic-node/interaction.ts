@@ -1,4 +1,5 @@
 import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
+import { resizeBox } from "@/core/shapes/base/resize-box";
 import { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
 import { SemanticNodeShape } from "@/core/shapes/semantic-node/types";
 
@@ -45,48 +46,17 @@ export const resizeSemanticNode = (
 ): SemanticNodeShape => {
   if (!originalBounds) return shape;
 
-  let { minX, minY, maxX, maxY } = originalBounds;
-  switch (handle) {
-    case "nw":
-      minX = point.x;
-      minY = point.y;
-      break;
-    case "ne":
-      maxX = point.x;
-      minY = point.y;
-      break;
-    case "se":
-      maxX = point.x;
-      maxY = point.y;
-      break;
-    case "sw":
-      minX = point.x;
-      maxY = point.y;
-      break;
-    case "n":
-      minY = point.y;
-      break;
-    case "s":
-      maxY = point.y;
-      break;
-    case "e":
-      maxX = point.x;
-      break;
-    case "w":
-      minX = point.x;
-      break;
-    default:
-      return shape;
-  }
-
-  if (maxX - minX < MIN_WIDTH) maxX = minX + MIN_WIDTH;
-  if (maxY - minY < MIN_HEIGHT) maxY = minY + MIN_HEIGHT;
+  const box = resizeBox(originalBounds, handle, point, {
+    width: MIN_WIDTH,
+    height: MIN_HEIGHT,
+  });
+  if (!box) return shape;
 
   return {
     ...shape,
     points: [
-      { x: minX, y: minY },
-      { x: maxX, y: maxY },
+      { x: box.minX, y: box.minY },
+      { x: box.maxX, y: box.maxY },
     ],
   };
 };
