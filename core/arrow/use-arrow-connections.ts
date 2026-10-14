@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ArrowConnection,
   ConnectionHandle,
@@ -19,6 +19,7 @@ import {
   createRouteEngineState,
   markEdgeDirty,
   clearEdgeDirty,
+  pruneRouteEngineState,
   AdjacencyMap,
 } from "@/core/routing/orthogonal-router";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
@@ -99,20 +100,6 @@ const buildRouteCacheSignature = (
     serializePoints(descriptor.existingPoints),
   ].join("|");
 
-const buildRouteStateHash = (descriptor: RouteArrowDescriptor): string =>
-  [
-    descriptor.sourceId ?? "",
-    descriptor.targetId ?? "",
-    descriptor.startHandle ?? "",
-    descriptor.endHandle ?? "",
-    descriptor.routePreference ?? "",
-    descriptor.routingMode ?? "orthogonal",
-    descriptor.preserveManualBends ? "manual" : "auto",
-    serializePoints(descriptor.existingPoints),
-    `${Math.round(descriptor.start.x * 1000) / 1000},${Math.round(descriptor.start.y * 1000) / 1000}`,
-    `${Math.round(descriptor.end.x * 1000) / 1000},${Math.round(descriptor.end.y * 1000) / 1000}`,
-  ].join("|");
-
 const getSideFromConnection = (
   connection: ArrowConnection | undefined,
   anchor: Anchor | null,
@@ -144,6 +131,17 @@ export const useArrowConnections = ({
   );
 
   const routeEngineStateRef = useRef(createRouteEngineState());
+
+  // The engine is routinely handed a subset of arrows (only those touched by a
+  // drag), so it cannot see deletions. Tell it which arrows still exist so
+  // deleted arrows stop occupying the route cache and the congestion map.
+  useEffect(() => {
+    const liveArrowIds = new Set<string>();
+    for (const element of elements) {
+      if (isArrowElement(element)) liveArrowIds.add(element.id);
+    }
+    pruneRouteEngineState(routeEngineStateRef.current, liveArrowIds);
+  }, [elements]);
 
   const baseRoutingObstacles = useMemo(() => {
     const obstacles = new Map<string, RoutingObstacle>();
@@ -382,10 +380,9 @@ export const useArrowConnections = ({
       );
       if (cachedPoints) {
         routeEngineStateRef.current.routeCache.set(arrow.id, cachedPoints);
-        routeEngineStateRef.current.pathHashCache.set(
-          arrow.id,
-          buildRouteStateHash(descriptor),
-        );
+        // Primed from globalPathCache, not computed by the engine: leave no hash
+        // behind so the engine never treats this entry as validated.
+        routeEngineStateRef.current.pathHashCache.delete(arrow.id);
         recordPath(routeEngineStateRef.current.congestionMap, arrow.id, cachedPoints);
         clearEdgeDirty(routeEngineStateRef.current, arrow.id);
         return {
@@ -417,10 +414,6 @@ export const useArrowConnections = ({
           cacheSignature,
         );
         routeEngineStateRef.current.routeCache.set(arrow.id, points);
-        routeEngineStateRef.current.pathHashCache.set(
-          arrow.id,
-          buildRouteStateHash(descriptor),
-        );
         recordPath(routeEngineStateRef.current.congestionMap, arrow.id, points);
       }
 
@@ -507,10 +500,7 @@ export const useArrowConnections = ({
         if (cached) {
           cachedRoutes.set(descriptor.arrowId, cached);
           routeEngineStateRef.current.routeCache.set(descriptor.arrowId, cached);
-          routeEngineStateRef.current.pathHashCache.set(
-            descriptor.arrowId,
-            buildRouteStateHash(descriptor),
-          );
+          routeEngineStateRef.current.pathHashCache.delete(descriptor.arrowId);
           recordPath(
             routeEngineStateRef.current.congestionMap,
             descriptor.arrowId,
@@ -549,10 +539,6 @@ export const useArrowConnections = ({
               buildRouteCacheSignature(descriptor, routingObstacleSignature),
             );
             routeEngineStateRef.current.routeCache.set(descriptor.arrowId, points);
-            routeEngineStateRef.current.pathHashCache.set(
-              descriptor.arrowId,
-              buildRouteStateHash(descriptor),
-            );
             recordPath(routeEngineStateRef.current.congestionMap, descriptor.arrowId, points);
           }
         });

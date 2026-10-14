@@ -246,6 +246,32 @@ export const countTotalCrossings = (routes: Map<string, Point[]>): number => {
 };
 
 /**
+ * Build a reusable counter for "how many crossings does this path have with
+ * every *other* arrow in `routes`".
+ *
+ * The grid is built once. Because `countTotalCrossings` counts unordered
+ * pairs of segments from different arrows, replacing one arrow changes the
+ * global total by exactly `counter(id, after) - counter(id, before)`, so
+ * callers can evaluate a single-arrow edit in O(local density) instead of
+ * cloning the route map and recounting the whole graph.
+ */
+export const createCrossingCounter = (
+  routes: Map<string, Point[]>,
+): ((arrowId: string, points: Point[]) => number) => {
+  const grid = buildSegmentGrid(routes);
+
+  return (arrowId, points) => {
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const seg = toIndexedSegment(arrowId, points, i);
+      if (!seg) continue;
+      total += queryGridForCrossings(grid, seg).length;
+    }
+    return total;
+  };
+};
+
+/**
  * Perform lightweight crossing minimization on routed paths.
  *
  * Strategy:
