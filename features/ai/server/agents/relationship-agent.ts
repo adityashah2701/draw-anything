@@ -1,6 +1,6 @@
 import { modelGraphDraftSchema, normalizeModelGraphDraft } from "@/features/ai/schemas";
 import { buildRelationshipMessages } from "@/features/ai/server/prompts";
-import { callStructured, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
+import { callStructuredNormalized, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
 
 export const relationshipAgent = async (
   state: AIWorkflowState,
@@ -10,13 +10,13 @@ export const relationshipAgent = async (
   const frame = { ...state.frame, currentPhase: "relationshipAgent" as const };
   logAIPhase(frame.frameId, "relationshipAgent", "Resolving relationships");
   const messages = await buildRelationshipMessages(state.request, state.graph);
-  const rawGraph = await callStructured<Record<string, unknown>>(
+  const graph = await callStructuredNormalized(
     runtime.model,
     modelGraphDraftSchema,
     "ai_relationship_graph",
     messages,
+    normalizeModelGraphDraft,
   );
-  const graph = normalizeModelGraphDraft(rawGraph);
   return {
     frame,
     graph,

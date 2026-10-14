@@ -2,7 +2,7 @@ import { modelGraphDraftSchema, normalizeModelGraphDraft } from "@/features/ai/s
 import { buildImprovementMessages } from "@/features/ai/server/prompts";
 import { buildAIDiagramDocument } from "@/features/ai/server/validation";
 import { getAIModelProviderConfig } from "@/features/ai/server/model-providers";
-import { callStructured, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
+import { callStructuredNormalized, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
 
 const needsRepair = (state: AIWorkflowState) =>
   Boolean(
@@ -55,13 +55,13 @@ export const repairAgent = async (
       document,
       needsExpansion({ ...state, document, improvementPasses }) ? state.missingComponents : undefined,
     );
-    const rawGraph = await callStructured<Record<string, unknown>>(
+    graph = await callStructuredNormalized(
       runtime.model,
       modelGraphDraftSchema,
       `ai_repaired_graph_${improvementPasses + 1}`,
       messages,
+      normalizeModelGraphDraft,
     );
-    graph = normalizeModelGraphDraft(rawGraph);
     improvementPasses += 1;
     document = buildAIDiagramDocument({
       prompt: state.request.prompt,

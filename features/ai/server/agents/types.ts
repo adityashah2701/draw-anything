@@ -23,6 +23,7 @@ import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { withRetry, categorizeError } from "@/features/ai/server/retry";
 import { SchemaValidationError } from "@/features/ai/server/errors";
 import { createCorrelationId, createTimer, logAICall } from "@/features/ai/server/telemetry";
+import { extractJsonFromText } from "@/features/ai/server/json-extract";
 
 export interface AIWorkflowState {
   request: AIGenerateDiagramRequest;
@@ -91,19 +92,6 @@ export const logAIPhase = (
     message,
     data,
   });
-};
-
-const extractJsonFromText = (text: string): Record<string, unknown> | null => {
-  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-  const raw = codeBlockMatch ? codeBlockMatch[1] : text;
-
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-  try {
-    return JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
 };
 
 export const callStructured = async <T extends Record<string, unknown>>(
@@ -213,4 +201,55 @@ export const callStructured = async <T extends Record<string, unknown>>(
 
     throw categorized;
   }
+};
+
+const describeNormalizationError = (error: unknown): string => {
+  const issues = (error as { issues?: Array<{ path?: unknown[]; message?: string }> })?.issues;
+  if (Array.isArray(issues) && issues.length > 0) {
+    return issues
+      .slice(0, 3)
+      .map((issue) => `${(issue.path ?? []).join(".") || "(root)"}: ${issue.message ?? "invalid"}`)
+      .join("; ");
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return message.slice(0, 300);
+};
+
+/**
+ * `callStructured` + normalisation, with one corrective re-ask.
+ *
+ * Providers can return JSON that parses but is unusable (no nodes, wrong
+ * shape). Instead of failing the whole generation, show the model its own
+ * answer and the problem once, then give up with a typed error.
+ */
+export const callStructuredNormalized = async <T extends Record<string, unknown>, N>(
+  model: StructuredChatModel,
+  schema: unknown,
+  name: string,
+  messages: BaseMessageLike[],
+  normalize: (raw: T) => N,
+  { maxReasks = 1 }: { maxReasks?: number } = {},
+): Promise<N> => {
+  let lastError: unknown;
+  let current = messages;
+
+  for (let attempt = 0; attempt <= maxReasks; attempt += 1) {
+    const raw = await callStructured<T>(model, schema, name, current);
+    try {
+      return normalize(raw);
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxReasks) break;
+      console.warn(`[callStructuredNormalized] "${name}" output unusable, re-asking once:`, describeNormalizationError(error));
+      current = [
+        ...messages,
+        ["ai", JSON.stringify(raw).slice(0, 4_000)],
+        [
+          "human",
+          `That answer could not be used: ${describeNormalizationError(error)}. Reply again with the corrected JSON object only.`,
+        ],
+      ];
+    }
+  }
+  throw new SchemaValidationError(name, lastError);
 };

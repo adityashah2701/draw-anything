@@ -1,6 +1,6 @@
 import { modelGraphDraftSchema, normalizeModelGraphDraft } from "@/features/ai/schemas";
 import { buildExpansionMessages } from "@/features/ai/server/prompts";
-import { callStructured, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
+import { callStructuredNormalized, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
 
 export const expansionAgent = async (
   state: AIWorkflowState,
@@ -30,14 +30,13 @@ export const expansionAgent = async (
     round,
   );
 
-  const rawGraph = await callStructured<Record<string, unknown>>(
+  const graph = await callStructuredNormalized(
     runtime.model,
     modelGraphDraftSchema,
     `ai_expansion_round_${round}`,
     messages,
+    normalizeModelGraphDraft,
   );
-
-  const graph = normalizeModelGraphDraft(rawGraph);
   const addedNodeIds = graph.nodes
     .filter((n) => !state.graph!.nodes.some((existing) => existing.id === n.id))
     .map((n) => n.id);

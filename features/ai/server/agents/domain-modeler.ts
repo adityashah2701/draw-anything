@@ -1,6 +1,6 @@
 import { modelGraphDraftSchema, normalizeModelGraphDraft } from "@/features/ai/schemas";
 import { buildDomainModelMessages } from "@/features/ai/server/prompts";
-import { callStructured, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
+import { callStructuredNormalized, checkpoint, logAIPhase, phaseCompleted, phaseStarted, AgentRuntime, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
 
 export const domainModelerAgent = async (
   state: AIWorkflowState,
@@ -15,13 +15,13 @@ export const domainModelerAgent = async (
     actors: state.actors,
     systems: state.systems,
   });
-  const rawGraph = await callStructured<Record<string, unknown>>(
+  const graph = await callStructuredNormalized(
     runtime.model,
     modelGraphDraftSchema,
     "ai_domain_graph",
     messages,
+    normalizeModelGraphDraft,
   );
-  const graph = normalizeModelGraphDraft(rawGraph);
   return {
     frame,
     graph,
