@@ -129,3 +129,14 @@ export const createGenerateDiagramHandler =
       },
     });
   };
+
+/** Which providers this server can call, for the provider picker. Sign-in required. */
+export const createProvidersHandler =
+  (deps: Pick<GenerateDiagramHandlerDeps, "getUserId" | "enabledProviders">) =>
+  async (): Promise<Response> => {
+    const userId = await deps.getUserId();
+    if (!userId) return json(401, "Sign in to generate diagrams.");
+    return new Response(JSON.stringify({ providers: deps.enabledProviders() }), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  };

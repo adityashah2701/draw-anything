@@ -29,6 +29,15 @@ interface AIPanelProps {
   onApplyDiagramCode: (payload: ApplyDiagramCodePayload) => void;
 }
 
+const PROVIDER_OPTIONS: Array<{ value: AIModelProvider; label: string }> = [
+  { value: "gemini", label: "Gemini 3.5 Flash" },
+  { value: "groq", label: "Groq (Llama-3 70B)" },
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "local", label: "Local" },
+];
+
 const SUGGESTIONS = [
   "Flowchart for a user login process",
   "System architecture with frontend, backend, and database",
@@ -68,6 +77,32 @@ export const AIPanel: React.FC<AIPanelProps> = ({
 }) => {
   const [mode, setMode] = React.useState<"describe" | "code">("describe");
   const [model, setModel] = React.useState<AIModelProvider>("gemini");
+  // Providers the server has credentials for; null until known (then show all).
+  const [available, setAvailable] = React.useState<AIModelProvider[] | null>(null);
+
+  React.useEffect(() => {
+    if (!isOpen || available !== null) return;
+    let cancelled = false;
+    fetch("/api/ai/generate-diagram")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { providers?: AIModelProvider[] } | null) => {
+        if (cancelled || !Array.isArray(data?.providers)) return;
+        setAvailable(data.providers);
+        setModel((current) =>
+          data.providers!.includes(current) ? current : (data.providers![0] ?? current),
+        );
+      })
+      .catch(() => {
+        /* keep showing every provider; the server still validates */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, available]);
+
+  const providerOptions = PROVIDER_OPTIONS.filter(
+    (option) => available === null || available.includes(option.value),
+  );
   const [input, setInput] = React.useState("");
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -128,14 +163,17 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             <select
               value={model}
               onChange={(e) => setModel(e.target.value as AIModelProvider)}
+              disabled={providerOptions.length === 0}
               className="text-[11px] bg-transparent text-muted-foreground border-none outline-none cursor-pointer hover:text-foreground p-0 mt-0.5"
             >
-                <option value="gemini">Gemini 3.5 Flash</option>
-              <option value="groq">Groq (Llama-3 70B)</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="openrouter">OpenRouter</option>
-              <option value="local">Local</option>
+              {providerOptions.length === 0 && (
+                <option value="">No AI provider configured</option>
+              )}
+              {providerOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>

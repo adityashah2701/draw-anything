@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createGenerateDiagramHandler } from "@/features/ai/server/generate-diagram-handler";
+import {
+  createGenerateDiagramHandler,
+  createProvidersHandler,
+} from "@/features/ai/server/generate-diagram-handler";
 import { createSlidingWindowLimiter } from "@/features/ai/server/request-guard";
 import { MissingAIProviderKeyError } from "@/features/ai/server/model-providers";
 import { RateLimitError } from "@/features/ai/server/errors";
@@ -146,5 +149,23 @@ describe("generate-diagram handler", () => {
     const before = produced;
     await new Promise((r) => setTimeout(r, 20));
     expect(produced).toBe(before);
+  });
+});
+
+describe("providers handler", () => {
+  it("lists only the configured providers, to signed-in users only", async () => {
+    const handler = createProvidersHandler({
+      getUserId: async () => "user_1",
+      enabledProviders: () => ["groq", "gemini"],
+    });
+    const response = await handler();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ providers: ["groq", "gemini"] });
+
+    const anonymous = createProvidersHandler({
+      getUserId: async () => null,
+      enabledProviders: () => ["groq"],
+    });
+    expect((await anonymous()).status).toBe(401);
   });
 });
