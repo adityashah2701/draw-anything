@@ -11,6 +11,7 @@ import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 import { createShape } from "@/core/shapes/shape-runtime";
 import { buildConnectorArrow } from "@/features/whiteboard/hooks/interaction/connector-arrow";
+import { resolveClickSelection } from "@/features/whiteboard/hooks/interaction/selection";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 
 interface ConnectionDraft {
@@ -140,6 +141,8 @@ export const useWhiteboardDrawing = ({
   const resizeInitialBoundsRef = useRef<Bounds | null>(null);
   const lastResizePointRef = useRef<Point | null>(null);
   const pendingArrowRerouteRef = useRef<DrawingElement | null>(null);
+  // A plain click on one member of a multi-selection: collapse to it on release unless the pointer moved.
+  const collapseOnReleaseRef = useRef<{ id: string; origin: Point } | null>(null);
   const previousSnapRef = useRef<{
     start: MagneticSnapMatch | null;
     end: MagneticSnapMatch | null;
@@ -237,39 +240,24 @@ export const useWhiteboardDrawing = ({
         }
 
         const elementsAtPoint = getElementsAtPoint(point);
+        const hit = elementsAtPoint[elementsAtPoint.length - 1] ?? null;
+        const outcome = resolveClickSelection({
+          selected: selectedElements,
+          hitId: hit?.id ?? null,
+          additive: e.ctrlKey || e.metaKey || e.shiftKey,
+        });
+        setSelectedElements(outcome.selected);
+        collapseOnReleaseRef.current = outcome.collapseOnRelease
+          ? { id: outcome.collapseOnRelease, origin: point }
+          : null;
 
-        if (elementsAtPoint.length > 0) {
-          const topElement = elementsAtPoint[elementsAtPoint.length - 1];
-
-          if (selectedElements.includes(topElement.id)) {
-            if (hasEditAccess) {
-              beginGesture?.();
-              setIsDragging(true);
-              setDragStart(point);
-            }
-          } else {
-            setSelectedElements((prev) =>
-              e.ctrlKey || e.metaKey
-                ? prev.includes(topElement.id)
-                  ? prev.filter((id: string) => id !== topElement.id)
-                  : [...prev, topElement.id]
-                : [topElement.id],
-            );
-
-            if (hasEditAccess) {
-              beginGesture?.();
-              setIsDragging(true);
-              setDragStart(point);
-            }
-          }
-        } else {
-          if (!e.ctrlKey && !e.metaKey) {
-            setSelectedElements([]);
-          }
-          if (hasEditAccess) {
-            setIsSelectingArea(true);
-            setSelectionBox({ start: point, end: point });
-          }
+        if (outcome.startDrag && hasEditAccess) {
+          beginGesture?.();
+          setIsDragging(true);
+          setDragStart(point);
+        } else if (!hit && hasEditAccess) {
+          setIsSelectingArea(true);
+          setSelectionBox({ start: point, end: point });
         }
         return;
       }
@@ -500,6 +488,13 @@ export const useWhiteboardDrawing = ({
           }
 
           if (isDragging && selectedElements.length > 0) {
+            const pending = collapseOnReleaseRef.current;
+            if (
+              pending &&
+              Math.hypot(point.x - pending.origin.x, point.y - pending.origin.y) > 3
+            ) {
+              collapseOnReleaseRef.current = null;
+            }
             const deltaX = point.x - dragStart.x;
             const deltaY = point.y - dragStart.y;
             const updatedElements = moveElements(
@@ -584,6 +579,38 @@ export const useWhiteboardDrawing = ({
       onArrowSnapPreviewChange,
     ],
   );
+
+  /**
+   * Abandon whatever the user is in the middle of creating (a shape being
+   * drawn, a connector being dragged, a marquee) without committing it.
+   * Returns false when there was nothing to cancel. Moves and resizes are not
+   * covered: they have already been written to the shared board.
+   */
+  const cancelDrawing = useCallback((): boolean => {
+    const creating =
+      isDrawing && currentElement !== null && currentTool !== "eraser";
+    if (!creating && !connectionDraft && !isSelectingArea) return false;
+
+    setCurrentElement(null);
+    setIsDrawing(false);
+    setConnectionDraft(null);
+    setIsSelectingArea(false);
+    setSelectionBox(null);
+    collapseOnReleaseRef.current = null;
+    pendingArrowRerouteRef.current = null;
+    lastPointRef.current = null;
+    previousSnapRef.current = { start: null, end: null };
+    onArrowSnapPreviewChange?.(null);
+    return true;
+  }, [
+    isDrawing,
+    currentElement,
+    currentTool,
+    connectionDraft,
+    isSelectingArea,
+    setCurrentElement,
+    onArrowSnapPreviewChange,
+  ]);
 
   const stopDrawing = useCallback(() => {
     // ── Complete a connection drag ────────────────────────────────────────
@@ -672,6 +699,10 @@ export const useWhiteboardDrawing = ({
       pendingArrowRerouteRef.current = null;
       return;
     }
+
+    const collapseTo = collapseOnReleaseRef.current;
+    collapseOnReleaseRef.current = null;
+    if (collapseTo) setSelectedElements([collapseTo.id]);
 
     if (isSelectingArea && selectionBox) {
       if (
@@ -808,6 +839,7 @@ export const useWhiteboardDrawing = ({
     startDrawing,
     draw,
     stopDrawing,
+    cancelDrawing,
     handleTextSubmit,
     handleTextCancel,
     cursorPosition,

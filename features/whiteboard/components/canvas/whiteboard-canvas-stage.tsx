@@ -104,9 +104,20 @@ export const WhiteboardCanvasStage = ({
           canvasViewport.canvasSize.height *
           (typeof window !== "undefined" ? window.devicePixelRatio : 1)
         }
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
+          // Left button / touch / pen only, and only the first finger: a second
+          // finger or a right click must not start a second gesture.
+          if (e.button !== 0 || !e.isPrimary) return;
           if (editingShapeLabelId) {
             return;
+          }
+          // Keep receiving move/up events when the pointer leaves the canvas
+          // (over a toolbar, outside the window), so a drag finishes where the
+          // user released instead of being cut off at the edge.
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // Capture is best effort; the gesture still works without it.
           }
           if (currentTool === "text" && whiteboardAccess.hasEditAccess) {
             const pos = canvasViewport.getMousePosition(e);
@@ -165,13 +176,22 @@ export const WhiteboardCanvasStage = ({
             setCurrentTool("select");
           }
         }}
-        onMouseMove={(e) => {
+        onPointerMove={(e) => {
+          if (!e.isPrimary) return;
           whiteboardDrawing.draw(e);
         }}
         onWheel={canvasViewport.handleWheelZoom}
-        onMouseUp={whiteboardDrawing.stopDrawing}
-        onMouseLeave={whiteboardDrawing.stopDrawing}
-        onMouseEnter={() => {}}
+        onPointerUp={(e) => {
+          if (!e.isPrimary) return;
+          if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          }
+          whiteboardDrawing.stopDrawing();
+        }}
+        onPointerCancel={(e) => {
+          if (!e.isPrimary) return;
+          whiteboardDrawing.stopDrawing();
+        }}
         className="cursor-crosshair"
         style={{
           width: canvasViewport.canvasSize.width,

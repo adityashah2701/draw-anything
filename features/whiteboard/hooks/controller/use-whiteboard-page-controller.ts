@@ -342,7 +342,11 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         setSelectedElements([]);
       }
     }, [deleteElementsWithConnectedArrows, selectedElements]),
-    clearSelection: () => setSelectedElements([]),
+    // Escape: abandon a half-made shape or connector first; only then clear the selection.
+    clearSelection: () => {
+      if (whiteboardDrawing.cancelDrawing()) return;
+      setSelectedElements([]);
+    },
     handleZoomIn: canvasViewport.handleZoomIn,
     handleZoomOut: canvasViewport.handleZoomOut,
     handleResetZoom: canvasViewport.handleResetZoom,
