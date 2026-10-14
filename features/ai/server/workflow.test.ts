@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { streamAIDiagramWorkflowEvents } from "@/features/ai/server/workflow";
 import { StructuredChatModel } from "@/features/ai/server/model-providers";
+import type { AIStreamEvent } from "@/features/ai/types";
 
 class MockStructuredModel {
   private calls = 0;
@@ -66,60 +67,115 @@ describe("AI LangGraph workflow", () => {
     expect(events.at(-1)?.type).toBe("frame.done");
   });
 
-  it("applies a repair pass after invalid generated output", async () => {
-    const events = [];
-    class RepairModel extends MockStructuredModel {
-      private repairCalls = 0;
+  // Scripted model: answers the nth structured call with responses[n]
+  // (the last one repeats). Call order is plan, domain graph, relationships, ...
+  const scripted = (...responses: unknown[]) => {
+    let calls = 0;
+    const model = {
+      withStructuredOutput: () => ({
+        invoke: async () => responses[Math.min(calls++, responses.length - 1)],
+      }),
+    } as unknown as StructuredChatModel;
+    return { model, callCount: () => calls };
+  };
 
-      withStructuredOutput<T extends Record<string, unknown>>(_schema: unknown) {
-        return {
-          invoke: async (): Promise<T> => {
-            this.repairCalls += 1;
-            if (this.repairCalls === 1) {
-              return {
-                diagramType: "architecture",
-                summary: "Broken then repaired",
-                layoutStrategy: "layered",
-                direction: "top-to-bottom",
-                styleTheme: "technical",
-                density: "balanced",
-              } as unknown as T;
-            }
-            if (this.repairCalls < 4) {
-              return {
-                nodes: [{ id: "api", label: "API", kind: "api" }],
-                edges: [{ from: "api", to: "missing" }],
-                groups: [],
-              } as unknown as T;
-            }
-            return {
-              nodes: [
-                { id: "client", label: "Client", kind: "browser" },
-                { id: "api", label: "API", kind: "api" },
-                { id: "database", label: "Database", kind: "database" },
-              ],
-              edges: [
-                { from: "client", to: "api" },
-                { from: "api", to: "database" },
-              ],
-              groups: [],
-            } as unknown as T;
-          },
-        };
-      }
-    }
+  const plan = (diagramType: string) => ({
+    diagramType,
+    summary: `A ${diagramType}`,
+    layoutStrategy: "layered",
+    direction: "top-to-bottom",
+    styleTheme: "technical",
+    density: "balanced",
+  });
 
+  const brokenGraph = {
+    nodes: [{ id: "api", label: "API", kind: "api" }],
+    edges: [{ from: "api", to: "missing" }],
+    groups: [],
+  };
+  const goodGraph = {
+    nodes: [
+      { id: "client", label: "Client", kind: "browser" },
+      { id: "api", label: "API", kind: "api" },
+      { id: "database", label: "Database", kind: "database" },
+    ],
+    edges: [
+      { from: "client", to: "api" },
+      { from: "api", to: "database" },
+    ],
+    groups: [],
+  };
+
+  const run = async (model: StructuredChatModel) => {
+    const events: AIStreamEvent[] = [];
     for await (const event of streamAIDiagramWorkflowEvents({
-      request: {
-        prompt: "Client API architecture",
-        provider: "gemini",
-      },
-      model: new RepairModel() as unknown as StructuredChatModel,
+      request: { prompt: "Describe the flow", provider: "gemini" },
+      model,
     })) {
       events.push(event);
     }
+    return events;
+  };
 
-    expect(events.some((event) => event.type === "repair.applied")).toBe(true);
-    expect(events.at(-1)?.type).toBe("frame.done");
+  it("applies a repair pass when the first graph is unusable and nothing needs expanding", async () => {
+    // A flowchart is not checked for infrastructure layers, so the critic does
+    // not expand it and the repair agent is the only way to recover.
+    const { model } = scripted(plan("flowchart"), brokenGraph, brokenGraph, goodGraph);
+    const events = await run(model);
+
+    const repair = events.find((event) => event.type === "repair.applied");
+    expect(repair).toBeDefined();
+    const done = events.at(-1);
+    expect(done?.type).toBe("frame.done");
+    if (done?.type === "frame.done") {
+      expect(done.graph.nodes).toHaveLength(3);
+      expect(done.graph.validation.valid).toBe(true);
+      expect(done.graph.validation.metrics.orphanNodes).toBe(0);
+    }
+  });
+
+  it("recovers from an unusable first architecture graph through the expansion loop", async () => {
+    // For an architecture the critic asks for missing layers and the expansion
+    // round rebuilds the graph, so repair has nothing left to do.
+    const { model } = scripted(plan("architecture"), brokenGraph, brokenGraph, goodGraph);
+    const events = await run(model);
+
+    const done = events.at(-1);
+    expect(done?.type).toBe("frame.done");
+    if (done?.type === "frame.done") {
+      expect(done.graph.nodes.length).toBeGreaterThanOrEqual(3);
+      expect(done.graph.validation.valid).toBe(true);
+    }
+  });
+
+  it("does not add infrastructure nodes to a flowchart", async () => {
+    const flow = {
+      nodes: [
+        { id: "start", label: "Start", kind: "workflow" },
+        { id: "check", label: "Credentials valid?", kind: "decision" },
+        { id: "home", label: "Show dashboard", kind: "workflow" },
+        { id: "error", label: "Show error", kind: "workflow" },
+      ],
+      edges: [
+        { from: "start", to: "check" },
+        { from: "check", to: "home", label: "yes" },
+        { from: "check", to: "error", label: "no" },
+      ],
+      groups: [],
+    };
+    const { model, callCount } = scripted(plan("flowchart"), flow, flow);
+    const events = await run(model);
+
+    const done = events.at(-1);
+    expect(done?.type).toBe("frame.done");
+    if (done?.type === "frame.done") {
+      expect(done.graph.nodes.map((node) => node.label).sort()).toEqual([
+        "Credentials valid?",
+        "Show dashboard",
+        "Show error",
+        "Start",
+      ]);
+    }
+    expect(callCount()).toBe(3); // plan, graph, relationships: no expansion, no repair
   });
 });

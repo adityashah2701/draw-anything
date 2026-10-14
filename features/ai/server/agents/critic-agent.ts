@@ -104,14 +104,20 @@ export const criticAgent = async (
     state.document.nodes.map((n) => n.layer).filter((l): l is NonNullable<typeof l> => l != null),
   );
 
-  const layerMissing = detectMissingByLayer(existingKinds, existingLayers);
-  const completenessIssues: AIMissingComponent[] = [...layerMissing];
+  // Layer coverage (clients, gateway, data stores, monitoring, ...) is a notion
+  // from system architecture. Applying it to a flowchart, mind map, ERD or
+  // sequence diagram makes the critic demand infrastructure that does not
+  // belong there, and the expansion round then adds it.
+  const checksLayerCoverage = state.document.diagramType === "architecture";
+  const completenessIssues: AIMissingComponent[] = checksLayerCoverage
+    ? detectMissingByLayer(existingKinds, existingLayers)
+    : [];
 
-  if (state.document.nodes.length < 10) {
+  if (checksLayerCoverage && state.document.nodes.length < 6) {
     notes.push({
       id: "critic-too-small",
       severity: "warning",
-      message: `Architecture diagram has only ${state.document.nodes.length} nodes. Production architectures typically have 25+ components. Consider adding: monitoring, caching, queue, auth, load balancer, CI/CD.`,
+      message: `Architecture diagram has only ${state.document.nodes.length} nodes. Check whether major components (clients, API, data stores) are missing.`,
     });
   }
 
@@ -134,8 +140,10 @@ export const criticAgent = async (
   let completenessScore = 10;
   const layerNames: Array<"edge" | "application" | "data" | "observability" | "external"> = ["edge", "application", "data", "observability", "external"];
   const coveredLayers = layerNames.filter((l) => existingLayers.has(l));
-  completenessScore -= (layerNames.length - coveredLayers.length) * 1.5;
-  completenessScore -= Math.min(3, completenessIssues.length * 0.5);
+  if (checksLayerCoverage) {
+    completenessScore -= (layerNames.length - coveredLayers.length) * 1.5;
+    completenessScore -= Math.min(3, completenessIssues.length * 0.5);
+  }
   completenessScore = Math.max(0, Math.min(10, completenessScore));
 
   const isComplete = completenessScore >= 5 && completenessIssues.length <= 2;
