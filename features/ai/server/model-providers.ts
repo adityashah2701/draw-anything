@@ -228,7 +228,7 @@ export const getAIModelProviderConfig = (
     case "groq":
       return {
         provider,
-        modelName: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+        modelName: process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
         displayName: "Groq",
       };
     case "openai":

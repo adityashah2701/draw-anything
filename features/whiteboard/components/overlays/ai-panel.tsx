@@ -31,7 +31,7 @@ interface AIPanelProps {
 
 const PROVIDER_OPTIONS: Array<{ value: AIModelProvider; label: string }> = [
   { value: "gemini", label: "Gemini 3.5 Flash" },
-  { value: "groq", label: "Groq (Llama-3 70B)" },
+  { value: "groq", label: "Groq (GPT-OSS 120B)" },
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
   { value: "openrouter", label: "OpenRouter" },
