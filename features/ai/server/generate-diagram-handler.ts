@@ -69,7 +69,10 @@ export const createGenerateDiagramHandler =
     const parsed = parseGenerateRequest(rawBody, {
       enabledProviders: deps.enabledProviders(),
     });
-    if (!parsed.ok) return json(parsed.status, parsed.message);
+    if (!parsed.ok) {
+      if (parsed.detail) console.warn("[ai-generate-diagram] Request rejected:", parsed.detail);
+      return json(parsed.status, parsed.message);
+    }
 
     const encoder = new TextEncoder();
     const pacingMs = deps.pacingMs ?? 50;

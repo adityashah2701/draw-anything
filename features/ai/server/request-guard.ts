@@ -34,12 +34,14 @@ export const getEnabledProviders = (
 
 export type ParseResult =
   | { ok: true; request: AIGenerateDiagramRequest }
-  | { ok: false; status: number; message: string };
+  /** `message` is for the client; `detail` (if any) is for the server log only. */
+  | { ok: false; status: number; message: string; detail?: string };
 
-const fail = (status: number, message: string): ParseResult => ({
+const fail = (status: number, message: string, detail?: string): ParseResult => ({
   ok: false,
   status,
   message,
+  ...(detail ? { detail } : {}),
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -128,7 +130,12 @@ export const parseGenerateRequest = (
   ) {
     return fail(400, "Unsupported AI provider.");
   } else if (!options.enabledProviders.includes(requested as AIModelProvider)) {
-    return fail(400, "That AI provider is not available on this server.");
+    return fail(
+      400,
+      "That AI provider is not available on this server.",
+      `"${requested}" was requested but ${PROVIDER_ENV[requested as AIModelProvider]} is not set in the server environment ` +
+        `(enabled: ${options.enabledProviders.join(", ") || "none"}). Set it in .env.local and restart the dev server.`,
+    );
   } else {
     provider = requested as AIModelProvider;
   }

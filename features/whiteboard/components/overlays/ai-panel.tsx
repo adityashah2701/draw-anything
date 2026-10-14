@@ -80,8 +80,10 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   // Providers the server has credentials for; null until known (then show all).
   const [available, setAvailable] = React.useState<AIModelProvider[] | null>(null);
 
+  // Ask every time the panel opens: the server's keys can change (restart, new
+  // .env.local) while the page stays open, and a stale list leaves a dead option.
   React.useEffect(() => {
-    if (!isOpen || available !== null) return;
+    if (!isOpen) return;
     let cancelled = false;
     fetch("/api/ai/generate-diagram")
       .then((res) => (res.ok ? res.json() : null))
@@ -98,7 +100,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, available]);
+  }, [isOpen]);
 
   const providerOptions = PROVIDER_OPTIONS.filter(
     (option) => available === null || available.includes(option.value),

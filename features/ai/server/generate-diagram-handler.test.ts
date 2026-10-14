@@ -124,6 +124,19 @@ describe("generate-diagram handler", () => {
     expect(limitedEvents.find((e) => e.type === "error")!.message).toMatch(/limit/i);
   });
 
+  it("logs which key is missing for an unavailable provider without sending it to the client", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { handler } = makeHandler({ enabledProviders: () => ["gemini"] });
+      const response = await handler(post({ prompt: "x", provider: "groq" }));
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(await response.json())).not.toContain("GROQ_API_KEY");
+      expect(warn.mock.calls.flat().join(" ")).toContain("GROQ_API_KEY");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("stops the workflow when the client goes away", async () => {
     let finished = false;
     let produced = 0;
