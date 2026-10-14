@@ -22,20 +22,23 @@ npx convex dev           # Convex dev server; regenerates convex/_generated
 npx convex deploy
 ```
 
-Tests live next to source (`*.test.ts`) in `features/ai/server` and `core/routing`. `vitest.config.ts` maps the `@/` alias. `features/ai/server/workflow.test.ts` ("applies a repair pass…") fails on a clean checkout and is unrelated to routing. `package-lock.json` is out of sync with `package.json` (`npm ci` fails; use `npm install`).
+Tests live next to source (`*.test.ts`) under `core`, `features`, `lib`. `vitest.config.ts` maps the `@/` alias. They are pure-logic tests (no DOM or React renderer is installed): hooks and components are covered through the pure modules they delegate to, so browser behaviour still needs a manual check. `package-lock.json` is out of sync with `package.json` (`npm ci` fails; use `npm install`). `npm run lint` reports 32 errors, all in `features/dashboard` and `hooks/use-api-*` and none introduced here (46 before the reliability work); `next build` needs `NEXT_PUBLIC_CONVEX_URL` and Clerk keys set to prerender.
 
 ## Architecture
 
 ### Directory layout
-- `app/` — routes: `(main-page)` dashboard/billing/org creation, `whiteboard/[id]` editor, `api/` (AI generation, Clerk webhook, Liveblocks auth), `actions/` server actions.
-- `features/` — feature modules: `whiteboard` (editor UI + hooks), `dashboard`, `billing`, `ai` (client types/schemas + `server/` pipeline).
-- `core/` — framework-free engine code: `shapes` (shape registry, per-shape definition/render/hit-test), `routing`, `arrow` (React hook bridging elements → routing), `anchors`, `snap`, `layout`, `collision`.
+- `app/` — routes: `(main-page)` dashboard/billing/org creation, `whiteboard/[id]` editor, `api/` (AI generation, Liveblocks auth), `actions/` server actions. The Clerk webhook lives in `convex/http.ts` only.
+- `features/` — feature modules: `whiteboard` (editor UI + hooks), `dashboard`, `billing`, `ai` (client types/schemas + `server/` pipeline), `diagram-code` (text DSL ⇄ canvas).
+- `core/` — framework-free engine code: `shapes` (shape registry, per-shape definition/render/hit-test), `routing`, `arrow` (React hook bridging elements → routing), `anchors`, `snap`, `collision`. `shapes/base/resize-box.ts` is the one resize implementation; shapes must delegate to it.
 - `convex/` — schema and queries/mutations. `liveblocks.config.ts` — Liveblocks room types and hooks.
 
 ### Whiteboard data flow
 - **Liveblocks storage is the live document**: `elements: LiveList<LiveObject<DrawingElementJson>>`, plus presence (cursor, selection, pencil draft). See `liveblocks.config.ts`.
 - **Convex `whiteboards.content`** is a JSON snapshot. On load, `use-whiteboard-page-controller.ts` seeds an empty Liveblocks room from it and restores the viewport; `features/whiteboard/hooks/data/use-whiteboard-auto-save.ts` writes it back.
-- Room access is granted in `app/api/liveblocks-auth/route.ts`; Convex auth uses Clerk JWTs (`convex/auth.config.ts`). Users are created both by the Clerk webhook (`users.createUser`) and on client login (`users.storeUser`).
+- **Authorization** is one rule: the whiteboard's creator, or a member of its organization (`convex/lib/accessRules.ts`, enforced by `convex/lib/access.ts` in every whiteboard/AI-frame/memory function). Non-members get nothing (there is no share-link feature). `app/api/liveblocks-auth/route.ts` applies the same rule through `lib/authz/room-access.ts` and fails closed. Convex auth uses the Clerk JWT template named `convex` (`convex/auth.config.ts`); org-wide access needs an `org_id` claim in it. Users are created by the Clerk webhook in `convex/http.ts` and on client login (`users.storeUser`). Deploy Convex before the app when changing these rules.
+- **Autosave** is `data/autosave-controller.ts` (pure: whole-board change detection, single flight, debounce + max wait, retry with backoff, stops on permission errors, flushes on hide/unmount) driven by `use-whiteboard-auto-save.ts`. It does not run until the Liveblocks room has been seeded from the stored snapshot (`seedState`), so a not-yet-synced empty board never overwrites stored content; unparseable stored content (`saved-content.ts`) is left alone.
+- **Undo**: every drag/resize/erase/draw gesture is bracketed by `beginGesture`/`endGesture` (`interaction/gesture-history.ts`, an idempotent wrapper around Liveblocks `history.pause/resume`) so it is one undo step.
+- **Canvas input**: `whiteboard-canvas-stage.tsx` uses pointer events with pointer capture (primary button/pointer only); selection rules are in `interaction/selection.ts`; Escape runs `cancelDrawing` before clearing the selection. Connector-handle arrows are built by `interaction/connector-arrow.ts` and routed through the same obstacle-aware router as drawn arrows. Unfilled `isGuide` rectangles (AI group frames) are hit-tested on their border only.
 
 ### Shapes
 `core/shapes/<shape>/` each export a definition built with `createShapeDefinition` (bounds, hit-test, resize handles, canvas render, anchors). They are registered in `core/shapes/register-shapes.ts` / `shape-registry.ts`; add new shapes there.
@@ -60,8 +63,12 @@ Point = `{ x, y }`; ConnectionHandle = `"top" | "right" | "bottom" | "left"`; de
 
 ### AI diagram generation (`features/ai/server`)
 - Client (`features/whiteboard/hooks/controller/use-ai-generation.ts`) POSTs to `/api/ai/generate-diagram` and reads a Server-Sent Events stream. It also records frame progress in Convex (`convex/aiFrames.ts`).
-- `workflow.ts` builds a LangGraph `StateGraph`: contextRetriever → architecturePlanner → domainModeler → infrastructureExpander → relationshipAgent → diagramComposer → layoutAgent → validationAgent → intermediateCompile → criticAgent → (one optional expansion loop back to relationshipAgent) → repairAgent → canvasCompiler. Agents are in `agents/`, prompts in `prompts/`, deterministic helpers in `tools/`.
+- `workflow.ts` builds a LangGraph `StateGraph`: contextRetriever → architecturePlanner → domainModeler → infrastructureExpander → relationshipAgent → diagramComposer → layoutAgent → validationAgent → criticAgent → (one optional expansion loop back to relationshipAgent) → repairAgent → canvasCompiler. Agents are in `agents/`, prompts in `prompts/`, deterministic helpers in `tools/`.
 - Agents emit `AIStreamEvent`s in their state updates; the route forwards them and also emits v1 compatibility events (`sse.ts`).
+- The route (`app/api/ai/generate-diagram`) requires a Clerk session, validates and size-limits the body (`request-guard.ts`), allow-lists the provider, rate limits per user (in memory, per server instance; `AI_RATE_LIMIT_MAX` default 10 per `AI_RATE_LIMIT_WINDOW_MS` default 10 min), and shows clients only generic error text. `GET` on the same path lists the providers that have keys configured; the UI offers only those. Logic is in `generate-diagram-handler.ts` because route files may only export HTTP handlers.
+- Structured model output is requested with a real JSON Schema (`z.toJSONSchema`, `describeSchemaForPrompt`) and parsed leniently (`schemas.ts`: clamps to `MAX_GRAPH_*`, drops unusable items with warnings, throws only if no node survives) with one corrective re-ask (`agents/types.ts: callStructuredNormalized`). Do not reintroduce strict `.parse()` of model output. The critic's layer-completeness rules apply to `architecture` diagrams only.
+- `canvas-compiler.ts` lays out with `layout/layered-order.ts` (barycentre sweeps with group-contiguous clusters, crossing counting) and emits group frames and edge labels as `isGuide` elements with `ai.role`; a frame is omitted rather than drawn over a non-member.
+- `features/diagram-code` is an Eraser-inspired text DSL (not claimed compatible): `parseDiagramCode`, `serializeDiagramCode`, `elementsFromDiagramCode`, `graphFromElements`. Edited from the AI panel's Code tab; applying it to an existing diagram is one undo step.
 - `model-providers.ts` picks the LLM from the request's `provider`: gemini (default), groq, openai, anthropic, openrouter, local. Each reads `<PROVIDER>_API_KEY` and an optional `<PROVIDER>_MODEL` override (`LOCAL_AI_*` for local).
 
 ## Environment Variables (`.env.local`)
@@ -70,7 +77,7 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=  CLERK_SECRET_KEY=  CLERK_WEBHOOK_SECRET=
 NEXT_PUBLIC_CONVEX_URL=  CONVEX_DEPLOY_KEY=
 LIVEBLOCKS_SECRET_KEY=  NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY=
 GEMINI_API_KEY=  GROQ_API_KEY=  OPENAI_API_KEY=  ANTHROPIC_API_KEY=  OPENROUTER_API_KEY=   # at least one
-# optional: GEMINI_MODEL, GROQ_MODEL, OPENAI_MODEL, ANTHROPIC_MODEL, OPENROUTER_MODEL, LOCAL_AI_BASE_URL/MODEL/API_KEY
+# optional: AI_RATE_LIMIT_MAX, AI_RATE_LIMIT_WINDOW_MS, GEMINI_MODEL, GROQ_MODEL, OPENAI_MODEL, ANTHROPIC_MODEL, OPENROUTER_MODEL, LOCAL_AI_BASE_URL/MODEL/API_KEY
 ```
 
 ## Git

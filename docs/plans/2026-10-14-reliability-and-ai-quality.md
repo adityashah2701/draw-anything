@@ -1,6 +1,6 @@
 # Plan — reliable canvas, authorization, and AI diagram quality
 
-Status: in execution. Evidence below was gathered by reading and running the code in this repository
+Status: executed (see §5 for results and what remains). Evidence below was gathered by reading and running the code in this repository
 (2026-10-14). Method notes: the *Compound Engineering* and *Ponytail* plugins are **not installed** in
 this environment, so they could not be invoked through the `Skill` tool. Their published instructions were
 read (github.com/EveryInc/compound-engineering-plugin, github.com/DietrichGebert/ponytail) and applied by
@@ -91,8 +91,8 @@ Each unit: failing test first, minimal change, run checks, commit only that unit
   errors reported by line. *Files:* new `features/diagram-code/*` (+ tests); minimal UI entry in the AI
   modal. LLM edit flow = send current code + instruction, validate with the parser, one repair retry.
 - **U11 Canvas reliability** — pointer events with capture and cancel, Escape cancel, connector-drop uses
-  the obstacle-aware route, selection toggle with Shift/Ctrl, prune stale selection ids.
-- **U12 Cleanup** — remove verified dead code (legacy webhook route; `core/layout` if still unreferenced),
+  the obstacle-aware route, selection toggle with Shift/Ctrl/Cmd and collapse-on-click, one shared resize with correct clamping, border-only hit-test for AI group frames. *Decided against:* pruning stale selection ids (harmless where they are read; an effect could race with just-created shapes and cannot be verified without a browser).
+- **U12 Cleanup** — remove verified dead code (legacy webhook route; `core/layout`, unreferenced; the duplicate `/api/generate-diagram` alias; the unused AI modal),
   update `claude.md` and the audit.
 
 ## 4. Approvals and limits
@@ -106,3 +106,37 @@ Each unit: failing test first, minimal change, run checks, commit only that unit
 - **Browser behaviour** (pointer capture, dragging, text editing) cannot be exercised here — there are no
   service credentials to load the board route. Those changes are typechecked, linted and logic-tested only,
   and are reported as *unverified in a browser*.
+
+## 5. Results (measured 2026-10-14 on this branch)
+
+Checks run: `npx tsc --noEmit` clean; `npx vitest run` 292 passed across 27 files; `next build` completes (with placeholder env values; without them prerender stops at
+"No address provided to ConvexReactClient", an environment gap); `npm run lint` 32 errors / 49 warnings vs
+**46 / 53 at the starting commit** — the 32 are all in `features/dashboard` and `hooks/use-api-*`, untouched.
+
+| Area | Evidence |
+|---|---|
+| Routing performance | `normalizeRoutes` 16.5 s → 0.1 s for 1000 routes; `routeArrowBatch` 3.5 s → 0.27 s for 955 edges |
+| AI layout quality | crossings −28 %, total arrow length −21 %, bends +4.5 %, layout width +4 % (a real trade-off) |
+| Dead code removed | `core/layout/*` (706 lines, all 25 exports unreferenced), legacy webhook route, `/api/generate-diagram` alias, `ai-diagram-modal.tsx`, `intermediate-compile-agent.ts` |
+| Left in place on purpose | `markShapeEdgesDirty`, `invalidateAllRoutes` (unused, a few lines, part of the dirty-tracking API) |
+
+Correction to the earlier audit: canvas rendering **already culls off-screen elements** (`use-canvas-engine`);
+no work was needed there.
+
+### Not verified / remaining
+
+- **No browser run.** Pointer capture, selection, Escape-cancel, resize and the new Code tab are typechecked,
+  linted and covered by pure-logic tests only; the hooks and components themselves have no automated test.
+- **No live AI call** was made, so output quality from a real model is untested; `responseJsonSchema`
+  (provider-side constrained decoding) is not enabled.
+- **Escape does not cancel a move or resize** (already written to the shared board); it cancels creation only.
+- **Contextual AI editing** (natural-language "change this diagram") is not built. What exists is text editing
+  of the diagram with a parser; an LLM edit flow would build on it.
+- **Convex changes are not deployed** — only the owner can run `npx convex deploy`. Confirm the Clerk JWT
+  template `convex` carries `org_id`; without it only creators can open boards.
+- Non-members lost read access to boards (product decision; no share links exist).
+- The AI rate limiter is per server instance, not distributed.
+- Still duplicated: four private grid implementations and two crossing definitions in the routing code;
+  `globalPathCache` remains a second route cache beside the engine's.
+- Eraser findings come from search excerpts only (docs unreachable): layout algorithm, canvas→code
+  write-back and connector rerouting were not observed.
