@@ -7,10 +7,10 @@ import {
   ConnectionHandle,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { getConnectionHandles } from "@/features/whiteboard/utils/canvas-render-utils";
-import { routeArrowPoints } from "@/core/routing/orthogonal-router";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 import { createShape } from "@/core/shapes/shape-runtime";
+import { buildConnectorArrow } from "@/features/whiteboard/hooks/interaction/connector-arrow";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 
 interface ConnectionDraft {
@@ -643,29 +643,23 @@ export const useWhiteboardDrawing = ({
           }
 
           if (fromHandle && nearestToHandle) {
-            const arrow = createShape("arrow", {
+            const arrow = buildConnectorArrow({
               id: generateId(),
-              points: routeArrowPoints({
-                start: { x: fromHandle.x, y: fromHandle.y },
-                end: { x: nearestToHandle.x, y: nearestToHandle.y },
-                startHandle: fromHandle.name,
-                endHandle: nearestToHandle.name,
-                routingMode: "orthogonal",
-              }),
-              color: "#475569",
-              strokeWidth: 2,
-              routingMode: "orthogonal",
-              isManuallyRouted: false,
-              arrowHeadStart: false,
-              arrowHeadEnd: true,
-              startConnection: {
+              from: {
                 elementId: fromEl.id,
                 anchorId: connectionDraft.fromAnchorId,
+                x: fromHandle.x,
+                y: fromHandle.y,
+                side: fromHandle.name,
               },
-              endConnection: {
+              to: {
                 elementId: target.id,
                 anchorId: nearestToHandle.id,
+                x: nearestToHandle.x,
+                y: nearestToHandle.y,
+                side: nearestToHandle.name,
               },
+              route: routeConnectedArrow,
             });
             if (arrow) {
               addElementDirect(arrow);
