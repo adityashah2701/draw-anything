@@ -12,86 +12,12 @@ import {
   markdownToEditableHtml,
   normalizeRichTextInput,
 } from "@/features/whiteboard/utils/rich-text-renderer";
-import { measureShapeLabel, FONT_FAMILY } from "@/core/shapes/base/shape-label-renderer";
+import { measureShapeLabel } from "@/core/shapes/base/shape-label-renderer";
+import { getShapeLabelRegion } from "@/core/text/label-region";
+import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
+import { measureLabelEditTopOffset, shapeLabelEditorStyle } from "./shape-label-editor-style";
 
 // ─── Shape Label Editor ───────────────────────────────────────────────────────
-
-/**
- * ShapeLabelEditor — pixel-perfect inline editor for shape center labels.
- *
- * Positioning strategy:
- * - We want the editor to sit exactly over the canvas-rendered label.
- * - The canvas renders the label centered at (cx, cy) in world coords.
- * - In screen space: sx = cx * zoom + panX, sy = cy * zoom + panY.
- * - We position the div at (sx, sy) and use transform: translate(-50%, -50%)
- *   to center it — no additional scale() transform.
- * - Font size is pre-zoomed: editorFontSize = unzoomedFontSize * zoom.
- * - Width is pre-zoomed: editorWidth = unzoomedWidth * zoom.
- * - Measure exact vertical offset to perfectly align CSS text baseline with Canvas text baseline.
- */
-const _labelOffsetCache = new Map<string, number>();
-
-function measureLabelEditTopOffset(
-  fontSize: number,
-  fontWeight: string,
-  fontStyle: string,
-): number {
-  const key = `lbl|${fontSize}|${fontWeight}|${fontStyle}`;
-  const cached = _labelOffsetCache.get(key);
-  if (cached !== undefined) return cached;
-
-  if (typeof document === "undefined") {
-    return fontSize * 0.1;
-  }
-
-  const lineHeight = fontSize * 1.2;
-  const fontStr = `${fontStyle} ${fontWeight} ${fontSize}px ${FONT_FAMILY}`;
-
-  // 1. Canvas fontAscent (distance from 'top' to alphabetic baseline)
-  let fontAscent = fontSize * 0.8;
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.font = fontStr;
-    ctx.textBaseline = "alphabetic";
-    const metrics = ctx.measureText("Mg");
-    if (metrics.fontBoundingBoxAscent !== undefined) {
-      fontAscent = metrics.fontBoundingBoxAscent;
-    } else if (metrics.actualBoundingBoxAscent !== undefined) {
-      fontAscent = metrics.actualBoundingBoxAscent;
-    }
-  }
-
-  // 2. CSS baseline Y
-  const testDiv = document.createElement("div");
-  testDiv.style.cssText = `
-    position: absolute;
-    left: -9999px;
-    top: -9999px;
-    visibility: hidden;
-    pointer-events: none;
-    font-family: ${FONT_FAMILY};
-    font-size: ${fontSize}px;
-    font-weight: ${fontWeight};
-    font-style: ${fontStyle};
-    line-height: ${lineHeight}px;
-    white-space: pre;
-    padding: 0;
-    margin: 0;
-    border: 0;
-  `;
-  testDiv.innerHTML = `<span>Mg</span><span id="baseline-marker" style="display: inline-block; width: 0; height: 0;"></span>`;
-  document.body.appendChild(testDiv);
-
-  const marker = testDiv.querySelector("#baseline-marker") as HTMLSpanElement;
-  const cssBaselineY = marker.offsetTop;
-
-  document.body.removeChild(testDiv);
-
-  const offset = cssBaselineY - fontAscent;
-  _labelOffsetCache.set(key, offset);
-  return offset;
-}
 
 interface ShapeLabelEditorProps {
   shape: DrawingElement;
@@ -108,6 +34,8 @@ interface ShapeLabelEditorProps {
   availableWidthPx: number;
   /** Available height in screen pixels */
   availableHeightPx: number;
+  /** Same line cap the canvas applies, so the editor wraps like the rendered label. */
+  maxLines?: number;
   onCommit: (
     label: string,
     fontSize: number,
@@ -129,6 +57,7 @@ function ShapeLabelEditor({
   initialFontStyle,
   availableWidthPx,
   availableHeightPx,
+  maxLines,
   onCommit,
   onCancel,
   updateElement,
@@ -145,9 +74,9 @@ function ShapeLabelEditor({
       if (typeof document === "undefined") {
         return {
           editorFontSize: fontSize * zoom,
-          editorLineHeight: fontSize * zoom * 1.2,
+          editorLineHeight: fontSize * zoom * LINE_HEIGHT_RATIO,
           editorWidth: Math.max(120, availableWidthPx),
-          editorMinHeight: fontSize * zoom * 1.2,
+          editorMinHeight: fontSize * zoom * LINE_HEIGHT_RATIO,
         };
       }
       const canvas = document.createElement("canvas");
@@ -155,9 +84,9 @@ function ShapeLabelEditor({
       if (!ctx) {
         return {
           editorFontSize: fontSize * zoom,
-          editorLineHeight: fontSize * zoom * 1.2,
+          editorLineHeight: fontSize * zoom * LINE_HEIGHT_RATIO,
           editorWidth: Math.max(120, availableWidthPx),
-          editorMinHeight: fontSize * zoom * 1.2,
+          editorMinHeight: fontSize * zoom * LINE_HEIGHT_RATIO,
         };
       }
       const metrics = measureShapeLabel({
@@ -169,20 +98,21 @@ function ShapeLabelEditor({
         preferredFontSize: fontSize,
         preferredFontWeight: fontWeight,
         preferredFontStyle: fontStyle,
+        maxLines,
       });
       if (metrics) {
         return {
           editorFontSize: metrics.finalFontSize,
           editorLineHeight: metrics.finalLineHeight,
-          editorWidth: Math.max(120, availableWidthPx),
+          editorWidth: metrics.wrapWidth,
           editorMinHeight: metrics.height,
         };
       }
       return {
         editorFontSize: fontSize * zoom,
-        editorLineHeight: fontSize * zoom * 1.2,
+        editorLineHeight: fontSize * zoom * LINE_HEIGHT_RATIO,
         editorWidth: Math.max(120, availableWidthPx),
-        editorMinHeight: fontSize * zoom * 1.2,
+        editorMinHeight: fontSize * zoom * LINE_HEIGHT_RATIO,
       };
     })();
 
@@ -343,46 +273,18 @@ function ShapeLabelEditor({
           }
         }}
         onBlur={doCommit}
-        style={{
-          position: "absolute",
-          left: sx,
-          /**
-           * Positioning: center the editor on (sx, sy) then shift up by editTopOffset.
-           *
-           * translate(-50%, -50%) centers the div on (sx, sy).
-           * Then we subtract editTopOffset to compensate for CSS half-leading so the
-           * first glyph aligns with the canvas-drawn label top.
-           *
-           * This is equivalent to positioning at:
-           *   left = sx - editorWidth/2
-           *   top  = sy - editorMinHeight/2 - editTopOffset
-           * but using CSS transform for cleaner sub-pixel handling.
-           */
-          top: sy - editTopOffset,
-          transform: "translate(-50%, -50%)",
-          width: editorWidth,
-          zIndex: 110,
-          textAlign: "center",
-          // Font size is already zoom-scaled (editorFontSize = unzoomedFontSize * zoom)
-          fontSize: editorFontSize,
+        style={shapeLabelEditorStyle({
+          sx,
+          sy,
+          editTopOffset,
+          editorWidth,
+          editorFontSize,
+          editorLineHeight,
+          editorMinHeight,
           fontWeight,
-          fontStyle: fontStyle as "normal" | "italic",
-          lineHeight: `${editorLineHeight}px`,
-          letterSpacing: 0,
-          padding: 0,
-          minHeight: `${editorMinHeight}px`,
-          margin: 0,
-          direction: "ltr",
-          unicodeBidi: "plaintext",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          fontFamily: FONT_FAMILY,
-          color: getAdaptiveColor(
-            shape.color,
-            isDark,
-          ),
-          caretColor: getAdaptiveColor(shape.color, isDark),
-        }}
+          fontStyle,
+          color: getAdaptiveColor(shape.color, isDark),
+        })}
         className="bg-transparent outline-none"
       />
     </>
@@ -480,19 +382,17 @@ export const WhiteboardEditingOverlays = ({
           const bounds = getElementBounds(shape);
           if (!bounds) return null;
 
-          const cx = (bounds.minX + bounds.maxX) / 2;
-          const cy = (bounds.minY + bounds.maxY) / 2;
-          const sx = cx * canvasViewport.zoom + canvasViewport.panOffset.x;
-          const sy = cy * canvasViewport.zoom + canvasViewport.panOffset.y;
+          // The text region, not the whole shape: semantic nodes keep their label beside the icon.
+          const region = getShapeLabelRegion(shape.type, bounds);
+          const sx = region.centerX * canvasViewport.zoom + canvasViewport.panOffset.x;
+          const sy = region.centerY * canvasViewport.zoom + canvasViewport.panOffset.y;
 
           const labelMarkdown = normalizeRichTextInput(
             editingShapeLabelDraft || "TEXT",
           );
 
-          const availableWidthPx =
-            (bounds.maxX - bounds.minX) * canvasViewport.zoom;
-          const availableHeightPx =
-            (bounds.maxY - bounds.minY) * canvasViewport.zoom;
+          const availableWidthPx = region.width * canvasViewport.zoom;
+          const availableHeightPx = region.height * canvasViewport.zoom;
 
           return (
             <ShapeLabelEditor
@@ -507,6 +407,7 @@ export const WhiteboardEditingOverlays = ({
               initialFontStyle={editingShapeLabelFontStyle}
               availableWidthPx={availableWidthPx}
               availableHeightPx={availableHeightPx}
+              maxLines={region.maxLines}
               updateElement={updateElement}
               onCommit={(label, fontSize, fontWeight, fontStyle) => {
                 updateElement({

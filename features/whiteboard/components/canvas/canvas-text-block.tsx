@@ -47,7 +47,8 @@ function ensureStyles() {
 
 import { TextFormat, TextToolbar } from "../overlays/text-toolbar";
 import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
-import { FONT_FAMILY } from "@/core/shapes/base/shape-label-renderer";
+import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
+import { textBlockEditorStyle } from "./text-block-style";
 
 export interface CanvasTextBlockProps {
   element: DrawingElement;
@@ -164,7 +165,7 @@ export function CanvasTextBlock({
     return fmt.size * zoom;
   }, [fmt.size, zoom]);
 
-  const lineHeightPx = effectiveSize * 1.2;
+  const lineHeightPx = effectiveSize * LINE_HEIGHT_RATIO;
 
   // ── Focus immediately on mount ────────────────────────────────────────────
   useLayoutEffect(() => {
@@ -366,25 +367,14 @@ export function CanvasTextBlock({
     typeof document !== "undefined" &&
     document.documentElement.classList.contains("dark");
 
-  const editorStyle: CSSProperties = {
-    outline: "none",
-    background: "transparent",
-    border: "none",
-    padding: 0,
-    margin: 0,
-    minWidth: 48,
-    fontFamily: FONT_FAMILY,
-    fontSize: effectiveSize,
+  const editorColor = getAdaptiveColor(element.color || "#111", isDark);
+  const editorStyle: CSSProperties = textBlockEditorStyle({
+    fontSizePx: effectiveSize,
+    lineHeightPx,
     fontWeight: resolveFontWeight(fmt),
-    fontStyle: fmt.italic ? "italic" : "normal",
-    letterSpacing: "0",
-    color: getAdaptiveColor(element.color || "#111", isDark),
-    caretColor: getAdaptiveColor(element.color || "#111", isDark),
-    lineHeight: `${lineHeightPx}px`,
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-    display: "block",
-  };
+    italic: fmt.italic,
+    color: editorColor,
+  });
 
   return (
     <>

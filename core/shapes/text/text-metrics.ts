@@ -1,5 +1,6 @@
-export const LINE_HEIGHT_RATIO = 1.0;
-export const FONT_FAMILY = "Inter, sans-serif";
+import { FONT_FAMILY, LINE_HEIGHT_RATIO } from "@/core/text/typography";
+
+export { FONT_FAMILY, LINE_HEIGHT_RATIO };
 
 export interface ResolvedTextStyle {
   fontSize: number;

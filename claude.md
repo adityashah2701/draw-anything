@@ -14,7 +14,8 @@ npm run build
 npm run lint             # next lint
 npx tsc --noEmit         # Type check
 
-npx vitest run                       # All tests (there is no `npm run test` script)
+npx vitest run                       # All unit tests (there is no `npm run test` script)
+npm run test:browser                 # Real-Chrome text checks (excluded from the line above)
 npx vitest run <file>                # One file
 npx vitest run -t "<test name>"      # One test by name
 
@@ -39,6 +40,9 @@ Tests live next to source (`*.test.ts`) under `core`, `features`, `lib`. `vitest
 - **Autosave** is `data/autosave-controller.ts` (pure: whole-board change detection, single flight, debounce + max wait, retry with backoff, stops on permission errors, flushes on hide/unmount) driven by `use-whiteboard-auto-save.ts`. It does not run until the Liveblocks room has been seeded from the stored snapshot (`seedState`), so a not-yet-synced empty board never overwrites stored content; unparseable stored content (`saved-content.ts`) is left alone.
 - **Undo**: every drag/resize/erase/draw gesture is bracketed by `beginGesture`/`endGesture` (`interaction/gesture-history.ts`, an idempotent wrapper around Liveblocks `history.pause/resume`) so it is one undo step.
 - **Canvas input**: `whiteboard-canvas-stage.tsx` uses pointer events with pointer capture (primary button/pointer only); selection rules are in `interaction/selection.ts`; Escape runs `cancelDrawing` before clearing the selection. Connector-handle arrows are built by `interaction/connector-arrow.ts` and routed through the same obstacle-aware router as drawn arrows. Unfilled `isGuide` rectangles (AI group frames) are hit-tested on their border only.
+
+### Text (`core/text`)
+One typography source (`typography.ts`: font stack, line height 1.2, `makeFontString`); canvas drawing, measuring and both DOM editors read it, so entering edit mode moves nothing. Shape-label layout (`label-layout.ts: layoutShapeLabel`) is computed in world units and only scaled by zoom afterwards, so a label wraps the same at every zoom; `measureShapeLabel`/`renderShapeLabel` are the screen-space adapters. Wrapping code takes a `MeasureContext` (`font` + `measureText`), so tests and the server can pass a double. `estimate.ts` sizes text without a canvas (AI compiler, tests); it is an estimate of Inter, not real metrics. `resizeText` takes its size from the already-measured `originalBounds`; do not re-measure there. Canvas text sits on the CSS first baseline (`baseline.ts`); both editors' styles live in `shape-label-editor-style.ts` / `text-block-style.ts` and `label-region.ts` is the one place that says where a label goes (semantic nodes keep theirs beside the icon). **The app does not load Inter**, so users get their system font, whose widths are not linear in size; exact zoom and resize behaviour is only guaranteed for Inter (see the spec). Text tests: `core/text/*.test.ts`; real-Chrome checks (canvas vs editor pixels, caret, IME, estimator accuracy) run with `npm run test:browser` (system Chrome via `playwright-core`; skips if none, set `CHROME_PATH`; `tests/browser/fixtures` holds Inter for the tests). Design: `docs/superpowers/specs/2026-10-15-text-foundation-design.md`.
 
 ### Shapes
 `core/shapes/<shape>/` each export a definition built with `createShapeDefinition` (bounds, hit-test, resize handles, canvas render, anchors). They are registered in `core/shapes/register-shapes.ts` / `shape-registry.ts`; add new shapes there.

@@ -11,6 +11,8 @@ import {
   routeArrowBatch,
 } from "@/core/routing/orthogonal-router";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
+import { estimateLabelBox, estimateTextWidth } from "@/core/text/estimate";
+import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import {
   AIDiagramDocumentV1,
   AIDiagramGroup,
@@ -73,12 +75,22 @@ const KIND_COLORS: Record<string, { fill: string; stroke: string }> = {
   external: { fill: "#f1f5f9", stroke: "#334155" },
 };
 
+const NODE_FONT_SIZE = 17;
+// Space the node renderer keeps beside the label: icon (28) + gaps (38).
+const NODE_LABEL_INSET = 66;
+
 const estimateWidth = (label: string, density: string) => {
-  const longestWord = label
-    .split(/\s+/)
-    .reduce((max, word) => Math.max(max, word.length), 0);
-  const compactness = density === "compact" ? -18 : density === "spacious" ? 22 : 0;
-  return Math.min(280, Math.max(168, 172 + longestWord * 4 + compactness));
+  const adjust = density === "compact" ? -18 : density === "spacious" ? 22 : 0;
+  const { width } = estimateLabelBox({
+    label,
+    fontSize: NODE_FONT_SIZE,
+    fontWeight: "600",
+    maxLines: 1,
+    minWidth: 168,
+    maxWidth: 280,
+    insetWidth: NODE_LABEL_INSET,
+  });
+  return Math.min(280, Math.max(168, width + adjust));
 };
 
 const getDepths = (document: AIDiagramDocumentV1) => {
@@ -297,11 +309,13 @@ const edgeLabelPosition = (points: Point[], label: string): Point | null => {
   if (!best) return null;
   const midX = (best.from.x + best.to.x) / 2;
   const midY = (best.from.y + best.to.y) / 2;
-  const width = Math.ceil(label.length * EDGE_LABEL_FONT_SIZE * 0.56);
+  const width = Math.ceil(estimateTextWidth(label, EDGE_LABEL_FONT_SIZE, "500"));
   const horizontal = Math.abs(best.to.y - best.from.y) < Math.abs(best.to.x - best.from.x);
+  // Text elements are as tall as their line box, not their font size.
+  const textHeight = EDGE_LABEL_FONT_SIZE * LINE_HEIGHT_RATIO;
   return horizontal
-    ? { x: midX - width / 2, y: midY - EDGE_LABEL_FONT_SIZE - 6 }
-    : { x: midX + 8, y: midY - EDGE_LABEL_FONT_SIZE / 2 };
+    ? { x: midX - width / 2, y: midY - textHeight - 4 }
+    : { x: midX + 8, y: midY - textHeight / 2 };
 };
 
 // ── Compile ───────────────────────────────────────────────────────────────
@@ -393,7 +407,7 @@ export const compileAIDiagramToCanvas = (
         strokeWidth: importance >= 8 ? 3 : 2,
         fill: style.fill,
         label: node.label,
-        fontSize: 17,
+        fontSize: NODE_FONT_SIZE,
         fontWeight: "600",
         ai: {
           frameId,

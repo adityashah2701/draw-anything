@@ -5,6 +5,8 @@ export interface RichTextSpan {
 }
 
 import { resolveTextWeight } from "@/core/shapes/text/text-metrics";
+import { FONT_FAMILY } from "@/core/text/typography";
+import type { MeasureContext } from "@/core/text/measure-context";
 
 export interface RichTextLayoutOptions {
   baseFontSize: number;
@@ -18,9 +20,6 @@ export interface RichTextLayout {
   lines: RichTextSpan[][];
   truncated: boolean;
 }
-
-const FONT_FAMILY =
-  "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const escapeHtml = (value: string) =>
   value
@@ -44,7 +43,7 @@ const resolveSpanStyle = (baseStyle: string | undefined, italic: boolean) => {
 };
 
 const makeFont = (
-  ctx: CanvasRenderingContext2D,
+  ctx: MeasureContext,
   baseFontSize: number,
   baseFontWeight: string | number,
   baseFontStyle: string,
@@ -127,10 +126,36 @@ export const normalizeRichTextInput = (input: string) => {
   return editableHtmlToMarkdown(input);
 };
 
+/**
+ * Start indexes of `*` / `**` markers that never get a closing partner. AI-generated and imported
+ * labels are stored unescaped, so "Rate * Limit" must stay literal instead of turning the rest of
+ * the label italic and dropping the asterisk. `***` is left to the normal toggle.
+ */
+const findUnmatchedMarkers = (input: string) => {
+  const singles: number[] = [];
+  const doubles: number[] = [];
+  for (let i = 0; i < input.length; i += 1) {
+    if (input[i] === "\\") {
+      i += 1;
+    } else if (input[i] === "*") {
+      if (input[i + 1] === "*" && input[i + 2] === "*") i += 2;
+      else if (input[i + 1] === "*") {
+        doubles.push(i);
+        i += 1;
+      } else singles.push(i);
+    }
+  }
+  const unmatched = new Set<number>();
+  if (singles.length % 2 === 1) unmatched.add(singles[singles.length - 1]);
+  if (doubles.length % 2 === 1) unmatched.add(doubles[doubles.length - 1]);
+  return unmatched;
+};
+
 export const parseMarkdownRichText = (input: string): RichTextSpan[] => {
   const normalizedInput = normalizeRichTextInput(input);
   if (!normalizedInput) return [];
 
+  const literal = findUnmatchedMarkers(normalizedInput);
   const spans: RichTextSpan[] = [];
   let buffer = "";
   let bold = false;
@@ -153,6 +178,16 @@ export const parseMarkdownRichText = (input: string): RichTextSpan[] => {
     if (char === "\n") {
       flush();
       spans.push({ text: "\n", bold: false, italic: false });
+      continue;
+    }
+
+    if (char === "*" && literal.has(index)) {
+      // A marker with no partner is just an asterisk (e.g. "5 * 3").
+      buffer += char;
+      if (normalizedInput[index + 1] === "*") {
+        buffer += "*";
+        index += 1;
+      }
       continue;
     }
 
@@ -317,7 +352,7 @@ const tokenizeParagraph = (paragraph: RichTextSpan[]) => {
 };
 
 export const measureRichTextLineWidth = (
-  ctx: CanvasRenderingContext2D,
+  ctx: MeasureContext,
   line: RichTextSpan[],
   baseFontSize: number,
   baseFontWeight: string | number,
@@ -332,7 +367,7 @@ export const measureRichTextLineWidth = (
 };
 
 const splitLongToken = (
-  ctx: CanvasRenderingContext2D,
+  ctx: MeasureContext,
   token: RichTextSpan,
   maxWidth: number,
   baseFontSize: number,
@@ -363,7 +398,7 @@ const splitLongToken = (
 };
 
 const wrapParagraph = (
-  ctx: CanvasRenderingContext2D,
+  ctx: MeasureContext,
   paragraph: RichTextSpan[],
   maxWidth: number,
   baseFontSize: number,
@@ -462,7 +497,7 @@ const wrapParagraph = (
 };
 
 const ellipsizeRichTextLine = (
-  ctx: CanvasRenderingContext2D,
+  ctx: MeasureContext,
   line: RichTextSpan[],
   maxWidth: number,
   baseFontSize: number,
@@ -521,7 +556,7 @@ const ellipsizeRichTextLine = (
 };
 
 export const layoutRichTextLines = (
-  ctx: CanvasRenderingContext2D,
+  ctx: MeasureContext,
   text: string,
   options: RichTextLayoutOptions,
 ): RichTextLayout => {
