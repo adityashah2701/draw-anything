@@ -2,6 +2,7 @@ import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller
 import useCanvasEngine from "@/features/whiteboard/hooks/canvas/use-canvas-engine";
 import { Cursors } from "@/features/whiteboard/components/canvas/cursors";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
+import { DEFAULT_LABEL_FONT_SIZE, defaultLabelWeight } from "@/core/text/label-layout";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { normalizeRichTextInput } from "@/features/whiteboard/utils/rich-text-renderer";
@@ -169,8 +170,10 @@ export const WhiteboardCanvasStage = ({
             setEditingShapeLabelDraft(
               normalizeRichTextInput(topEl.label?.trim() || "TEXT"),
             );
-            setEditingShapeLabelFontSize(topEl.fontSize || 20);
-            setEditingShapeLabelFontWeight(topEl.fontWeight || "600");
+            // Same fallbacks the canvas renderer uses, so opening the editor changes nothing.
+            const labelSize = topEl.fontSize || DEFAULT_LABEL_FONT_SIZE;
+            setEditingShapeLabelFontSize(labelSize);
+            setEditingShapeLabelFontWeight(topEl.fontWeight || defaultLabelWeight(labelSize));
             setEditingShapeLabelFontStyle(topEl.fontStyle || "normal");
             setSelectedElements([topEl.id]);
             setCurrentTool("select");

@@ -29,8 +29,8 @@ export const MODELS = {
   },
   CHEAP: {
     provider: "groq" as AIModelProvider,
-    model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
-    displayName: "Groq Llama-3 70B",
+    model: process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
+    displayName: "Groq GPT-OSS 120B",
   },
   REVIEW: {
     provider: "anthropic" as AIModelProvider,

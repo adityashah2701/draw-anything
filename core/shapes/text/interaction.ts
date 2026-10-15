@@ -1,8 +1,6 @@
 import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
 import { TextShape } from "@/core/shapes/text/types";
 import { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
-import { measureTextShapeBlock } from "@/core/shapes/text/geometry";
-import { resolveTextStyle } from "@/core/shapes/text/text-metrics";
 
 export const containsPointInText = (
   _shape: TextShape,
@@ -45,14 +43,8 @@ export const resizeText = (
 ): TextShape => {
   if (!shape.text || !shape.fontSize || !originalBounds) return shape;
 
-  const { fontWeight: weight } = resolveTextStyle(shape.fontSize, shape.fontWeight, shape.fontStyle);
-  
-  const originalSize = measureTextShapeBlock(
-    shape.text,
-    shape.fontSize,
-    weight,
-    shape.fontStyle || "normal",
-  );
+  // originalBounds was measured with the real canvas context; re-measuring here would not be.
+  const originalSize = { width: originalBounds.width, height: originalBounds.height };
   const left = shape.points[0].x;
   const top = shape.points[0].y;
   const right = left + originalSize.width;
@@ -91,12 +83,12 @@ export const resizeText = (
     Math.min(200, Math.round(shape.fontSize * scaleFactor)),
   );
 
-  const resizedSize = measureTextShapeBlock(
-    shape.text,
-    nextFontSize,
-    weight,
-    shape.fontStyle || "normal",
-  );
+  // Single-font text scales linearly with font size.
+  const ratio = nextFontSize / shape.fontSize;
+  const resizedSize = {
+    width: originalSize.width * ratio,
+    height: originalSize.height * ratio,
+  };
   let newX = shape.points[0].x;
   let newY = shape.points[0].y;
 

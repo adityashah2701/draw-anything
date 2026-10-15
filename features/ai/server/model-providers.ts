@@ -6,7 +6,7 @@ import { AIModelProvider } from "@/features/ai/types";
 import { MODELS, ModelRole } from "./models";
 import { GoogleGenAI, Content } from "@google/genai";
 import { z } from "zod";
-import { extractJsonFromText } from "./json-extract";
+import { parseModelJson } from "./json-extract";
 
 export interface AIModelProviderConfig {
   provider: AIModelProvider;
@@ -124,8 +124,6 @@ class GeminiChatModel {
   withStructuredOutput<T extends Record<string, any>>(
     schema: unknown,
   ): { invoke: (input: unknown) => Promise<T> } {
-    const schemaDescription = describeSchemaForPrompt(schema);
-
     const client = this.client;
     const model = this.model;
     const temperature = this.temperature;
@@ -138,7 +136,7 @@ class GeminiChatModel {
 
         const structuredPrompt: GenAIMessage = {
           role: "user",
-          parts: [{ text: `Respond ONLY with a single JSON object matching this JSON Schema:\n${schemaDescription}\nDo not wrap in markdown code fences. Do not include any text before or after the JSON.` }],
+          parts: [{ text: buildJsonInstruction(schema) }],
         };
 
         const response = await client.models.generateContent({
@@ -152,26 +150,7 @@ class GeminiChatModel {
           },
         });
 
-        const raw = response.text ?? "";
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
-          // Fenced or chatty output despite responseMimeType: dig the object out.
-          const extracted = extractJsonFromText(raw);
-          if (extracted) return extracted as T;
-          throw new Error(`Failed to parse model output as JSON (${raw.length} chars)`);
-        }
-        if (typeof parsed === "object" && parsed !== null) {
-          return parsed as T;
-        }
-        // If model returned a JSON string literal (e.g. "..." instead of {...}),
-        // try parsing the inner value.
-        if (typeof parsed === "string") {
-          const inner = extractJsonFromText(parsed);
-          if (inner) return inner as T;
-        }
-        throw new Error(`Expected JSON object but got: ${typeof parsed}`);
+        return parseModelJson(response.text ?? "") as T;
       },
     };
   }
@@ -210,6 +189,64 @@ export const describeSchemaForPrompt = (schema: unknown): string => {
   return JSON.stringify(rest);
 };
 
+/** The instruction appended to every structured request, for every provider. */
+export const buildJsonInstruction = (schema: unknown): string =>
+  `Respond with ONLY a single JSON object that matches this JSON Schema:\n${describeSchemaForPrompt(schema)}\n` +
+  "Rules: no markdown code fences and no text before or after the JSON; leave out optional fields you do not need instead of sending null; keep to the length limits in the schema.";
+
+/** Plain text of a chat reply, whether `content` is a string or content blocks. */
+const messageText = (message: unknown): string => {
+  const content = (message as { content?: unknown } | null)?.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((block: unknown) =>
+      typeof block === "string"
+        ? block
+        : typeof (block as { text?: unknown })?.text === "string"
+          ? (block as { text: string }).text
+          : "",
+    )
+    .join("");
+};
+
+const finishReasonOf = (message: unknown): string | undefined => {
+  const meta = (message as { response_metadata?: Record<string, unknown> } | null)
+    ?.response_metadata;
+  const reason = meta?.finish_reason ?? meta?.stop_reason;
+  return typeof reason === "string" ? reason : undefined;
+};
+
+/**
+ * Structured output for any LangChain chat model, the same way for every
+ * provider: the schema goes in the prompt, the reply is read as plain text and
+ * parsed leniently here. The provider's own structured-output modes are
+ * deliberately not used. They differ per model (Groq switches gpt-oss to strict
+ * JSON-schema decoding, others use tool calling), validate against our strict
+ * Zod schema before the lenient normaliser runs, and on failure left callers
+ * with nothing to recover from.
+ */
+export const createPromptedStructuredModel = (
+  base: Pick<BaseChatModel, "invoke">,
+): StructuredChatModel =>
+  ({
+    invoke: (input: unknown, options?: unknown) =>
+      base.invoke(input as never, options as never),
+    withStructuredOutput: (schema: unknown) => {
+      const instruction = buildJsonInstruction(schema);
+      return {
+        invoke: async (input: unknown) => {
+          const messages = [
+            ...(Array.isArray(input) ? input : [input]),
+            ["human", instruction],
+          ];
+          const response = await base.invoke(messages as never);
+          return parseModelJson(messageText(response), finishReasonOf(response));
+        },
+      };
+    },
+  }) as unknown as StructuredChatModel;
+
 // ---------------------------------------------------------------------------
 // Provider factory
 // ---------------------------------------------------------------------------
@@ -228,7 +265,7 @@ export const getAIModelProviderConfig = (
     case "groq":
       return {
         provider,
-        modelName: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+        modelName: process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
         displayName: "Groq",
       };
     case "openai":
@@ -273,28 +310,28 @@ export const createAIChatModel = (
         maxOutputTokens: 16384,
       }) as unknown as StructuredChatModel;
     case "groq":
-      return new ChatGroq({
+      return createPromptedStructuredModel(new ChatGroq({
         model: config.modelName,
         temperature: 0,
         maxTokens: 16384,
         apiKey: requireEnv(config.provider, "GROQ_API_KEY"),
-      });
+      }));
     case "openai":
-      return new ChatOpenAI({
+      return createPromptedStructuredModel(new ChatOpenAI({
         model: config.modelName,
         temperature: 0,
         maxTokens: 16384,
         apiKey: requireEnv(config.provider, "OPENAI_API_KEY"),
-      });
+      }));
     case "anthropic":
-      return new ChatAnthropic({
+      return createPromptedStructuredModel(new ChatAnthropic({
         model: config.modelName,
         temperature: 0,
         maxTokens: 16384,
         apiKey: requireEnv(config.provider, "ANTHROPIC_API_KEY"),
-      });
+      }));
     case "openrouter":
-      return new ChatOpenAI({
+      return createPromptedStructuredModel(new ChatOpenAI({
         model: config.modelName,
         temperature: 0,
         maxTokens: 16384,
@@ -302,9 +339,9 @@ export const createAIChatModel = (
         configuration: {
           baseURL: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
         },
-      });
+      }));
     case "local":
-      return new ChatOpenAI({
+      return createPromptedStructuredModel(new ChatOpenAI({
         model: config.modelName,
         temperature: 0,
         apiKey: process.env.LOCAL_AI_API_KEY ?? "local",
@@ -312,7 +349,7 @@ export const createAIChatModel = (
           baseURL:
             process.env.LOCAL_AI_BASE_URL ?? "http://localhost:11434/v1",
         },
-      });
+      }));
   }
 };
 

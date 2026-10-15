@@ -46,6 +46,30 @@ export class SchemaValidationError extends AIServiceError {
   }
 }
 
+export type UnparseableReason = "empty" | "truncated" | "not-json";
+
+/**
+ * The model answered, but not with a JSON object we can read. `rawText` keeps
+ * what it said (for the corrective re-ask and for logs); it is never shown to
+ * the user.
+ */
+export class UnparseableModelOutputError extends AIServiceError {
+  constructor(
+    public readonly reason: UnparseableReason,
+    public readonly rawText = "",
+  ) {
+    super(
+      reason === "empty"
+        ? "The model returned an empty answer instead of a JSON object"
+        : reason === "truncated"
+          ? "The model's answer was cut off before the JSON object was complete"
+          : "The model's answer did not contain a readable JSON object",
+      "UNPARSEABLE_OUTPUT",
+    );
+    this.name = "UnparseableModelOutputError";
+  }
+}
+
 export class AuthenticationError extends AIServiceError {
   constructor(provider: string, cause?: unknown) {
     super(
@@ -81,6 +105,12 @@ export const toUserFacingMessage = (error: unknown): string => {
     return "Selected AI model is currently unavailable. Try a different provider.";
   }
   if (error instanceof SchemaValidationError) {
+    if (
+      error.cause instanceof UnparseableModelOutputError &&
+      error.cause.reason === "truncated"
+    ) {
+      return "The AI's answer was cut off before it finished. Try a simpler prompt.";
+    }
     return "AI returned an invalid response. Please try again.";
   }
   if (error instanceof NetworkError) {

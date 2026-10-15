@@ -1,9 +1,12 @@
 import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
 import {
-  layoutRichTextLines,
   measureRichTextLineWidth,
   RichTextSpan,
 } from "@/features/whiteboard/utils/rich-text-renderer";
+import { layoutShapeLabel } from "@/core/text/label-layout";
+import { FONT_FAMILY, makeFontString } from "@/core/text/typography";
+
+export { FONT_FAMILY };
 export interface ShapeLabelRenderOptions {
   ctx: CanvasRenderingContext2D;
   label: string;
@@ -20,14 +23,6 @@ export interface ShapeLabelRenderOptions {
   preferredFontStyle?: string;
   maxLines?: number;
 }
-
-export const FONT_FAMILY =
-  "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const MIN_FONT_SIZE = 9;
-const MAX_FONT_SIZE = 72;
-const LINE_HEIGHT_MULTIPLIER = 1.2;
-const MIN_PADDING = 8;
-const MAX_LINE_COUNT = 4;
 
 interface Rgb {
   r: number;
@@ -121,25 +116,21 @@ export const resolveTextColor = (preferredColor?: string, fillColor?: string) =>
     : "#0f172a";
 };
 
-const makeFont = (
-  fontSize: number,
-  fontWeight?: string | number,
-  fontStyle?: string,
-) => {
-  const resolvedWeight =
-    fontWeight?.toString() || (fontSize >= 18 ? "600" : "500");
-  const resolvedStyle = fontStyle === "italic" ? "italic" : "normal";
-  return `${resolvedStyle} ${resolvedWeight} ${fontSize}px ${FONT_FAMILY}`;
-};
-
 export interface ShapeLabelMetrics {
   finalFontSize: number;
   finalLineHeight: number;
+  fontWeight: string;
   lines: RichTextSpan[][];
+  /** Width the text wraps to; an editor placed over the label should use this. */
+  wrapWidth: number;
   width: number;
   height: number;
 }
 
+/**
+ * Screen-space view of the world-unit layout: wrapping and font fit are decided at
+ * zoom 1, so a label looks the same at every zoom and only its scale changes.
+ */
 export const measureShapeLabel = ({
   ctx,
   label,
@@ -151,86 +142,24 @@ export const measureShapeLabel = ({
   preferredFontStyle,
   maxLines,
 }: Omit<ShapeLabelRenderOptions, "centerX" | "centerY" | "clipPath" | "preferredColor" | "fillColor">): ShapeLabelMetrics | null => {
-  const normalizedLabel = label.trim();
-  if (!normalizedLabel) return null;
-
-  const padding = clamp(12 * zoom, MIN_PADDING, 24);
-  const availableWidth = maxWidth - padding * 2;
-  const availableHeight = maxHeight - padding * 2;
-
-  if (availableWidth <= 8 || availableHeight <= 8) return null;
-
-  const targetFontSize = clamp(
-    (preferredFontSize ?? 16) * zoom,
-    MIN_FONT_SIZE,
-    MAX_FONT_SIZE,
-  );
-  const maxAllowedLines = clamp(maxLines ?? MAX_LINE_COUNT, 1, MAX_LINE_COUNT);
-
-  let finalFontSize = MIN_FONT_SIZE;
-  let finalLines: RichTextSpan[][] = [];
-  let finalLineHeight = MIN_FONT_SIZE * LINE_HEIGHT_MULTIPLIER;
-  let fitted = false;
-
-  for (let fontSize = Math.floor(targetFontSize); fontSize >= MIN_FONT_SIZE; fontSize -= 1) {
-    ctx.font = makeFont(fontSize, preferredFontWeight, preferredFontStyle);
-    const layout = layoutRichTextLines(ctx, normalizedLabel, {
-      baseFontSize: fontSize,
-      baseFontWeight: preferredFontWeight || (fontSize >= 18 ? "600" : "500"),
-      baseFontStyle: preferredFontStyle || "normal",
-      maxWidth: availableWidth,
-      maxLines: maxAllowedLines,
-    });
-    if (layout.lines.length === 0 || layout.truncated) {
-      continue;
-    }
-    const lineHeight = fontSize * LINE_HEIGHT_MULTIPLIER;
-    if (layout.lines.length * lineHeight > availableHeight) {
-      continue;
-    }
-    finalFontSize = fontSize;
-    finalLines = layout.lines;
-    finalLineHeight = lineHeight;
-    fitted = true;
-    break;
-  }
-
-  if (!fitted) {
-    finalFontSize = MIN_FONT_SIZE;
-    ctx.font = makeFont(finalFontSize, preferredFontWeight, preferredFontStyle);
-    finalLineHeight = finalFontSize * LINE_HEIGHT_MULTIPLIER;
-    const fallbackLayout = layoutRichTextLines(ctx, normalizedLabel, {
-      baseFontSize: finalFontSize,
-      baseFontWeight: preferredFontWeight || (finalFontSize >= 18 ? "600" : "500"),
-      baseFontStyle: preferredFontStyle || "normal",
-      maxWidth: availableWidth,
-      maxLines: clamp(
-        Math.floor(availableHeight / finalLineHeight),
-        1,
-        maxAllowedLines,
-      ),
-    });
-    if (fallbackLayout.lines.length === 0) return null;
-    finalLines = fallbackLayout.lines;
-  }
-
-  if (finalLines.length === 0) return null;
-
-  const baseWeight = preferredFontWeight?.toString() || (finalFontSize >= 18 ? "600" : "500");
-  const baseStyle = preferredFontStyle || "normal";
-  
-  let maxWidthUsed = 0;
-  for (const line of finalLines) {
-    const lineWidth = measureRichTextLineWidth(ctx, line, finalFontSize, baseWeight, baseStyle);
-    maxWidthUsed = Math.max(maxWidthUsed, lineWidth);
-  }
-
+  const layout = layoutShapeLabel(ctx, {
+    label,
+    boxWidth: maxWidth / zoom,
+    boxHeight: maxHeight / zoom,
+    fontSize: preferredFontSize,
+    fontWeight: preferredFontWeight,
+    fontStyle: preferredFontStyle,
+    maxLines,
+  });
+  if (!layout) return null;
   return {
-    finalFontSize,
-    finalLineHeight,
-    lines: finalLines,
-    width: maxWidthUsed,
-    height: finalLines.length * finalLineHeight,
+    finalFontSize: layout.fontSize * zoom,
+    finalLineHeight: layout.lineHeight * zoom,
+    fontWeight: layout.fontWeight,
+    lines: layout.lines,
+    wrapWidth: layout.wrapWidth * zoom,
+    width: layout.width * zoom,
+    height: layout.height * zoom,
   };
 };
 
@@ -238,38 +167,29 @@ export const renderShapeLabel = (options: ShapeLabelRenderOptions) => {
   const metrics = measureShapeLabel(options);
   if (!metrics) return;
 
-  const { finalFontSize, finalLineHeight, lines, height: blockHeight } = metrics;
-  const { ctx, centerX, centerY, clipPath, preferredColor, fillColor, preferredFontWeight, preferredFontStyle } = options;
+  const { finalFontSize, finalLineHeight, fontWeight, lines, height: blockHeight } = metrics;
+  const { ctx, centerX, centerY, clipPath, preferredColor, fillColor, preferredFontStyle } = options;
 
   const textColor = resolveTextColor(preferredColor, fillColor);
-  const baseWeight = preferredFontWeight?.toString() || (finalFontSize >= 18 ? "600" : "500");
   const baseStyle = preferredFontStyle || "normal";
-  
+
   let drawY = centerY - blockHeight / 2 + (finalLineHeight - finalFontSize) / 2;
 
   ctx.save();
   clipPath(ctx);
   ctx.clip();
-  ctx.font = makeFont(finalFontSize, preferredFontWeight, preferredFontStyle);
   ctx.fillStyle = textColor;
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
 
   for (const line of lines) {
-    const lineWidth = measureRichTextLineWidth(
-      ctx,
-      line,
-      finalFontSize,
-      baseWeight,
-      baseStyle,
-    );
+    const lineWidth = measureRichTextLineWidth(ctx, line, finalFontSize, fontWeight, baseStyle);
     let drawX = centerX - lineWidth / 2;
     for (const span of line) {
       const weight = span.bold
-        ? String(Math.max(Number.parseInt(baseWeight, 10) || 400, 700))
-        : baseWeight;
-      const style = span.italic ? "italic" : baseStyle;
-      ctx.font = `${style} ${weight} ${finalFontSize}px ${FONT_FAMILY}`;
+        ? String(Math.max(Number.parseInt(fontWeight, 10) || 400, 700))
+        : fontWeight;
+      ctx.font = makeFontString(finalFontSize, weight, span.italic ? "italic" : baseStyle);
       ctx.fillText(span.text, drawX, drawY);
       drawX += ctx.measureText(span.text).width;
     }
@@ -278,4 +198,3 @@ export const renderShapeLabel = (options: ShapeLabelRenderOptions) => {
 
   ctx.restore();
 };
-

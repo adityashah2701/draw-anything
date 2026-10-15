@@ -153,3 +153,16 @@ describe("createSlidingWindowLimiter", () => {
     expect(limiter.size()).toBeLessThanOrEqual(50);
   });
 });
+
+describe("unavailable provider", () => {
+  it("tells the server log which key is missing, but the client only a generic message", () => {
+    const result = parseGenerateRequest(JSON.stringify({ prompt: "x", provider: "groq" }), {
+      enabledProviders: ["gemini"],
+    });
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    if (result.ok) return;
+    expect(result.message).not.toContain("GROQ_API_KEY");
+    expect(result.detail).toContain("GROQ_API_KEY");
+    expect(result.detail).toContain("enabled: gemini");
+  });
+});

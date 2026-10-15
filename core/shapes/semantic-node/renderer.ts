@@ -1,4 +1,6 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
+import { getShapeLabelRegion, semanticIconSize, SEMANTIC_ICON_LEFT } from "@/core/text/label-region";
+import { makeFontString } from "@/core/text/typography";
 import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { SemanticNodeShape } from "@/core/shapes/semantic-node/types";
 
@@ -66,8 +68,8 @@ export const renderSemanticNodeToCanvas = (
   }
   ctx.stroke();
 
-  const iconSize = Math.min(28 * zoom, height * 0.42);
-  const iconX = left + 14 * zoom + iconSize / 2;
+  const iconSize = semanticIconSize(height / zoom) * zoom;
+  const iconX = left + SEMANTIC_ICON_LEFT * zoom + iconSize / 2;
   const iconY = top + height / 2;
   ctx.save();
   ctx.beginPath();
@@ -81,26 +83,38 @@ export const renderSemanticNodeToCanvas = (
   ctx.fillStyle = "rgba(15, 23, 42, 0.08)";
   ctx.fill();
   ctx.fillStyle = shape.color;
-  ctx.font = `600 ${Math.max(8, 9 * zoom)}px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  ctx.font = makeFontString(Math.max(8, 9 * zoom), 600, "normal");
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(icon, iconX, iconY);
   ctx.restore();
 
   if (shape.label) {
-    const labelLeft = left + iconSize + 26 * zoom;
-    const labelWidth = Math.max(32, width - iconSize - 38 * zoom);
+    const worldMinX = Math.min(shape.points[0].x, shape.points[1].x);
+    const worldMinY = Math.min(shape.points[0].y, shape.points[1].y);
+    const worldWidth = width / zoom;
+    const worldHeight = height / zoom;
+    const region = getShapeLabelRegion("semantic-node", {
+      minX: worldMinX,
+      minY: worldMinY,
+      maxX: worldMinX + worldWidth,
+      maxY: worldMinY + worldHeight,
+      width: worldWidth,
+      height: worldHeight,
+    });
+    const regionWidth = region.width * zoom;
+    const centerX = region.centerX * zoom + panOffset.x;
     renderShapeLabel({
       ctx,
       label: shape.label,
-      centerX: labelLeft + labelWidth / 2,
-      centerY: top + height / 2,
-      maxWidth: labelWidth,
-      maxHeight: height * 0.72,
+      centerX,
+      centerY: region.centerY * zoom + panOffset.y,
+      maxWidth: regionWidth,
+      maxHeight: region.height * zoom,
       zoom,
       clipPath: (canvasContext) => {
         canvasContext.beginPath();
-        canvasContext.rect(labelLeft, top, labelWidth, height);
+        canvasContext.rect(centerX - regionWidth / 2, top, regionWidth, height);
         canvasContext.closePath();
       },
       preferredColor: shape.color,
@@ -108,7 +122,7 @@ export const renderSemanticNodeToCanvas = (
       preferredFontSize: shape.fontSize,
       preferredFontWeight: shape.fontWeight,
       preferredFontStyle: shape.fontStyle,
-      maxLines: 2,
+      maxLines: region.maxLines,
     });
   }
 };
