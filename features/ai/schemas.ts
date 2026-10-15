@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveIconId } from "@/core/icons/registry";
 import {
   AIDiagramDocumentV1,
   AIDiagramEdge,
@@ -93,7 +94,16 @@ export const normalizeSemanticKind = (kind: unknown): AISemanticNodeKind => {
   if (typeof kind !== "string") return "generic";
   const key = kind.trim().toLowerCase().replace(/[\s_]+/g, "-");
   if (semanticNodeKindValues.has(key)) return key as AISemanticNodeKind;
-  return KIND_ALIASES[key] ?? "generic";
+  if (KIND_ALIASES[key]) return KIND_ALIASES[key];
+  // A vendor word ("kafka", "postgres") the registry knows names a kind or an alias of one.
+  const icon = resolveIconId(key);
+  return icon && semanticNodeKindValues.has(icon) ? (icon as AISemanticNodeKind) : "generic";
+};
+
+/** An icon reference worth storing: valid, and different from what the node's kind already shows. */
+export const normalizeIconReference = (candidates: unknown[], kind: AISemanticNodeKind): string | undefined => {
+  const id = candidates.map(resolveIconId).find((resolved) => resolved !== undefined);
+  return id && id !== resolveIconId(kind) ? id : undefined;
 };
 
 export const aiDiagramTypeSchema = z.enum([
@@ -141,6 +151,7 @@ export const aiDiagramNodeSchema = z.object({
   id: z.string().min(1).max(80),
   label: z.string().min(1).max(80),
   kind: aiSemanticNodeKindSchema.default("generic"),
+  icon: z.string().max(40).optional(),
   layer: z
     .enum(["edge", "application", "data", "observability", "external"])
     .optional(),
@@ -366,6 +377,7 @@ const modelDiagramNodeSchema = z
     id: z.string(),
     label: z.string().max(60),
     kind: z.string().optional(),
+    icon: z.string().optional(),
     layer: z.string().optional(),
     column: z.number().optional(),
     parentId: z.string().optional(),
@@ -442,10 +454,12 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
     const priority = typeof record.priority === "number" && Number.isFinite(record.priority)
       ? Math.min(10, Math.max(0, record.priority))
       : undefined;
+    const kind = normalizeSemanticKind(record.kind ?? record.type);
     nodes.push({
       id: text(record.id, 80) ?? slug(label, `node-${index + 1}`),
       label,
-      kind: normalizeSemanticKind(record.kind ?? record.type),
+      kind,
+      icon: normalizeIconReference([record.icon, record.kind, record.type], kind),
       layer: pick(
         record.layer,
         ["edge", "application", "data", "observability", "external"] as const,

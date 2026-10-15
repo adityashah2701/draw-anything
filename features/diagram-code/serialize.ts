@@ -3,7 +3,7 @@ import type { AIDiagramType } from "@/features/ai/types";
 export interface SerializableGraph {
   diagramType?: AIDiagramType;
   title?: string;
-  nodes: Array<{ id: string; label: string; kind?: string }>;
+  nodes: Array<{ id: string; label: string; kind?: string; icon?: string }>;
   edges: Array<{
     from: string;
     to: string;
@@ -53,6 +53,7 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
     const name = nameOf.get(node.id)!;
     const props: string[] = [];
     if (node.kind && node.kind !== "generic") props.push(`kind: ${node.kind}`);
+    if (node.icon) props.push(`icon: ${node.icon}`);
     if (clean(node.label) !== name) props.push(`label: "${clean(node.label)}"`);
     return props.length > 0 ? `${writeName(name)} [${props.join(", ")}]` : writeName(name);
   };

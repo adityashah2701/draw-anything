@@ -15,8 +15,10 @@ export interface ParsedNode {
   name: string;
   /** Text shown on the canvas (the `label` property, else the name). */
   label: string;
-  /** Raw `kind`/`icon` value; normalised later against the known kinds. */
+  /** Raw `kind` value; normalised later against the known kinds. */
   kind?: string;
+  /** Raw `icon` value; resolved against the icon registry later. */
+  icon?: string;
   dashed?: boolean;
 }
 

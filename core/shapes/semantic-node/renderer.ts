@@ -1,46 +1,9 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
 import { getShapeLabelRegion, semanticIconSize, SEMANTIC_ICON_LEFT } from "@/core/text/label-region";
-import { makeFontString } from "@/core/text/typography";
+import { drawIconTile } from "@/core/icons/draw";
+import { iconForNode } from "@/core/icons/registry";
 import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { SemanticNodeShape } from "@/core/shapes/semantic-node/types";
-
-const ICON_LABELS: Record<string, string> = {
-  database: "DB",
-  cache: "CA",
-  queue: "Q",
-  dns: "DNS",
-  firewall: "FW",
-  waf: "WAF",
-  "message-broker": "MQ",
-  "event-bus": "EV",
-  gateway: "GW",
-  api: "API",
-  "load-balancer": "LB",
-  kubernetes: "K8S",
-  pod: "POD",
-  cluster: "CLU",
-  container: "CTR",
-  worker: "WK",
-  "service-mesh": "SM",
-  deployment: "DEP",
-  namespace: "NS",
-  region: "REG",
-  "availability-zone": "AZ",
-  authentication: "ID",
-  user: "U",
-  browser: "WEB",
-  mobile: "APP",
-  agent: "AG",
-  tool: "TL",
-  memory: "MEM",
-  "vector-store": "VS",
-  "ai-model": "AI",
-  dashboard: "DASH",
-  alerting: "AL",
-  config: "CFG",
-  cicd: "CI",
-  decision: "?",
-};
 
 export const renderSemanticNodeToCanvas = (
   shape: SemanticNodeShape,
@@ -57,8 +20,6 @@ export const renderSemanticNodeToCanvas = (
   const width = Math.abs(endX - startX);
   const height = Math.abs(endY - startY);
   const radius = Math.min(8 * zoom, width / 2, height / 2);
-  const kind = shape.ai?.semanticKind ?? "generic";
-  const icon = ICON_LABELS[kind] ?? kind.slice(0, 2).toUpperCase();
 
   ctx.beginPath();
   ctx.roundRect(left, top, width, height, radius);
@@ -71,23 +32,7 @@ export const renderSemanticNodeToCanvas = (
   const iconSize = semanticIconSize(height / zoom) * zoom;
   const iconX = left + SEMANTIC_ICON_LEFT * zoom + iconSize / 2;
   const iconY = top + height / 2;
-  ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(
-    iconX - iconSize / 2,
-    iconY - iconSize / 2,
-    iconSize,
-    iconSize,
-    Math.min(6 * zoom, iconSize / 2),
-  );
-  ctx.fillStyle = "rgba(15, 23, 42, 0.08)";
-  ctx.fill();
-  ctx.fillStyle = shape.color;
-  ctx.font = makeFontString(Math.max(8, 9 * zoom), 600, "normal");
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(icon, iconX, iconY);
-  ctx.restore();
+  drawIconTile(ctx, iconForNode(shape.ai), iconX, iconY, iconSize);
 
   if (shape.label) {
     const worldMinX = Math.min(shape.points[0].x, shape.points[1].x);

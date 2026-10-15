@@ -23,3 +23,5 @@ export { getShapeBounds } from "@/core/shapes/shape-runtime";
 export { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
 export { LAYOUT_FIXTURES } from "@/features/ai/server/layout/fixtures";
 export { measureLayout } from "@/features/ai/server/layout/metrics";
+export { drawIconTile } from "@/core/icons/draw";
+export { listIcons } from "@/core/icons/registry";

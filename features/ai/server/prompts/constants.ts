@@ -34,6 +34,10 @@ export const NODE_KINDS = [
   "generic",
 ].join(", ");
 
+/** Icon ids a model may put in a node's optional `icon`; unknown ids are ignored, not errors. */
+export const ICON_HINT =
+  "Optional \"icon\": a technology name when the kind is too coarse (e.g. postgres, kafka, nginx, s3, redis, esp32, sensor, bluetooth, can-bus). Omit it when the kind already says it.";
+
 export const contextSummary = (request: AIGenerateDiagramRequest) => {
   const elements = request.canvasContext?.elements ?? [];
   const selected = request.canvasContext?.selectedElementIds ?? [];

@@ -61,6 +61,8 @@ export interface BaseDrawingElement {
     generationId?: string;
     semanticId?: string;
     semanticKind?: string;
+    /** Icon registry id; absent on older boards, which fall back to `semanticKind`. */
+    icon?: string;
     diagramType?: string;
     /** What a generated element is, so later edits can find or replace it. */
     role?: "node" | "edge" | "group" | "group-label" | "edge-label";

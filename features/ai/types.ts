@@ -86,6 +86,8 @@ export interface AIDiagramNode {
   id: string;
   label: string;
   kind: AISemanticNodeKind;
+  /** Icon registry id (core/icons). Optional: the kind's icon is used when absent or unknown. */
+  icon?: string;
   layer?: "edge" | "application" | "data" | "observability" | "external";
   column?: number;
   parentId?: string;

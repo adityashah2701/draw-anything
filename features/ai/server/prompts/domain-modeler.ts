@@ -1,6 +1,6 @@
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { AIGenerateDiagramRequest } from "@/features/ai/types";
-import { NODE_KINDS } from "./constants";
+import { ICON_HINT, NODE_KINDS } from "./constants";
 
 export const buildDomainModelMessages = async (
   request: AIGenerateDiagramRequest,
@@ -14,6 +14,7 @@ export const buildDomainModelMessages = async (
         "Create a semantic graph from the plan. Do not emit coordinates.",
         "",
         `Node kinds: ${NODE_KINDS}.`,
+        ICON_HINT,
         "- Generate EXACTLY 8-15 nodes. Be concise, no redundancy.",
         "- Labels: 1-4 words max. Every node needs a specific kind.",
         "- Every node must have at least one edge (no orphans).",
@@ -54,6 +55,7 @@ export const buildGraphDraftMessages = async (
         "Create a semantic graph. Do not emit coordinates.",
         "",
         `Node kinds: ${NODE_KINDS}.`,
+        ICON_HINT,
         "- Generate 8-15 nodes max. Be concise.",
         "- Concise labels (1-4 words) with specific kinds.",
         "- Every node must have at least one edge.",

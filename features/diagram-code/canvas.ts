@@ -22,7 +22,7 @@ export const documentFromParsedCode = (
   generationId: string,
 ) => {
   const { graph, warnings } = normalizeModelGraphDraftDetailed({
-    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind })),
+    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon })),
     edges: parsed.edges.map((edge) => ({
       from: edge.from,
       to: edge.to,
@@ -123,6 +123,7 @@ export const graphFromElements = (elements: DrawingElement[]): GraphFromElements
       id,
       label: el.label?.trim() || el.text?.trim() || `Shape ${(unlabeled += 1)}`,
       kind: el.ai?.semanticKind ?? (el.type === "diamond" ? "decision" : undefined),
+      icon: el.ai?.icon,
     };
   });
 

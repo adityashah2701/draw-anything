@@ -90,13 +90,13 @@ describe("AI graph validation", () => {
   it("normalizes unsupported model node kinds instead of failing", () => {
     const graph = normalizeModelGraphDraft({
       nodes: [
-        { id: "frontend", label: "Frontend", kind: "frontend" },
+        { id: "frontend", label: "Frontend", kind: "flux-capacitor" },
         { id: "backend", label: "Backend", kind: "backend" },
       ],
       edges: [{ from: "frontend", to: "backend" }],
     });
 
-    expect(graph.nodes.map((node) => node.kind)).toEqual(["generic", "generic"]);
+    expect(graph.nodes.map((node) => node.kind)).toEqual(["generic", "service"]); // unknown stays generic; "backend" is an icon alias for service
     const document = buildAIDiagramDocument({
       prompt: "frontend backend architecture",
       plan: {

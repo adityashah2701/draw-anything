@@ -166,7 +166,7 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
       if (UNSUPPORTED_PROPS.has(key)) {
         add(line, "warning", `"${key}" is not supported yet and was ignored.`);
       } else if (["kind", "icon", "label", "dashed"].includes(key)) {
-        props[key === "icon" ? "kind" : key] = value;
+        props[key] = value;
       } else {
         add(line, "warning", `Unknown property "${key}" was ignored.`);
       }
@@ -220,6 +220,7 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
 
   const applyProps = (node: ParsedNode, props: Record<string, string>) => {
     if (props.kind !== undefined) node.kind = props.kind;
+    if (props.icon !== undefined) node.icon = props.icon;
     if (props.label !== undefined) node.label = props.label;
     if (props.dashed !== undefined) node.dashed = props.dashed.toLowerCase() === "true";
   };

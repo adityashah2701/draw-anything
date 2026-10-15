@@ -489,6 +489,7 @@ export const buildCanvas = (
         generationId: document.metadata.generationId,
         semanticId: node.id,
         semanticKind: node.kind,
+        ...(node.icon ? { icon: node.icon } : {}),
         diagramType: document.diagramType,
         role: "node",
       },
