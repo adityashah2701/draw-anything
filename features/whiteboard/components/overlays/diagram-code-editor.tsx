@@ -8,6 +8,7 @@ import {
 } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { serializeDiagramCode } from "@/features/diagram-code/serialize";
+import { findMovedNodes } from "@/features/diagram-code/pins";
 import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
@@ -69,15 +70,26 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({
   };
 
   const run = (mode: "add" | "update") => {
+    // Updating keeps nodes where the user dragged them. Read at apply time, from the elements as
+    // they are now, so moves made after the code was loaded count.
+    const pins =
+      mode === "update" && sourceIds.length > 0
+        ? findMovedNodes(elements.filter((el) => sourceIds.includes(el.id)))
+        : undefined;
     const result = elementsFromDiagramCode(code, {
       generationId: newGenerationId(),
       frameId: "diagram-code",
+      pins,
     });
     if (result.elements.length === 0) {
       setNotice("Nothing was drawn. Fix the errors above first.");
       return;
     }
-    onApply({ elements: result.elements, replaceIds: mode === "update" ? sourceIds : [] });
+    onApply({
+      elements: result.elements,
+      replaceIds: mode === "update" ? sourceIds : [],
+      anchored: Boolean(pins && pins.size > 0),
+    });
     // Later updates replace what was just drawn.
     setSourceIds(result.elements.map((el) => el.id));
     setNotice(mode === "update" ? "Diagram updated." : "Added to the canvas.");

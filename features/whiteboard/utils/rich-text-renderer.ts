@@ -555,6 +555,27 @@ const ellipsizeRichTextLine = (
     : [];
 };
 
+/** Width of the widest unbreakable word in `text` (formatting respected), at the given font. */
+export const longestWordWidth = (
+  ctx: MeasureContext,
+  text: string,
+  baseFontSize: number,
+  baseFontWeight: string | number,
+  baseFontStyle: string,
+) => {
+  let widest = 0;
+  for (const span of parseMarkdownRichText(text)) {
+    for (const word of span.text.split(/\s+/u)) {
+      if (!word) continue;
+      widest = Math.max(
+        widest,
+        measureRichTextLineWidth(ctx, [{ ...span, text: word }], baseFontSize, baseFontWeight, baseFontStyle),
+      );
+    }
+  }
+  return widest;
+};
+
 export const layoutRichTextLines = (
   ctx: MeasureContext,
   text: string,

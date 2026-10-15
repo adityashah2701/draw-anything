@@ -92,7 +92,8 @@ describe("semantic node label region", () => {
     expect(r.centerX + r.width / 2).toBeLessThanOrEqual(bounds.maxX);
     expect(r.centerX).toBeGreaterThan(bounds.minX + bounds.width / 2); // centre sits right of the node's centre
     expect(r.centerY).toBe(bounds.minY + bounds.height / 2);
-    expect(r.maxLines).toBe(2);
+    expect(r.maxLines).toBe(4);
+    expect(r.height).toBe(bounds.height); // the node's whole height; layout subtracts its own padding
   });
 
   it("other shapes use the whole box", () => {

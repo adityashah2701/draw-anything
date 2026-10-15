@@ -17,11 +17,18 @@ export interface LayoutNode {
    * so that a frame drawn around them does not swallow unrelated nodes.
    */
   cluster?: string;
+  /**
+   * Nested groups the node belongs to, outermost first. Members of every group on a path are kept
+   * adjacent, so a frame drawn around a nested group does not swallow its siblings.
+   */
+  clusterPath?: string[];
 }
 
 export interface LayoutEdge {
   from: string;
   to: string;
+  /** Width of the edge's label; same-row neighbours it joins are spaced to leave room for it. */
+  labelWidth?: number;
 }
 
 type Rows = Map<number, string[]>;
@@ -85,21 +92,38 @@ export const countCrossings = (
   return crossings;
 };
 
+/** Breathing room either side of a label that sits between two nodes of a row. */
+const LABEL_SIDE_ROOM = 24;
+
 const mean = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
 
-/** Keep members of one cluster adjacent, ordered by where the cluster first appears. */
-const clusterContiguous = (ids: string[], clusterOf: Map<string, string>): string[] => {
-  const order: string[] = [];
-  const members = new Map<string, string[]>();
+/**
+ * Orders `ids` so that members of every group on their cluster paths stay adjacent. Units at each
+ * level (a sub-group, or a node that is not in a deeper group) are sorted by `score`, ties by first
+ * appearance; the members of a sub-group are ordered recursively.
+ */
+const orderHierarchical = (
+  ids: string[],
+  pathOf: Map<string, string[]>,
+  score: (id: string) => number,
+  firstIndex: Map<string, number>,
+  level = 0,
+): string[] => {
+  const units = new Map<string, string[]>();
   for (const id of ids) {
-    const key = clusterOf.get(id) ?? id;
-    if (!members.has(key)) {
-      members.set(key, []);
-      order.push(key);
-    }
-    members.get(key)!.push(id);
+    const key = pathOf.get(id)?.[level] ?? `\u0000${id}`;
+    units.set(key, [...(units.get(key) ?? []), id]);
   }
-  return order.flatMap((key) => members.get(key)!);
+  return [...units.entries()]
+    .map(([key, members]) => ({
+      members: key.startsWith("\u0000")
+        ? members
+        : orderHierarchical(members, pathOf, score, firstIndex, level + 1),
+      score: mean(members.map(score)),
+      first: Math.min(...members.map((id) => firstIndex.get(id)!)),
+    }))
+    .sort((x, y) => x.score - y.score || x.first - y.first)
+    .flatMap((unit) => unit.members);
 };
 
 /**
@@ -113,15 +137,22 @@ export const orderRows = (
   { maxSweeps = 8 }: { maxSweeps?: number } = {},
 ): Rows => {
   const depthOf = new Map(nodes.map((node) => [node.id, node.depth]));
-  const clusterOf = new Map<string, string>();
-  nodes.forEach((node) => node.cluster && clusterOf.set(node.id, node.cluster));
+  const pathOf = new Map<string, string[]>();
+  nodes.forEach((node) => {
+    const path = node.clusterPath ?? (node.cluster ? [node.cluster] : []);
+    if (path.length > 0) pathOf.set(node.id, path);
+  });
 
   const rows: Rows = new Map();
   for (const node of nodes) {
     if (!rows.has(node.depth)) rows.set(node.depth, []);
     rows.get(node.depth)!.push(node.id);
   }
-  rows.forEach((ids, depth) => rows.set(depth, clusterContiguous(ids, clusterOf)));
+  rows.forEach((ids, depth) => {
+    const first = new Map(ids.map((id, i) => [id, i]));
+    // Initial order: groups adjacent, everything else in the order given.
+    rows.set(depth, orderHierarchical(ids, pathOf, (id) => first.get(id)!, first));
+  });
 
   const above = new Map<string, string[]>();
   const below = new Map<string, string[]>();
@@ -147,22 +178,7 @@ export const orderRows = (
     });
 
     const index = new Map(ids.map((id, i) => [id, i]));
-    const units = new Map<string, string[]>();
-    for (const id of ids) {
-      const key = clusterOf.get(id) ?? id;
-      units.set(key, [...(units.get(key) ?? []), id]);
-    }
-    const byBarycenter = (a: string, b: string) =>
-      (barycenter.get(a)! - barycenter.get(b)!) || (index.get(a)! - index.get(b)!);
-
-    const ordered = [...units.values()]
-      .map((members) => ({
-        members: [...members].sort(byBarycenter),
-        score: mean(members.map((id) => barycenter.get(id)!)),
-        first: Math.min(...members.map((id) => index.get(id)!)),
-      }))
-      .sort((a, b) => (a.score - b.score) || (a.first - b.first))
-      .flatMap((unit) => unit.members);
+    const ordered = orderHierarchical(ids, pathOf, (id) => barycenter.get(id)!, index);
     rows.set(depth, ordered);
   };
 
@@ -188,13 +204,13 @@ export const orderRows = (
 
 /**
  * Place `desired` centers as close as possible (least squares) while keeping
- * neighbours at least `width/2 + gap + width/2` apart and in the same order.
+ * neighbours at least `width/2 + gaps[i] + width/2` apart and in the same order.
  * Solved exactly with pool-adjacent-violators.
  */
-const placeRow = (desired: number[], widths: number[], gap: number): number[] => {
+const placeRow = (desired: number[], widths: number[], gaps: number[]): number[] => {
   const offset: number[] = [0];
   for (let i = 1; i < desired.length; i += 1) {
-    offset[i] = offset[i - 1] + (widths[i - 1] + widths[i]) / 2 + gap;
+    offset[i] = offset[i - 1] + (widths[i - 1] + widths[i]) / 2 + gaps[i - 1];
   }
   const blocks: Array<{ sum: number; count: number }> = [];
   desired.forEach((d, i) => {
@@ -229,15 +245,26 @@ export const assignCenters = (
   const depthOf = new Map(nodes.map((node) => [node.id, node.depth]));
   const center = new Map<string, number>();
 
+  // A labelled edge between two nodes of the same row needs the label to fit between them.
+  const labelGap = new Map<string, number>();
+  const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  for (const edge of edges) {
+    if (!edge.labelWidth || depthOf.get(edge.from) !== depthOf.get(edge.to)) continue;
+    const key = pairKey(edge.from, edge.to);
+    labelGap.set(key, Math.max(labelGap.get(key) ?? 0, edge.labelWidth + LABEL_SIDE_ROOM));
+  }
+  const gapsFor = (ids: string[]) => ids.slice(1).map((id, i) => Math.max(gap, labelGap.get(pairKey(ids[i], id)) ?? 0));
+
   const depths = [...rows.keys()].sort((a, b) => a - b);
   for (const depth of depths) {
     const ids = rows.get(depth)!;
     const widths = ids.map((id) => width.get(id)!);
-    const total = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, ids.length - 1);
+    const gaps = gapsFor(ids);
+    const total = widths.reduce((sum, w) => sum + w, 0) + gaps.reduce((sum, g) => sum + g, 0);
     let cursor = centerX - total / 2;
     ids.forEach((id, i) => {
       center.set(id, cursor + widths[i] / 2);
-      cursor += widths[i] + gap;
+      cursor += widths[i] + (gaps[i] ?? 0);
     });
   }
 
@@ -260,7 +287,7 @@ export const assignCenters = (
         .filter((c): c is number => c !== undefined);
       return near.length > 0 ? mean(near) : center.get(id)!;
     });
-    const placed = placeRow(desired, ids.map((id) => width.get(id)!), gap);
+    const placed = placeRow(desired, ids.map((id) => width.get(id)!), gapsFor(ids));
     ids.forEach((id, i) => center.set(id, placed[i]));
   };
 

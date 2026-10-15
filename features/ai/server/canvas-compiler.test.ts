@@ -234,7 +234,7 @@ describe("AI canvas compiler", () => {
     expect(outer.maxY).toBeGreaterThan(inner.maxY);
   });
 
-  it("omits a frame that would swallow a node that is not in the group", () => {
+  it("makes room instead of dropping a frame: a node between two group members is moved beside the frame", () => {
     // top and bottom are in the group; mid sits between them in the same column.
     const doc = withGraph(
       [
@@ -245,7 +245,44 @@ describe("AI canvas compiler", () => {
       [{ from: "top", to: "mid" }, { from: "mid", to: "bottom" }],
       [{ id: "g", label: "G", nodeIds: ["top", "bottom"] }],
     );
-    expect(frames(compileAIDiagramToCanvas(doc, "f"))).toHaveLength(0);
+    const els = compileAIDiagramToCanvas(doc, "f");
+    const frame = frames(els)[0];
+    expect(frame).toBeDefined();
+    const f = box(frame);
+    const mid = box(els.find((e) => e.label === "Mid")!);
+    const overlapsFrame = mid.minX < f.maxX && mid.maxX > f.minX && mid.minY < f.maxY && mid.maxY > f.minY;
+    expect(overlapsFrame).toBe(false);
+    for (const label of ["Top", "Bottom"]) {
+      const m = box(els.find((e) => e.label === label)!);
+      expect(f.minX <= m.minX && f.maxX >= m.maxX && f.minY <= m.minY && f.maxY >= m.maxY).toBe(true);
+    }
+  });
+
+  it("never draws a frame over a node that is not in the group, even when two groups interleave", () => {
+    // a1,a2 are one group and b1,b2 another, but the graph threads them a1 -> b1 -> a2 -> b2.
+    const doc = withGraph(
+      [
+        { id: "a1", label: "A1", layer: "edge" },
+        { id: "b1", label: "B1", layer: "application" },
+        { id: "a2", label: "A2", layer: "data" },
+        { id: "b2", label: "B2", layer: "observability" },
+      ],
+      [{ from: "a1", to: "b1" }, { from: "b1", to: "a2" }, { from: "a2", to: "b2" }],
+      [
+        { id: "ga", label: "GA", nodeIds: ["a1", "a2"] },
+        { id: "gb", label: "GB", nodeIds: ["b1", "b2"] },
+      ],
+    );
+    const els = compileAIDiagramToCanvas(doc, "f");
+    const members: Record<string, string[]> = { ga: ["A1", "A2"], gb: ["B1", "B2"] };
+    for (const frame of frames(els)) {
+      const f = box(frame);
+      const owner = members[frame.ai!.semanticId!];
+      for (const node of els.filter((e) => e.type === "semantic-node" && !owner.includes(e.label!))) {
+        const n = box(node);
+        expect(n.minX < f.maxX && n.maxX > f.minX && n.minY < f.maxY && n.maxY > f.minY, `${node.label} inside ${frame.ai!.semanticId}`).toBe(false);
+      }
+    }
   });
 
   it("ignores groups with fewer than two known members", () => {

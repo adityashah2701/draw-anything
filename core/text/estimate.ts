@@ -15,7 +15,7 @@ import { LINE_HEIGHT_RATIO } from "./typography";
  */
 
 const WEIGHTS = [400, 500, 600, 700];
-const BOX_MARGIN = 1.02;
+const BOX_MARGIN = 1.04;
 const FALLBACK_EM = 0.56; // lowercase average, for scripts we have no table for
 
 const nearestWeight = (fontWeight: string | number) => {
@@ -86,13 +86,20 @@ export const estimateLabelBox = (input: LabelBoxInput): LabelBox => {
   const lineHeight = input.fontSize * LINE_HEIGHT_RATIO;
   const heightFor = (lines: number) => lines * lineHeight + LABEL_PADDING * 2;
 
-  for (let width = input.minWidth; width <= input.maxWidth; width += 4) {
+  // A word is never split to make a label fit, so the box is at least as wide as the longest word.
+  const longest = Math.max(0, ...label.split(/\s+/u).map((w) => estimateTextWidth(w, input.fontSize, input.fontWeight ?? "400")));
+  const widestWordBox = Math.ceil((longest * BOX_MARGIN + inset + LABEL_PADDING * 2) / 4) * 4;
+  if (widestWordBox > input.maxWidth) {
+    return { width: input.maxWidth, height: heightFor(input.maxLines), lineCount: input.maxLines, fits: false };
+  }
+
+  for (let width = Math.max(input.minWidth, widestWordBox); width <= input.maxWidth; width += 4) {
     ctx.font = "";
     const { lines, truncated } = layoutRichTextLines(ctx, label, {
       baseFontSize: input.fontSize,
       baseFontWeight: input.fontWeight ?? "400",
       baseFontStyle: input.fontStyle ?? "normal",
-      // Text must fit in 98% of the line: covers the estimator's worst measured undershoot (-0.85%).
+      // Text must fit in ~96% of the line: covers the worst measured undershoot of Inter (-0.85%), system San Francisco (-2.3%) and Geist (-3.6%).
       maxWidth: (width - inset - LABEL_PADDING * 2) / BOX_MARGIN,
       maxLines: input.maxLines,
     });

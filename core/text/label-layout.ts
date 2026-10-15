@@ -1,5 +1,6 @@
 import {
   layoutRichTextLines,
+  longestWordWidth,
   measureRichTextLineWidth,
   RichTextSpan,
 } from "@/features/whiteboard/utils/rich-text-renderer";
@@ -35,6 +36,8 @@ export interface ShapeLabelLayout {
   height: number;
   /** False when even the smallest font had to drop text. */
   fits: boolean;
+  /** True when a word is wider than the line and had to be split across lines (only at the smallest size). */
+  brokenWord: boolean;
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -98,6 +101,8 @@ export const layoutShapeLabel = (
   for (let size = target; size >= MIN_FONT_SIZE; size -= 1) {
     const attempt = layoutAt(size, maxLines);
     if (attempt.lines.length === 0 || attempt.truncated) continue;
+    // A word split across lines reads as a typo: shrink the text before doing that.
+    if (longestWordWidth(ctx, label, size, fontWeight, fontStyle) > wrapWidth) continue;
     if (attempt.lines.length * size * LINE_HEIGHT_RATIO > availableHeight) continue;
     fontSize = size;
     chosen = attempt;
@@ -131,5 +136,6 @@ export const layoutShapeLabel = (
     width,
     height: lines.length * lineHeight,
     fits,
+    brokenWord: longestWordWidth(ctx, label, fontSize, fontWeight, fontStyle) > wrapWidth,
   };
 };

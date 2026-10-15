@@ -52,4 +52,9 @@ export interface ApplyDiagramCodePayload {
   elements: DrawingElement[];
   /** Existing elements to delete first (the diagram this code was loaded from). */
   replaceIds: string[];
+  /**
+   * The elements are already in their final world positions (some nodes were pinned where the user
+   * put them), so the canvas must not shift them to line up with the diagram they replace.
+   */
+  anchored?: boolean;
 }

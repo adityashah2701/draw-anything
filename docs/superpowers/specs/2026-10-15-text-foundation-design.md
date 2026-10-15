@@ -97,7 +97,7 @@ Stored data is `points[0]` (top-left), `text`, `fontSize`, `fontWeight`, `fontSt
 | system (SF) | -7.5% .. +30.2% | -2.3% .. +7.6%, mean +3.2% |
 | Helvetica / Arial | -4.5% .. +35.0% | -5.7% .. +13.4%, mean +4.3% |
 
-The old table undersized wide-letter labels by up to 10% (a node sized from it would wrap or shrink). `estimateLabelBox` now also keeps text within 98% of the line, and no Inter-sized box in the corpus is narrower than the real text. Remaining weakness: no kerning, Latin-1 accents by base letter, CJK as 1em, other scripts a flat average. On Helvetica/Arial a few labels come out up to 5.7% narrower than the real text (under 10% of the corpus). The estimate stays a fallback for code without a DOM; it is not ground truth. Test: `tests/browser/estimator.browser.test.ts`; regenerate the table with `GENERATE_ADVANCES=1 npm run test:browser`.
+The old table undersized wide-letter labels by up to 10% (a node sized from it would wrap or shrink). `estimateLabelBox` now also keeps text within 96% of the line (the margin was 98% here and was raised to 96% in Sub-project B), and no Inter-sized box in the corpus is narrower than the real text. Remaining weakness: no kerning, Latin-1 accents by base letter, CJK as 1em, other scripts a flat average. On Helvetica/Arial a few labels come out up to 5.7% narrower than the real text (under 10% of the corpus). The estimate stays a fallback for code without a DOM; it is not ground truth. Test: `tests/browser/estimator.browser.test.ts`; regenerate the table with `GENERATE_ADVANCES=1 npm run test:browser`.
 
 ## Acceptance criteria against evidence
 | # | Criterion | Evidence | Status |

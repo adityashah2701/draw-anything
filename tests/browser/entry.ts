@@ -18,3 +18,8 @@ export {
   normalizeRichTextInput,
 } from "@/features/whiteboard/utils/rich-text-renderer";
 export { renderSemanticNodeToCanvas } from "@/core/shapes/semantic-node/renderer";
+export { drawElement } from "@/features/whiteboard/utils/canvas-render-utils";
+export { getShapeBounds } from "@/core/shapes/shape-runtime";
+export { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
+export { LAYOUT_FIXTURES } from "@/features/ai/server/layout/fixtures";
+export { measureLayout } from "@/features/ai/server/layout/metrics";

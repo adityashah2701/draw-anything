@@ -1,17 +1,24 @@
 import { buildAnchorId } from "@/core/anchors/generate-anchors";
-import {
-  assignCenters,
-  orderRows,
-  type LayoutEdge,
-  type LayoutNode,
-} from "@/features/ai/server/layout/layered-order";
+import { placeEdgeLabels, EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT } from "@/features/ai/server/layout/edge-labels";
+import { bundleFans } from "@/features/ai/server/layout/bus";
+import { FRAME_NEST_STEP, FRAME_PADDING, FRAME_TITLE_HEIGHT } from "@/features/ai/server/layout/frame-constants";
+import { placeGrid } from "@/features/ai/server/layout/grid-placement";
+import { placeLayered } from "@/features/ai/server/layout/layered-placement";
+import { withPins, type NodePin } from "@/features/ai/server/layout/pins";
+import type {
+  Placement,
+  PlacementEngine,
+  PlacementInput,
+} from "@/features/ai/server/layout/types";
+import type { Box } from "@/features/ai/server/layout/geometry";
 import { getConnectionHandlePoint } from "@/core/routing/connection-handles";
 import {
   RouteArrowDescriptor,
   routeArrowBatch,
 } from "@/core/routing/orthogonal-router";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
-import { estimateLabelBox, estimateTextWidth } from "@/core/text/estimate";
+import { estimateTextWidth } from "@/core/text/estimate";
+import { sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import {
   AIDiagramDocumentV1,
@@ -76,22 +83,24 @@ const KIND_COLORS: Record<string, { fill: string; stroke: string }> = {
 };
 
 const NODE_FONT_SIZE = 17;
-// Space the node renderer keeps beside the label: icon (28) + gaps (38).
-const NODE_LABEL_INSET = 66;
+const NODE_FONT_WEIGHT = "600";
+const BASE_NODE_HEIGHT = 78;
+const DECISION_NODE_HEIGHT = 92;
 
-const estimateWidth = (label: string, density: string) => {
-  const adjust = density === "compact" ? -18 : density === "spacious" ? 22 : 0;
-  const { width } = estimateLabelBox({
-    label,
+/**
+ * Width and height of a node from its label (core/text/node-size.ts): the fewest lines that fit,
+ * the narrowest box for them, and a height that holds them. The minimums keep the look nodes
+ * always had (168 wide, 78 tall; 92 for decisions); only labels that need more get more.
+ */
+export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize =>
+  sizeSemanticNode({
+    label: node.label,
     fontSize: NODE_FONT_SIZE,
-    fontWeight: "600",
-    maxLines: 1,
-    minWidth: 168,
+    fontWeight: NODE_FONT_WEIGHT,
+    minWidth: density === "compact" ? 150 : density === "spacious" ? 190 : 168,
     maxWidth: 280,
-    insetWidth: NODE_LABEL_INSET,
+    minHeight: node.kind === "decision" ? DECISION_NODE_HEIGHT : BASE_NODE_HEIGHT,
   });
-  return Math.min(280, Math.max(168, width + adjust));
-};
 
 const getDepths = (document: AIDiagramDocumentV1) => {
   if (document.diagramType === "architecture") {
@@ -103,45 +112,83 @@ const getDepths = (document: AIDiagramDocumentV1) => {
     );
   }
 
-  const incoming = new Map<string, number>();
-  const outgoing = new Map<string, string[]>();
-  document.nodes.forEach((node) => {
-    incoming.set(node.id, 0);
-    outgoing.set(node.id, []);
+  // Layers by longest path from the sources, after breaking cycles. A loop-back edge (a retry, a
+  // feedback arrow) must not stop the nodes behind it from getting a layer, so depth-first search
+  // finds the edges that point back up the current path and layering ignores them. For an acyclic
+  // graph there are no such edges and this is the plain longest-path layering.
+  const knownIds = new Set(document.nodes.map((node) => node.id));
+  const edges = document.edges.filter((e) => knownIds.has(e.from) && knownIds.has(e.to) && e.from !== e.to);
+  const out = new Map<string, Array<{ to: string; index: number }>>(document.nodes.map((n) => [n.id, []]));
+  const indegree = new Map(document.nodes.map((n) => [n.id, 0]));
+  edges.forEach((e, index) => {
+    out.get(e.from)!.push({ to: e.to, index });
+    indegree.set(e.to, indegree.get(e.to)! + 1);
   });
-  document.edges.forEach((edge) => {
-    if (!incoming.has(edge.to) || !outgoing.has(edge.from)) return;
-    incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
-    outgoing.get(edge.from)?.push(edge.to);
+
+  const state = new Map<string, 0 | 1 | 2>(document.nodes.map((n) => [n.id, 0]));
+  const backEdges = new Set<number>();
+  const visit = (id: string) => {
+    state.set(id, 1);
+    for (const { to, index } of out.get(id)!) {
+      if (state.get(to) === 1) backEdges.add(index);
+      else if (state.get(to) === 0) visit(to);
+    }
+    state.set(id, 2);
+  };
+  // Sources first (in node order), then whatever is left (nodes only reachable through a cycle).
+  // Starting from people/clients instead puts User at the top but, measured on a request/response
+  // flow, makes connectors 41% longer and triples crossings, so it was tried and dropped.
+  document.nodes.filter((n) => indegree.get(n.id) === 0).forEach((n) => state.get(n.id) === 0 && visit(n.id));
+  document.nodes.forEach((n) => state.get(n.id) === 0 && visit(n.id));
+
+  const remaining = new Map(document.nodes.map((n) => [n.id, 0]));
+  edges.forEach((e, index) => {
+    if (!backEdges.has(index)) remaining.set(e.to, remaining.get(e.to)! + 1);
   });
   const depth = new Map(document.nodes.map((node) => [node.id, 0]));
-  const queue = document.nodes
-    .filter((node) => (incoming.get(node.id) ?? 0) === 0)
-    .map((node) => node.id);
-  const seen = new Set<string>();
+  const queue = document.nodes.filter((n) => remaining.get(n.id) === 0).map((n) => n.id);
   while (queue.length > 0) {
     const id = queue.shift()!;
-    seen.add(id);
-    outgoing.get(id)?.forEach((next) => {
-      depth.set(next, Math.max(depth.get(next) ?? 0, (depth.get(id) ?? 0) + 1));
-      incoming.set(next, (incoming.get(next) ?? 0) - 1);
-      if ((incoming.get(next) ?? 0) === 0) queue.push(next);
-    });
+    for (const { to, index } of out.get(id)!) {
+      if (backEdges.has(index)) continue;
+      depth.set(to, Math.max(depth.get(to)!, depth.get(id)! + 1));
+      remaining.set(to, remaining.get(to)! - 1);
+      if (remaining.get(to) === 0) queue.push(to);
+    }
   }
-  document.nodes.forEach((node, index) => {
-    if (!seen.has(node.id)) depth.set(node.id, Math.floor(index / 4));
-  });
   return depth;
 };
 
+/** Leave from the side that faces the target: below/above when it is in another row, else left/right. */
 const chooseHandles = (
   source: PositionedNode,
   target: PositionedNode,
 ): { from: ConnectionHandle; to: ConnectionHandle } => {
-  if (target.depth > source.depth) return { from: "bottom", to: "top" };
-  if (target.depth < source.depth) return { from: "top", to: "bottom" };
+  if (target.bounds.minY >= source.bounds.maxY - 1) return { from: "bottom", to: "top" };
+  if (target.bounds.maxY <= source.bounds.minY + 1) return { from: "top", to: "bottom" };
   if (target.bounds.minX >= source.bounds.minX) return { from: "right", to: "left" };
   return { from: "left", to: "right" };
+};
+
+/**
+ * Two edges between the same pair of nodes (a request and its response, or two labelled calls) would
+ * leave the same handles and be drawn on top of each other. The second uses the nodes' right sides
+ * and the third their left sides (bottom/top sides when the pair sits side by side), which routes it
+ * around as a visible loop instead of hiding it behind the first.
+ */
+const spreadParallelEdges = (
+  handles: { from: ConnectionHandle; to: ConnectionHandle },
+  source: PositionedNode,
+  target: PositionedNode,
+  used: Map<string, number>,
+): { from: ConnectionHandle; to: ConnectionHandle } => {
+  const ends = [`${source.node.id}.${handles.from}`, `${target.node.id}.${handles.to}`].sort().join("|");
+  const seen = used.get(ends) ?? 0;
+  used.set(ends, seen + 1);
+  if (seen === 0) return handles;
+  const vertical = handles.from === "top" || handles.from === "bottom";
+  const side: ConnectionHandle = vertical ? (seen === 1 ? "right" : "left") : seen === 1 ? "bottom" : "top";
+  return { from: side, to: side };
 };
 
 const asObstacle = (positioned: PositionedNode): RoutingObstacle => ({
@@ -162,9 +209,6 @@ interface GroupBox {
   depth: number;
 }
 
-const FRAME_PADDING = 20;
-const FRAME_NEST_STEP = 16;
-const FRAME_TITLE_HEIGHT = 22;
 
 /** Groups worth drawing: known members only, at least two, deduplicated by member set. */
 const usableGroups = (
@@ -239,7 +283,7 @@ const buildGroupFrames = (
   document: AIDiagramDocumentV1,
   positioned: Map<string, PositionedNode>,
   frameId: string,
-): DrawingElement[] => {
+): { elements: DrawingElement[]; titleBoxes: Box[]; dropped: string[] } => {
   const boxes = nestingDepths(usableGroups(document, positioned));
   const accepted: Array<{ box: GroupBox; bounds: ReturnType<typeof frameBounds> }> = [];
 
@@ -255,8 +299,17 @@ const buildGroupFrames = (
     );
     if (!swallowsStranger && !clashes) accepted.push({ box, bounds });
   }
+  const acceptedIds = new Set(accepted.map(({ box }) => box.group.id));
+  const dropped = boxes.filter(({ group }) => !acceptedIds.has(group.id)).map(({ group }) => group.id);
 
-  return accepted.flatMap(({ box, bounds }) => {
+  const titleBoxes: Box[] = accepted.map(({ box, bounds }) => ({
+    minX: bounds.minX + 12,
+    minY: bounds.minY + 8,
+    maxX: bounds.minX + 12 + estimateTextWidth(box.group.label, 13, "600"),
+    maxY: bounds.minY + 8 + 13 * LINE_HEIGHT_RATIO,
+  }));
+
+  const elements = accepted.flatMap(({ box, bounds }) => {
     const base = `${document.metadata.generationId}-group-${box.group.id}`;
     const ai = {
       frameId,
@@ -291,39 +344,29 @@ const buildGroupFrames = (
     };
     return [frame, title];
   });
-};
-
-// ── Edge labels ───────────────────────────────────────────────────────────
-
-const EDGE_LABEL_FONT_SIZE = 13;
-
-/** Put the label on the longest segment: above a horizontal one, beside a vertical one. */
-const edgeLabelPosition = (points: Point[], label: string): Point | null => {
-  let best: { from: Point; to: Point; length: number } | null = null;
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const length = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
-    if (length > 0 && (!best || length > best.length)) {
-      best = { from: points[i], to: points[i + 1], length };
-    }
-  }
-  if (!best) return null;
-  const midX = (best.from.x + best.to.x) / 2;
-  const midY = (best.from.y + best.to.y) / 2;
-  const width = Math.ceil(estimateTextWidth(label, EDGE_LABEL_FONT_SIZE, "500"));
-  const horizontal = Math.abs(best.to.y - best.from.y) < Math.abs(best.to.x - best.from.x);
-  // Text elements are as tall as their line box, not their font size.
-  const textHeight = EDGE_LABEL_FONT_SIZE * LINE_HEIGHT_RATIO;
-  return horizontal
-    ? { x: midX - width / 2, y: midY - textHeight - 4 }
-    : { x: midX + 8, y: midY - textHeight / 2 };
+  return { elements, titleBoxes, dropped };
 };
 
 // ── Compile ───────────────────────────────────────────────────────────────
 
-export const compileAIDiagramToCanvas = (
-  document: AIDiagramDocumentV1,
-  frameId: string,
-): DrawingElement[] => {
+export interface CompileDiagnostics {
+  /** Edge labels that could not be placed clear of nodes, other labels and each other. */
+  collidingLabels: string[];
+  /** Groups declared with a label and two or more members that were not drawn as a frame. */
+  droppedGroups: string[];
+  /** Nodes whose label needs more lines than a node may show; the renderer shrinks their text. */
+  unfittedNodes: string[];
+  /** Set when the layout engine threw and the plain grid was used instead; holds the error message. */
+  layoutFallback?: string;
+}
+
+export interface CompileResult {
+  elements: DrawingElement[];
+  diagnostics: CompileDiagnostics;
+}
+
+/** Sizes, graph and gaps for a layout engine; everything an engine may use, nothing it must not. */
+export const prepareDiagram = (document: AIDiagramDocumentV1) => {
   const depthByNodeId = getDepths(document);
   const density = document.styleHints.density;
   const groups = usableGroups(
@@ -335,8 +378,9 @@ export const compileAIDiagramToCanvas = (
   const frameRoom = groups.length > 0 ? 40 + maxNesting * FRAME_NEST_STEP : 0;
   const horizontalGap =
     (density === "compact" ? 52 : density === "spacious" ? 112 : 78) + frameRoom / 2;
+  // Row pitch was 138 for 78px nodes: the gap between rows, not the pitch, is what stays constant.
   const verticalGap =
-    (density === "compact" ? 112 : density === "spacious" ? 168 : 138) + frameRoom;
+    (density === "compact" ? 112 : density === "spacious" ? 168 : 138) - BASE_NODE_HEIGHT + frameRoom;
 
   // Nodes ordered as before (column hint, then label) as the starting point.
   const ordered = [...document.nodes].sort((a, b) => {
@@ -347,84 +391,114 @@ export const compileAIDiagramToCanvas = (
 
   // The outermost group a node belongs to keeps its members side by side.
   const clusterOf = new Map<string, string>();
-  [...groups].forEach(({ group, members }) =>
+  groups.forEach(({ group, members }) =>
     members.forEach((m) => {
       if (!clusterOf.has(m.node.id)) clusterOf.set(m.node.id, group.id);
     }),
   );
 
-  const layoutNodes: LayoutNode[] = ordered.map((node) => ({
-    id: node.id,
-    depth: depthByNodeId.get(node.id) ?? 0,
-    width: estimateWidth(node.label, density),
-    cluster: clusterOf.get(node.id),
-  }));
-  const knownIds = new Set(layoutNodes.map((n) => n.id));
-  const layoutEdges: LayoutEdge[] = document.edges
-    .filter((edge) => knownIds.has(edge.from) && knownIds.has(edge.to))
-    .map((edge) => ({ from: edge.from, to: edge.to }));
-
-  const rows = orderRows(layoutNodes, layoutEdges);
-  const centers = assignCenters(rows, layoutNodes, layoutEdges, {
-    gap: horizontalGap,
-    centerX: 960,
+  // Nested chain of groups per node, outermost first; a group that only partly overlaps the chain
+  // (neither inside nor around it) cannot be nested and is not part of the path.
+  const memberSets = groups.map(({ group, members }) => ({ id: group.id, ids: new Set(members.map((m) => m.node.id)) }));
+  const pathOf = new Map<string, string[]>();
+  document.nodes.forEach((node) => {
+    const chain = memberSets.filter((g) => g.ids.has(node.id)); // already outermost (largest) first
+    const path: Array<(typeof memberSets)[number]> = [];
+    chain.forEach((g) => {
+      const last = path[path.length - 1];
+      if (!last || (g.ids.size < last.ids.size && [...g.ids].every((id) => last.ids.has(id)))) path.push(g);
+    });
+    if (path.length > 0) pathOf.set(node.id, path.map((g) => g.id));
   });
 
+  const sizes = new Map(document.nodes.map((node) => [node.id, sizeDiagramNode(node, density)]));
+  const knownIds = new Set(document.nodes.map((n) => n.id));
+  const input: PlacementInput = {
+    nodes: ordered.map((node) => ({
+      id: node.id,
+      depth: depthByNodeId.get(node.id) ?? 0,
+      width: sizes.get(node.id)!.width,
+      height: sizes.get(node.id)!.height,
+      cluster: clusterOf.get(node.id),
+      clusterPath: pathOf.get(node.id),
+    })),
+    edges: document.edges
+      .filter((edge) => knownIds.has(edge.from) && knownIds.has(edge.to))
+      .map((edge) => ({
+        from: edge.from,
+        to: edge.to,
+        labelWidth: edge.label?.trim()
+          ? Math.ceil(estimateTextWidth(edge.label.trim(), EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT))
+          : undefined,
+      })),
+    groups: groups.map(({ group, members }) => ({ id: group.id, nodeIds: members.map((m) => m.node.id) })),
+    gaps: { horizontal: horizontalGap, vertical: verticalGap, groupRoom: frameRoom },
+  };
+  return { input, sizes };
+};
+
+/** Everything after node placement: elements, group frames, routed connectors, edge labels. */
+export const buildCanvas = (
+  document: AIDiagramDocumentV1,
+  frameId: string,
+  prepared: ReturnType<typeof prepareDiagram>,
+  placement: Placement,
+): CompileResult => {
+  const { input, sizes } = prepared;
   const nodeById = new Map(document.nodes.map((node) => [node.id, node]));
-  const widthById = new Map(layoutNodes.map((n) => [n.id, n.width]));
+  const depthById = new Map(input.nodes.map((n) => [n.id, n.depth]));
   const positionedByNodeId = new Map<string, PositionedNode>();
   const nodeElements: DrawingElement[] = [];
 
-  rows.forEach((ids, depth) => {
-    const y = 150 + depth * verticalGap;
-    ids.forEach((id) => {
-      const node = nodeById.get(id)!;
-      const width = widthById.get(id)!;
-      const height = node.kind === "decision" ? 92 : 78;
-      const x = (centers.get(id) ?? 960) - width / 2;
-      const style = KIND_COLORS[node.kind] ?? {
-        fill: depth % 2 === 0 ? "#f8fafc" : "#eef2ff",
-        stroke: "#1f2937",
-      };
-      const importance =
-        document.visualImportance.find((entry) => entry.nodeId === node.id)?.score ?? 5;
-      const bounds: Bounds = {
-        minX: x,
-        minY: y,
-        maxX: x + width,
-        maxY: y + height,
-        width,
-        height,
-      };
-      const element: DrawingElement = {
-        id: `${document.metadata.generationId}-${node.id}`,
-        type: "semantic-node",
-        points: [
-          { x: bounds.minX, y: bounds.minY },
-          { x: bounds.maxX, y: bounds.maxY },
-        ],
-        color: style.stroke,
-        strokeWidth: importance >= 8 ? 3 : 2,
-        fill: style.fill,
-        label: node.label,
-        fontSize: NODE_FONT_SIZE,
-        fontWeight: "600",
-        ai: {
-          frameId,
-          generationId: document.metadata.generationId,
-          semanticId: node.id,
-          semanticKind: node.kind,
-          diagramType: document.diagramType,
-          role: "node",
-        },
-      };
-      nodeElements.push(element);
-      positionedByNodeId.set(node.id, { node, element, bounds, depth });
-    });
+  // Reading order (top to bottom, left to right) keeps element order stable and readable.
+  const order = [...placement.entries()].sort(([, a], [, b]) => a.y - b.y || a.x - b.x);
+  order.forEach(([id, at]) => {
+    const node = nodeById.get(id);
+    const size = sizes.get(id);
+    if (!node || !size) return;
+    const depth = depthById.get(id) ?? 0;
+    const style = KIND_COLORS[node.kind] ?? {
+      fill: depth % 2 === 0 ? "#f8fafc" : "#eef2ff",
+      stroke: "#1f2937",
+    };
+    const importance =
+      document.visualImportance.find((entry) => entry.nodeId === node.id)?.score ?? 5;
+    const bounds: Bounds = {
+      minX: at.x,
+      minY: at.y,
+      maxX: at.x + size.width,
+      maxY: at.y + size.height,
+      width: size.width,
+      height: size.height,
+    };
+    const element: DrawingElement = {
+      id: `${document.metadata.generationId}-${node.id}`,
+      type: "semantic-node",
+      points: [
+        { x: bounds.minX, y: bounds.minY },
+        { x: bounds.maxX, y: bounds.maxY },
+      ],
+      color: style.stroke,
+      strokeWidth: importance >= 8 ? 3 : 2,
+      fill: style.fill,
+      label: node.label,
+      fontSize: NODE_FONT_SIZE,
+      fontWeight: NODE_FONT_WEIGHT,
+      ai: {
+        frameId,
+        generationId: document.metadata.generationId,
+        semanticId: node.id,
+        semanticKind: node.kind,
+        diagramType: document.diagramType,
+        role: "node",
+      },
+    };
+    nodeElements.push(element);
+    positionedByNodeId.set(node.id, { node, element, bounds, depth });
   });
 
-  const groupElements = buildGroupFrames(document, positionedByNodeId, frameId);
-  const elements: DrawingElement[] = [...groupElements, ...nodeElements];
+  const frames = buildGroupFrames(document, positionedByNodeId, frameId);
+  const elements: DrawingElement[] = [...frames.elements, ...nodeElements];
 
   const obstacles = Array.from(positionedByNodeId.values()).map(asObstacle);
   const arrowDrafts: Array<{
@@ -439,11 +513,12 @@ export const compileAIDiagramToCanvas = (
     dashed: boolean;
   }> = [];
 
+  const usedHandlePairs = new Map<string, number>();
   document.edges.forEach((edge, index) => {
     const source = positionedByNodeId.get(edge.from);
     const target = positionedByNodeId.get(edge.to);
     if (!source || !target) return;
-    const handles = chooseHandles(source, target);
+    const handles = spreadParallelEdges(chooseHandles(source, target), source, target, usedHandlePairs);
     const start = getConnectionHandlePoint(source.bounds, handles.from);
     const end = getConnectionHandlePoint(target.bounds, handles.to);
     const edgeId = `${document.metadata.generationId}-${edge.id || `edge-${index + 1}`}`;
@@ -485,10 +560,26 @@ export const compileAIDiagramToCanvas = (
     },
   });
 
-  const labelElements: DrawingElement[] = [];
+  // Siblings leaving (or entering) one node side share a bus level where that is clear of nodes.
+  const bundled = bundleFans(
+    arrowDrafts.map((draft) => ({
+      id: draft.edgeId,
+      points: routed.get(draft.edgeId) ?? [draft.descriptor.start, draft.descriptor.end],
+      sourceId: draft.sourceElementId,
+      targetId: draft.targetElementId,
+      fromHandle: draft.fromHandle,
+      toHandle: draft.toHandle,
+    })),
+    Array.from(positionedByNodeId.values()).map((p) => ({
+      id: p.element.id,
+      box: { minX: p.bounds.minX, minY: p.bounds.minY, maxX: p.bounds.maxX, maxY: p.bounds.maxY },
+    })),
+  );
+
+  const paths = new Map<string, Point[]>();
   arrowDrafts.forEach((draft) => {
-    const points =
-      routed.get(draft.edgeId) ?? [draft.descriptor.start, draft.descriptor.end];
+    const points = bundled.get(draft.edgeId)!;
+    paths.set(draft.edgeId, points);
     elements.push({
       id: draft.edgeId,
       type: draft.bidirectional ? "arrow-bidirectional" : "arrow",
@@ -517,32 +608,77 @@ export const compileAIDiagramToCanvas = (
         role: "edge",
       },
     });
-
-    if (draft.label) {
-      const position = edgeLabelPosition(points, draft.label);
-      if (position) {
-        labelElements.push({
-          id: `${draft.edgeId}-label`,
-          type: "text",
-          points: [position],
-          color: "#475569",
-          strokeWidth: 1,
-          text: draft.label,
-          fontSize: EDGE_LABEL_FONT_SIZE,
-          fontWeight: "500",
-          fontStyle: "normal",
-          isGuide: true,
-          ai: {
-            frameId,
-            generationId: document.metadata.generationId,
-            semanticId: `${draft.edgeId}-label`,
-            diagramType: document.diagramType,
-            role: "edge-label",
-          },
-        });
-      }
-    }
   });
 
-  return [...elements, ...labelElements];
+  // Labels go last: they need the routed paths, the nodes and the frame titles to stay clear of.
+  const labelDrafts = arrowDrafts.filter((draft) => draft.label);
+  const placed = placeEdgeLabels(
+    labelDrafts.map((draft) => ({ id: draft.edgeId, text: draft.label!, points: paths.get(draft.edgeId)! })),
+    [...Array.from(positionedByNodeId.values()).map((p) => p.bounds), ...frames.titleBoxes],
+    paths,
+  );
+  const labelElements: DrawingElement[] = placed.map((label) => {
+    const draft = labelDrafts.find((d) => d.edgeId === label.id)!;
+    return {
+      id: `${draft.edgeId}-label`,
+      type: "text",
+      points: [label.position],
+      color: "#475569",
+      strokeWidth: 1,
+      text: draft.label,
+      fontSize: EDGE_LABEL_FONT_SIZE,
+      fontWeight: EDGE_LABEL_FONT_WEIGHT,
+      fontStyle: "normal",
+      isGuide: true,
+      ai: {
+        frameId,
+        generationId: document.metadata.generationId,
+        semanticId: `${draft.edgeId}-label`,
+        diagramType: document.diagramType,
+        role: "edge-label",
+      },
+    } as DrawingElement;
+  });
+
+  return {
+    elements: [...elements, ...labelElements],
+    diagnostics: {
+      collidingLabels: placed.filter((p) => p.collides).map((p) => p.id),
+      droppedGroups: frames.dropped,
+      unfittedNodes: [...sizes.entries()].filter(([, size]) => !size.fits).map(([id]) => id),
+    },
+  };
 };
+
+export interface CompileOptions {
+  engine?: PlacementEngine;
+  /** Nodes (by diagram node id) that must keep their centre; everything else is laid out around them. */
+  pins?: Map<string, NodePin>;
+}
+
+export const compileAIDiagramDetailed = (
+  document: AIDiagramDocumentV1,
+  frameId: string,
+  { engine = placeLayered, pins }: CompileOptions = {},
+): CompileResult => {
+  const prepared = prepareDiagram(document);
+  const place = pins && pins.size > 0 ? withPins(engine, pins) : engine;
+  let placement: Placement;
+  let layoutFallback: string | undefined;
+  try {
+    placement = place(prepared.input);
+  } catch (error) {
+    // A layout bug must cost the diagram its tidiness, not the whole generation.
+    layoutFallback = error instanceof Error ? error.message : String(error);
+    placement = placeGrid(prepared.input);
+  }
+  const result = buildCanvas(document, frameId, prepared, placement);
+  return layoutFallback ? { ...result, diagnostics: { ...result.diagnostics, layoutFallback } } : result;
+};
+
+export const compileAIDiagramToCanvas = (
+  document: AIDiagramDocumentV1,
+  frameId: string,
+  options: CompileOptions = {},
+): DrawingElement[] => compileAIDiagramDetailed(document, frameId, options).elements;
+

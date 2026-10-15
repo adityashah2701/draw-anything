@@ -8,6 +8,7 @@ import type { AIDiagramType } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { parseDiagramCode } from "./parse";
 import type { SerializableGraph } from "./serialize";
+import type { NodePin } from "@/features/ai/server/layout/pins";
 import type { DiagramCodeIssue } from "./types";
 
 export interface CodeToCanvasResult {
@@ -15,25 +16,11 @@ export interface CodeToCanvasResult {
   issues: DiagramCodeIssue[];
 }
 
-/**
- * Diagram code -> canvas elements, using the same document builder and
- * compiler as AI generation, so code and AI produce identical-looking output.
- * Nothing is drawn if the code has errors (a half-applied edit is worse than none).
- */
-export const elementsFromDiagramCode = (
-  source: string,
-  { generationId, frameId }: { generationId: string; frameId: string },
-): CodeToCanvasResult => {
-  const parsed = parseDiagramCode(source);
-  const issues = [...parsed.issues];
-  if (issues.some((issue) => issue.severity === "error")) return { elements: [], issues };
-  if (parsed.nodes.length === 0) {
-    return {
-      elements: [],
-      issues: [...issues, { line: 1, severity: "error", message: "There is nothing to draw yet: add at least one node." }],
-    };
-  }
 
+export const documentFromParsedCode = (
+  parsed: ReturnType<typeof parseDiagramCode>,
+  generationId: string,
+) => {
   const { graph, warnings } = normalizeModelGraphDraftDetailed({
     nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind })),
     edges: parsed.edges.map((edge) => ({
@@ -45,8 +32,6 @@ export const elementsFromDiagramCode = (
     })),
     groups: parsed.groups.map((group) => ({ id: group.id, label: group.label, nodeIds: group.nodeIds })),
   });
-  warnings.forEach((message) => issues.push({ line: 1, severity: "warning", message }));
-
   const document = buildAIDiagramDocument({
     prompt: "diagram code",
     plan: normalizeModelPlan({
@@ -59,7 +44,41 @@ export const elementsFromDiagramCode = (
     generationId,
     improvementPasses: 0,
   });
-  return { elements: compileAIDiagramToCanvas(document, frameId), issues };
+  return { document, warnings };
+};
+
+/**
+ * Diagram code -> canvas elements, using the same document builder and
+ * compiler as AI generation, so code and AI produce identical-looking output.
+ * Nothing is drawn if the code has errors (a half-applied edit is worse than none).
+ */
+export const elementsFromDiagramCode = (
+  source: string,
+  {
+    generationId,
+    frameId,
+    pins,
+  }: {
+    generationId: string;
+    frameId: string;
+    /** Nodes (by id) that must keep their centre; see `findMovedNodes`. */
+    pins?: Map<string, NodePin>;
+  },
+): CodeToCanvasResult => {
+  const parsed = parseDiagramCode(source);
+  const issues = [...parsed.issues];
+  if (issues.some((issue) => issue.severity === "error")) return { elements: [], issues };
+  if (parsed.nodes.length === 0) {
+    return {
+      elements: [],
+      issues: [...issues, { line: 1, severity: "error", message: "There is nothing to draw yet: add at least one node." }],
+    };
+  }
+
+  const { document, warnings } = documentFromParsedCode(parsed, generationId);
+  warnings.forEach((message) => issues.push({ line: 1, severity: "warning", message }));
+
+  return { elements: compileAIDiagramToCanvas(document, frameId, { pins }), issues };
 };
 
 // ── canvas -> code ──────────────────────────────────────────────────────────

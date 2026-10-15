@@ -53,3 +53,93 @@ Adopt a library only if it beats the current engine on 1, 2 and 4 for architectu
 5. **Engine comparison:** a committed report compares the current engine and ELK.js on the identical fixtures with the metrics above, including runtime and licence, and the choice is justified by it. No dependency is added without that report.
 6. Existing `canvas-compiler`, `layered-order` and `fixtures` tests keep passing; saved diagrams still load (no stored-format change without a demonstrated need); all label boxes come from A's sizing functions; AI providers unaffected.
 7. `tsc`, `vitest`, `npm run test:browser`, lint and build all run and are reported honestly, with anything unrunnable stated.
+
+---
+
+# Outcome (2026-10-16): implemented
+
+Benchmark, evidence and decision: `docs/superpowers/reports/2026-10-16-layout-benchmark.md`.
+
+## Decision
+Keep the in-repo layered engine, improved; **ELK.js is not adopted** (it stays a dev dependency used by the
+benchmark only). On identical input the improved layered engine matches or beats ELK on edge length,
+drawing size, label collisions, group containment and stability, and is within a few crossings everywhere
+except the flowchart, where ELK is better (1 vs 3). It stays synchronous with no new runtime dependency.
+
+## Measurement contract
+| Layer | Rule | Where |
+|---|---|---|
+| **World space** | Everything stored (node points, arrow points, text anchors) is world units at zoom 1. | element JSON |
+| **Screen space** | Zoom only scales world geometry when drawing. No layout or wrapping decision depends on zoom. | `core/text/label-layout.ts` (Sub-project A) |
+| **Server / compile (no DOM)** | A node's size is computed from its label by the deterministic estimator (Inter advance widths, 4% margin) and written into the stored points. The compiler never measures a font. | `core/text/node-size.ts`, `estimate.ts` |
+| **Browser** | The renderer lays the label out inside the stored box with the real `measureText`; if it still does not fit it shrinks the text. It never changes stored geometry. | `layoutShapeLabel`, `renderShapeLabel` |
+| **Selection / hit-testing** | Node boxes are the stored points; standalone text uses real-measured bounds. | shape definitions |
+| **Estimator vs reality** | `estimateLabelBox` plus margin must hold the label under the real renderer; this is a test, not an assumption. | `tests/browser/layout-render.browser.test.ts`, `estimator.browser.test.ts` |
+
+The estimator is per font; the table is regenerated from a font file with `GENERATE_ADVANCES=1 npm run test:browser`.
+
+### Geist vs Inter (the brief's premise, checked)
+**Geist is used only by the DOM UI** (`--font-sans`). Every canvas and editor font comes from the
+`FONT_FAMILY` stack (`Inter, system`), so canvas text never renders in Geist; the stack is not changed here.
+Measured in Chrome over the 46-label corpus (138 samples): Geist is on average **2.4% narrower than Inter**
+(range -8.5% to +3.9%). The Inter estimate against each font: Inter -0.85% to +4.0% (mean +0.3%), Geist
+-3.6% to +10.1% (mean +2.8%), system San Francisco -2.3% to +7.6%, Helvetica/Arial -5.7% to +13.4%.
+The box margin was raised from 2% to **4%** to cover the narrowest of Inter, San Francisco and Geist.
+Switching the canvas to Geist (or loading Inter) is a typeface change and is left to a separate decision; if
+taken, regenerate the advance table from that font so the server estimate matches what is drawn.
+
+### Verified in Chrome with the real renderers
+All four fixtures compiled and drawn with `drawElement`: **0 labels shrunk and 0 cut** under both Inter and the
+system font. The tightest node fills 96.6% of its wrap width under Inter and 98.8% under the system font
+(`tests/browser/layout-render.browser.test.ts`; `SAVE_LAYOUT_PNG=<dir>` keeps pictures for inspection).
+
+## What changed (files)
+- `core/text/node-size.ts` (new), `label-region.ts` (region = whole node height, up to 4 lines), `estimate.ts` (4% margin).
+- `core/routing/grid-route.ts` (new), `obstacle-avoidance.ts` (search before the intersecting last resort),
+  `orthogonal-router.ts` (stub pinning no longer overwrites bends).
+- `features/ai/server/canvas-compiler.ts`: prepare -> place -> build pipeline, dynamic sizing, cycle-aware layering,
+  geometry-based connection handles, `compileAIDiagramDetailed` with diagnostics, pins and a grid fallback.
+- `features/ai/server/layout/`: `types`, `layered-placement` (components, row heights), `layered-order`
+  (nested group contiguity, label room), `group-separation`, `bus`, `edge-labels`, `pins`, `grid-placement`,
+  `geometry`, `metrics`, `frame-constants`, fixtures incl. `stress`, `benchmark/` (ELK engine and the benchmark).
+- `features/diagram-code/pins.ts`, `canvas.ts` and the editor/controller: manual positions survive regeneration.
+- `features/ai/server/agents/canvas-compiler-agent.ts`: uses the detailed result and logs diagnostics (ids and counts only).
+
+## Dynamic sizing behaviour
+Width: the fewest lines (up to 4) that fit within 168-280 px (150/190 for compact/spacious density), then the
+narrowest width for that many lines. Height: lines x 20.4 + 24 px padding, never below 78 px (92 for decisions).
+`sizeSemanticNode` is the exact inverse of `getShapeLabelRegion` + `layoutShapeLabel`, so the renderer produces the
+line count that was sized for. Optional metadata / secondary labels: the semantic-node renderer draws only the
+label and icon, so there is nothing to size; add it when the renderer draws secondary text (Sub-project C).
+Existing nodes saved at 78 px now show 2-line labels at full size (the old region was 72% of the height).
+
+## Manual positions and regeneration
+Applying edited diagram code to an existing diagram keeps nodes the user dragged where they put them, with no
+stored-format change. Moved nodes are found by recompiling the diagram's own graph (the layout is
+deterministic) and comparing node centres after removing any common shift (so dragging the whole diagram is not
+a manual choice); those nodes are pinned, everything else is laid out around them and overlaps are resolved
+sideways. A board laid out by another engine version looks "all moved", so every position is kept: wrong in the
+safe direction. Detection runs at apply time on the current elements. Layout is pure and synchronous, so a late
+layout result cannot overwrite a newer edit; the apply is one undo step (unchanged). AI generation adds a new
+frame and does not touch existing elements; regenerating from the AI prompt is unchanged.
+
+## Acceptance criteria against evidence
+| # | Criterion | Evidence | Status |
+|---|---|---|---|
+| 1 | Dynamic sizing: no label shrunk or cut on the fixtures incl. multiline and 46-56 char labels; boxes never narrower than the estimate; real renderer confirms | `compile-regressions.test.ts`, `node-size.test.ts`, `layout-render.browser.test.ts` (Chrome, Inter and system) | met |
+| 2 | Edge-label collisions: zero on architecture and flowchart; unplaceable labels reported | benchmark guarantees (0 on all four fixtures), `edge-labels.test.ts` | met (0 on all four) |
+| 3 | Crossings and pass-throughs lower than baseline on architecture and flowchart; mind map not worse | baseline 5 / 8 / 3 -> 4 / 3 / 0; pass-throughs 0 / 0 / 0 (stress 2 -> 1) | met |
+| 4 | Stability: deterministic; adding a node moves few nodes; manual node survives relayout | determinism asserted for all engines; stress 51 px / flowchart 66 px mean shift; pin tests | met for determinism and pins; "moves few nodes" is relative: see report |
+| 5 | Engine comparison report incl. runtime and licence; choice justified | `2026-10-16-layout-benchmark.md` | met |
+| 6 | Existing tests pass; saved diagrams load; no stored-format change | 469 unit tests; round-trip and field-set tests | met |
+| 7 | tsc, vitest, test:browser, lint, build reported honestly | see final report | see below |
+
+## Known limitations
+- Flowchart crossings: ELK network simplex reaches 1 where layered has 3.
+- Dense graphs (stress, 39 crossings) are readable but busy; the layered engine does not add long-edge dummy nodes.
+- Mind maps are a top-down tree and become very wide (18 leaves in a row); a radial layout would fix that.
+- The server estimate is for Inter; other fonts differ by a few percent either way (4% margin; browser shrink is the net).
+- Fan-out bundling and the grid search only run at compile time and when a user later drags a connected node;
+  interactive routing is otherwise unchanged.
+- The full editor was not exercised end to end: the whiteboard needs a signed-in Clerk user and a real Convex id.
+  The app boots and serves in Chrome; the editor flows are covered through extracted modules and real-Chrome tests.

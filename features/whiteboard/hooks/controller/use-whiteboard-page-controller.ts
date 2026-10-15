@@ -834,7 +834,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
    * editing code feels like editing the diagram.
    */
   const applyDiagramCode = useCallback(
-    ({ elements: next, replaceIds }: ApplyDiagramCodePayload) => {
+    ({ elements: next, replaceIds, anchored }: ApplyDiagramCodePayload) => {
       if (!whiteboardAccess.hasEditAccess || next.length === 0) return;
 
       const cornerOf = (list: DrawingElement[]) => {
@@ -858,8 +858,9 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
               x: -canvasViewport.panOffset.x / canvasViewport.zoom + 80,
               y: -canvasViewport.panOffset.y / canvasViewport.zoom + 80,
             };
-      const dx = to.x - from.x;
-      const dy = to.y - from.y;
+      // Anchored elements already sit where the user wants them: do not slide them to the old corner.
+      const dx = anchored ? 0 : to.x - from.x;
+      const dy = anchored ? 0 : to.y - from.y;
 
       gestureHistory.begin();
       try {

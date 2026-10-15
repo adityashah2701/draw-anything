@@ -1,5 +1,7 @@
-# Sub-project B: plan (draft, starts after the spec is approved)
+# Sub-project B: plan (executed 2026-10-16)
 Spec: `docs/superpowers/specs/2026-10-15-layout-and-routing-design.md`. Tests first; each step ends green.
+
+Status: steps 0-5 and 7-10 done; step 6 done with ELK rejected on evidence; step 8's command-level UI is not built (the pure pin/relayout logic and the code-editor integration are).
 
 0. Done in the Sub-project A pass: `LAYOUT_FIXTURES` (architecture, flowchart, mind-map) with a validity and coverage test; baseline label-fit numbers (5/17, 5/13, 8/25 nodes shrunk).
 1. Settle the font question recorded in the A spec (load Inter, or scale-transform text), so pixel-level numbers are trustworthy.

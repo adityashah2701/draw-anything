@@ -1,4 +1,4 @@
-import { compileAIDiagramToCanvas } from "@/features/ai/server/canvas-compiler";
+import { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
 import { checkpoint, logAIPhase, phaseCompleted, phaseStarted, AIWorkflowState, AIWorkflowUpdate } from "@/features/ai/server/agents/types";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
@@ -11,9 +11,17 @@ export const canvasCompilerAgent = async (
 
   let elements: DrawingElement[] = [];
   try {
-    elements = compileAIDiagramToCanvas(state.document, frame.frameId);
+    const compiled = compileAIDiagramDetailed(state.document, frame.frameId);
+    elements = compiled.elements;
+    const { collidingLabels, droppedGroups, unfittedNodes, layoutFallback } = compiled.diagnostics;
+    if (layoutFallback || collidingLabels.length > 0 || droppedGroups.length > 0 || unfittedNodes.length > 0) {
+      // Ids and counts only: nothing from the user's prompt is logged.
+      console.warn(
+        `[canvasCompiler] ${frame.frameId}: layoutFallback=${Boolean(layoutFallback)} collidingLabels=${collidingLabels.length} droppedGroups=${droppedGroups.length} unfittedNodes=${unfittedNodes.length}`,
+      );
+    }
   } catch (compileError) {
-    console.error("[canvasCompiler] Compilation failed, attempting fallback:", compileError);
+    console.error("[canvasCompiler] Compilation failed:", compileError);
   }
 
   const completedFrame = {

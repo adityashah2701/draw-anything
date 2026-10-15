@@ -129,6 +129,15 @@ const pinPathEndpointStubs = (
     return points;
   }
 
+  // Distance along the handle's ray at which `point` lies, or null if it is not on that ray.
+  const distanceAlongRay = (origin: Point, dir: Point, point: Point) => {
+    const dx = point.x - origin.x;
+    const dy = point.y - origin.y;
+    const along = dx * dir.x + dy * dir.y;
+    const across = Math.abs(dx * dir.y) + Math.abs(dy * dir.x);
+    return across < 0.5 && along > 0.5 ? along : null;
+  };
+
   const pinned = points.map((point) => ({ ...point }));
   if (startHandle) {
     const dir = getHandleDirection(startHandle);
@@ -137,7 +146,13 @@ const pinPathEndpointStubs = (
       y: start.y + dir.y * stubDistance,
     };
     pinned[0] = { ...start };
-    pinned[1] = startExit;
+    const along = distanceAlongRay(start, dir, pinned[1]);
+    if (along === null) {
+      // The next point is a real bend, not the stub: keep it and add the stub in front of it.
+      pinned.splice(1, 0, startExit);
+    } else if (along < stubDistance) {
+      pinned[1] = startExit; // stub too short: extend it
+    } // else the first segment already leaves the handle by at least the stub: keep it
   }
 
   if (endHandle) {
@@ -147,9 +162,13 @@ const pinPathEndpointStubs = (
       y: end.y + dir.y * stubDistance,
     };
     const endIndex = pinned.length - 1;
-    const penultimateIndex = pinned.length - 2;
     pinned[endIndex] = { ...end };
-    pinned[penultimateIndex] = endEntry;
+    const along = distanceAlongRay(end, dir, pinned[endIndex - 1]);
+    if (along === null) {
+      pinned.splice(endIndex, 0, endEntry);
+    } else if (along < stubDistance) {
+      pinned[endIndex - 1] = endEntry;
+    }
   }
 
   return orthogonalizePath(pinned, preference);

@@ -4,6 +4,7 @@ import {
 } from "@/features/whiteboard/types/whiteboard.types";
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
 import { compressOrthogonalPath } from "@/core/routing/routing-utils";
+import { findGridRoute } from "@/core/routing/grid-route";
 import {
   Aabb,
   expandAabb,
@@ -470,7 +471,23 @@ export const getObstacleAwareOrthogonalPath = ({
     }
   }
 
-  // Level 2: Accept the best intersecting candidate (least-cost) as last resort.
+  // Level 2: search for a clear route. Fixed path shapes (one lane, one U-turn) cannot get around
+  // obstacles in several rows; the search can. Clearance shrinks before giving up on it.
+  if (bestScore === Number.POSITIVE_INFINITY) {
+    for (const clearance of [obstaclePadding, obstaclePadding / 2, 4]) {
+      const boxes = obstacles.map((obstacle) =>
+        expandAabb(obstacle.bounds, ignoreIds.has(obstacle.id) ? 2 : clearance),
+      );
+      const route = findGridRoute({ from: startExit, to: endEntry, boxes });
+      if (route) {
+        best = wrapWithHandles(start, end, startExit, endEntry, route);
+        bestScore = 0;
+        break;
+      }
+    }
+  }
+
+  // Level 3: Accept the best intersecting candidate (least-cost) as last resort.
   if (bestScore === Number.POSITIVE_INFINITY) {
     best = [...baseCandidates].sort(
       (a, b) =>
