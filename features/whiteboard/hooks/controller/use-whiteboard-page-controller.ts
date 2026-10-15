@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { moveShape } from "@/core/shapes/shape-runtime";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { LiveObject } from "@liveblocks/client";
@@ -26,6 +27,8 @@ import { useCanvasViewport } from "@/features/whiteboard/hooks/canvas/use-canvas
 import { useWhiteboardUtils } from "@/features/whiteboard/hooks/utils/use-whiteboard-utils";
 import { useWhiteboardDrawing } from "@/features/whiteboard/hooks/interaction/use-whiteboard-drawing";
 import { useWhiteboardKeyboard } from "@/features/whiteboard/hooks/interaction/use-whiteboard-keyboard";
+import type { ShortcutCommand } from "@/features/whiteboard/hooks/interaction/keyboard-policy";
+import { useElementCommands } from "@/features/whiteboard/hooks/interaction/use-element-commands";
 import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/data/use-whiteboard-auto-save";
 import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whiteboard-ui-state";
 import {
@@ -96,6 +99,37 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [],
   );
 
+  // Batched writes: one storage mutation (hence one undo step) and one list scan for any number of
+  // elements, instead of one mutation and one scan per element.
+  const addElements = useLiveblocksM(({ storage }, batch: DrawingElementJson[]) => {
+    const list = storage.get("elements");
+    batch.forEach((element) => list.push(new LiveObject(element)));
+  }, []);
+
+  const updateElements = useLiveblocksM(({ storage }, batch: DrawingElementJson[]) => {
+    const list = storage.get("elements");
+    const indexById = new Map<string, number>();
+    for (let i = 0; i < list.length; i += 1) indexById.set(list.get(i)!.get("id") as string, i);
+    for (const element of batch) {
+      const index = indexById.get(element.id);
+      if (index !== undefined) list.get(index)!.update(element);
+    }
+  }, []);
+
+  /** Rewrites stacking order (list order is z-order) by moving only the items that are out of place. */
+  const reorderElements = useLiveblocksM(({ storage }, orderedIds: string[]) => {
+    const list = storage.get("elements");
+    const current: string[] = [];
+    for (let i = 0; i < list.length; i += 1) current.push(list.get(i)!.get("id") as string);
+    if (orderedIds.length !== current.length) return; // stale view of the list: do nothing rather than scramble
+    orderedIds.forEach((id, target) => {
+      const from = current.indexOf(id);
+      if (from === -1 || from === target) return;
+      list.move(from, target);
+      current.splice(target, 0, current.splice(from, 1)[0]);
+    });
+  }, []);
+
   const seedElements = useLiveblocksM(
     ({ storage }, initial: DrawingElementJson[]) => {
       const list = storage.get("elements");
@@ -134,7 +168,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     getElementsAtPoint,
     getElementsInBounds,
     getResizeHandle,
-    moveElements,
     resizeElement,
     getElementBounds,
     getElementsOnPath,
@@ -226,12 +259,15 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     getElementsInBounds,
     getResizeHandle,
     deleteElements: (ids) => deleteElementsWithConnectedArrows(ids),
-    moveElements: (ids, dx, dy) => {
-      const moved = moveElements(ids, dx, dy);
-      const arrows = rerouteConnectedArrowsForChanges(moved);
-      arrows.forEach((a) => updateElement(a as unknown as DrawingElementJson));
-      return moved;
+    moveElements: (origin, dx, dy) => {
+      const moved = origin.map((el) => moveShape(el, { x: dx, y: dy }));
+      const movedIds = new Set(moved.map((el) => el.id));
+      const arrows = (
+        rerouteConnectedArrowsForChanges(moved) as unknown as DrawingElement[]
+      ).filter((arrow) => !movedIds.has(arrow.id));
+      updateElements([...moved, ...arrows] as unknown as DrawingElementJson[]);
     },
+    zoom: canvasViewport.zoom,
     resizeElement: (id, handle, pt, bounds) => {
       const resized = resizeElement(id, handle, pt, bounds);
       if (resized) {
@@ -328,31 +364,71 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     }
   }, [whiteboard?.content, canvasViewport, canvasViewport.loadViewportSettings]);
 
+  const elementCommands = useElementCommands({
+    elements,
+    selectedElements,
+    setSelectedElements,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    getElementBounds,
+    generateId,
+    addElements: (batch) => addElements(batch as unknown as DrawingElementJson[]),
+    updateElements: (batch) => updateElements(batch as unknown as DrawingElementJson[]),
+    reorderElements,
+    deleteElements: deleteElementsWithConnectedArrows,
+    rerouteConnectedArrows: (moved) =>
+      rerouteConnectedArrowsForChanges(moved) as unknown as DrawingElement[],
+  });
+
+  const runShortcut = useCallback(
+    (command: ShortcutCommand) => {
+      switch (command.type) {
+        case "undo": return handleUndo();
+        case "redo": return handleRedo();
+        case "save": return whiteboardAutoSave.saveWhiteboard();
+        case "select-all": return setSelectedElements(elements.map((el) => el.id));
+        case "copy": return elementCommands.copy();
+        case "cut": return elementCommands.cut();
+        case "paste": return elementCommands.paste();
+        case "duplicate": return elementCommands.duplicate();
+        case "nudge": return elementCommands.nudge(command.dx, command.dy);
+        case "z-order": return elementCommands.zOrder(command.move);
+        case "delete":
+          deleteElementsWithConnectedArrows(selectedElements);
+          return setSelectedElements([]);
+        // Escape: abandon a half-made shape or connector first; then clear the selection; then leave a drawing tool.
+        case "escape":
+          if (whiteboardDrawing.cancelDrawing()) return;
+          if (selectedElements.length > 0) return setSelectedElements([]);
+          return uiState.setCurrentTool("select");
+        case "zoom-in": return canvasViewport.handleZoomIn();
+        case "zoom-out": return canvasViewport.handleZoomOut();
+        case "zoom-reset": return canvasViewport.handleResetZoom();
+        case "fit": return handleFitToScreen();
+        case "toggle-grid": return canvasViewport.toggleGrid();
+        case "toggle-help": return uiState.setShowCommandMenu((prev) => !prev);
+      }
+    },
+    [
+      canvasViewport,
+      deleteElementsWithConnectedArrows,
+      elementCommands,
+      elements,
+      handleFitToScreen,
+      handleRedo,
+      handleUndo,
+      selectedElements,
+      uiState,
+      whiteboardAutoSave.saveWhiteboard,
+      whiteboardDrawing,
+    ],
+  );
+
   useWhiteboardKeyboard({
     currentTool: uiState.currentTool,
     setCurrentTool: uiState.setCurrentTool,
     hasEditAccess: whiteboardAccess.hasEditAccess,
-    handleUndo,
-    handleRedo,
-    saveWhiteboard: whiteboardAutoSave.saveWhiteboard,
-    selectAllElements: () => setSelectedElements(elements.map((el) => el.id)),
-    deleteSelectedElements: useCallback(() => {
-      if (selectedElements.length > 0) {
-        deleteElementsWithConnectedArrows(selectedElements);
-        setSelectedElements([]);
-      }
-    }, [deleteElementsWithConnectedArrows, selectedElements]),
-    // Escape: abandon a half-made shape or connector first; only then clear the selection.
-    clearSelection: () => {
-      if (whiteboardDrawing.cancelDrawing()) return;
-      setSelectedElements([]);
-    },
-    handleZoomIn: canvasViewport.handleZoomIn,
-    handleZoomOut: canvasViewport.handleZoomOut,
-    handleResetZoom: canvasViewport.handleResetZoom,
-    handleFitToScreen,
-    toggleGrid: canvasViewport.toggleGrid,
-    setShowCommandMenu: uiState.setShowCommandMenu,
+    hasSelection: selectedElements.length > 0,
+    onCommand: runShortcut,
   });
 
   useEffect(() => {
@@ -1026,6 +1102,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleGenerateDiagram,
     handleCommandAction,
     deleteSelectedElements,
+    elementCommands,
+    isBoardReady: liveElements !== null && seedState === "settled",
     handleSelectAllElements,
     handleClearSelection,
     handleColorChange,

@@ -13,6 +13,10 @@ import { createShape } from "@/core/shapes/shape-runtime";
 import { buildConnectorArrow } from "@/features/whiteboard/hooks/interaction/connector-arrow";
 import { resolveClickSelection } from "@/features/whiteboard/hooks/interaction/selection";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
+import { computeDrag, unionBounds, type Guide } from "@/features/whiteboard/hooks/interaction/drag-session";
+
+/** Pixels (on screen) within which a dragged shape snaps to another shape's edge or centre. */
+const SNAP_SCREEN_PX = 6;
 
 interface ConnectionDraft {
   fromElementId: string;
@@ -45,11 +49,9 @@ interface UseWhiteboardDrawingProps {
   getElementsInBounds: (start: Point, end: Point) => DrawingElement[];
   getResizeHandle: (point: Point, element: DrawingElement) => string | null;
   deleteElements: (elementIds: string[]) => void;
-  moveElements: (
-    elementIds: string[],
-    deltaX: number,
-    deltaY: number,
-  ) => DrawingElement[];
+  /** Writes `origin` (the elements as they were when the drag began) moved by the total delta. */
+  moveElements: (origin: DrawingElement[], deltaX: number, deltaY: number) => void;
+  zoom: number;
   resizeElement: (
     elementId: string,
     handle: string,
@@ -107,6 +109,7 @@ export const useWhiteboardDrawing = ({
   getResizeHandle,
   deleteElements,
   moveElements,
+  zoom,
   resizeElement,
   updateElement,
   getElementBounds,
@@ -132,6 +135,15 @@ export const useWhiteboardDrawing = ({
   // Drawing state
   const [isDrawing, setIsDrawing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [alignmentGuides, setAlignmentGuides] = useState<Guide[]>([]);
+  // What a drag started from. Positions are always origin + total travel, so a missed or repeated
+  // pointer event cannot make a shape drift away from the cursor.
+  const dragSessionRef = useRef<{
+    start: Point;
+    origin: DrawingElement[];
+    selection: Bounds;
+    targets: Bounds[];
+  } | null>(null);
   const [dragStart, setDragStart] = useState<Point | null>(null);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
@@ -253,6 +265,27 @@ export const useWhiteboardDrawing = ({
 
         if (outcome.startDrag && hasEditAccess) {
           beginGesture?.();
+          const moving = new Set(outcome.selected);
+          const origin = elements.filter((el) => moving.has(el.id));
+          const selectionBounds = unionBounds(
+            origin.flatMap((el) => getElementBounds(el) ?? []),
+          );
+          dragSessionRef.current = selectionBounds
+            ? {
+                start: point,
+                origin,
+                selection: selectionBounds,
+                // Other shapes to align with; connectors, freehand and group frames are not alignment targets.
+                targets: elements.flatMap((el) =>
+                  moving.has(el.id) ||
+                  el.isGuide ||
+                  el.type === "freehand" ||
+                  isArrowElement(el)
+                    ? []
+                    : (getElementBounds(el) ?? []),
+                ),
+              }
+            : null;
           setIsDragging(true);
           setDragStart(point);
         } else if (!hit && hasEditAccess) {
@@ -495,15 +528,19 @@ export const useWhiteboardDrawing = ({
             ) {
               collapseOnReleaseRef.current = null;
             }
-            const deltaX = point.x - dragStart.x;
-            const deltaY = point.y - dragStart.y;
-            const updatedElements = moveElements(
-              selectedElements,
-              deltaX,
-              deltaY,
-            );
-            updatedElements.forEach((el) => updateElement(el));
-            setDragStart(point);
+            const session = dragSessionRef.current;
+            if (session) {
+              const { dx, dy, guides } = computeDrag({
+                start: session.start,
+                point,
+                selection: session.selection,
+                targets: session.targets,
+                threshold: SNAP_SCREEN_PX / zoom,
+                snap: !e.altKey,
+              });
+              moveElements(session.origin, dx, dy);
+              setAlignmentGuides(guides);
+            }
           }
         }
       }
@@ -569,6 +606,7 @@ export const useWhiteboardDrawing = ({
       resizeElement,
       updateElement,
       moveElements,
+      zoom,
       hasEditAccess,
       deleteElements,
       connectionDraft,
@@ -749,6 +787,8 @@ export const useWhiteboardDrawing = ({
     setSelectionBox(null);
     setResizeHandle(null);
     setDragStart(null);
+    dragSessionRef.current = null;
+    setAlignmentGuides([]);
     lastResizePointRef.current = null;
     pendingArrowRerouteRef.current = null;
     previousSnapRef.current = { start: null, end: null };
@@ -829,6 +869,7 @@ export const useWhiteboardDrawing = ({
     isResizing,
     isSelectingArea,
     selectionBox,
+    alignmentGuides,
     textPosition,
 
     // Connection state

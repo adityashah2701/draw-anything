@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { clampZoom, fitView, stepZoom, wheelIntent, zoomAtPoint, type View } from "@/features/whiteboard/utils/viewport-math";
 
 /** World-space axis-aligned bounding box of the current viewport. */
 export interface ViewportBounds {
@@ -10,9 +11,10 @@ export interface ViewportBounds {
 }
 
 export const useCanvasViewport = () => {
-  // Canvas settings
-  const [zoom, setZoom] = useState(1);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  // Zoom and pan change together (zooming moves the pan), so they are one state: no render can
+  // see a new zoom with the old pan.
+  const [view, setView] = useState<View>({ zoom: 1, panOffset: { x: 0, y: 0 } });
+  const { zoom, panOffset } = view;
   const [startPan, setStartPan] = useState<Point | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -34,19 +36,15 @@ export const useCanvasViewport = () => {
   // Used for viewport-based virtualization (skip routing/rendering off-screen).
   const viewportBounds = useMemo<ViewportBounds>(() => {
     const { width, height } = canvasSize;
-    // Convert screen-space rect to world-space coords
     const minX = -panOffset.x / zoom;
     const minY = -panOffset.y / zoom;
-    const maxX = minX + width / zoom;
-    const maxY = minY + height / zoom;
-    return { minX, minY, maxX, maxY };
+    return { minX, minY, maxX: minX + width / zoom, maxY: minY + height / zoom };
   }, [zoom, panOffset, canvasSize]);
 
   // Get mouse position relative to canvas
   const getMousePosition = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): Point => {
-      const canvas = e.currentTarget;
-      const rect = canvas.getBoundingClientRect();
+      const rect = e.currentTarget.getBoundingClientRect();
       return {
         x: (e.clientX - rect.left - panOffset.x) / zoom,
         y: (e.clientY - rect.top - panOffset.y) / zoom,
@@ -55,66 +53,41 @@ export const useCanvasViewport = () => {
     [zoom, panOffset],
   );
 
-  const handleWheelZoom = useCallback(
-    (e: React.WheelEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-
-      const canvas = e.currentTarget;
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      // Zoom around cursor position for precise navigation.
-      const worldX = (mouseX - panOffset.x) / zoom;
-      const worldY = (mouseY - panOffset.y) / zoom;
-
-      const zoomFactor = Math.exp(-e.deltaY * 0.0015);
-      const nextZoom = Math.max(0.1, Math.min(5, zoom * zoomFactor));
-
-      setZoom(nextZoom);
-      setPanOffset({
-        x: mouseX - worldX * nextZoom,
-        y: mouseY - worldY * nextZoom,
-      });
-    },
-    [zoom, panOffset],
-  );
-
-  // Zoom operations
-  const handleZoomIn = useCallback(() => {
-    setZoom((prev) => Math.min(prev * 1.2, 5));
+  /**
+   * Wheel on the canvas. Attach it natively with `{ passive: false }`: React's `onWheel` is passive,
+   * so `preventDefault` there is ignored and Ctrl+wheel would zoom the whole browser page.
+   */
+  const handleNativeWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const intent = wheelIntent(e);
+    setView((current) =>
+      intent.kind === "zoom"
+        ? zoomAtPoint(current, { x: e.clientX - rect.left, y: e.clientY - rect.top }, current.zoom * intent.factor)
+        : { ...current, panOffset: { x: current.panOffset.x + intent.dx, y: current.panOffset.y + intent.dy } },
+    );
   }, []);
 
-  const handleZoomOut = useCallback(() => {
-    setZoom((prev) => Math.max(prev / 1.2, 0.1));
-  }, []);
-
-  const handleResetZoom = useCallback(() => {
-    setZoom(1);
-    setPanOffset({ x: 0, y: 0 });
-  }, []);
+  // Buttons and Ctrl +/-: zoom about the middle of the canvas, like the wheel zooms about the cursor.
+  const handleZoomIn = useCallback(() => setView((v) => stepZoom(v, canvasSize, 1)), [canvasSize]);
+  const handleZoomOut = useCallback(() => setView((v) => stepZoom(v, canvasSize, -1)), [canvasSize]);
+  const handleResetZoom = useCallback(() => setView({ zoom: 1, panOffset: { x: 0, y: 0 } }), []);
 
   const fitToBounds = useCallback(
     (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
-      const width = Math.max(1, bounds.maxX - bounds.minX);
-      const height = Math.max(1, bounds.maxY - bounds.minY);
-
-      if (canvasSize.width <= 0 || canvasSize.height <= 0) return;
-
-      const padding = 80;
-      const fitZoomX = (canvasSize.width - padding * 2) / width;
-      const fitZoomY = (canvasSize.height - padding * 2) / height;
-      const nextZoom = Math.max(0.1, Math.min(5, Math.min(fitZoomX, fitZoomY)));
-
-      const centerX = (bounds.minX + bounds.maxX) / 2;
-      const centerY = (bounds.minY + bounds.maxY) / 2;
-
-      setZoom(nextZoom);
-      setPanOffset({
-        x: canvasSize.width / 2 - centerX * nextZoom,
-        y: canvasSize.height / 2 - centerY * nextZoom,
-      });
+      const next = fitView(bounds, canvasSize);
+      if (next) setView(next);
     },
+    [canvasSize],
+  );
+
+  /** Moves the view so a world point sits at the middle of the canvas (minimap clicks). */
+  const centerOn = useCallback(
+    (world: Point) =>
+      setView((v) => ({
+        ...v,
+        panOffset: { x: canvasSize.width / 2 - world.x * v.zoom, y: canvasSize.height / 2 - world.y * v.zoom },
+      })),
     [canvasSize],
   );
 
@@ -123,14 +96,19 @@ export const useCanvasViewport = () => {
     setStartPan(point);
   }, []);
 
+  // Not a functional update on purpose: `currentPoint` is a world point computed from the pan of the
+  // render that produced it, so it must be applied to that same pan (else two moves between renders
+  // would apply the same displacement twice).
   const handlePan = useCallback(
     (currentPoint: Point) => {
-      if (startPan) {
-        setPanOffset({
+      if (!startPan) return;
+      setView({
+        zoom,
+        panOffset: {
           x: panOffset.x + (currentPoint.x - startPan.x) * zoom,
           y: panOffset.y + (currentPoint.y - startPan.y) * zoom,
-        });
-      }
+        },
+      });
     },
     [startPan, panOffset, zoom],
   );
@@ -151,8 +129,13 @@ export const useCanvasViewport = () => {
       panOffset?: { x: number; y: number };
       showGrid?: boolean;
     }) => {
-      if (settings.zoom !== undefined) setZoom(settings.zoom);
-      if (settings.panOffset) setPanOffset(settings.panOffset);
+      setView((v) => ({
+        zoom: settings.zoom !== undefined && Number.isFinite(settings.zoom) ? clampZoom(settings.zoom) : v.zoom,
+        panOffset:
+          settings.panOffset && Number.isFinite(settings.panOffset.x) && Number.isFinite(settings.panOffset.y)
+            ? settings.panOffset
+            : v.panOffset,
+      }));
       if (settings.showGrid !== undefined) setShowGrid(settings.showGrid);
     },
     [],
@@ -170,13 +153,12 @@ export const useCanvasViewport = () => {
     viewportBounds,
 
     // Actions
-    setZoom,
-    setPanOffset,
     handleZoomIn,
     handleZoomOut,
     handleResetZoom,
     fitToBounds,
-    handleWheelZoom,
+    centerOn,
+    handleNativeWheel,
     startPanning,
     handlePan,
     stopPanning,

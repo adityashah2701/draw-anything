@@ -10,6 +10,8 @@ import {
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import { drawGuides } from "@/features/whiteboard/utils/draw-guides";
+import type { Guide } from "@/features/whiteboard/hooks/interaction/drag-session";
 
 interface ConnectionDraft {
   fromElementId: string;
@@ -51,6 +53,8 @@ interface CanvasEngineProps {
   magneticSnapPreview?: MagneticSnapPreview | null;
   /** Shape label currently being edited inline */
   editingShapeLabelId?: string | null;
+  /** Alignment lines shown while dragging */
+  alignmentGuides?: Guide[];
 }
 
 const useCanvasEngine = ({
@@ -63,6 +67,7 @@ const useCanvasEngine = ({
   canvasSize,
   selectedElements,
   selectionBox,
+  alignmentGuides,
   editingTextId,
   otherUsersDrafts = [],
   otherUsersSelections = {},
@@ -200,6 +205,8 @@ const useCanvasEngine = ({
       ctx.restore();
     }
 
+    if (alignmentGuides) drawGuides(ctx, alignmentGuides, zoom, panOffset);
+
     // ── Connection draft preview ─────────────────────────────────────────
     if (connectionDraft) {
       const fromEl = elements.find(
@@ -301,6 +308,7 @@ const useCanvasEngine = ({
     selectedElements,
     otherUsersDrafts,
     selectionBox,
+    alignmentGuides,
     zoom,
     panOffset,
     cursorPosition,

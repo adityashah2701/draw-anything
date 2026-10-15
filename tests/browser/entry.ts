@@ -25,3 +25,6 @@ export { LAYOUT_FIXTURES } from "@/features/ai/server/layout/fixtures";
 export { measureLayout } from "@/features/ai/server/layout/metrics";
 export { drawIconTile } from "@/core/icons/draw";
 export { listIcons } from "@/core/icons/registry";
+export { drawGuides } from "@/features/whiteboard/utils/draw-guides";
+export { computeDrag } from "@/features/whiteboard/hooks/interaction/drag-session";
+export { zoomAtPoint, wheelIntent } from "@/features/whiteboard/utils/viewport-math";

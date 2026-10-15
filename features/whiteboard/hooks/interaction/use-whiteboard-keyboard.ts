@@ -1,218 +1,70 @@
-import { useEffect, useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Tool } from "@/features/whiteboard/types/whiteboard.types";
+import {
+  isTextEntryTarget,
+  resolveShortcut,
+  type ShortcutCommand,
+} from "@/features/whiteboard/hooks/interaction/keyboard-policy";
 
 interface UseWhiteboardKeyboardProps {
   currentTool: Tool;
   setCurrentTool: (tool: Tool) => void;
   hasEditAccess: boolean;
-
-  // Actions
-  handleUndo: () => void;
-  handleRedo: () => void;
-  saveWhiteboard: () => void;
-  selectAllElements: () => void;
-  deleteSelectedElements: () => void;
-  clearSelection: () => void;
-
-  // Viewport
-  handleZoomIn: () => void;
-  handleZoomOut: () => void;
-  handleResetZoom: () => void;
-  handleFitToScreen: () => void;
-  toggleGrid: () => void;
-
-  // UI State
-  setShowCommandMenu: (show: boolean | ((prev: boolean) => boolean)) => void;
+  hasSelection: boolean;
+  /** Runs every command except the tool switches and the Space-to-pan hold, which live here. */
+  onCommand: (command: ShortcutCommand) => void;
 }
 
+/** Window key listener; what each key means is decided by `keyboard-policy.ts`. */
 export const useWhiteboardKeyboard = ({
   currentTool,
   setCurrentTool,
   hasEditAccess,
-  handleUndo,
-  handleRedo,
-  saveWhiteboard,
-  selectAllElements,
-  deleteSelectedElements,
-  clearSelection,
-  handleZoomIn,
-  handleZoomOut,
-  handleResetZoom,
-  handleFitToScreen,
-  toggleGrid,
-  setShowCommandMenu,
+  hasSelection,
+  onCommand,
 }: UseWhiteboardKeyboardProps) => {
+  // The tool to return to when Space is released (only set while Space is what switched to hand).
+  const toolBeforeSpaceRef = useRef<Tool | null>(null);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Show/hide command menu
-      if (e.key === "?" || (e.ctrlKey && e.key === "/")) {
-        e.preventDefault();
-        setShowCommandMenu((prev) => !prev);
-        return;
-      }
-
-      // Ctrl/Cmd + Key combinations
-      if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-          case "z":
-            e.preventDefault();
-            if (e.shiftKey) {
-              handleRedo();
-            } else {
-              handleUndo();
-            }
-            break;
-          case "y":
-            e.preventDefault();
-            handleRedo();
-            break;
-          case "s":
-            e.preventDefault();
-            saveWhiteboard();
-            break;
-          case "a":
-            e.preventDefault();
-            selectAllElements();
-            break;
-          case "=":
-          case "+":
-            e.preventDefault();
-            handleZoomIn();
-            break;
-          case "-":
-            e.preventDefault();
-            handleZoomOut();
-            break;
-          case "0":
-            e.preventDefault();
-            handleResetZoom();
-            break;
+      const command = resolveShortcut(e, {
+        textEntry: isTextEntryTarget(e.target),
+        hasEditAccess,
+        hasSelection,
+      });
+      if (!command) return;
+      // Browser defaults (page scroll on arrows/space, save dialog, bookmark...) are never wanted here.
+      e.preventDefault();
+      if (command.type === "tool") return setCurrentTool(command.tool);
+      if (command.type === "hand-hold") {
+        if (currentTool !== "hand") {
+          toolBeforeSpaceRef.current = currentTool;
+          setCurrentTool("hand");
         }
         return;
       }
-
-      // Skip if typing in input fields or contentEditable editors
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target instanceof HTMLElement && e.target.isContentEditable)
-      ) {
-        return;
-      }
-
-      // Tool shortcuts and other single key commands
-      switch (e.key.toLowerCase()) {
-        // Tool selection
-        case "v":
-          setCurrentTool("select");
-          break;
-        case "p":
-          if (hasEditAccess) setCurrentTool("pen");
-          break;
-        case "r":
-          if (hasEditAccess) setCurrentTool("rectangle");
-          break;
-        case "c":
-          if (hasEditAccess) setCurrentTool("circle");
-          break;
-        case "d":
-          if (hasEditAccess) setCurrentTool("diamond");
-          break;
-        case "l":
-          if (hasEditAccess) setCurrentTool("line");
-          break;
-        case "a":
-          if (hasEditAccess) setCurrentTool("arrow");
-          break;
-        case "b":
-          if (hasEditAccess) setCurrentTool("arrow-bidirectional");
-          break;
-        case "t":
-          if (hasEditAccess) setCurrentTool("text");
-          break;
-        case "e":
-          if (hasEditAccess) setCurrentTool("eraser");
-          break;
-        case "h":
-          setCurrentTool("hand");
-          break;
-
-        // Canvas operations
-        case "g":
-          e.preventDefault();
-          toggleGrid();
-          break;
-        case "f":
-          e.preventDefault();
-          handleFitToScreen();
-          break;
-        case "delete":
-        case "backspace":
-          e.preventDefault();
-          deleteSelectedElements();
-          break;
-        case "escape":
-          e.preventDefault();
-          clearSelection();
-          break;
-        case " ":
-          e.preventDefault();
-          if (currentTool !== "hand") {
-            setCurrentTool("hand");
-          }
-          break;
-      }
+      onCommand(command);
     },
-    [
-      currentTool,
-      setCurrentTool,
-      hasEditAccess,
-      handleUndo,
-      handleRedo,
-      saveWhiteboard,
-      selectAllElements,
-      deleteSelectedElements,
-      clearSelection,
-      handleZoomIn,
-      handleZoomOut,
-      handleResetZoom,
-      handleFitToScreen,
-      toggleGrid,
-      setShowCommandMenu,
-    ],
+    [currentTool, hasEditAccess, hasSelection, onCommand, setCurrentTool],
   );
 
   const handleKeyUp = useCallback(
     (e: KeyboardEvent) => {
-      // Skip if typing in input fields or contentEditable editors
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target instanceof HTMLElement && e.target.isContentEditable)
-      ) {
-        return;
-      }
-
-      // Return to select tool when spacebar is released
-      if (e.key === " " && currentTool === "hand") {
-        setCurrentTool("select");
-      }
+      if (e.key !== " " || toolBeforeSpaceRef.current === null) return;
+      const previous = toolBeforeSpaceRef.current;
+      toolBeforeSpaceRef.current = null;
+      setCurrentTool(previous);
     },
-    [currentTool, setCurrentTool],
+    [setCurrentTool],
   );
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [handleKeyDown, handleKeyUp]);
-
-  return {
-    // This hook primarily handles side effects (keyboard events)
-    // and doesn't need to return any state
-  };
 };
