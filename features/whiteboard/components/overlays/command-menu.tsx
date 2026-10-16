@@ -205,6 +205,10 @@ export function CommandMenu({
             <Copy className="mr-2 h-4 w-4" />
             <span>Copy as image</span>
           </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("copy-svg"))}>
+            <Copy className="mr-2 h-4 w-4" />
+            <span>Copy as SVG</span>
+          </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onAction?.("clear"))}>
             <Trash2 className="mr-2 h-4 w-4" />
             <span>Clear Canvas</span>

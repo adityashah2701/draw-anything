@@ -158,6 +158,40 @@ suite("export dialog in real Chrome (real component + hook + exporter)", () => {
     expect(pageErrors).toEqual([]);
   });
 
+  it("Copy SVG puts the selection's SVG on the clipboard as text", async () => {
+    await mount({ select: "two" });
+    await page.getByRole("button", { name: "Copy SVG" }).click();
+    await page.waitForFunction(async () => (await navigator.clipboard.readText()).startsWith("<?xml"));
+    const result = await page.evaluate(async () => {
+      const text = await navigator.clipboard.readText();
+      const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+      const whole = await window.T.exportScene({
+        elements: window.fixtureElements,
+        selectedIds: [],
+        options: { format: "svg", scale: 1, transparent: false, selectionOnly: false },
+      });
+      return { error: doc.querySelector("parsererror")?.textContent ?? null, texts: doc.querySelectorAll("text").length, wholeTexts: (await whole.blob.text()).match(/<text /g)?.length ?? 0 };
+    });
+    expect(result.error).toBeNull();
+    expect(result.texts).toBeGreaterThanOrEqual(2);
+    expect(result.texts).toBeLessThan(result.wholeTexts);
+    expect(await page.getByRole("alert").count()).toBe(0);
+    expect(await page.getByRole("dialog").isVisible()).toBe(true);
+    expect(pageErrors).toEqual([]);
+  });
+
+  it("a failed SVG copy shows its reason in the dialog", async () => {
+    await mount();
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = () => Promise.reject(new DOMException("blocked", "NotAllowedError"));
+    });
+    await page.getByRole("button", { name: "Copy SVG" }).click();
+    const alert = page.getByRole("alert");
+    await alert.waitFor();
+    expect(await alert.textContent()).toMatch(/blocked copying/i);
+    expect(pageErrors).toEqual([]);
+  });
+
   it("a failed copy shows its reason in the dialog", async () => {
     await mount();
     await page.evaluate(() => {

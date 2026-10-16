@@ -87,7 +87,7 @@ export const elementsFromDiagramCode = (
 
 // ── canvas -> code ──────────────────────────────────────────────────────────
 
-const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "diamond", "triangle"]);
+const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "diamond", "pill", "triangle"]);
 
 const boundsOf = (element: DrawingElement) => ({
   minX: Math.min(...element.points.map((p) => p.x)),
@@ -128,6 +128,7 @@ export const graphFromElements = (elements: DrawingElement[]): GraphFromElements
       label: el.label?.trim() || el.text?.trim() || `Shape ${(unlabeled += 1)}`,
       kind: el.ai?.semanticKind ?? (el.type === "diamond" ? "decision" : undefined),
       icon: el.ai?.icon,
+      shape: el.type === "diamond" || el.type === "pill" ? el.type : undefined,
     };
   });
 

@@ -10,6 +10,6 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts"],
-    exclude: ["node_modules/**", ".next/**", "**/*.browser.test.ts"],
+    exclude: ["node_modules/**", ".next/**", ".claude/**", "**/*.browser.test.ts"],
   },
 });

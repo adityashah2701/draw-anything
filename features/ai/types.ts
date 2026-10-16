@@ -66,6 +66,8 @@ export type AISemanticNodeKind =
   | "config"
   | "cicd"
   | "workflow"
+  | "start"
+  | "end"
   | "decision"
   | "parallel"
   | "retry"
@@ -93,8 +95,8 @@ export interface AIDiagramNode {
   parentId?: string;
   description?: string;
   priority?: number;
-  /** Drawn as a real diamond; decisions always are. */
-  shape?: "diamond";
+  /** Drawn as a real diamond (decisions always are) or a pill (start and end always are). */
+  shape?: "diamond" | "pill";
   /** #rrggbb stroke; the fill is a tint of it. */
   color?: string;
 }

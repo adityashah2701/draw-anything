@@ -20,8 +20,8 @@ export interface ParsedNode {
   /** Raw `icon` value; resolved against the icon registry later. */
   icon?: string;
   dashed?: boolean;
-  /** `diamond` only; other Eraser shapes are reported and ignored. */
-  shape?: "diamond";
+  /** `diamond` or `pill` (`oval`/`ellipse` read as pill); other Eraser shapes are reported and ignored. */
+  shape?: "diamond" | "pill";
   /** #rrggbb */
   color?: string;
 }

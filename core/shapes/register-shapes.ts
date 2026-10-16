@@ -2,6 +2,7 @@ import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { rectangleDefinition } from "@/core/shapes/rectangle/definition";
 import { circleDefinition } from "@/core/shapes/circle/definition";
 import { diamondDefinition } from "@/core/shapes/diamond/definition";
+import { pillDefinition } from "@/core/shapes/pill/definition";
 import { triangleDefinition } from "@/core/shapes/triangle/definition";
 import { arrowDefinition } from "@/core/shapes/arrow/definition";
 import { bidirectionalArrowDefinition } from "@/core/shapes/bidirectional-arrow/definition";
@@ -18,6 +19,7 @@ export const initializeShapeRegistry = () => {
   shapeRegistry.register(rectangleDefinition);
   shapeRegistry.register(circleDefinition);
   shapeRegistry.register(diamondDefinition);
+  shapeRegistry.register(pillDefinition);
   shapeRegistry.register(triangleDefinition);
   shapeRegistry.register(semanticNodeDefinition);
   shapeRegistry.register(lineDefinition);

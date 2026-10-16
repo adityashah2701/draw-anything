@@ -5,6 +5,7 @@ import { documentFromParsedCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent } from "@/features/ai/types";
 import { runDiagramAgent, type AgentProgress } from "./agent-loop";
+import { inferDiagramType } from "./prompt/prompt-context";
 import { buildSystemPrompt, buildUserPrompt } from "./prompt/system";
 import { createToolTransport } from "./transports/create";
 import type { ToolTransport } from "./types";
@@ -75,7 +76,10 @@ export async function* streamDiagramAgentEvents(options: DiagramAgentOptions): A
     const result = yield* withLiveEvents(async (emit) =>
       runDiagramAgent({
         transport,
-        system: buildSystemPrompt(transport.kind),
+        system: buildSystemPrompt(transport.kind, {
+          diagramType: inferDiagramType(request.prompt, options.existingDiagram),
+          prompt: request.prompt,
+        }),
         user: buildUserPrompt(request.prompt, options.existingDiagram),
         maxTurns: options.maxTurns,
         signal: controller.signal,

@@ -111,6 +111,8 @@ add("wifi", "hardware", "wifi", "WiFi", "wireless", "wlan");
 add("bluetooth", "hardware", "bluetooth", "BT", "ble");
 add("radio", "hardware", "radio-tower", "RF", "lora", "zigbee", "antenna");
 add("workflow", "flow", "workflow", "WF", "process", "step");
+add("start", "flow", "rocket", "GO", "begin", "entry-point");
+add("end", "flow", "signpost", "END", "finish", "terminator", "stop");
 add("decision", "flow", "split", "?", "branch", "condition", "if");
 add("parallel", "flow", "git-fork", "PAR", "fork", "concurrent");
 add("retry", "flow", "rotate-cw", "RT", "retry-loop");

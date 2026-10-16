@@ -60,6 +60,8 @@ One renderer: every format draws elements with `drawElement` in light mode (`cor
 ### Shapes
 `core/shapes/<shape>/` each export a definition built with `createShapeDefinition` (bounds, hit-test, resize handles, canvas render, anchors). They are registered in `core/shapes/register-shapes.ts` / `shape-registry.ts`; add new shapes there.
 
+AI flowcharts draw `decision` as a `diamond` and `start`/`end` as a `pill` (a rectangle with fully rounded ends, `core/shapes/pill`; no toolbar entry, it comes from the compiler and diagram code), everything else as a `semantic-node` with an icon tile. `shapeOf` in `canvas-compiler.ts` decides (an explicit `shape:` beats the kind), `sizeDiamondNode`/`sizePillNode` in `core/text/node-size.ts` size each so its label fits (the pill's label box is `pillLabelBox` in `core/text/label-region.ts`, shared by renderer, sizing and layout metrics). In the DSL `shape: diamond|pill` (`oval` and `ellipse` read as pill) is accepted; the serializer only writes `shape:` when the kind does not already imply it. A new node-like element type must also be added to `isNodeElement` (`layout/metrics.ts`), `NODE_TYPES` (`diagram-code/canvas.ts`) and the node list in `diagram-code/pins.ts`. The agent prompt is trimmed per request (`prompt/prompt-context.ts`: inferred diagram type picks the playbook, one example and the icon categories); its size budgets are tests in `prompt/prompt-context.test.ts`.
+
 ### Routing engine (`core/routing`)
 Public API is `orthogonal-router.ts` (`routeArrowPoints`, `routeArrowBatch`); `route-engine.ts` (`routeWithEngine`) runs the pipeline:
 1. Sanitize inputs (`routing-guards.ts`: `sanitizeEdges`, `sanitizeObstacles`, `isFullyConnectedEdge`)

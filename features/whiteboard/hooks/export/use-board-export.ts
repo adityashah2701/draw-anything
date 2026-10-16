@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { copyPngToClipboard, downloadBlob, exportFilename } from "@/features/whiteboard/export/deliver";
+import { copyPngToClipboard, copySvgToClipboard, downloadBlob, exportFilename } from "@/features/whiteboard/export/deliver";
 import { ExportError } from "@/features/whiteboard/export/errors";
 import { exportScene, type ExportOptions } from "@/features/whiteboard/export/export-scene";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -77,7 +77,26 @@ export const useBoardExport = (source: Source) => {
     [run],
   );
 
+  const copySvg = useCallback(
+    async (selectionOnly: boolean): Promise<string | null> => {
+      const { error } = await run((signal) => {
+        const { elements, selectedIds } = latest.current;
+        const svg = exportScene({
+          elements,
+          selectedIds,
+          options: { format: "svg", scale: 1, transparent: false, selectionOnly },
+          signal,
+        }).then((r) => r.blob.text());
+        return copySvgToClipboard(svg);
+      });
+      if (error) return error;
+      toast.success(selectionOnly ? "Copied selection as SVG" : "Copied board as SVG");
+      return null;
+    },
+    [run],
+  );
+
   const cancel = useCallback(() => running.current?.abort(), []);
 
-  return { isExporting, exportFile, copyImage, cancel };
+  return { isExporting, exportFile, copyImage, copySvg, cancel };
 };

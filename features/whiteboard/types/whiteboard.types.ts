@@ -85,6 +85,11 @@ export interface DiamondShape extends BaseDrawingElement {
   type: "diamond";
 }
 
+/** Terminator: a rectangle with fully rounded ends. Used for flowchart start and end. */
+export interface PillShape extends BaseDrawingElement {
+  type: "pill";
+}
+
 export interface TriangleShape extends BaseDrawingElement {
   type: "triangle";
 }
@@ -132,6 +137,7 @@ export type DrawingElement =
   | RectangleShape
   | CircleShape
   | DiamondShape
+  | PillShape
   | TriangleShape
   | LineShape
   | TextShape

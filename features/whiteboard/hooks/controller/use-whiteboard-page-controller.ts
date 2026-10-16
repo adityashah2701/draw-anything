@@ -799,6 +799,9 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "copy-image":
           void boardExport.copyImage(selectedElements.length > 0).then((message) => message && toast.error(message));
           break;
+        case "copy-svg":
+          void boardExport.copySvg(selectedElements.length > 0).then((message) => message && toast.error(message));
+          break;
       }
     },
     [

@@ -86,6 +86,9 @@ const parseFont = (font: string) => {
   };
 };
 
+/** How far (in drawing units) a word may start from the end of the previous one and still be the same run. */
+const RUN_GAP_TOLERANCE = 0.75;
+
 type PathPoint = { x: number; y: number };
 
 export class SvgContext implements PathDataSink {
@@ -187,7 +190,7 @@ export class SvgContext implements PathDataSink {
   restore() {
     const previous = this.stack.pop();
     if (!previous) return;
-    this.body.push("</g>".repeat(this.state.openGroups));
+    this.push("</g>".repeat(this.state.openGroups));
     this.state = previous;
   }
 
@@ -322,13 +325,13 @@ export class SvgContext implements PathDataSink {
     if (this.d.length === 0) return;
     this.includePath(0);
     const evenodd = rule === "evenodd" ? ' fill-rule="evenodd"' : "";
-    this.body.push(`<path d="${this.d.join(" ")}" fill="${escapeXml(this.state.fillStyle)}"${this.opacity("fill")}${evenodd}${this.transformAttr()}/>`);
+    this.push(`<path d="${this.d.join(" ")}" fill="${escapeXml(this.state.fillStyle)}"${this.opacity("fill")}${evenodd}${this.transformAttr()}/>`);
   }
   stroke(path?: unknown) {
     this.requireNoPath(path);
     if (this.d.length === 0) return;
     this.includePath((this.state.lineWidth * this.scaleFactor()) / 2);
-    this.body.push(`<path d="${this.d.join(" ")}"${this.strokeAttrs()}${this.transformAttr()}/>`);
+    this.push(`<path d="${this.d.join(" ")}"${this.strokeAttrs()}${this.transformAttr()}/>`);
   }
   /** Used by icon glyphs: raw SVG path data in the current transform (see core/icons/draw.ts). */
   strokePathData(data: string) {
@@ -336,18 +339,18 @@ export class SvgContext implements PathDataSink {
     // Glyphs are 24-unit boxes; the extent is the unit box, which is a safe superset of the ink.
     this.include(0, 0, (this.state.lineWidth * this.scaleFactor()) / 2);
     this.include(24, 24, (this.state.lineWidth * this.scaleFactor()) / 2);
-    this.body.push(`<path d="${data}"${this.strokeAttrs()}${this.transformAttr()}/>`);
+    this.push(`<path d="${data}"${this.strokeAttrs()}${this.transformAttr()}/>`);
   }
   fillRect(x: number, y: number, w: number, h: number) {
     this.include(x, y, 0);
     this.include(x + w, y + h, 0);
-    this.body.push(`<rect x="${num(x)}" y="${num(y)}" width="${num(w)}" height="${num(h)}" fill="${escapeXml(this.state.fillStyle)}"${this.opacity("fill")}${this.transformAttr()}/>`);
+    this.push(`<rect x="${num(x)}" y="${num(y)}" width="${num(w)}" height="${num(h)}" fill="${escapeXml(this.state.fillStyle)}"${this.opacity("fill")}${this.transformAttr()}/>`);
   }
   strokeRect(x: number, y: number, w: number, h: number) {
     const pad = (this.state.lineWidth * this.scaleFactor()) / 2;
     this.include(x, y, pad);
     this.include(x + w, y + h, pad);
-    this.body.push(`<rect x="${num(x)}" y="${num(y)}" width="${num(w)}" height="${num(h)}"${this.strokeAttrs()}${this.transformAttr()}/>`);
+    this.push(`<rect x="${num(x)}" y="${num(y)}" width="${num(w)}" height="${num(h)}"${this.strokeAttrs()}${this.transformAttr()}/>`);
   }
   clearRect() {
     // Export scenes are drawn onto an empty surface, so there is nothing to clear.
@@ -356,7 +359,7 @@ export class SvgContext implements PathDataSink {
     if (this.d.length === 0) return;
     const id = `clip${(this.clipId += 1)}`;
     this.defs.push(`<clipPath id="${id}"><path d="${this.d.join(" ")}"${this.transformAttr()}/></clipPath>`);
-    this.body.push(`<g clip-path="url(#${id})">`);
+    this.push(`<g clip-path="url(#${id})">`);
     this.state.openGroups += 1;
   }
 
@@ -392,9 +395,30 @@ export class SvgContext implements PathDataSink {
       : baseline === "top" || baseline === "hanging" ? y + emAscent
       : baseline === "bottom" ? y - emDescent
       : y;
-    this.body.push(
-      `<text x="${num(x)}" y="${num(baselineY)}" font-family="${escapeXml(font.family)}" font-size="${num(font.size)}" font-weight="${font.weight}" font-style="${font.style}" fill="${escapeXml(this.state.fillStyle)}"${this.opacity("fill")} text-anchor="${anchor}" xml:space="preserve"${this.transformAttr()}>${clean}</text>`,
-    );
+    const head = `y="${num(baselineY)}" font-family="${escapeXml(font.family)}" font-size="${num(font.size)}" font-weight="${font.weight}" font-style="${font.style}" fill="${escapeXml(this.state.fillStyle)}"${this.opacity("fill")} text-anchor="${anchor}" xml:space="preserve"${this.transformAttr()}`;
+    // The renderers draw a line word by word, each call starting where the last ended. Join such calls
+    // into one element so the text can be selected and searched; only start-anchored text qualifies,
+    // because centred and right-aligned positions are per call.
+    const run = this.run;
+    if (run && anchor === "start" && run.head === head && Math.abs(x - run.endX) <= RUN_GAP_TOLERANCE) {
+      run.text += clean;
+      run.endX = x + metrics.width;
+      return;
+    }
+    this.flushRun();
+    this.run = { x, head, text: clean, endX: anchor === "start" ? x + metrics.width : Number.NaN };
+  }
+
+  private run: { x: number; head: string; text: string; endX: number } | null = null;
+  private flushRun() {
+    const run = this.run;
+    if (!run) return;
+    this.run = null;
+    this.body.push(`<text x="${num(run.x)}" ${run.head}>${run.text}</text>`);
+  }
+  private push(markup: string) {
+    this.flushRun();
+    this.body.push(markup);
   }
 
   // ── results ──────────────────────────────────────────────────────────────
@@ -404,6 +428,7 @@ export class SvgContext implements PathDataSink {
   }
   /** The drawing as SVG elements (open clip groups closed) and the definitions they reference. */
   markup(): { defs: string; body: string } {
+    this.flushRun();
     const closing = "</g>".repeat(this.state.openGroups + this.stack.reduce((n, s) => n + s.openGroups, 0));
     return { defs: this.defs.join(""), body: this.body.join("") + closing };
   }

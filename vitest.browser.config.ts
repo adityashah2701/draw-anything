@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.browser.test.ts"],
-    exclude: ["node_modules/**", ".next/**"],
+    exclude: ["node_modules/**", ".next/**", ".claude/**"],
     testTimeout: 60_000,
     hookTimeout: 60_000,
     fileParallelism: false,

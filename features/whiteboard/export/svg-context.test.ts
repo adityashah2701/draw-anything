@@ -170,3 +170,73 @@ describe("SvgContext sanitising", () => {
     expect(ctx.markup().body + ctx.markup().defs).not.toMatch(/href|<image|<script|<foreignObject|https?:/i);
   });
 });
+
+describe("SvgContext text runs", () => {
+  const texts = (ctx: SvgContext) => [...ctx.markup().body.matchAll(/<text [^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
+
+  it("joins words drawn one after another on a line into one text element", () => {
+    const ctx = make();
+    ctx.font = "16px Inter";
+    ctx.fillText("Hello", 0, 10); // measured width 50
+    ctx.fillText(" ", 50, 10);
+    ctx.fillText("world", 60, 10);
+    expect(texts(ctx)).toEqual(["Hello world"]);
+    expect(ctx.markup().body).toContain('<text x="0" y="10"');
+    expect(ctx.inkBounds()).toEqual({ minX: 0, minY: 2, maxX: 110, maxY: 12 });
+  });
+
+  it("tolerates sub-pixel rounding between words but not a real gap", () => {
+    const near = make();
+    near.fillText("ab", 0, 10);
+    near.fillText("cd", 20.4, 10);
+    expect(texts(near)).toEqual(["abcd"]);
+    const gap = make();
+    gap.fillText("ab", 0, 10);
+    gap.fillText("cd", 25, 10);
+    expect(texts(gap)).toEqual(["ab", "cd"]);
+  });
+
+  it.each([
+    ["another line", (c: SvgContext) => c.fillText("b", 10, 30)],
+    ["another colour", (c: SvgContext) => { c.fillStyle = "#ff0000"; c.fillText("b", 10, 10); }],
+    ["another font", (c: SvgContext) => { c.font = "bold 20px Inter"; c.fillText("b", 10, 10); }],
+    ["another opacity", (c: SvgContext) => { c.globalAlpha = 0.5; c.fillText("b", 10, 10); }],
+    ["another transform", (c: SvgContext) => { c.translate(0, 1); c.fillText("b", 10, 10); }],
+  ])("does not join across %s", (_name, second) => {
+    const ctx = make();
+    ctx.fillText("a", 0, 10);
+    second(ctx);
+    expect(texts(ctx)).toHaveLength(2);
+  });
+
+  it("does not join centred or right-aligned text, whose x is per call", () => {
+    const ctx = make();
+    ctx.textAlign = "center";
+    ctx.fillText("ab", 20, 10);
+    ctx.fillText("cd", 20, 10);
+    expect(texts(ctx)).toEqual(["ab", "cd"]);
+  });
+
+  it("keeps drawing order: anything painted between two words splits the run", () => {
+    const ctx = make();
+    ctx.fillText("a", 0, 10);
+    ctx.beginPath();
+    ctx.rect(0, 0, 5, 5);
+    ctx.fill();
+    ctx.fillText("b", 10, 10);
+    expect(ctx.markup().body).toMatch(/<text[^>]*>a<\/text><path [^>]*\/><text[^>]*>b<\/text>/);
+    const clipped = make();
+    clipped.fillText("a", 0, 10);
+    clipped.save();
+    clipped.restore();
+    clipped.fillText("b", 10, 10);
+    expect(texts(clipped)).toEqual(["a", "b"]);
+  });
+
+  it("still escapes every part of a merged run", () => {
+    const ctx = make();
+    ctx.fillText("a<", 0, 10);
+    ctx.fillText('&"b', 20, 10);
+    expect(texts(ctx)).toEqual(["a&lt;&amp;&quot;b"]);
+  });
+});

@@ -4,6 +4,14 @@ export interface WorkedExample {
   code: string;
 }
 
+/** The examples a request of this type learns from the most; the first is always enough on its own. */
+export const examplesFor = (diagramType: string | undefined, prompt = ""): WorkedExample[] => {
+  const pick = (...requests: string[]) => requests.map((r) => EXAMPLES.find((e) => e.request === r)!);
+  if (diagramType === "flowchart" || diagramType === "workflow") return pick("Login flow");
+  if (diagramType === "architecture" && /ci\/cd|pipeline|deploy/i.test(prompt)) return pick("CI/CD pipeline with staging and production");
+  return pick("Web app backend on AWS");
+};
+
 export const EXAMPLES: WorkedExample[] = [
   {
     request: "CI/CD pipeline with staging and production",
@@ -82,13 +90,13 @@ Payments Service > Stripe: charge`,
     code: `type flowchart
 title Login
 
-Start [kind: user]
+Start [kind: start]
 Enter Credentials [kind: workflow]
 Valid? [kind: decision]
 MFA Required? [kind: decision]
 Create Session [kind: workflow]
 Show Error [kind: alerting]
-Dashboard [kind: dashboard]
+Dashboard [kind: end]
 
 Start > Enter Credentials > Valid?
 Valid? > MFA Required?: yes

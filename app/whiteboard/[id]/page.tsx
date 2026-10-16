@@ -9,6 +9,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { RoomProvider } from "@/liveblocks.config";
 import { WhiteboardCanvasRoom } from "@/features/whiteboard/components/canvas/whiteboard-canvas-room";
 import { resolveWhiteboardAccess } from "@/features/whiteboard/hooks/access/whiteboard-access";
+import { isPlausibleWhiteboardId } from "@/lib/whiteboard-id";
 
 const Centered = ({ children }: { children: React.ReactNode }) => (
   <div className="flex h-screen items-center justify-center bg-background">
@@ -20,7 +21,10 @@ const Centered = ({ children }: { children: React.ReactNode }) => (
 
 export default function WhiteboardCanvasRoomPage() {
   const params = useParams();
-  const whiteboardId = params.id as string;
+  const rawId = params.id;
+  // A malformed id must never reach Convex: its validator throws and that used
+  // to crash the page (DA-006). It gets the same "not found" as a missing board.
+  const whiteboardId = isPlausibleWhiteboardId(rawId) ? rawId : undefined;
 
   // Ask the server before opening a realtime connection: people without access
   // get a clear message instead of a spinner that never ends.
@@ -28,7 +32,7 @@ export default function WhiteboardCanvasRoomPage() {
     api.whiteboard.getAccess,
     whiteboardId ? { id: whiteboardId as Id<"whiteboards"> } : "skip",
   );
-  const { status } = resolveWhiteboardAccess(access);
+  const { status } = resolveWhiteboardAccess(whiteboardId ? access : null);
 
   if (status === "loading") {
     return (
@@ -41,7 +45,7 @@ export default function WhiteboardCanvasRoomPage() {
     );
   }
 
-  if (status === "denied") {
+  if (status === "denied" || !whiteboardId) {
     return (
       <Centered>
         <h1 className="text-lg font-semibold text-foreground">

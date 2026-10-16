@@ -23,6 +23,24 @@ export const SEMANTIC_INSET_WIDTH = SEMANTIC_ICON_MAX + ICON_LEFT_MARGIN + ICON_
 export const semanticIconSize = (height: number) => Math.min(SEMANTIC_ICON_MAX, height * 0.42);
 export const SEMANTIC_ICON_LEFT = ICON_LEFT_MARGIN;
 
+/**
+ * The text box of a pill (a rectangle with fully rounded ends): inset by half a radius at each end and
+ * 70% of the height, which keeps its corners inside the rounded ends. The renderer, the node sizing
+ * and the layout metrics all read it from here.
+ */
+export const PILL_MAX_LINES = 3;
+const PILL_HEIGHT_SHARE = 0.7;
+export const pillLabelBox = (width: number, height: number) => ({
+  width: Math.max(MIN_LABEL_WIDTH, width - height / 2),
+  height: height * PILL_HEIGHT_SHARE,
+  maxLines: PILL_MAX_LINES,
+});
+/** The inverse of `pillLabelBox`: the smallest pill (not below `min`) whose label box holds `box`. */
+export const pillSizeForLabel = (box: { width: number; height: number }, min: { width: number; height: number }) => {
+  const height = Math.max(min.height, Math.ceil(box.height / PILL_HEIGHT_SHARE));
+  return { width: Math.max(min.width, Math.ceil(box.width + height / 2)), height };
+};
+
 export const getShapeLabelRegion = (type: string, bounds: Bounds): LabelRegion => {
   if (type === "semantic-node") {
     const icon = semanticIconSize(bounds.height);

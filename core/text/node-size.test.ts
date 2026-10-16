@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createEstimateContext, estimateTextWidth } from "./estimate";
 import { layoutShapeLabel } from "./label-layout";
-import { getShapeLabelRegion } from "./label-region";
-import { sizeSemanticNode } from "./node-size";
+import { getShapeLabelRegion, pillLabelBox, pillSizeForLabel } from "./label-region";
+import { sizePillNode, sizeSemanticNode } from "./node-size";
 
 const input = { fontSize: 17, fontWeight: "600", minWidth: 168, maxWidth: 280, minHeight: 78 };
 const LABELS = [
@@ -90,5 +90,46 @@ describe("a word is never split to make a label fit", () => {
 
   it("a box that cannot hold the longest word at any width is reported as not fitting", () => {
     expect(sizeSemanticNode({ ...input, label: "Pneumonoultramicroscopicsilicovolcanoconiosis" }).fits).toBe(false);
+  });
+});
+
+describe("sizePillNode", () => {
+  const input = (label: string) => ({ label, fontSize: 17, fontWeight: "600", minWidth: 168, maxWidth: 280, minHeight: 64 });
+
+  it.each(["Start", "End", "Order shipped", "Customer submits the request and waits for confirmation by email"])(
+    "%s: the label lays out in the pill's label box at the requested size, with no broken word",
+    (label) => {
+      const size = sizePillNode(input(label));
+      const box = pillLabelBox(size.width, size.height);
+      const layout = layoutShapeLabel(createEstimateContext(), { label, boxWidth: box.width, boxHeight: box.height, fontSize: 17, fontWeight: "600", maxLines: box.maxLines });
+      expect(layout?.fits, JSON.stringify(size)).toBe(true);
+      expect(layout?.brokenWord).toBeFalsy();
+      expect(layout!.fontSize).toBe(17);
+    },
+  );
+
+  it("a single word wider than the widest pill is reported as not fitting, and the renderer shrinks it instead of breaking it", () => {
+    const label = "Supercalifragilisticexpialidocious";
+    const size = sizePillNode(input(label));
+    expect(size.fits).toBe(false);
+    // The label box gets the full 280; the pill adds the room its rounded ends take.
+    expect(pillLabelBox(size.width, size.height).width).toBeGreaterThanOrEqual(280);
+    const box = pillLabelBox(size.width, size.height);
+    const layout = layoutShapeLabel(createEstimateContext(), { label, boxWidth: box.width, boxHeight: box.height, fontSize: 17, fontWeight: "600", maxLines: box.maxLines });
+    expect(layout?.fits).toBe(true);
+    expect(layout?.brokenWord).toBeFalsy();
+    expect(layout!.fontSize).toBeLessThan(17);
+  });
+
+  it("keeps the minimum size for short labels and is never wider than a semantic node would allow", () => {
+    expect(sizePillNode(input("Start"))).toMatchObject({ width: 168, height: 64 });
+    expect(sizePillNode(input("x ".repeat(40))).width).toBeLessThanOrEqual(320);
+  });
+
+  it("pillSizeForLabel is the inverse of pillLabelBox", () => {
+    const { width, height } = pillSizeForLabel({ width: 120, height: 40 }, { width: 0, height: 0 });
+    const box = pillLabelBox(width, height);
+    expect(box.width).toBeGreaterThanOrEqual(120);
+    expect(box.height).toBeGreaterThanOrEqual(40);
   });
 });

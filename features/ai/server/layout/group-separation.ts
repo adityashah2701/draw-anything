@@ -1,4 +1,4 @@
-import { FRAME_NEST_STEP, FRAME_PADDING, FRAME_TITLE_HEIGHT } from "./frame-constants";
+import { FRAME_NEST_STEP, FRAME_PADDING, frameTopBand } from "./frame-constants";
 import type { Placement, PlacementInput } from "./types";
 
 interface Rect {
@@ -39,11 +39,12 @@ export const separateGroups = (placement: Placement, input: PlacementInput): Pla
   };
   const frameOf = (set: (typeof sets)[number]): Rect => {
     const members = [...set.ids].filter((id) => out.has(id)).map(rect);
-    const pad = FRAME_PADDING + depthOf(set) * FRAME_NEST_STEP;
+    const depth = depthOf(set);
+    const pad = FRAME_PADDING + depth * FRAME_NEST_STEP;
     return {
       minX: Math.min(...members.map((r) => r.minX)) - pad,
       maxX: Math.max(...members.map((r) => r.maxX)) + pad,
-      minY: Math.min(...members.map((r) => r.minY)) - pad - FRAME_TITLE_HEIGHT,
+      minY: Math.min(...members.map((r) => r.minY)) - pad - frameTopBand(depth),
       maxY: Math.max(...members.map((r) => r.maxY)) + pad,
     };
   };
