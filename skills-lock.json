@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "audit-codebase": {
+      "source": "bogenc/audit-codebase",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "5327df32f4159efb3cd6f9f7d3fd7d80cb231db6300fe66f9e0c0d835aa0fc31"
+    },
     "aws-diagrams": {
       "source": "eraserlabs/eraser-io",
       "sourceType": "github",
