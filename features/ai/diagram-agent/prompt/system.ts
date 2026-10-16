@@ -1,8 +1,9 @@
 import { TEXT_PROTOCOL_INSTRUCTIONS } from "../transports/text-protocol";
 import type { ToolTransport } from "../types";
-import { EXAMPLES } from "./examples";
+import { EXAMPLES, examplesFor } from "./examples";
 import { iconVocabulary } from "./icon-vocabulary";
 import { PLAYBOOKS } from "./playbooks";
+import { iconCategoriesFor, type PromptContext } from "./prompt-context";
 
 const LANGUAGE = `Diagram code (one statement per line; // starts a comment):
   type architecture            header lines, before everything else: type, title, direction
@@ -15,9 +16,18 @@ const LANGUAGE = `Diagram code (one statement per line; // starts a comment):
   Group Name { ... }           a group; nodes declared inside belong to it; groups can nest
 Names must be unique. Quote names that contain punctuation: "Auth (v2)" > Users.`;
 
-/** The agent's instructions. The text protocol's tool syntax is only included for that transport. */
-export const buildSystemPrompt = (transport: ToolTransport["kind"]): string =>
-  [
+/**
+ * The agent's instructions. The text protocol's tool syntax is only included for that transport.
+ * Without a `context` the prompt is complete (every playbook, every icon, every example). With one it
+ * keeps what can help this request: a known type's own playbook and one example, and only the icon
+ * categories that type uses (`search_icons` still finds the rest).
+ */
+export const buildSystemPrompt = (transport: ToolTransport["kind"], context?: PromptContext): string => {
+  const type = context?.diagramType;
+  const playbooks = Object.entries(PLAYBOOKS).filter(([name]) => !type || name === type);
+  const examples = context ? examplesFor(type, context.prompt) : EXAMPLES;
+  const categories = context ? iconCategoriesFor(context) : undefined;
+  return [
     "You are a senior solutions architect who draws clear, professional diagrams. You write diagrams as code; an engine lays them out, picks icons and styles them. You never think about coordinates or colours.",
     "",
     LANGUAGE,
@@ -36,19 +46,20 @@ export const buildSystemPrompt = (transport: ToolTransport["kind"]): string =>
     "- Declare nodes in flow order; connected nodes close together; group tightly coupled nodes.",
     "- Use dashed (-->) for optional, async or feedback paths.",
     "",
-    "By diagram type:",
-    ...Object.entries(PLAYBOOKS).map(([type, text]) => `- ${type}: ${text}`),
+    type ? `How to draw a ${type} diagram:` : "By diagram type:",
+    ...playbooks.map(([name, text]) => `- ${name}: ${text}`),
     "",
-    "Icon ids (icon: or kind:), by category:",
-    iconVocabulary(),
+    categories ? "Icon ids (icon: or kind:), the common ones for this diagram; search_icons finds any others:" : "Icon ids (icon: or kind:), by category:",
+    iconVocabulary(categories),
     "",
-    "Examples of good diagrams:",
-    ...EXAMPLES.map((e) => `Request: ${e.request}\n\`\`\`diagram\n${e.code}\n\`\`\``),
+    context ? "Example of a good diagram:" : "Examples of good diagrams:",
+    ...examples.map((e) => `Request: ${e.request}\n\`\`\`diagram\n${e.code}\n\`\`\``),
     "",
     transport === "text"
       ? TEXT_PROTOCOL_INSTRUCTIONS
       : "Use the provided tools. Always end by calling finish with the complete diagram code as its argument.",
   ].join("\n");
+};
 
 export const buildUserPrompt = (prompt: string, existingDiagram?: string): string =>
   existingDiagram

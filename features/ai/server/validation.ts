@@ -21,6 +21,9 @@ import {
 import { AIGraphDraftOutput, AIPlanOutput } from "@/features/ai/schemas";
 
 const KIND_HINTS: Array<[RegExp, AIDiagramNode["kind"]]> = [
+  // Whole-label only: "End User" is a user, not a terminator.
+  [/^(start|begin)$/i, "start"],
+  [/^(end|finish)$/i, "end"],
   [/\b(db|database|postgres|mysql|mongo|sql)\b/i, "database"],
   [/\b(cache|redis|memcache)\b/i, "cache"],
   [/\b(queue|broker|kafka|rabbit|pubsub|sqs)\b/i, "queue"],

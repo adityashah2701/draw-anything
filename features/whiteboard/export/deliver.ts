@@ -28,6 +28,14 @@ export const downloadBlob = (blob: Blob, filename: string) => {
   }
 };
 
+const asClipboardError = (error: unknown, what: string) => {
+  if (error instanceof ExportError) return error;
+  if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError")) {
+    return new ExportError("clipboard-denied", `The browser blocked copying to the clipboard. Allow clipboard access for this site, or download the ${what}.`);
+  }
+  return new ExportError("render-failed", "Copying failed.");
+};
+
 /** Put a PNG on the clipboard. Takes a promise because Safari needs the write to start inside the click. */
 export const copyPngToClipboard = async (png: Promise<Blob>) => {
   if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
@@ -36,10 +44,21 @@ export const copyPngToClipboard = async (png: Promise<Blob>) => {
   try {
     await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
   } catch (error) {
-    if (error instanceof ExportError) throw error;
-    if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError")) {
-      throw new ExportError("clipboard-denied", "The browser blocked copying to the clipboard. Allow clipboard access for this site, or download the PNG.");
-    }
-    throw new ExportError("render-failed", "Copying the image failed.");
+    throw asClipboardError(error, "PNG");
+  }
+};
+
+/**
+ * Put SVG markup on the clipboard as text, which every editor and code field accepts. Browsers do not
+ * allow `image/svg+xml` on the clipboard (Chrome refuses it as unsafe), so there is no image flavour.
+ */
+export const copySvgToClipboard = async (svg: Promise<string>) => {
+  if (!navigator.clipboard?.writeText) {
+    throw new ExportError("clipboard-unsupported", "This browser cannot copy to the clipboard. Download the SVG instead.");
+  }
+  try {
+    await navigator.clipboard.writeText(await svg);
+  } catch (error) {
+    throw asClipboardError(error, "SVG");
   }
 };

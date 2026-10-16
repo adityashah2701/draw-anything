@@ -365,6 +365,7 @@ export const WhiteboardEditingOverlays = ({
         onExport={boardExport.exportFile}
         onCopy={boardExport.copyImage}
         onCancelExport={boardExport.cancel}
+        onCopySvg={boardExport.copySvg}
       />
 
       <CommandMenu

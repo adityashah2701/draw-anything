@@ -8,6 +8,7 @@ import { parseDiagramCode } from "@/features/diagram-code/parse";
 import type { AIDiagramDocumentV1, AIModelProvider } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { runDiagramAgent } from "../agent-loop";
+import { inferDiagramType } from "../prompt/prompt-context";
 import { buildSystemPrompt, buildUserPrompt } from "../prompt/system";
 import { createNativeTransport } from "../transports/native";
 import { createTextTransport } from "../transports/text";
@@ -57,7 +58,7 @@ describe.skipIf(process.env.AI_EVAL !== "1")("live AI diagram evaluation", () =>
               if (!transport) continue;
               const result = await runDiagramAgent({
                 transport,
-                system: buildSystemPrompt(transport.kind),
+                system: buildSystemPrompt(transport.kind, { diagramType: inferDiagramType(golden.prompt), prompt: golden.prompt }),
                 user: buildUserPrompt(golden.prompt),
               });
               const { document } = documentFromParsedCode(parseDiagramCode(result.code), "eval", { prompt: golden.prompt, provider });

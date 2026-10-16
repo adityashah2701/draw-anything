@@ -3,7 +3,7 @@ export const PLAYBOOKS: Record<string, string> = {
   architecture:
     "Actors and entry points first (users, clients, CDN), then the edge (gateway, load balancer), services, then data stores and external systems. Put each tier in a group with a plain name. Show the main request path left to right in declaration order; put cross-cutting parts (monitoring, secrets, CI/CD) in their own group and connect them once, not to everything. Label a connection only when the protocol or meaning is not obvious.",
   flowchart:
-    "One start, one or more ends. Every decision is a question ending in ? with each outgoing branch labelled (yes/no or the condition). Keep the happy path straight; loops go back with a short label (retry). Steps are short verb phrases. Use kind decision ONLY for branching questions; steps are kind workflow, never decision. No groups unless there are clear phases.",
+    "One start (kind: start) and one or more ends (kind: end); they are drawn as rounded terminators. Every decision is a question ending in ? with each outgoing branch labelled (yes/no or the condition). Keep the happy path straight; loops go back with a short label (retry). Steps are short verb phrases. Use kind decision ONLY for branching questions; steps are kind workflow, never decision. No groups unless there are clear phases.",
   network:
     "Group by zone (internet, DMZ, internal, cloud). Show firewalls and load balancers on the boundaries between zones. One connection per link; avoid labelling every link.",
   "entity-relationship":

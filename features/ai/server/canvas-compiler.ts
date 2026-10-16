@@ -1,7 +1,7 @@
 import { buildAnchorId } from "@/core/anchors/generate-anchors";
 import { placeEdgeLabels, EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT } from "@/features/ai/server/layout/edge-labels";
 import { bundleFans } from "@/features/ai/server/layout/bus";
-import { FRAME_NEST_STEP, FRAME_PADDING, FRAME_TITLE_HEIGHT } from "@/features/ai/server/layout/frame-constants";
+import { FRAME_NEST_STEP, FRAME_PADDING, FRAME_TITLE_HEIGHT, frameTopBand } from "@/features/ai/server/layout/frame-constants";
 import { placeGrid } from "@/features/ai/server/layout/grid-placement";
 import { placeLayered } from "@/features/ai/server/layout/layered-placement";
 import { withPins, type NodePin } from "@/features/ai/server/layout/pins";
@@ -19,7 +19,7 @@ import {
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { tint } from "@/core/color/named-colors";
-import { sizeDiamondNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
+import { sizeDiamondNode, sizePillNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import {
   AIDiagramDocumentV1,
@@ -70,6 +70,8 @@ const KIND_COLORS: Record<string, { fill: string; stroke: string }> = {
   user: { fill: "#f5f3ff", stroke: "#6d28d9" },
   browser: { fill: "#f5f3ff", stroke: "#6d28d9" },
   mobile: { fill: "#f5f3ff", stroke: "#6d28d9" },
+  start: { fill: "#dcfce7", stroke: "#15803d" },
+  end: { fill: "#fee2e2", stroke: "#b91c1c" },
   decision: { fill: "#ffe4e6", stroke: "#be123c" },
   workflow: { fill: "#e0f2fe", stroke: "#075985" },
   parallel: { fill: "#ede9fe", stroke: "#5b21b6" },
@@ -90,10 +92,18 @@ const KIND_COLORS: Record<string, { fill: string; stroke: string }> = {
 const NODE_FONT_SIZE = 17;
 const NODE_FONT_WEIGHT = "600";
 const BASE_NODE_HEIGHT = 78;
+/** Normal widest node, and the widest one allowed when a single word needs more room. */
+const NODE_MAX_WIDTH = 280;
+const NODE_WIDEST_WIDTH = 520;
 
-/** Decisions (and nodes that ask for `shape: diamond`) are real diamonds with no icon tile; the rest are semantic nodes. */
-const isDecisionNode = (node: AIDiagramNode) => node.kind === "decision" || node.shape === "diamond";
+/**
+ * Decisions are real diamonds and start/end are pills, both with no icon tile; the rest are semantic
+ * nodes. An explicit `shape:` wins over what the kind implies.
+ */
+const shapeOf = (node: AIDiagramNode): "diamond" | "pill" | undefined =>
+  node.shape ?? (node.kind === "decision" ? "diamond" : node.kind === "start" || node.kind === "end" ? "pill" : undefined);
 const DECISION_NODE_HEIGHT = 92;
+const PILL_NODE_HEIGHT = 64;
 
 /**
  * Width and height of a node from its label (core/text/node-size.ts): the fewest lines that fit,
@@ -101,15 +111,23 @@ const DECISION_NODE_HEIGHT = 92;
  * always had (168 wide, 78 tall; 92 for decisions); only labels that need more get more.
  */
 export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize => {
-  const input = {
-    label: node.label,
-    fontSize: NODE_FONT_SIZE,
-    fontWeight: NODE_FONT_WEIGHT,
-    minWidth: density === "compact" ? 150 : density === "spacious" ? 190 : 168,
-    maxWidth: 280,
-    minHeight: isDecisionNode(node) ? DECISION_NODE_HEIGHT : BASE_NODE_HEIGHT,
+  const shape = shapeOf(node);
+  const sizeWith = (maxWidth: number) => {
+    const input = {
+      label: node.label,
+      fontSize: NODE_FONT_SIZE,
+      fontWeight: NODE_FONT_WEIGHT,
+      minWidth: density === "compact" ? 150 : density === "spacious" ? 190 : 168,
+      maxWidth,
+      minHeight: shape === "diamond" ? DECISION_NODE_HEIGHT : shape === "pill" ? PILL_NODE_HEIGHT : BASE_NODE_HEIGHT,
+    };
+    return shape === "diamond" ? sizeDiamondNode(input) : shape === "pill" ? sizePillNode(input) : sizeSemanticNode(input);
   };
-  return isDecisionNode(node) ? sizeDiamondNode(input) : sizeSemanticNode(input);
+  // A long unbroken word (a table or column name) cannot wrap. Widen the box for it, up to a limit,
+  // rather than let the renderer shrink the text or break the word mid-letter.
+  let size = sizeWith(NODE_MAX_WIDTH);
+  for (let width = NODE_MAX_WIDTH + 80; !size.fits && width <= NODE_WIDEST_WIDTH; width += 80) size = sizeWith(width);
+  return size;
 };
 
 const getDepths = (document: AIDiagramDocumentV1) => {
@@ -264,7 +282,7 @@ const frameBounds = ({ members, depth }: GroupBox) => {
   return {
     minX: Math.min(...members.map((m) => m.bounds.minX)) - pad,
     maxX: Math.max(...members.map((m) => m.bounds.maxX)) + pad,
-    minY: Math.min(...members.map((m) => m.bounds.minY)) - pad - FRAME_TITLE_HEIGHT,
+    minY: Math.min(...members.map((m) => m.bounds.minY)) - pad - frameTopBand(depth),
     maxY: Math.max(...members.map((m) => m.bounds.maxY)) + pad,
   };
 };
@@ -385,7 +403,7 @@ export const prepareDiagram = (document: AIDiagramDocumentV1) => {
     new Map(document.nodes.map((node) => [node.id, { node } as PositionedNode])),
   );
   const maxNesting = Math.max(0, ...nestingDepths(groups).map((g) => g.depth));
-  const frameRoom = groups.length > 0 ? 40 + maxNesting * FRAME_NEST_STEP : 0;
+  const frameRoom = groups.length > 0 ? 40 + maxNesting * (FRAME_NEST_STEP + FRAME_TITLE_HEIGHT) : 0;
   const horizontalGap =
     (density === "compact" ? 52 : density === "spacious" ? 112 : 78) + frameRoom / 2;
   // Row pitch was 138 for 78px nodes: the gap between rows, not the pitch, is what stays constant.
@@ -485,7 +503,7 @@ export const buildCanvas = (
     };
     const element: DrawingElement = {
       id: `${document.metadata.generationId}-${node.id}`,
-      type: isDecisionNode(node) ? "diamond" : "semantic-node",
+      type: shapeOf(node) ?? "semantic-node",
       points: [
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },

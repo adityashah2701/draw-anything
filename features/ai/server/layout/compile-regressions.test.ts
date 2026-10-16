@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { compileAIDiagramDetailed, compileAIDiagramToCanvas, sizeDiagramNode } from "@/features/ai/server/canvas-compiler";
-import { estimateLabelBox } from "@/core/text/estimate";
+import { createEstimateContext, estimateLabelBox } from "@/core/text/estimate";
+import { layoutShapeLabel } from "@/core/text/label-layout";
+import { pillLabelBox } from "@/core/text/label-region";
 import { graphFromElements, elementsFromDiagramCode } from "@/features/diagram-code/canvas";
 import { findMovedNodes } from "@/features/diagram-code/pins";
 import { serializeDiagramCode } from "@/features/diagram-code/serialize";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
 import type { ArrowShape, DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { LAYOUT_FIXTURES } from "./fixtures";
+import { nestedGroups } from "../../../../tests/browser/baseline-fixtures";
 import { fixtureDocument } from "./fixtures/base";
 import { measureLayout, nodeBox } from "./metrics";
 import type { PlacementEngine } from "./types";
@@ -313,5 +316,135 @@ describe("Eraser-style code on the canvas", () => {
     expect(line).toBeDefined();
     const coloured = arrows.find((a) => a.color === "#dc2626")!;
     expect(coloured.arrowHeadEnd).toBe(true);
+  });
+});
+
+describe("flowchart terminators (pills)", () => {
+  const code = [
+    "type flowchart",
+    "Start [kind: start]",
+    "Enter credentials [kind: workflow]",
+    "Valid? [kind: decision]",
+    "Dashboard [kind: end]",
+    "Locked out [shape: pill, color: red]",
+    "Start > Enter credentials > Valid?",
+    "Valid? > Dashboard: yes",
+    "Valid? > Locked out: no",
+  ].join("\n");
+  const { elements, issues } = elementsFromDiagramCode(code, { generationId: "g", frameId: "f" });
+  const named = (label: string) => elements.find((e) => e.label === label)!;
+  const doc = { id: "x", kind: "generic" as const };
+
+  it("parses without issues", () => expect(issues).toEqual([]));
+
+  it("draws start and end (and an explicit shape: pill) as pills, steps as semantic nodes, decisions as diamonds", () => {
+    expect(named("Start").type).toBe("pill");
+    expect(named("Dashboard").type).toBe("pill");
+    expect(named("Locked out").type).toBe("pill");
+    expect(named("Enter credentials").type).toBe("semantic-node");
+    expect(named("Valid?").type).toBe("diamond");
+  });
+
+  it("colours a pill by its kind, or by its own colour", () => {
+    expect(named("Start")).toMatchObject({ color: "#15803d", fill: "#dcfce7" });
+    expect(named("Dashboard")).toMatchObject({ color: "#b91c1c", fill: "#fee2e2" });
+    expect(named("Locked out").color).toBe("#dc2626");
+  });
+
+  it("sizes each pill to its label, and the label fits its label box at the requested size", () => {
+    for (const label of ["Start", "Dashboard", "Locked out"]) {
+      const el = named(label);
+      const [a, b] = el.points;
+      const size = sizeDiagramNode({ ...doc, id: label, label, kind: label === "Locked out" ? "generic" : label === "Start" ? "start" : "end", shape: "pill" }, "balanced");
+      expect([Math.abs(b.x - a.x), Math.abs(b.y - a.y)]).toEqual([size.width, size.height]);
+      const box = pillLabelBox(size.width, size.height);
+      const layout = layoutShapeLabel(createEstimateContext(), { label, boxWidth: box.width, boxHeight: box.height, fontSize: 17, fontWeight: "600", maxLines: box.maxLines });
+      expect(layout?.fits).toBe(true);
+      expect(layout!.fontSize).toBe(17);
+    }
+  });
+
+  it("attaches connectors to the pill's edge midpoints", () => {
+    const pill = named("Start");
+    const [a, b] = pill.points;
+    const mids = [`${(a.x + b.x) / 2},${a.y}`, `${b.x},${(a.y + b.y) / 2}`, `${(a.x + b.x) / 2},${b.y}`, `${a.x},${(a.y + b.y) / 2}`];
+    const arrows = elements.filter((e): e is ArrowShape => e.type === "arrow" && e.startConnection?.elementId === pill.id);
+    expect(arrows.length).toBeGreaterThan(0);
+    for (const arrow of arrows) expect(mids).toContain(`${arrow.points[0].x},${arrow.points[0].y}`);
+  });
+
+  it("counts pills as nodes: no overlaps and no clipped labels in the layout metrics", () => {
+    const m = measureLayout(elements);
+    expect(m.nodeOverlaps).toBe(0);
+    expect(m.labelsCut).toBe(0);
+    expect(elements.filter((e) => e.ai?.role === "node")).toHaveLength(5);
+  });
+
+  it("reads back from the canvas with its kind, and writes code that says no more than the kind", () => {
+    const { graph } = graphFromElements(elements);
+    expect(graph.nodes.find((n) => n.label === "Start")).toMatchObject({ kind: "start", shape: "pill" });
+    const text = serializeDiagramCode(graph);
+    expect(text).toMatch(/^Start \[kind: start\]$/m);
+    expect(text).toMatch(/^Locked out \[shape: pill\]$/m);
+    const again = elementsFromDiagramCode(text, { generationId: "g2", frameId: "f" }).elements;
+    expect(again.filter((e) => e.type === "pill").map((e) => e.label).sort()).toEqual(["Dashboard", "Locked out", "Start"]);
+    expect(again.find((e) => e.label === "Enter credentials")?.type).toBe("semantic-node");
+  });
+
+  it("keeps a dragged pill where the user put it when the code is re-applied", () => {
+    const start = named("Start");
+    const moved = elements.map((e) => (e.id === start.id ? { ...e, points: e.points.map((p) => ({ x: p.x + 400, y: p.y + 250 })) } : e));
+    const pins = findMovedNodes(moved);
+    expect([...pins.keys()]).toContain("start");
+  });
+
+  it("older boards without pills compile exactly as before (kinds without start/end are untouched)", () => {
+    const old = compileAIDiagramToCanvas(LAYOUT_FIXTURES.flowchart, "f");
+    expect(old.some((e) => e.type === "pill")).toBe(false);
+  });
+
+  it("a label of just Start or End becomes a pill even when the kind is not given", () => {
+    const bare = elementsFromDiagramCode("type flowchart\nStart\nEnd User\nEnd\nStart > End User > End", { generationId: "g", frameId: "f" }).elements;
+    const typeOf = (label: string) => bare.find((e) => e.label === label)?.type;
+    expect(typeOf("Start")).toBe("pill");
+    expect(typeOf("End")).toBe("pill");
+    expect(typeOf("End User")).not.toBe("pill");
+  });
+});
+
+describe("long identifiers and nested frame titles", () => {
+  it("widens a node for a long unbroken name instead of shrinking or breaking it", () => {
+    const name = "organization_membership_role_assignments";
+    const size = sizeDiagramNode({ id: "t", label: `${name}\nmembership_id, assigned_by_administrator_user_id`, kind: "database" }, "balanced");
+    expect(size.fits).toBe(true);
+    expect(size.width).toBeGreaterThan(280);
+    expect(size.width).toBeLessThanOrEqual(520);
+    // Ordinary labels keep the old cap.
+    expect(sizeDiagramNode({ id: "u", label: "A normal label that wraps over a few lines in the box", kind: "service" }, "balanced").width).toBeLessThanOrEqual(280);
+  });
+
+  it("gives a word that is too long even for the widest box a bounded size, and says it does not fit", () => {
+    const size = sizeDiagramNode({ id: "w", label: "x".repeat(120), kind: "generic" }, "balanced");
+    expect(size.fits).toBe(false);
+    expect(size.width).toBeLessThanOrEqual(520);
+  });
+
+  it("leaves room above an inner frame for the outer frame's title", () => {
+    const doc = nestedGroups;
+    const frames = compileAIDiagramToCanvas(doc, "frame").filter((e) => e.ai?.role === "group");
+    const rect = (e: DrawingElement) => ({ minX: Math.min(e.points[0].x, e.points[1].x), minY: Math.min(e.points[0].y, e.points[1].y), maxX: Math.max(e.points[0].x, e.points[1].x), maxY: Math.max(e.points[0].y, e.points[1].y) });
+    const TITLE_BOTTOM = 8 + 13 * 1.2; // title top offset + one line of 13px text
+    let nestedPairs = 0;
+    for (const outer of frames) {
+      for (const inner of frames) {
+        const o = rect(outer);
+        const i = rect(inner);
+        const inside = i.minX > o.minX && i.maxX < o.maxX && i.minY > o.minY && i.maxY < o.maxY;
+        if (!inside) continue;
+        nestedPairs += 1;
+        expect(i.minY - o.minY, `${inner.ai?.semanticId} inside ${outer.ai?.semanticId}`).toBeGreaterThanOrEqual(TITLE_BOTTOM + 4);
+      }
+    }
+    expect(nestedPairs).toBeGreaterThanOrEqual(3);
   });
 });

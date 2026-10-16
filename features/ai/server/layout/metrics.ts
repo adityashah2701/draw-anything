@@ -1,6 +1,6 @@
 import { createEstimateContext, estimateTextWidth } from "@/core/text/estimate";
 import { layoutShapeLabel } from "@/core/text/label-layout";
-import { getShapeLabelRegion } from "@/core/text/label-region";
+import { getShapeLabelRegion, pillLabelBox } from "@/core/text/label-region";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import {
@@ -56,9 +56,9 @@ export interface LayoutMetrics {
 
 const EDGE_LABEL_FONT_SIZE = 13;
 
-/** Generated node: a semantic node, or a diamond the compiler drew for a decision. */
+/** Generated node: a semantic node, or a diamond or pill the compiler drew for a decision, start or end. */
 export const isNodeElement = (e: DrawingElement) =>
-  e.type === "semantic-node" || (e.type === "diamond" && e.ai?.role === "node");
+  e.type === "semantic-node" || ((e.type === "diamond" || e.type === "pill") && e.ai?.role === "node");
 
 export const nodeBox = (element: DrawingElement): Box => {
   const [a, b] = element.points;
@@ -207,7 +207,9 @@ export const measureLayout = (
     const region =
       node.type === "diamond"
         ? { width: width * 0.66, height: height * 0.66, maxLines: 3 }
-        : getShapeLabelRegion("semantic-node", { ...b, width, height });
+        : node.type === "pill"
+          ? pillLabelBox(width, height)
+          : getShapeLabelRegion("semantic-node", { ...b, width, height });
     const layout = layoutShapeLabel(ctx, {
       label: node.label ?? "",
       boxWidth: region.width,

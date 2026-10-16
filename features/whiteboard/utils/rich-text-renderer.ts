@@ -114,16 +114,28 @@ const mergeAdjacentSpans = (spans: RichTextSpan[]) => {
   return merged;
 };
 
+// The only tags the label editor's contentEditable produces. Any other "<...>" in a label is text the
+// user typed (`List<String>`, `<Component />`) and must be kept, not mistaken for markup and dropped.
+const EDITOR_TAGS = "br|div|p|span|strong|b|em|i|u|li|ul|ol";
+const EDITOR_TAG = new RegExp(`</?(?:${EDITOR_TAGS})(?:[\\s/][^>]*)?>`, "i");
+const OTHER_ANGLE = new RegExp(`<(?!/?(?:${EDITOR_TAGS})[\\s/>])`, "gi");
+
+/** True when the text contains markup the editor wrote (so it needs converting back to markdown). */
+export const looksLikeEditorHtml = (input: string) => EDITOR_TAG.test(input);
+
+/** Turn every "<" that does not start an editor tag into "&lt;" so an HTML parser keeps it as text. */
+export const escapeNonEditorAngles = (input: string) => input.replace(OTHER_ANGLE, "&lt;");
+
 export const normalizeRichTextInput = (input: string) => {
   if (!input) return "";
-  if (!/<\/?[a-z][\s\S]*>/i.test(input)) return input;
+  if (!looksLikeEditorHtml(input)) return input;
   if (typeof document === "undefined") {
     return input
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<\/div>|<\/p>|<\/li>/gi, "\n")
-      .replace(/<[^>]+>/g, "");
+      .replace(new RegExp(`</?(?:${EDITOR_TAGS})(?:[\\s/][^>]*)?>`, "gi"), "");
   }
-  return editableHtmlToMarkdown(input);
+  return editableHtmlToMarkdown(escapeNonEditorAngles(input));
 };
 
 /**

@@ -17,6 +17,8 @@ interface ExportDialogProps {
   /** Resolves to null on success, else the message to show. */
   onExport: (options: ExportOptions) => Promise<string | null>;
   onCopy: (selectionOnly: boolean) => Promise<string | null>;
+  /** The "Copy SVG" button appears only when this is provided. */
+  onCopySvg?: (selectionOnly: boolean) => Promise<string | null>;
   onCancelExport: () => void;
 }
 
@@ -27,7 +29,7 @@ const FORMAT_NOTES: Record<ExportFormat, string> = {
 };
 
 // Remounted on every open (see below), so each visit starts from the same sensible defaults.
-const ExportForm = ({ onClose, selectedCount, isExporting, onExport, onCopy, onCancelExport }: Omit<ExportDialogProps, "isOpen">) => {
+const ExportForm = ({ onClose, selectedCount, isExporting, onExport, onCopy, onCopySvg, onCancelExport }: Omit<ExportDialogProps, "isOpen">) => {
   const hasSelection = selectedCount > 0;
   const [options, setOptions] = useState<ExportOptions>({ ...DEFAULT_EXPORT_OPTIONS, selectionOnly: hasSelection });
   const [error, setError] = useState<string | null>(null);
@@ -125,17 +127,29 @@ const ExportForm = ({ onClose, selectedCount, isExporting, onExport, onCopy, onC
         )}
       </div>
 
-      <DialogFooter className="gap-2 sm:justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isExporting}
-          onClick={() => finish(onCopy(options.selectionOnly && hasSelection), false)}
-        >
-          <Copy className="mr-2 h-4 w-4" />
-          Copy as image
-        </Button>
-        <div className="flex gap-2">
+      <DialogFooter className="flex-col gap-3 sm:flex-col sm:items-stretch sm:justify-start">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isExporting}
+            onClick={() => finish(onCopy(options.selectionOnly && hasSelection), false)}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Copy as image
+          </Button>
+          {onCopySvg && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isExporting}
+              onClick={() => finish(onCopySvg(options.selectionOnly && hasSelection), false)}
+            >
+              Copy SVG
+            </Button>
+          )}
+        </div>
+        <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={() => (isExporting ? onCancelExport() : onClose())}>
             {isExporting ? "Stop" : "Cancel"}
           </Button>

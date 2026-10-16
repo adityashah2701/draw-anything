@@ -18,6 +18,7 @@ const ExportHarness = ({ elements, selectedIds }: { elements: DrawingElement[]; 
         isExporting={exporter.isExporting}
         onExport={exporter.exportFile}
         onCopy={exporter.copyImage}
+        onCopySvg={exporter.copySvg}
         onCancelExport={exporter.cancel}
       />
     </>

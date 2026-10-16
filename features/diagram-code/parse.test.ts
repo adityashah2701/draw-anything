@@ -258,13 +258,13 @@ describe("Eraser-style lines, shapes and colours", () => {
   });
 
   it("supports node shape: diamond and color, and warns about the rest", () => {
-    const parsed = parseDiagramCode('A [shape: diamond, color: blue]\nB [shape: oval, color: "url(x)"]\nC [shape: rectangle]');
+    const parsed = parseDiagramCode('A [shape: diamond, color: blue]\nB [shape: cylinder, color: "url(x)"]\nC [shape: rectangle]');
     expect(parsed.nodes[0]).toMatchObject({ shape: "diamond", color: "#2563eb" });
     expect(parsed.nodes[1].shape).toBeUndefined();
     expect(parsed.nodes[1].color).toBeUndefined();
     expect(parsed.nodes[2].shape).toBeUndefined();
     const messages = parsed.issues.map((i) => i.message).join(" | ");
-    expect(messages).toMatch(/oval/);
+    expect(messages).toMatch(/cylinder/);
     expect(messages).toMatch(/not recognised/);
     expect(parsed.issues).toHaveLength(2);
   });
@@ -314,12 +314,12 @@ describe("Eraser-style syntax: edge cases", () => {
 
   it("reads shape case-insensitively; a later unsupported shape does not undo an earlier one", () => {
     expect(parseDiagramCode("A [shape: DIAMOND]").nodes[0].shape).toBe("diamond");
-    const parsed = parseDiagramCode("A [shape: diamond]\nA [shape: oval]");
+    const parsed = parseDiagramCode("A [shape: diamond]\nA [shape: cylinder]");
     expect(parsed.nodes).toHaveLength(1);
     expect(parsed.nodes[0].shape).toBe("diamond");
   });
 
-  it.each(["oval", "cylinder", "hexagon", "parallelogram", "star"])("reports shape %s once and still declares the node", (shape) => {
+  it.each(["cylinder", "hexagon", "parallelogram", "star"])("reports shape %s once and still declares the node", (shape) => {
     const parsed = parseDiagramCode(`Thing [shape: ${shape}, icon: database]`);
     expect(parsed.nodes).toHaveLength(1);
     expect(parsed.nodes[0]).toMatchObject({ name: "Thing", icon: "database" });
@@ -362,5 +362,19 @@ describe("Eraser-style syntax: edge cases", () => {
       [undefined, undefined],
     ]);
     expect(parseDiagramCode("A - B, C").edges).toHaveLength(2);
+  });
+});
+
+describe("pill shape", () => {
+  it.each(["pill", "PILL", "oval", "ellipse"])("reads shape: %s as a pill, without a warning", (shape) => {
+    const parsed = parseDiagramCode(`Begin [shape: ${shape}]`);
+    expect(parsed.nodes[0].shape).toBe("pill");
+    expect(parsed.issues).toEqual([]);
+  });
+
+  it("accepts start and end as kinds", () => {
+    const parsed = parseDiagramCode("Go [kind: start]\nStop [kind: end]\nGo > Stop");
+    expect(parsed.nodes.map((n) => n.kind)).toEqual(["start", "end"]);
+    expect(parsed.issues).toEqual([]);
   });
 });

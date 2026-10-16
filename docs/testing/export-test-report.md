@@ -10,6 +10,7 @@
 | PDF | one page sized to the diagram (0.75 pt per px, capped at 14400 pt keeping aspect). **Raster**: the page holds a lossless image at the chosen scale, so text is not selectable and nothing is vector. Always white (PDF has no alpha here). Not split across pages: a diagram is one page |
 | Selection only | selected elements + connectors with both ends selected + those connectors' labels (`selection-policy.ts`); a connector with one selected end is left out unless selected itself |
 | Copy as image | PNG at 2× via the Clipboard API (selection if any, else the board) |
+| Copy SVG | the same SVG markup as the export, as text (`writeText`); browsers do not allow `image/svg+xml` on the clipboard, so there is no image flavour. Button in the dialog; the command-menu entry needs the controller change listed below |
 | Limits | 16,384 px per side and 64 MP for PNG; 24 MP for PDF (it holds pixels three times); 50 M characters for SVG. Over the limit: a message, never a silent fallback |
 | Errors | `ExportError` codes: nothing-to-export, no-selection, too-large, render-failed, unsupported, clipboard-unsupported, clipboard-denied, cancelled. Shown inside the dialog; nothing is thrown into the editor |
 
@@ -51,15 +52,23 @@ Baseline before this work: 643 unit tests passed, type check and lint clean, bro
 ## Not tested, and why
 - **The real editor.** Reaching `/whiteboard/[id]` needs a Clerk sign-in for a real account and a real board id in the Convex deployment. I did not create or guess credentials. Not exercised: the controller wiring (command menu item, Cmd/Ctrl+Shift+E in the live canvas, the selection coming from the canvas, the board title in the file name), and export at different editor zoom levels. Zoom independence is structural, not measured: export reads only `elements` and `selectedIds`, never viewport state, and the DPR and theme independence tests passed. The unit test covers the shortcut mapping only.
 - **A real clipboard denial.** Headless Chrome allows clipboard writes by default, so a denial was simulated (the API rejecting with `NotAllowedError`), plus a simulated missing `ClipboardItem`.
+- The command-menu "Copy SVG" entry and the live editor wiring (see above).
 - Safari and Firefox. Chrome only. Safari has a smaller canvas area limit than the 64 MP used here; very large PNGs may fail there with `render-failed`.
 - Memory release after many exports (one heap measurement only; no leak test).
 - Opening the PDF in a PDF viewer app (parsed with pdf.js only).
 
 ## Known limitations and issues
-1. SVG text is emitted one `<text>` per word (the renderer draws word by word). Selecting or searching text in the SVG works per word.
+1. ~~SVG text is one `<text>` per word~~ **Fixed (pass 3):** consecutive words on a line are one `<text>` (`RUN_GAP_TOLERANCE` 0.75 units). Architecture fixture: 79 -> 37 text elements, 50,342 -> 40,964 characters; one element per wrapped line, not per label. Centred/right-aligned text is not merged.
 2. SVG fonts are not embedded. Viewers without the app's font use a fallback, and text inside a shape (which is clipped to the shape) may be wider than designed.
 3. PDF is raster (above), single page.
 4. There are no curved connectors in the product (only straight and orthogonal), so none were tested.
 5. Explicit line breaks inside a label become spaces when the board is shown as diagram code (the DSL has no multi-line strings). Pre-existing.
 6. Pre-existing: opening `/whiteboard/<malformed id>` (for example `abc123`) crashes the page with an unhandled Convex `ArgumentValidationError` ("Application error: a client-side exception"), instead of a not-found message. Not caused by export; reproduced unauthenticated.
 7. Exports are always light mode (a deliberate decision, stated in the dialog); there is no dark-export option.
+
+## Pass 3 additions (2026-10-16)
+- Text runs: unit tests (merge; no merge across line, colour, font, opacity, transform, centred text, a painted shape in between, or a real gap; escaping; bounds identical) and a browser assertion that `Line one` / `Line two` are single `<text>` elements.
+- SVG vs PNG pixel comparison on the architecture fixture, before and after coalescing: **0 of 247,607** and **0 of 247,613** inked pixels differ by more than 96/255 (0.00%). The threshold was tightened from 12% to 1%.
+- Copy SVG: clipboard text read back equals the exported SVG byte for byte and parses as XML; denial / failure / missing API map to `clipboard-denied` / `render-failed` / `clipboard-unsupported` (simulated, like the PNG case); dialog "Copy SVG" copies the selection's SVG only and shows failures inline.
+- Dialog footer is now two rows (copy actions, then Cancel / Export); screenshot taken with the app's compiled Tailwind and inspected.
+- Final counts for these files: my 4 unit-test files in `features/whiteboard/export` = 38 tests (svg-context 26, selection-policy 6, pdf 3, deliver 3); `tests/browser/export.browser.test.ts` 21; `tests/browser/export-dialog.browser.test.ts` 12.

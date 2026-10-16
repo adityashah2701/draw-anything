@@ -1,6 +1,6 @@
 import { estimateLabelBox } from "./estimate";
 import { LABEL_PADDING } from "./label-layout";
-import { SEMANTIC_INSET_WIDTH, SEMANTIC_MAX_LINES } from "./label-region";
+import { PILL_MAX_LINES, pillSizeForLabel, SEMANTIC_INSET_WIDTH, SEMANTIC_MAX_LINES } from "./label-region";
 import { LINE_HEIGHT_RATIO } from "./typography";
 
 export interface NodeSize {
@@ -64,4 +64,22 @@ export const sizeDiamondNode = (input: NodeSizeInput): NodeSize => {
   const height = Math.max(input.minHeight, Math.ceil(box.height * 2));
   const width = Math.max(input.minWidth, Math.ceil(box.width / (DIAMOND_FIT - box.height / height) / 4) * 4);
   return { width, height, lineCount: box.lineCount, fits: box.fits };
+};
+
+/** Size of a pill (flowchart start/end) that shows `label`: the fewest lines that fit its label box (see `pillLabelBox`). */
+export const sizePillNode = (input: NodeSizeInput): NodeSize => {
+  const min = { width: input.minWidth, height: input.minHeight };
+  for (let lines = 1; lines <= PILL_MAX_LINES; lines += 1) {
+    const box = estimateLabelBox({
+      label: input.label,
+      fontSize: input.fontSize,
+      fontWeight: input.fontWeight,
+      maxLines: lines,
+      minWidth: 0,
+      maxWidth: input.maxWidth,
+    });
+    if (box.fits) return { ...pillSizeForLabel(box, min), lineCount: box.lineCount, fits: true };
+  }
+  const widest = estimateLabelBox({ label: input.label, fontSize: input.fontSize, fontWeight: input.fontWeight, maxLines: PILL_MAX_LINES, minWidth: 0, maxWidth: input.maxWidth });
+  return { ...pillSizeForLabel(widest, min), lineCount: PILL_MAX_LINES, fits: false };
 };

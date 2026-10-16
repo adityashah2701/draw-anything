@@ -169,6 +169,9 @@ suite("export in real Chrome", () => {
     expect(Number(r.width)).toBe(r.size[0]);
     const all = r.texts.join("|");
     expect(all).toContain("日本語 مرحبا 😀 café – naïve");
+    // A line of words is one element, so it can be selected and searched as a unit.
+    expect(r.texts).toContain("Line one");
+    expect(r.texts).toContain("Line two");
     expect(all).toContain("Circle");
     expect(all).toContain("Ready");
     expect(all).toContain("Supercalifragilisticexpialidocious");
@@ -222,10 +225,11 @@ suite("export in real Chrome", () => {
       { shot, png: r.png },
     );
     await s.page.evaluate(() => document.getElementById("host")?.remove());
+    console.log(`svg-vs-png: ${diff.differing} of ${diff.inked} inked pixels differ (${((100 * diff.differing) / diff.inked).toFixed(2)}%)`);
     expect(diff.sizeA).toEqual(diff.sizeB);
     expect(diff.inked).toBeGreaterThan(1000);
-    // Anti-aliasing and text placement differ by a pixel here and there; a missing shape or label would be far larger.
-    expect(diff.differing / diff.inked).toBeLessThan(0.12);
+    // Measured 0.00% (0 of ~247,600 inked pixels differ by more than 96/255); a missing shape or label would be far larger.
+    expect(diff.differing / diff.inked).toBeLessThan(0.01);
   });
 
   it("selection-only exports the picked nodes and the connectors between them, with tight bounds", async () => {
@@ -370,6 +374,47 @@ suite("export in real Chrome", () => {
     expect(failures).toEqual({ denied: "clipboard-denied", broken: "render-failed", unsupported: "clipboard-unsupported" });
   });
 
+  it("Copy SVG puts the same markup on the clipboard as the SVG export, and it parses as XML", async () => {
+    await s.page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    const r = await s.page.evaluate(async () => {
+      const H = window.H;
+      const els = H.mixed();
+      const direct = await (await H.run(els, [], { format: "svg", scale: 1 })).blob.text();
+      await window.T.copySvgToClipboard(H.run(els, [], { format: "svg", scale: 1 }).then((x) => x.blob.text()));
+      const copied = await navigator.clipboard.readText();
+      const doc = new DOMParser().parseFromString(copied, "image/svg+xml");
+      return { same: copied === direct, length: copied.length, error: doc.querySelector("parsererror")?.textContent ?? null, root: doc.documentElement.nodeName };
+    });
+    expect(r.same).toBe(true);
+    expect(r.length).toBeGreaterThan(1000);
+    expect(r.error).toBeNull();
+    expect(r.root).toBe("svg");
+  });
+
+  it("a failed SVG copy maps to a clear error", async () => {
+    const codes = await s.page.evaluate(async () => {
+      const svg = () => Promise.resolve("<svg xmlns='http://www.w3.org/2000/svg'/>");
+      const code = async () => {
+        try {
+          await window.T.copySvgToClipboard(svg());
+          return "copied";
+        } catch (e) {
+          return (e as { code?: string }).code;
+        }
+      };
+      const real = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = () => Promise.reject(new DOMException("blocked", "NotAllowedError"));
+      const denied = await code();
+      navigator.clipboard.writeText = () => Promise.reject(new TypeError("boom"));
+      const broken = await code();
+      (navigator.clipboard as unknown as { writeText?: unknown }).writeText = undefined;
+      const unsupported = await code();
+      navigator.clipboard.writeText = real;
+      return { denied, broken, unsupported };
+    });
+    expect(codes).toEqual({ denied: "clipboard-denied", broken: "render-failed", unsupported: "clipboard-unsupported" });
+  });
+
   it("PDF is a valid one-page file whose image decodes to the diagram, on a white page", async () => {
     const r = await s.page.evaluate(async () => {
       const H = window.H;
@@ -489,10 +534,10 @@ suite("export security and limits in real Chrome", () => {
     const urls = r.text.match(/url\([^)]*\)/gi) ?? [];
     expect(urls.length).toBeGreaterThan(0);
     expect(urls.every((u) => /^url\(#clip\d+\)$/.test(u))).toBe(true);
-    // Label text that looks like HTML is reduced to its text by the app before drawing, so no tag text
-    // survives; plain "<", "&" and quotes are kept as characters (escaped in the file, text when parsed).
+    // Only the editor's own tags are treated as markup; anything else, hostile or not, is drawn as the text
+    // it is (escaped in the file, plain text when parsed), so the hostile strings are visible and inert.
     const shown = r.texts.join("");
-    expect(shown).not.toContain("<script");
+    expect(shown.replace(/\s+/g, "")).toContain("<script>window.__pwned=1</script>");
     // (A label wraps inside its box and a wrap drops the space, so compare without whitespace.)
     expect(shown.replace(/\s+/g, "")).toContain('1<2&&3>2&"quoted"');
     expect(shown).toContain("😀");

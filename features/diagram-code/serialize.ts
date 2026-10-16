@@ -3,7 +3,7 @@ import type { AIDiagramType } from "@/features/ai/types";
 export interface SerializableGraph {
   diagramType?: AIDiagramType;
   title?: string;
-  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: "diamond"; color?: string }>;
+  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: "diamond" | "pill"; color?: string }>;
   edges: Array<{
     from: string;
     to: string;
@@ -18,6 +18,8 @@ export interface SerializableGraph {
 
 const CONNECTOR_IN_NAME = /(^|\s)(<-->|-->|<>|--|-|>|<)(\s|$)/;
 const DIRECTIVE_LOOKALIKE = /^(title|type|direction)\s/i;
+
+const IMPLIED_SHAPE: Record<string, string> = { decision: "diamond", start: "pill", end: "pill" };
 
 const clean = (text: string) => text.replace(/\s+/g, " ").replace(/"/g, "'").trim();
 
@@ -56,7 +58,8 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
     const props: string[] = [];
     if (node.kind && node.kind !== "generic") props.push(`kind: ${node.kind}`);
     if (node.icon) props.push(`icon: ${node.icon}`);
-    if (node.shape === "diamond" && node.kind !== "decision") props.push("shape: diamond");
+    // A kind already implies its shape (decision: diamond, start/end: pill), so only say it when it adds something.
+    if (node.shape && node.shape !== IMPLIED_SHAPE[node.kind ?? ""]) props.push(`shape: ${node.shape}`);
     if (node.color) props.push(`color: ${node.color}`);
     if (clean(node.label) !== name) props.push(`label: "${clean(node.label)}"`);
     return props.length > 0 ? `${writeName(name)} [${props.join(", ")}]` : writeName(name);
