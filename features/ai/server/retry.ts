@@ -19,6 +19,11 @@ const NETWORK_SIGNALS = [
   "fetch failed",
   "network",
   "deadline exceeded",
+  // Gemini 503 UNAVAILABLE ("high demand") and 500/504 are transient per its docs.
+  "503",
+  "unavailable",
+  "high demand",
+  "overloaded",
 ];
 
 const isRateLimit = (msg: string): boolean =>

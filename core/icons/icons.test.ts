@@ -100,3 +100,28 @@ describe("drawIconTile", () => {
     expect(calls).toContain("fillText");
   });
 });
+
+import { searchIcons } from "./registry";
+
+describe("searchIcons", () => {
+  it("ranks the exact id first, then aliases", () => {
+    expect(searchIcons("database")[0]).toMatchObject({ id: "database", via: "id" });
+    expect(searchIcons("postgres")[0]).toMatchObject({ id: "database", via: "alias" });
+    expect(searchIcons("Kafka")[0].id).toBe("message-broker");
+    expect(searchIcons("esp32")[0].id).toBe("microcontroller");
+  });
+
+  it("finds by prefix, substring and shared words, capped by limit", () => {
+    expect(searchIcons("load")[0].id).toBe("load-balancer");
+    expect(searchIcons("balancer").map((m) => m.id)).toContain("load-balancer");
+    expect(searchIcons("message queue", 3).length).toBeLessThanOrEqual(3);
+    expect(searchIcons("security").map((m) => m.category)).toContain("security");
+  });
+
+  it("is total: junk, empty, huge and prototype keys never throw", () => {
+    for (const bad of [undefined, null, 5, {}, "", "   ", "zzzzzzzz", "__proto__", "constructor", "x".repeat(10_000)]) {
+      expect(Array.isArray(searchIcons(bad))).toBe(true);
+    }
+    expect(searchIcons("database", 0)).toEqual([]);
+  });
+});

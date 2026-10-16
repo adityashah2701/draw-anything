@@ -7,7 +7,7 @@ import {
   createSlidingWindowLimiter,
   getEnabledProviders,
 } from "@/features/ai/server/request-guard";
-import { streamAIDiagramWorkflowEvents } from "@/features/ai/server/workflow";
+import { selectPipeline } from "@/features/ai/diagram-agent/pipeline";
 
 export const runtime = "nodejs";
 
@@ -28,7 +28,8 @@ const handler = createGenerateDiagramHandler({
   getUserId,
   enabledProviders: () => getEnabledProviders(),
   limiter,
-  runWorkflow: (request) => streamAIDiagramWorkflowEvents({ request }),
+  // AI_PIPELINE=agent switches to the single diagram agent; the default stays the legacy workflow.
+  runWorkflow: (request) => selectPipeline()(request),
 });
 const providers = createProvidersHandler({
   getUserId,

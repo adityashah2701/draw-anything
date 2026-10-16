@@ -40,6 +40,8 @@ export interface LayoutMetrics {
   edgeThroughNodes: number;
   bends: number;
   totalEdgeLength: number;
+  /** Length of the single longest connector: long corridors are the first thing that reads as clutter. */
+  longestEdge: number;
   /** Edges whose path is more than 3x the Manhattan distance between their ends. */
   detouredEdges: number;
   /** Frames (groups) that also cover a non-member, plus members left outside their frame. */
@@ -113,6 +115,7 @@ export const measureLayout = (
   let edgeThroughNodes = 0;
   let bends = 0;
   let totalEdgeLength = 0;
+  let longestEdge = 0;
   let detouredEdges = 0;
   for (const arrow of arrows) {
     const ends = new Set([arrow.startConnection?.elementId, arrow.endConnection?.elementId]);
@@ -125,6 +128,7 @@ export const measureLayout = (
     bends += Math.max(0, arrow.points.length - 2);
     const length = pathLength(arrow.points);
     totalEdgeLength += length;
+    longestEdge = Math.max(longestEdge, length);
     const first = arrow.points[0];
     const last = arrow.points[arrow.points.length - 1];
     const manhattan = Math.abs(first.x - last.x) + Math.abs(first.y - last.y);
@@ -225,6 +229,7 @@ export const measureLayout = (
     edgeThroughNodes,
     bends,
     totalEdgeLength: Math.round(totalEdgeLength),
+    longestEdge: Math.round(longestEdge),
     detouredEdges,
     groupViolations,
     groupsDropped,

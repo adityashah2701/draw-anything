@@ -19,12 +19,12 @@ export interface ModelEntry {
 export const MODELS = {
   FAST: {
     provider: "gemini" as AIModelProvider,
-    model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+    model: process.env.GEMINI_MODEL ?? "gemini-3.8-flash",
     displayName: "Gemini 3.5 Flash",
   },
   REASONING: {
     provider: "gemini" as AIModelProvider,
-    model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+    model: process.env.GEMINI_MODEL ?? "gemini-3.8-flash",
     displayName: "Gemini 3.5 Flash",
   },
   CHEAP: {

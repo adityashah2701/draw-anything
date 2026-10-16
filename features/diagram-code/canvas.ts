@@ -4,7 +4,7 @@ import {
   normalizeModelGraphDraftDetailed,
   normalizeModelPlan,
 } from "@/features/ai/schemas";
-import type { AIDiagramType } from "@/features/ai/types";
+import type { AIDiagramType, AIModelProvider } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { parseDiagramCode } from "./parse";
 import type { SerializableGraph } from "./serialize";
@@ -20,6 +20,8 @@ export interface CodeToCanvasResult {
 export const documentFromParsedCode = (
   parsed: ReturnType<typeof parseDiagramCode>,
   generationId: string,
+  /** Who produced the diagram, when it is not hand-written code. */
+  meta: { prompt?: string; provider?: AIModelProvider; modelName?: string } = {},
 ) => {
   const { graph, warnings } = normalizeModelGraphDraftDetailed({
     nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon })),
@@ -33,14 +35,14 @@ export const documentFromParsedCode = (
     groups: parsed.groups.map((group) => ({ id: group.id, label: group.label, nodeIds: group.nodeIds })),
   });
   const document = buildAIDiagramDocument({
-    prompt: "diagram code",
+    prompt: meta.prompt ?? "diagram code",
     plan: normalizeModelPlan({
       diagramType: parsed.diagramType ?? "flowchart",
       summary: parsed.title ?? "Diagram from code",
     }),
     graph,
-    provider: "local",
-    modelName: "diagram-code",
+    provider: meta.provider ?? "local",
+    modelName: meta.modelName ?? "diagram-code",
     generationId,
     improvementPasses: 0,
   });

@@ -139,6 +139,50 @@ export const getIcon = (reference: unknown): IconDef => registry.get(resolveIcon
 export const iconForNode = (ai: { icon?: string; semanticKind?: string } | undefined): IconDef =>
   getIcon(resolveIconId(ai?.icon) ?? resolveIconId(ai?.semanticKind));
 
+export interface IconMatch {
+  id: string;
+  category: IconCategory;
+  /** What matched: the id itself, an alias ("postgres"), or only the category/words. */
+  via: "id" | "alias" | "partial";
+}
+
+/**
+ * Ranked icon lookup for an agent or a picker: exact id, exact alias, prefix, substring, then shared
+ * words. Pure and total: junk input returns [].
+ */
+export const searchIcons = (query: unknown, limit = 8): IconMatch[] => {
+  if (typeof query !== "string") return [];
+  const q = key(query);
+  if (!q) return [];
+  const words = q.split("-").filter((w) => w.length >= 2);
+  const scored = new Map<string, { score: number; via: IconMatch["via"] }>();
+  const offer = (id: string, score: number, via: IconMatch["via"]) => {
+    const best = scored.get(id);
+    if (!best || score > best.score) scored.set(id, { score, via });
+  };
+  for (const [id] of registry) {
+    if (id === q) offer(id, 100, "id");
+    else if (id.startsWith(q)) offer(id, 70, "id");
+    else if (q.length >= 3 && id.includes(q)) offer(id, 40, "id");
+  }
+  for (const [alias, id] of aliases) {
+    if (alias === q) offer(id, 90, "alias");
+    else if (alias.startsWith(q)) offer(id, 60, "alias");
+    else if (q.length >= 3 && alias.includes(q)) offer(id, 35, "alias");
+  }
+  if (words.length > 0) {
+    for (const [id, def] of registry) {
+      const idWords = new Set(id.split("-"));
+      const shared = words.filter((w) => idWords.has(w) || def.category === w).length;
+      if (shared > 0) offer(id, 20 + shared, "partial");
+    }
+  }
+  return [...scored.entries()]
+    .sort((a, b) => b[1].score - a[1].score || a[0].localeCompare(b[0]))
+    .slice(0, Math.max(0, limit))
+    .map(([id, { via }]) => ({ id, category: registry.get(id)!.category, via }));
+};
+
 export const listIcons = (): IconDef[] => [...registry.values()];
 
 /** Ids the model may use in `icon`, for prompts. Compact on purpose. */

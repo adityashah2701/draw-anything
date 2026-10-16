@@ -88,6 +88,12 @@ function toGenAIMessages(
   return { systemInstruction, contents };
 }
 
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3.6-flash";
+
+/** Gemini docs: 503 UNAVAILABLE is a temporary overload of that model; another model is the suggested workaround. */
+const isGeminiOverload = (e: unknown): boolean =>
+  /\b503\b|UNAVAILABLE|high demand/i.test(e instanceof Error ? e.message : String(e));
+
 class GeminiChatModel {
   private client: GoogleGenAI;
   private model: string;
@@ -101,12 +107,22 @@ class GeminiChatModel {
     this.maxOutputTokens = opts.maxOutputTokens ?? 16384;
   }
 
+  private async generate(params: Parameters<GoogleGenAI["models"]["generateContent"]>[0]) {
+    try {
+      return await this.client.models.generateContent(params);
+    } catch (e) {
+      if (!isGeminiOverload(e) || params.model === GEMINI_FALLBACK_MODEL) throw e;
+      console.warn(`[gemini] ${params.model} overloaded, falling back to ${GEMINI_FALLBACK_MODEL}`);
+      return this.client.models.generateContent({ ...params, model: GEMINI_FALLBACK_MODEL });
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async invoke(input: any): Promise<any> {
     const messages = Array.isArray(input) ? input : [input];
     const { systemInstruction, contents } = toGenAIMessages(messages);
 
-    const response = await this.client.models.generateContent({
+    const response = await this.generate({
       model: this.model,
       contents: contents as Content[],
       config: {
@@ -124,7 +140,7 @@ class GeminiChatModel {
   withStructuredOutput<T extends Record<string, any>>(
     schema: unknown,
   ): { invoke: (input: unknown) => Promise<T> } {
-    const client = this.client;
+    const generate = this.generate.bind(this);
     const model = this.model;
     const temperature = this.temperature;
     const maxOutputTokens = this.maxOutputTokens;
@@ -139,7 +155,7 @@ class GeminiChatModel {
           parts: [{ text: buildJsonInstruction(schema) }],
         };
 
-        const response = await client.models.generateContent({
+        const response = await generate({
           model,
           contents: [...contents, structuredPrompt] as Content[],
           config: {
@@ -195,7 +211,7 @@ export const buildJsonInstruction = (schema: unknown): string =>
   "Rules: no markdown code fences and no text before or after the JSON; leave out optional fields you do not need instead of sending null; keep to the length limits in the schema.";
 
 /** Plain text of a chat reply, whether `content` is a string or content blocks. */
-const messageText = (message: unknown): string => {
+export const messageText = (message: unknown): string => {
   const content = (message as { content?: unknown } | null)?.content;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -259,7 +275,7 @@ export const getAIModelProviderConfig = (
     case "gemini":
       return {
         provider,
-        modelName: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+        modelName: process.env.GEMINI_MODEL ?? "gemini-3.8-flash",
         displayName: "Gemini",
       };
     case "groq":
@@ -296,42 +312,42 @@ export const getAIModelProviderConfig = (
   }
 };
 
-export const createAIChatModel = (
+/**
+ * The provider's own LangChain chat model (no prompted-JSON wrapper), for callers that talk to the
+ * model directly (the diagram agent's tool loop). `null` for Gemini, which has its own adapter
+ * without tool calling.
+ */
+export const createBaseChatModel = (
   providerInput?: AIModelProvider,
-): StructuredChatModel => {
+): BaseChatModel | null => {
   const config = getAIModelProviderConfig(providerInput);
 
   switch (config.provider) {
     case "gemini":
-      return new GeminiChatModel({
-        apiKey: requireEnv(config.provider, "GEMINI_API_KEY"),
-        model: config.modelName,
-        temperature: 0,
-        maxOutputTokens: 16384,
-      }) as unknown as StructuredChatModel;
+      return null;
     case "groq":
-      return createPromptedStructuredModel(new ChatGroq({
+      return new ChatGroq({
         model: config.modelName,
         temperature: 0,
         maxTokens: 16384,
         apiKey: requireEnv(config.provider, "GROQ_API_KEY"),
-      }));
+      });
     case "openai":
-      return createPromptedStructuredModel(new ChatOpenAI({
+      return new ChatOpenAI({
         model: config.modelName,
         temperature: 0,
         maxTokens: 16384,
         apiKey: requireEnv(config.provider, "OPENAI_API_KEY"),
-      }));
+      });
     case "anthropic":
-      return createPromptedStructuredModel(new ChatAnthropic({
+      return new ChatAnthropic({
         model: config.modelName,
         temperature: 0,
         maxTokens: 16384,
         apiKey: requireEnv(config.provider, "ANTHROPIC_API_KEY"),
-      }));
+      });
     case "openrouter":
-      return createPromptedStructuredModel(new ChatOpenAI({
+      return new ChatOpenAI({
         model: config.modelName,
         temperature: 0,
         maxTokens: 16384,
@@ -339,18 +355,33 @@ export const createAIChatModel = (
         configuration: {
           baseURL: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
         },
-      }));
+      });
     case "local":
-      return createPromptedStructuredModel(new ChatOpenAI({
+      return new ChatOpenAI({
         model: config.modelName,
         temperature: 0,
         apiKey: process.env.LOCAL_AI_API_KEY ?? "local",
         configuration: {
-          baseURL:
-            process.env.LOCAL_AI_BASE_URL ?? "http://localhost:11434/v1",
+          baseURL: process.env.LOCAL_AI_BASE_URL ?? "http://localhost:11434/v1",
         },
-      }));
+      });
   }
+};
+
+export const createAIChatModel = (
+  providerInput?: AIModelProvider,
+): StructuredChatModel => {
+  const config = getAIModelProviderConfig(providerInput);
+  const base = createBaseChatModel(providerInput);
+  if (!base) {
+    return new GeminiChatModel({
+      apiKey: requireEnv(config.provider, "GEMINI_API_KEY"),
+      model: config.modelName,
+      temperature: 0,
+      maxOutputTokens: 16384,
+    }) as unknown as StructuredChatModel;
+  }
+  return createPromptedStructuredModel(base);
 };
 
 /**
