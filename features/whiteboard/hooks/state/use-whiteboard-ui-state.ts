@@ -17,6 +17,7 @@ export const useWhiteboardUiState = () => {
 
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [showOutlineColorPicker, setShowOutlineColorPicker] = useState(false);
   const [showFillColorPicker, setShowFillColorPicker] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -118,6 +119,8 @@ export const useWhiteboardUiState = () => {
     setShowShortcuts,
     showCommandMenu,
     setShowCommandMenu,
+    showExport,
+    setShowExport,
     showOutlineColorPicker,
     setShowOutlineColorPicker,
     showFillColorPicker,

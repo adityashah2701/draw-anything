@@ -82,13 +82,13 @@ Payments Service > Stripe: charge`,
     code: `type flowchart
 title Login
 
-Start [kind: decision]
-Enter Credentials
+Start [kind: user]
+Enter Credentials [kind: workflow]
 Valid? [kind: decision]
 MFA Required? [kind: decision]
-Create Session
-Show Error
-Dashboard
+Create Session [kind: workflow]
+Show Error [kind: alerting]
+Dashboard [kind: dashboard]
 
 Start > Enter Credentials > Valid?
 Valid? > MFA Required?: yes

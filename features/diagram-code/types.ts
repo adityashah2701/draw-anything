@@ -20,6 +20,10 @@ export interface ParsedNode {
   /** Raw `icon` value; resolved against the icon registry later. */
   icon?: string;
   dashed?: boolean;
+  /** `diamond` only; other Eraser shapes are reported and ignored. */
+  shape?: "diamond";
+  /** #rrggbb */
+  color?: string;
 }
 
 export interface ParsedEdge {
@@ -28,6 +32,9 @@ export interface ParsedEdge {
   label?: string;
   bidirectional?: boolean;
   dashed?: boolean;
+  /** `-` / `--`: a line with no arrowhead. */
+  plain?: boolean;
+  color?: string;
   line: number;
 }
 

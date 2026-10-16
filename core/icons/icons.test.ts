@@ -85,6 +85,26 @@ describe("drawIconTile", () => {
     expect(calls).not.toContain("fillText");
   });
 
+  it("hands each glyph path to a vector context separately, never as a Path2D", () => {
+    vi.stubGlobal("Path2D", class { constructor() { throw new Error("must not be used"); } });
+    const paths: string[] = [];
+    const base = fakeCtx().ctx as unknown as Record<string, unknown>;
+    const ctx = new Proxy(base, {
+      get: (t, name) => (name === "isPathDataSink" ? true : name === "strokePathData" ? (d: string) => void paths.push(d) : t[name as string]),
+    }) as unknown as CanvasRenderingContext2D;
+    const icon = getIcon("database");
+    drawIconTile(ctx, icon, 50, 50, 28);
+    // One call per path string: a relative "m" in a later path starts at the origin, not at the previous end.
+    expect(paths).toEqual(icon.paths);
+  });
+
+  it("does not treat a context that merely answers to any method name as a vector context", () => {
+    vi.stubGlobal("Path2D", class { addPath() {} });
+    const { ctx, calls } = fakeCtx();
+    drawIconTile(ctx, getIcon("database"), 50, 50, 28);
+    expect(calls).not.toContain("strokePathData");
+  });
+
   it("falls back to the text badge when Path2D is missing, and still draws the tile", () => {
     vi.stubGlobal("Path2D", undefined);
     const { ctx, calls } = fakeCtx();

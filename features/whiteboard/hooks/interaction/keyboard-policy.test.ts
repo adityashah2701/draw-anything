@@ -69,3 +69,17 @@ describe("canvas shortcuts", () => {
     expect(resolveShortcut(ev("c", { altKey: true }), ctx())).toBeNull();
   });
 });
+
+describe("export shortcut", () => {
+  it("opens export with Cmd/Ctrl+Shift+E, for viewers too", () => {
+    expect(resolveShortcut(ev("E", { metaKey: true, shiftKey: true }), ctx())).toEqual({ type: "export" });
+    expect(resolveShortcut(ev("e", { ctrlKey: true, shiftKey: true }), ctx({ hasEditAccess: false }))).toEqual({ type: "export" });
+  });
+  it("leaves plain E (eraser) and Cmd+E alone", () => {
+    expect(resolveShortcut(ev("e"), ctx())).toEqual({ type: "tool", tool: "eraser" });
+    expect(resolveShortcut(ev("e", { metaKey: true }), ctx())).toBeNull();
+  });
+  it("does nothing while typing", () => {
+    expect(resolveShortcut(ev("E", { metaKey: true, shiftKey: true }), ctx({ textEntry: true }))).toBeNull();
+  });
+});

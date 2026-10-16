@@ -24,13 +24,15 @@ export const documentFromParsedCode = (
   meta: { prompt?: string; provider?: AIModelProvider; modelName?: string } = {},
 ) => {
   const { graph, warnings } = normalizeModelGraphDraftDetailed({
-    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon })),
+    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon, shape: node.shape, color: node.color })),
     edges: parsed.edges.map((edge) => ({
       from: edge.from,
       to: edge.to,
       label: edge.label,
       dashed: edge.dashed,
       bidirectional: edge.bidirectional,
+      plain: edge.plain,
+      color: edge.color,
     })),
     groups: parsed.groups.map((group) => ({ id: group.id, label: group.label, nodeIds: group.nodeIds })),
   });
@@ -155,6 +157,7 @@ export const graphFromElements = (elements: DrawingElement[]): GraphFromElements
       label: label?.text,
       dashed: arrow.dashed || undefined,
       bidirectional: both ? true : undefined,
+      plain: arrow.arrowHeadEnd === false && !arrow.arrowHeadStart ? true : undefined,
     });
     consumed.add(el.id);
     if (label) consumed.add(label.id);

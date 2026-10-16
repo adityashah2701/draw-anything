@@ -1,3 +1,4 @@
+import { isDarkRender } from "@/core/theme/render-theme";
 import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
 import {
   measureRichTextLineWidth,
@@ -96,7 +97,7 @@ const contrastRatio = (a: Rgb, b: Rgb) => {
 };
 
 export const resolveTextColor = (preferredColor?: string, fillColor?: string) => {
-  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const isDark = isDarkRender();
   const adaptivePreferred = getAdaptiveColor(preferredColor, isDark);
   const fallbackColor = isDark ? "#f8fafc" : "#1f2937";
   const fillRgb = parseColorToRgb(fillColor);

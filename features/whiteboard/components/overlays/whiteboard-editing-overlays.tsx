@@ -4,6 +4,7 @@ import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text
 import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
 import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
 import { AIPanel } from "@/features/whiteboard/components/overlays/ai-panel";
+import { ExportDialog } from "@/features/whiteboard/components/overlays/export-dialog";
 import { CommandMenu } from "@/features/whiteboard/components/overlays/command-menu";
 import { DrawingElementJson } from "@/liveblocks.config";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -310,6 +311,9 @@ export const WhiteboardEditingOverlays = ({
     setShowAIModal,
     showCommandMenu,
     setShowCommandMenu,
+    showExport,
+    setShowExport,
+    boardExport,
     editingTextElement,
     isNewTextElement,
     editingShapeLabelId,
@@ -351,6 +355,16 @@ export const WhiteboardEditingOverlays = ({
         elements={controller.elements}
         selectedElementIds={controller.selectedElements}
         onApplyDiagramCode={controller.applyDiagramCode}
+      />
+
+      <ExportDialog
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        selectedCount={controller.selectedElements.length}
+        isExporting={boardExport.isExporting}
+        onExport={boardExport.exportFile}
+        onCopy={boardExport.copyImage}
+        onCancelExport={boardExport.cancel}
       />
 
       <CommandMenu

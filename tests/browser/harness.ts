@@ -16,22 +16,29 @@ export const findChrome = (): string | null => {
   return candidates.find((path): path is string => !!path && existsSync(path)) ?? null;
 };
 
-let bundle: string | null = null;
-const getBundle = async () => {
-  bundle ??= (
-    await build({
-      entryPoints: [`${root}tests/browser/entry.ts`],
-      bundle: true,
-      write: false,
-      format: "iife",
-      globalName: "T",
-      platform: "browser",
-      alias: { "@": root.replace(/\/$/, "") },
-      jsx: "automatic",
-      logLevel: "silent",
-    })
-  ).outputFiles[0].text;
-  return bundle;
+const bundles = new Map<string, string>();
+const getBundle = async (entry = "entry.ts", globalName = "T") => {
+  const key = `${entry}:${globalName}`;
+  if (!bundles.has(key)) {
+    bundles.set(
+      key,
+      (
+        await build({
+          entryPoints: [`${root}tests/browser/${entry}`],
+          bundle: true,
+          write: false,
+          format: "iife",
+          globalName,
+          platform: "browser",
+          alias: { "@": root.replace(/\/$/, "") },
+          jsx: "automatic",
+          define: { "process.env.NODE_ENV": '"production"' },
+          logLevel: "silent",
+        })
+      ).outputFiles[0].text,
+    );
+  }
+  return bundles.get(key)!;
 };
 
 export interface BrowserSession {
@@ -55,7 +62,7 @@ const interFace = () =>
  * what users without Inter installed get, because the app never loads it.
  */
 export const openPage = async (
-  options: { deviceScaleFactor?: number; extraCss?: string; font?: FontMode } = {},
+  options: { deviceScaleFactor?: number; extraCss?: string; font?: FontMode; secure?: boolean; ui?: boolean } = {},
 ): Promise<BrowserSession> => {
   const executablePath = findChrome();
   if (!executablePath) throw new Error("No Chrome found; set CHROME_PATH");
@@ -66,10 +73,17 @@ export const openPage = async (
       deviceScaleFactor: options.deviceScaleFactor ?? 1,
     })
   ).newPage();
-  await page.setContent(
-    `<!doctype html><html><head><style>${options.font === "inter" ? interFace() : ""}html,body{margin:0;background:#fff}${options.extraCss ?? ""}</style></head><body></body></html>`,
-  );
+  const html = `<!doctype html><html><head><style>${options.font === "inter" ? interFace() : ""}html,body{margin:0;background:#fff}${options.extraCss ?? ""}</style></head><body></body></html>`;
+  if (options.secure) {
+    // about:blank is not a secure context, so navigator.clipboard does not exist there; localhost is.
+    await page.route("http://localhost/", (route) => route.fulfill({ contentType: "text/html", body: html }));
+    await page.goto("http://localhost/");
+  } else {
+    await page.setContent(html);
+  }
   await page.addScriptTag({ content: await getBundle() });
+  // React components (the export dialog) on window.U, for tests that click through real UI.
+  if (options.ui) await page.addScriptTag({ content: await getBundle("ui-entry.tsx", "U") });
   if (options.font === "inter") {
     await page.evaluate(async () => {
       await Promise.all(["400", "500", "600", "700"].map((w) => document.fonts.load(`${w} 16px Inter`)));

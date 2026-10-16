@@ -44,3 +44,24 @@ export const sizeSemanticNode = (input: NodeSizeInput): NodeSize => {
   }
   return { width: input.maxWidth, height: heightFor(SEMANTIC_MAX_LINES), lineCount: SEMANTIC_MAX_LINES, fits: false };
 };
+
+/** Share of a diamond's width and height the label box may use (matches the diamond renderer). */
+const DIAMOND_LABEL_FRACTION = 0.66;
+/** A text block of w x h fits a W x H rhombus when w/W + h/H <= 1; keep a little air. */
+const DIAMOND_FIT = 0.95;
+const DIAMOND_MAX_LINES = 3;
+
+/** Size of a diamond that shows `label`: the text block must sit inside the rhombus, not just its bounding box. */
+export const sizeDiamondNode = (input: NodeSizeInput): NodeSize => {
+  const box = estimateLabelBox({
+    label: input.label,
+    fontSize: input.fontSize,
+    fontWeight: input.fontWeight,
+    maxLines: DIAMOND_MAX_LINES,
+    minWidth: input.minWidth * DIAMOND_LABEL_FRACTION,
+    maxWidth: input.maxWidth * DIAMOND_LABEL_FRACTION,
+  });
+  const height = Math.max(input.minHeight, Math.ceil(box.height * 2));
+  const width = Math.max(input.minWidth, Math.ceil(box.width / (DIAMOND_FIT - box.height / height) / 4) * 4);
+  return { width, height, lineCount: box.lineCount, fits: box.fits };
+};

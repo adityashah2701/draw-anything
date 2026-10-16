@@ -56,6 +56,10 @@ export interface LayoutMetrics {
 
 const EDGE_LABEL_FONT_SIZE = 13;
 
+/** Generated node: a semantic node, or a diamond the compiler drew for a decision. */
+export const isNodeElement = (e: DrawingElement) =>
+  e.type === "semantic-node" || (e.type === "diamond" && e.ai?.role === "node");
+
 export const nodeBox = (element: DrawingElement): Box => {
   const [a, b] = element.points;
   return {
@@ -76,7 +80,7 @@ export const measureLayout = (
   elements: DrawingElement[],
   groups: Array<{ id: string; nodeIds: string[] }> = [],
 ): LayoutMetrics => {
-  const nodes = elements.filter((e) => e.type === "semantic-node");
+  const nodes = elements.filter(isNodeElement);
   const arrows = elements.filter((e) => e.type === "arrow" || e.type === "arrow-bidirectional");
   const labels = elements.filter((e) => e.ai?.role === "edge-label");
   const frames = elements.filter((e) => e.ai?.role === "group");
@@ -197,7 +201,13 @@ export const measureLayout = (
   const ctx = createEstimateContext();
   for (const node of nodes) {
     const b = nodeBoxes.get(node.id)!;
-    const region = getShapeLabelRegion("semantic-node", { ...b, width: b.maxX - b.minX, height: b.maxY - b.minY });
+    const width = b.maxX - b.minX;
+    const height = b.maxY - b.minY;
+    // A diamond's label box is 66% of its bounds with at most 3 lines (core/shapes/diamond/renderer.ts).
+    const region =
+      node.type === "diamond"
+        ? { width: width * 0.66, height: height * 0.66, maxLines: 3 }
+        : getShapeLabelRegion("semantic-node", { ...b, width, height });
     const layout = layoutShapeLabel(ctx, {
       label: node.label ?? "",
       boxWidth: region.width,
@@ -252,9 +262,9 @@ const median = (values: number[]) => {
  * median) is removed first so only genuine reshuffling counts as movement.
  */
 export const compareLayouts = (before: DrawingElement[], after: DrawingElement[]) => {
-  const prev = new Map(before.filter((e) => e.type === "semantic-node").map((e) => [e.id, nodeBox(e)]));
+  const prev = new Map(before.filter(isNodeElement).map((e) => [e.id, nodeBox(e)]));
   const shifts: Array<{ dx: number; dy: number }> = [];
-  for (const e of after.filter((n) => n.type === "semantic-node")) {
+  for (const e of after.filter(isNodeElement)) {
     const was = prev.get(e.id);
     if (!was) continue;
     const now = nodeBox(e);

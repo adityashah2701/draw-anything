@@ -93,6 +93,10 @@ export interface AIDiagramNode {
   parentId?: string;
   description?: string;
   priority?: number;
+  /** Drawn as a real diamond; decisions always are. */
+  shape?: "diamond";
+  /** #rrggbb stroke; the fill is a tint of it. */
+  color?: string;
 }
 
 export interface AIDiagramEdge {
@@ -103,6 +107,10 @@ export interface AIDiagramEdge {
   relationship?: string;
   bidirectional?: boolean;
   dashed?: boolean;
+  /** A line without an arrowhead (`-` and `--` in diagram code). */
+  plain?: boolean;
+  /** #rrggbb line colour. */
+  color?: string;
 }
 
 export interface AIDiagramGroup {

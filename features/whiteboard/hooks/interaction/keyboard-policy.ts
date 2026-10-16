@@ -19,6 +19,7 @@ export type ShortcutCommand =
   | { type: "fit" }
   | { type: "toggle-grid" }
   | { type: "toggle-help" }
+  | { type: "export" }
   | { type: "tool"; tool: Tool }
   | { type: "hand-hold" };
 
@@ -85,6 +86,8 @@ export const resolveShortcut = (e: ShortcutEvent, ctx: ShortcutContext): Shortcu
         return edit ? { type: "redo" } : null;
       case "s":
         return { type: "save" };
+      case "e":
+        return e.shiftKey ? { type: "export" } : null;
       case "a":
         return { type: "select-all" };
       case "c":

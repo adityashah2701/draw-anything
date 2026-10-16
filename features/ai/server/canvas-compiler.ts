@@ -18,7 +18,8 @@ import {
 } from "@/core/routing/orthogonal-router";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { estimateTextWidth } from "@/core/text/estimate";
-import { sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
+import { tint } from "@/core/color/named-colors";
+import { sizeDiamondNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import {
   AIDiagramDocumentV1,
@@ -70,6 +71,10 @@ const KIND_COLORS: Record<string, { fill: string; stroke: string }> = {
   browser: { fill: "#f5f3ff", stroke: "#6d28d9" },
   mobile: { fill: "#f5f3ff", stroke: "#6d28d9" },
   decision: { fill: "#ffe4e6", stroke: "#be123c" },
+  workflow: { fill: "#e0f2fe", stroke: "#075985" },
+  parallel: { fill: "#ede9fe", stroke: "#5b21b6" },
+  retry: { fill: "#fef9c3", stroke: "#854d0e" },
+  loop: { fill: "#fef9c3", stroke: "#854d0e" },
   agent: { fill: "#e0e7ff", stroke: "#3730a3" },
   tool: { fill: "#e2e8f0", stroke: "#334155" },
   memory: { fill: "#fef9c3", stroke: "#854d0e" },
@@ -85,6 +90,9 @@ const KIND_COLORS: Record<string, { fill: string; stroke: string }> = {
 const NODE_FONT_SIZE = 17;
 const NODE_FONT_WEIGHT = "600";
 const BASE_NODE_HEIGHT = 78;
+
+/** Decisions (and nodes that ask for `shape: diamond`) are real diamonds with no icon tile; the rest are semantic nodes. */
+const isDecisionNode = (node: AIDiagramNode) => node.kind === "decision" || node.shape === "diamond";
 const DECISION_NODE_HEIGHT = 92;
 
 /**
@@ -92,15 +100,17 @@ const DECISION_NODE_HEIGHT = 92;
  * the narrowest box for them, and a height that holds them. The minimums keep the look nodes
  * always had (168 wide, 78 tall; 92 for decisions); only labels that need more get more.
  */
-export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize =>
-  sizeSemanticNode({
+export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize => {
+  const input = {
     label: node.label,
     fontSize: NODE_FONT_SIZE,
     fontWeight: NODE_FONT_WEIGHT,
     minWidth: density === "compact" ? 150 : density === "spacious" ? 190 : 168,
     maxWidth: 280,
-    minHeight: node.kind === "decision" ? DECISION_NODE_HEIGHT : BASE_NODE_HEIGHT,
-  });
+    minHeight: isDecisionNode(node) ? DECISION_NODE_HEIGHT : BASE_NODE_HEIGHT,
+  };
+  return isDecisionNode(node) ? sizeDiamondNode(input) : sizeSemanticNode(input);
+};
 
 const getDepths = (document: AIDiagramDocumentV1) => {
   if (document.diagramType === "architecture") {
@@ -457,10 +467,12 @@ export const buildCanvas = (
     const size = sizes.get(id);
     if (!node || !size) return;
     const depth = depthById.get(id) ?? 0;
-    const style = KIND_COLORS[node.kind] ?? {
-      fill: depth % 2 === 0 ? "#f8fafc" : "#eef2ff",
-      stroke: "#1f2937",
-    };
+    const style = node.color
+      ? { fill: tint(node.color, 0.88), stroke: node.color }
+      : (KIND_COLORS[node.kind] ?? {
+          fill: depth % 2 === 0 ? "#f8fafc" : "#eef2ff",
+          stroke: "#1f2937",
+        });
     const importance =
       document.visualImportance.find((entry) => entry.nodeId === node.id)?.score ?? 5;
     const bounds: Bounds = {
@@ -473,7 +485,7 @@ export const buildCanvas = (
     };
     const element: DrawingElement = {
       id: `${document.metadata.generationId}-${node.id}`,
-      type: "semantic-node",
+      type: isDecisionNode(node) ? "diamond" : "semantic-node",
       points: [
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },
@@ -512,6 +524,8 @@ export const buildCanvas = (
     targetElementId: string;
     bidirectional: boolean;
     dashed: boolean;
+    plain: boolean;
+    color?: string;
   }> = [];
 
   const usedHandlePairs = new Map<string, number>();
@@ -532,6 +546,8 @@ export const buildCanvas = (
       targetElementId: target.element.id,
       bidirectional: Boolean(edge.bidirectional),
       dashed: Boolean(edge.dashed),
+      plain: Boolean(edge.plain),
+      color: edge.color,
       descriptor: {
         arrowId: edgeId,
         sourceId: source.element.id,
@@ -585,11 +601,11 @@ export const buildCanvas = (
       id: draft.edgeId,
       type: draft.bidirectional ? "arrow-bidirectional" : "arrow",
       points,
-      color: "#64748b",
+      color: draft.color ?? "#64748b",
       strokeWidth: 2,
       dashed: draft.dashed,
-      arrowHeadStart: draft.bidirectional,
-      arrowHeadEnd: true,
+      arrowHeadStart: draft.bidirectional && !draft.plain,
+      arrowHeadEnd: !draft.plain,
       routingMode: "orthogonal",
       routePreference: draft.descriptor.routePreference,
       isManuallyRouted: false,

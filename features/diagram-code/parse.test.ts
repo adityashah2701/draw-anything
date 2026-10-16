@@ -211,10 +211,10 @@ describe("parseDiagramCode – errors carry line numbers", () => {
   });
 
   it("warns about unknown property keys and unsupported ones", () => {
-    const parsed = parseDiagramCode("A [wibble: 1, color: red, kind: api]");
+    const parsed = parseDiagramCode("A [wibble: 1, colorMode: bold, kind: api]");
     const warnings = parsed.issues.filter((i) => i.severity === "warning");
     expect(warnings.map((w) => w.message).join(" ")).toMatch(/wibble/);
-    expect(warnings.map((w) => w.message).join(" ")).toMatch(/color/);
+    expect(warnings.map((w) => w.message).join(" ")).toMatch(/colormode/);
     expect(parsed.nodes[0].kind).toBe("api");
   });
 
@@ -228,5 +228,139 @@ describe("parseDiagramCode – errors carry line numbers", () => {
   it("refuses absurdly large input without hanging", () => {
     const parsed = parseDiagramCode("A > B\n".repeat(50_000));
     expect(parsed.issues.some((i) => i.severity === "error")).toBe(true);
+  });
+});
+
+describe("Eraser-style lines, shapes and colours", () => {
+  it("reads - and -- as lines without an arrowhead (--  is dotted)", () => {
+    const parsed = parseDiagramCode("A - B\nB -- C");
+    expect(parsed.nodes.map((n) => n.name)).toEqual(["A", "B", "C"]);
+    expect(parsed.edges).toMatchObject([
+      { plain: true, dashed: undefined },
+      { plain: true, dashed: true },
+    ]);
+  });
+
+  it("keeps --> a dotted arrow, not a dotted line", () => {
+    expect(parseDiagramCode("A --> B").edges[0]).toMatchObject({ dashed: true, plain: undefined });
+  });
+
+  it("takes a trailing [color: x] off the label and onto the edge", () => {
+    const [labelled] = parseDiagramCode("A > B: Triage [color: green]").edges;
+    expect(labelled).toMatchObject({ label: "Triage", color: "#16a34a" });
+    const [bare] = parseDiagramCode("A > B: [color: #f00]").edges;
+    expect(bare.label).toBeUndefined();
+    expect(bare.color).toBe("#ff0000");
+  });
+
+  it("leaves brackets that are not a colour in the label", () => {
+    expect(parseDiagramCode("A > B: GET [v2]").edges[0].label).toBe("GET [v2]");
+  });
+
+  it("supports node shape: diamond and color, and warns about the rest", () => {
+    const parsed = parseDiagramCode('A [shape: diamond, color: blue]\nB [shape: oval, color: "url(x)"]\nC [shape: rectangle]');
+    expect(parsed.nodes[0]).toMatchObject({ shape: "diamond", color: "#2563eb" });
+    expect(parsed.nodes[1].shape).toBeUndefined();
+    expect(parsed.nodes[1].color).toBeUndefined();
+    expect(parsed.nodes[2].shape).toBeUndefined();
+    const messages = parsed.issues.map((i) => i.message).join(" | ");
+    expect(messages).toMatch(/oval/);
+    expect(messages).toMatch(/not recognised/);
+    expect(parsed.issues).toHaveLength(2);
+  });
+});
+
+describe("Eraser-style syntax: edge cases", () => {
+  const messages = (src: string) => parseDiagramCode(src).issues.map((i) => i.message);
+
+  it("keeps a malformed edge colour as label text and says so", () => {
+    for (const src of ["A > B: hi [color: red", "A > B: hi [color red]"]) {
+      const parsed = parseDiagramCode(src);
+      expect(parsed.edges).toHaveLength(1);
+      expect(parsed.edges[0].color).toBeUndefined();
+      expect(parsed.edges[0].label).toContain("hi [color");
+      expect(parsed.issues.map((i) => i.message).join(" ")).toMatch(/looks like an edge color/);
+    }
+  });
+
+  it("ignores an unknown or empty edge colour with a warning and keeps the label", () => {
+    const bad = parseDiagramCode("A > B: hi [color: nope]");
+    expect(bad.edges[0]).toMatchObject({ label: "hi", color: undefined });
+    expect(bad.issues).toHaveLength(1);
+    const empty = parseDiagramCode("A > B: [color: ]");
+    expect(empty.edges[0].label).toBeUndefined();
+    expect(empty.issues).toHaveLength(1);
+  });
+
+  it("treats [color] right after a node as that node's colour, not the connection's", () => {
+    const parsed = parseDiagramCode("A > B [color: red]");
+    expect(parsed.nodes.find((n) => n.name === "B")?.color).toBe("#dc2626");
+    expect(parsed.edges[0].color).toBeUndefined();
+  });
+
+  it("accepts hex in either case and short form, and names in any case", () => {
+    const parsed = parseDiagramCode('A [color: #ABCDEF]\nB [color: #FA0]\nC [color: " BLUE "]');
+    expect(parsed.nodes.map((n) => n.color)).toEqual(["#abcdef", "#ffaa00", "#2563eb"]);
+    expect(parsed.issues).toEqual([]);
+  });
+
+  it("rejects bad colours with exactly one warning each, including functions with commas", () => {
+    for (const src of ["A [color: #12345]", "A [color: rgb(1,2,3)]", "A [color: url(x)]"]) {
+      const parsed = parseDiagramCode(src);
+      expect(parsed.nodes[0].color).toBeUndefined();
+      expect(parsed.issues).toHaveLength(1);
+    }
+  });
+
+  it("reads shape case-insensitively; a later unsupported shape does not undo an earlier one", () => {
+    expect(parseDiagramCode("A [shape: DIAMOND]").nodes[0].shape).toBe("diamond");
+    const parsed = parseDiagramCode("A [shape: diamond]\nA [shape: oval]");
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.nodes[0].shape).toBe("diamond");
+  });
+
+  it.each(["oval", "cylinder", "hexagon", "parallelogram", "star"])("reports shape %s once and still declares the node", (shape) => {
+    const parsed = parseDiagramCode(`Thing [shape: ${shape}, icon: database]`);
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.nodes[0]).toMatchObject({ name: "Thing", icon: "database" });
+    expect(parsed.nodes[0].shape).toBeUndefined();
+    expect(parsed.issues).toHaveLength(1);
+    expect(parsed.issues[0].message).toContain(shape);
+  });
+
+  it("still ignores colorMode with a warning (regression)", () => {
+    const parsed = parseDiagramCode("A [colorMode: bold]");
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.issues.map((i) => i.message).join(" ")).toMatch(/colormode/);
+  });
+
+  it("warns about a connector-like token it does not know instead of silently making a strange node", () => {
+    expect(messages("A --- B").join(" ")).toMatch(/"---" is not a connector/);
+    expect(messages("A <-> B").join(" ")).toMatch(/"<->" is not a connector/);
+    expect(parseDiagramCode("A --- B").nodes.map((n) => n.name)).toEqual(["A --- B"]);
+    expect(messages('"A --- B" > C')).toEqual([]);
+  });
+
+  it("leaves hyphens inside names, quoted names and labels alone", () => {
+    expect(parseDiagramCode("Sign-up > Home").nodes.map((n) => n.name)).toEqual(["Sign-up", "Home"]);
+    expect(parseDiagramCode("A > B: well - maybe").edges[0].label).toBe("well - maybe");
+    const quoted = parseDiagramCode('"Read - Write" > C');
+    expect(quoted.nodes.map((n) => n.name)).toEqual(["Read - Write", "C"]);
+    expect(quoted.issues).toEqual([]);
+  });
+
+  it("reports a dangling connector with its line number", () => {
+    expect(parseDiagramCode("A > B\nA -").issues).toEqual([expect.objectContaining({ line: 2, severity: "error" })]);
+    expect(parseDiagramCode("- > B").issues.every((i) => i.severity === "error" && i.line === 1)).toBe(true);
+  });
+
+  it("chains and branches with lines, keeping each link's own style", () => {
+    const parsed = parseDiagramCode("A - B -- C > D");
+    expect(parsed.edges.map((e) => [e.plain, e.dashed])).toEqual([
+      [true, undefined],
+      [true, true],
+      [undefined, undefined],
+    ]);
+    expect(parseDiagramCode("A - B, C").edges).toHaveLength(2);
   });
 });

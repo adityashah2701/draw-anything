@@ -1,3 +1,4 @@
+import { isNodeElement } from "@/features/ai/server/layout/metrics";
 import { describe, expect, it } from "vitest";
 import { compileAIDiagramToCanvas } from "@/features/ai/server/canvas-compiler";
 import { createEstimateContext } from "@/core/text/estimate";
@@ -28,7 +29,7 @@ describe("layout fixtures are well-formed", () => {
 
   it.each(entries)("%s: compiles to one node per node and one arrow per edge", (_name, doc) => {
     const elements = compileAIDiagramToCanvas(doc, "frame-fixture");
-    expect(elements.filter((e) => e.type === "semantic-node")).toHaveLength(doc.nodes.length);
+    expect(elements.filter(isNodeElement)).toHaveLength(doc.nodes.length);
     expect(elements.filter((e) => e.type === "arrow")).toHaveLength(doc.edges.length);
   });
 });

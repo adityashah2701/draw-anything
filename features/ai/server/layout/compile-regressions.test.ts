@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { compileAIDiagramDetailed, compileAIDiagramToCanvas, sizeDiagramNode } from "@/features/ai/server/canvas-compiler";
+import { estimateLabelBox } from "@/core/text/estimate";
 import { graphFromElements, elementsFromDiagramCode } from "@/features/diagram-code/canvas";
 import { findMovedNodes } from "@/features/diagram-code/pins";
 import { serializeDiagramCode } from "@/features/diagram-code/serialize";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
-import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { ArrowShape, DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { LAYOUT_FIXTURES } from "./fixtures";
 import { fixtureDocument } from "./fixtures/base";
 import { measureLayout, nodeBox } from "./metrics";
@@ -231,5 +232,86 @@ Search > Index
     const els = first().map((e) => (e.type === "semantic-node" ? { ...e, points: e.points.map((p) => ({ x: p.x * 1.7 + (e.label?.length ?? 0) * 13, y: p.y * 1.3 })) } : e));
     const pins = findMovedNodes(els);
     expect(pins.size).toBeGreaterThanOrEqual(nodesOf(els).length - 1);
+  });
+});
+
+describe("decision diamonds", () => {
+  const doc = LAYOUT_FIXTURES.flowchart;
+  const elements = compileAIDiagramToCanvas(doc, "frame-diamond");
+  const decisions = doc.nodes.filter((n) => n.kind === "decision");
+
+  it("draws every decision as a diamond and every other node as a semantic node", () => {
+    expect(decisions.length).toBeGreaterThan(0);
+    for (const node of doc.nodes) {
+      const el = elements.find((e) => e.ai?.semanticId === node.id)!;
+      expect(el.type).toBe(node.kind === "decision" ? "diamond" : "semantic-node");
+    }
+  });
+
+  it.each(["OK?", "Valid?", "Is the customer's payment method valid and not expired?"])(
+    "sizes %s so its text block sits inside the rhombus",
+    (label) => {
+      const size = sizeDiagramNode({ id: "d", label, kind: "decision" }, "balanced");
+      const text = estimateLabelBox({ label, fontSize: 17, fontWeight: "600", maxLines: 3, minWidth: 0, maxWidth: 280 * 0.66 });
+      expect(text.width / size.width + text.height / size.height).toBeLessThanOrEqual(1);
+      expect(size.height).toBeGreaterThanOrEqual(92);
+    },
+  );
+
+  it("attaches connectors to the diamond's four vertices", () => {
+    const diamond = elements.find((e) => e.type === "diamond")!;
+    const [a, b] = diamond.points;
+    const vertices = [
+      `${(a.x + b.x) / 2},${a.y}`, `${b.x},${(a.y + b.y) / 2}`, `${(a.x + b.x) / 2},${b.y}`, `${a.x},${(a.y + b.y) / 2}`,
+    ];
+    const arrows = elements.filter(
+      (e): e is ArrowShape => e.type === "arrow" && (e.startConnection?.elementId === diamond.id || e.endConnection?.elementId === diamond.id),
+    );
+    expect(arrows.length).toBeGreaterThan(0);
+    for (const arrow of arrows) {
+      const end = arrow.startConnection?.elementId === diamond.id ? arrow.points[0] : arrow.points[arrow.points.length - 1];
+      expect(vertices).toContain(`${end.x},${end.y}`);
+    }
+  });
+
+  it("round-trips through diagram code with the decision kind intact", () => {
+    const { graph } = graphFromElements(elements);
+    for (const node of decisions) {
+      expect(graph.nodes.find((n) => n.id === node.id)?.kind).toBe("decision");
+    }
+  });
+});
+
+describe("Eraser-style code on the canvas", () => {
+  const code = [
+    "type flowchart",
+    "Start [color: green]",
+    "Ready [shape: diamond]",
+    "Done",
+    "Start - Ready",
+    "Ready > Done: ship [color: red]",
+  ].join("\n");
+  const { elements, issues } = elementsFromDiagramCode(code, { generationId: "g", frameId: "f" });
+  const byLabel = (label: string) => elements.find((e) => e.label === label)!;
+
+  it("parses without issues", () => {
+    expect(issues).toEqual([]);
+  });
+
+  it("draws shape: diamond as a diamond and colours a node by its colour", () => {
+    expect(byLabel("Ready").type).toBe("diamond");
+    expect(byLabel("Done").type).toBe("semantic-node");
+    expect(byLabel("Start")).toMatchObject({ color: "#16a34a" });
+    expect(byLabel("Start").fill).toMatch(/^#[0-9a-f]{6}$/);
+    expect(byLabel("Start").fill).not.toBe("#16a34a");
+  });
+
+  it("draws - without an arrowhead and colours a connection", () => {
+    const arrows = elements.filter((e): e is ArrowShape => e.type === "arrow");
+    expect(arrows).toHaveLength(2);
+    const [line] = arrows.filter((a) => a.arrowHeadEnd === false);
+    expect(line).toBeDefined();
+    const coloured = arrows.find((a) => a.color === "#dc2626")!;
+    expect(coloured.arrowHeadEnd).toBe(true);
   });
 });

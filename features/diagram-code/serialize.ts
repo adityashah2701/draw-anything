@@ -3,18 +3,20 @@ import type { AIDiagramType } from "@/features/ai/types";
 export interface SerializableGraph {
   diagramType?: AIDiagramType;
   title?: string;
-  nodes: Array<{ id: string; label: string; kind?: string; icon?: string }>;
+  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: "diamond"; color?: string }>;
   edges: Array<{
     from: string;
     to: string;
     label?: string;
     dashed?: boolean;
     bidirectional?: boolean;
+    plain?: boolean;
+    color?: string;
   }>;
   groups: Array<{ id: string; label: string; nodeIds: string[] }>;
 }
 
-const CONNECTOR_IN_NAME = /(^|\s)(<-->|-->|<>|>|<)(\s|$)/;
+const CONNECTOR_IN_NAME = /(^|\s)(<-->|-->|<>|--|-|>|<)(\s|$)/;
 const DIRECTIVE_LOOKALIKE = /^(title|type|direction)\s/i;
 
 const clean = (text: string) => text.replace(/\s+/g, " ").replace(/"/g, "'").trim();
@@ -29,8 +31,8 @@ const writeName = (name: string): string =>
     ? `"${name}"`
     : name;
 
-const connectorFor = (edge: { dashed?: boolean; bidirectional?: boolean }) =>
-  edge.bidirectional ? (edge.dashed ? "<-->" : "<>") : edge.dashed ? "-->" : ">";
+const connectorFor = (edge: { dashed?: boolean; bidirectional?: boolean; plain?: boolean }) =>
+  edge.plain ? (edge.dashed ? "--" : "-") : edge.bidirectional ? (edge.dashed ? "<-->" : "<>") : edge.dashed ? "-->" : ">";
 
 /**
  * Write a graph as diagram code. The output parses back to the same nodes,
@@ -54,6 +56,8 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
     const props: string[] = [];
     if (node.kind && node.kind !== "generic") props.push(`kind: ${node.kind}`);
     if (node.icon) props.push(`icon: ${node.icon}`);
+    if (node.shape === "diamond" && node.kind !== "decision") props.push("shape: diamond");
+    if (node.color) props.push(`color: ${node.color}`);
     if (clean(node.label) !== name) props.push(`label: "${clean(node.label)}"`);
     return props.length > 0 ? `${writeName(name)} [${props.join(", ")}]` : writeName(name);
   };
@@ -117,7 +121,8 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
   const edgeLines = graph.edges
     .filter((edge) => known.has(edge.from) && known.has(edge.to))
     .map((edge) => {
-      const label = edge.label ? `: ${clean(edge.label)}` : "";
+      const color = edge.color ? ` [color: ${edge.color}]` : "";
+      const label = edge.label ? `: ${clean(edge.label)}${color}` : color ? `:${color}` : "";
       return `${writeName(nameOf.get(edge.from)!)} ${connectorFor(edge)} ${writeName(nameOf.get(edge.to)!)}${label}`;
     });
   if (edgeLines.length > 0) {

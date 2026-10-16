@@ -36,7 +36,7 @@ export const findMovedNodes = (elements: DrawingElement[]): Map<string, NodePin>
   const { document } = documentFromParsedCode(parseDiagramCode(serializeDiagramCode(graph)), "pin-detect");
   const fresh = new Map(
     compileAIDiagramToCanvas(document, "pin-detect")
-      .filter((e) => e.type === "semantic-node")
+      .filter((e) => e.ai?.role === "node")
       .map((e) => [e.ai!.semanticId!, centreOf(e)]),
   );
 

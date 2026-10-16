@@ -1,3 +1,4 @@
+import { isDarkRender } from "@/core/theme/render-theme";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import {
   getArrowEditHandles,
@@ -77,9 +78,7 @@ export const drawGrid = (
   const offsetX = panOffset.x % gridSize;
   const offsetY = panOffset.y % gridSize;
 
-  const isDark =
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark");
+  const isDark = isDarkRender();
 
   for (let x = offsetX; x < width; x += gridSize) {
     for (let y = offsetY; y < height; y += gridSize) {
@@ -122,9 +121,7 @@ export const drawElement = (
   // Save context state
   ctx.save();
 
-  const isDark =
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark");
+  const isDark = isDarkRender();
 
   const strokeColor = getAdaptiveColor(element.color, isDark);
 

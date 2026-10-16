@@ -307,11 +307,8 @@ export const editableHtmlToMarkdown = (input: string | HTMLElement) => {
 
   const root =
     typeof input === "string"
-      ? (() => {
-          const container = document.createElement("div");
-          container.innerHTML = input;
-          return container;
-        })()
+      ? // DOMParser documents are inert: a detached div's innerHTML would still fire <img onerror>.
+        new DOMParser().parseFromString(input, "text/html").body
       : input;
 
   const markdown = Array.from(root.childNodes)

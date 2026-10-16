@@ -1,3 +1,4 @@
+import { normalizeColor } from "@/core/color/named-colors";
 import { z } from "zod";
 import { resolveIconId } from "@/core/icons/registry";
 import {
@@ -159,6 +160,8 @@ export const aiDiagramNodeSchema = z.object({
   parentId: z.string().min(1).max(80).optional(),
   description: z.string().max(240).optional(),
   priority: z.number().min(0).max(10).optional(),
+  shape: z.literal("diamond").optional(),
+  color: z.string().max(7).optional(),
 }) satisfies z.ZodType<AIDiagramNode>;
 
 export const aiDiagramEdgeSchema = z.object({
@@ -169,6 +172,8 @@ export const aiDiagramEdgeSchema = z.object({
   relationship: z.string().max(120).optional(),
   bidirectional: z.boolean().optional(),
   dashed: z.boolean().optional(),
+  plain: z.boolean().optional(),
+  color: z.string().max(7).optional(),
 }) satisfies z.ZodType<AIDiagramEdge>;
 
 const optionalStringArraySchema = z.array(z.string().min(1).max(120)).default([]);
@@ -469,6 +474,8 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       parentId: text(record.parentId, 80),
       description: text(record.description, 240),
       priority,
+      shape: record.shape === "diamond" ? "diamond" : undefined,
+      color: normalizeColor(record.color),
     });
   });
 
@@ -508,6 +515,8 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       relationship: text(source.relationship, 120),
       bidirectional: typeof source.bidirectional === "boolean" ? source.bidirectional : undefined,
       dashed: typeof source.dashed === "boolean" ? source.dashed : undefined,
+      plain: typeof source.plain === "boolean" ? source.plain : undefined,
+      color: normalizeColor(source.color),
     });
   });
   if (unusableEdges > 0) warnings.push(`Ignored ${unusableEdges} unusable edge(s).`);

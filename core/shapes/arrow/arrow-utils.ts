@@ -1,3 +1,4 @@
+import { isDarkRender } from "@/core/theme/render-theme";
 import { getAdaptiveColor } from '@/features/whiteboard/utils/canvas-render-utils';
 import {
   ArrowConnection,
@@ -60,9 +61,7 @@ export const getArrowEditHandles = (points: Point[]): ArrowEditHandle[] => {
 };
 
 export const getArrowStyle = (element: ArrowElement): ArrowStyle => {
-  const isDark =
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark");
+  const isDark = isDarkRender();
 
   const color = getAdaptiveColor(element.color, isDark);
 

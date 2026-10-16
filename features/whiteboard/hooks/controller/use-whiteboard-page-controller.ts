@@ -22,6 +22,7 @@ import {
 } from "@/features/whiteboard/types/whiteboard.types";
 import { useMagneticSnap } from "@/core/snap/use-magnetic-snap";
 import { useArrowConnections } from "@/core/arrow/use-arrow-connections";
+import { useBoardExport } from "@/features/whiteboard/hooks/export/use-board-export";
 import { useWhiteboardAccess } from "@/features/whiteboard/hooks/access/use-whiteboard-access";
 import { useCanvasViewport } from "@/features/whiteboard/hooks/canvas/use-canvas-viewport";
 import { useWhiteboardUtils } from "@/features/whiteboard/hooks/utils/use-whiteboard-utils";
@@ -160,6 +161,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   const [currentElement, setCurrentElement] =
     useState<DrawingElement | null>(null);
   const [selectedElements, setSelectedElements] = useState<string[]>([]);
+  const boardExport = useBoardExport({ elements, selectedIds: selectedElements, title: whiteboard?.title });
 
   const whiteboardAccess = useWhiteboardAccess(whiteboard);
   const canvasViewport = useCanvasViewport();
@@ -406,6 +408,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "fit": return handleFitToScreen();
         case "toggle-grid": return canvasViewport.toggleGrid();
         case "toggle-help": return uiState.setShowCommandMenu((prev) => !prev);
+        case "export": return uiState.setShowExport(true);
       }
     },
     [
@@ -791,14 +794,10 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
           uiState.setShowShortcuts(true);
           break;
         case "export":
-          if (canvasRef.current) {
-            const dataUrl = canvasRef.current.toDataURL("image/png");
-            const link = document.createElement("a");
-            link.download = `whiteboard-${whiteboardId}.png`;
-            link.href = dataUrl;
-            link.click();
-            toast.success("Exported as PNG");
-          }
+          uiState.setShowExport(true);
+          break;
+        case "copy-image":
+          void boardExport.copyImage(selectedElements.length > 0).then((message) => message && toast.error(message));
           break;
       }
     },
@@ -809,7 +808,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       handleRedo,
       handleUndo,
       whiteboardAccess.hasEditAccess,
-      whiteboardId,
+      boardExport,
+      selectedElements.length,
       uiState,
     ],
   );
@@ -1101,6 +1101,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleRenameWhiteboard,
     handleGenerateDiagram,
     handleCommandAction,
+    boardExport,
     deleteSelectedElements,
     elementCommands,
     isBoardReady: liveElements !== null && seedState === "settled",

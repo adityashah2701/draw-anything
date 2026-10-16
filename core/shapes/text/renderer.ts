@@ -1,3 +1,4 @@
+import { isDarkRender } from "@/core/theme/render-theme";
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
 import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
 import { renderRichTextLines } from "@/features/whiteboard/utils/rich-text-renderer";
@@ -19,9 +20,7 @@ export const renderTextToCanvas = (
   ctx.save();
   ctx.font = makeFontString(effectiveSize * zoom, weight, style);
 
-  const isDark =
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark");
+  const isDark = isDarkRender();
 
   const color = getAdaptiveColor(shape.color, isDark);
   ctx.fillStyle = color;

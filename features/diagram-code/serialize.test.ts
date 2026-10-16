@@ -119,3 +119,34 @@ describe("serializeDiagramCode", () => {
     expect(parsed.groups[0].nodeIds).toHaveLength(2);
   });
 });
+
+describe("serializing lines, shapes and colours", () => {
+  it("round-trips plain lines, edge colours, node shape and colour", () => {
+    const graph = {
+      nodes: [
+        { id: "a", label: "A", shape: "diamond" as const, color: "#2563eb" },
+        { id: "b", label: "B" },
+        { id: "c", label: "C" },
+      ],
+      edges: [
+        { from: "a", to: "b", plain: true },
+        { from: "b", to: "c", plain: true, dashed: true, label: "link", color: "#16a34a" },
+        { from: "a", to: "c", color: "#dc2626" },
+      ],
+      groups: [],
+    };
+    const parsed = parseDiagramCode(serializeDiagramCode(graph));
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.nodes[0]).toMatchObject({ shape: "diamond", color: "#2563eb" });
+    expect(parsed.edges).toMatchObject([
+      { plain: true },
+      { plain: true, dashed: true, label: "link", color: "#16a34a" },
+      { color: "#dc2626", label: undefined },
+    ]);
+  });
+
+  it("quotes names that contain a standalone - so they stay one node", () => {
+    const code = serializeDiagramCode({ nodes: [{ id: "a", label: "Auth - Login" }, { id: "b", label: "B" }], edges: [{ from: "a", to: "b" }], groups: [] });
+    expect(parseDiagramCode(code).nodes.map((n) => n.name)).toEqual(["Auth - Login", "B"]);
+  });
+});

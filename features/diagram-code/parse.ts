@@ -1,3 +1,4 @@
+import { normalizeColor } from "@/core/color/named-colors";
 import { parseDiagramType } from "@/features/ai/schemas";
 import { slugId } from "@/features/ai/server/validation";
 import type {
@@ -11,11 +12,13 @@ import type {
 export const MAX_SOURCE_CHARS = 100_000;
 export const MAX_SOURCE_LINES = 2_000;
 
-type Connector = "<-->" | "-->" | "<>" | ">" | "<";
-// Longest first so "<-->" is not read as "<" followed by "-->".
-const CONNECTORS: Connector[] = ["<-->", "-->", "<>", ">", "<"];
+type Connector = "<-->" | "-->" | "<>" | "--" | ">" | "<" | "-";
+// Longest first so "<-->" is not read as "<" followed by "-->", and "-->" not as "--".
+const CONNECTORS: Connector[] = ["<-->", "-->", "<>", "--", ">", "<", "-"];
 
-const UNSUPPORTED_PROPS = new Set(["color", "shape", "colormode", "stylemode", "typeface", "icon-color"]);
+const UNSUPPORTED_PROPS = new Set(["colormode", "stylemode", "typeface", "icon-color"]);
+/** A trailing `[color: x]` on a connection, after its optional label. */
+const EDGE_COLOR_PROP = /\s*\[\s*color\s*:\s*([^\]]*)\]\s*$/i;
 const DIRECTIVE = /^(title|type|direction)\s+(.+)$/i;
 
 /** Remove `//` comments (not inside quotes) and whole-line `#` comments. */
@@ -54,8 +57,8 @@ const splitTopLevel = (text: string, separator: string): string[] => {
   for (const ch of text) {
     if (ch === '"') quote = !quote;
     if (!quote) {
-      if (ch === "[") depth += 1;
-      else if (ch === "]") depth = Math.max(0, depth - 1);
+      if (ch === "[" || ch === "(") depth += 1;
+      else if (ch === "]" || ch === ")") depth = Math.max(0, depth - 1);
       else if (ch === separator && depth === 0) {
         parts.push(current);
         current = "";
@@ -165,6 +168,14 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
       const value = unquote(entry.slice(colon + 1));
       if (UNSUPPORTED_PROPS.has(key)) {
         add(line, "warning", `"${key}" is not supported yet and was ignored.`);
+      } else if (key === "shape") {
+        const shape = value.toLowerCase();
+        if (shape === "diamond") props.shape = "diamond";
+        else if (shape !== "rectangle") add(line, "warning", `Shape "${value}" is not supported yet; only diamond and rectangle are. It was ignored.`);
+      } else if (key === "color") {
+        const color = normalizeColor(value);
+        if (color) props.color = color;
+        else add(line, "warning", `Color "${value}" was not recognised (use a name such as blue, or "#rrggbb"); it was ignored.`);
       } else if (["kind", "icon", "label", "dashed"].includes(key)) {
         props[key] = value;
       } else {
@@ -223,6 +234,8 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
     if (props.icon !== undefined) node.icon = props.icon;
     if (props.label !== undefined) node.label = props.label;
     if (props.dashed !== undefined) node.dashed = props.dashed.toLowerCase() === "true";
+    if (props.shape === "diamond") node.shape = "diamond";
+    if (props.color !== undefined) node.color = props.color;
   };
 
   /** Find or create a node; new nodes join every group currently open. */
@@ -305,6 +318,16 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
         return;
       }
       const resolved = sides.map((side) => side.map((ref) => resolveNode(ref, line, false)));
+      let edgeLabel = edgeTokens.label;
+      let edgeColor: string | undefined;
+      const colorProp = edgeLabel === undefined ? null : EDGE_COLOR_PROP.exec(edgeLabel);
+      if (colorProp) {
+        edgeColor = normalizeColor(unquote(colorProp[1]));
+        if (!edgeColor) add(line, "warning", `Color "${colorProp[1].trim()}" was not recognised; it was ignored.`);
+        edgeLabel = edgeLabel!.slice(0, colorProp.index).trim();
+      } else if (edgeLabel !== undefined && /\[\s*colou?r\b/i.test(edgeLabel)) {
+        add(line, "warning", 'This looks like an edge color but is not "[color: name]" at the end of the connection; it was kept as label text.');
+      }
       edgeTokens.connectors.forEach((connector, i) => {
         for (const left of resolved[i]) {
           for (const right of resolved[i + 1]) {
@@ -316,15 +339,22 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
             edges.push({
               from: from.id,
               to: to.id,
-              label: edgeTokens.label || undefined,
+              label: edgeLabel || undefined,
               bidirectional: connector === "<>" || connector === "<-->" ? true : undefined,
-              dashed: connector === "-->" || connector === "<-->" ? true : undefined,
+              dashed: connector === "-->" || connector === "<-->" || connector === "--" ? true : undefined,
+              plain: connector === "-" || connector === "--" ? true : undefined,
+              color: edgeColor,
               line,
             });
           }
         }
       });
       return;
+    }
+
+    const strayConnector = /(^|\s)([-<>]{2,})(?=\s|$)/.exec(text.replace(/"[^"]*"/g, '""'));
+    if (strayConnector) {
+      add(line, "warning", `"${strayConnector[2]}" is not a connector (use >, <, <>, -, -- or -->), so this line was read as a node name. Put the name in "quotes" if that is what you meant.`);
     }
 
     if (text.endsWith("{")) {

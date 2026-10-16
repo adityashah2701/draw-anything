@@ -13,6 +13,7 @@ import {
   Pencil,
   Square,
   Type,
+  Copy,
   Download,
   Save,
   Trash2,
@@ -197,7 +198,12 @@ export function CommandMenu({
           </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onAction?.("export"))}>
             <Download className="mr-2 h-4 w-4" />
-            <span>Export as PNG</span>
+            <span>Export…</span>
+            <CommandShortcut>⇧⌘E</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("copy-image"))}>
+            <Copy className="mr-2 h-4 w-4" />
+            <span>Copy as image</span>
           </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onAction?.("clear"))}>
             <Trash2 className="mr-2 h-4 w-4" />
