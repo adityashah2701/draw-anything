@@ -13,10 +13,8 @@ import {
   segmentBounds,
 } from "@/core/collision/aabb";
 
-export interface RoutingObstacle {
-  id: string;
-  bounds: Aabb;
-}
+import type { RoutingObstacle } from "@/core/routing/types";
+export type { RoutingObstacle };
 
 export interface ObstacleAwareRouteInput {
   start: Point;
@@ -530,7 +528,7 @@ export const getObstacleAwareOrthogonalPath = ({
   return compressOrthogonalPath(best);
 };
 
-export const getPathBounds = (points: Point[]): Aabb | null => {
+const getPathBounds = (points: Point[]): Aabb | null => {
   if (points.length === 0) return null;
   let minX = points[0].x;
   let minY = points[0].y;

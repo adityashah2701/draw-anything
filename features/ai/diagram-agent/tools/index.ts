@@ -22,7 +22,7 @@ const formatTerm = (term: string, perTerm: number): string => {
 };
 
 /** One query or several separated by commas or newlines: models tend to ask once per turn, so one call should be enough for a whole diagram. */
-export const formatIcons = (query: string): string => {
+const formatIcons = (query: string): string => {
   const terms = [...new Set(query.split(/[,\n;]/).map((t) => t.trim()).filter(Boolean))].slice(0, MAX_TERMS);
   return terms.map((term) => formatTerm(term, terms.length > 1 ? 4 : 8)).join("\n");
 };

@@ -70,19 +70,8 @@ import {
 
 // ─────────────────── Types ───────────────────
 
-export interface RouteEngineEdge {
-  arrowId: string;
-  sourceId?: string;
-  targetId?: string;
-  start: Point;
-  end: Point;
-  startHandle?: ConnectionHandle;
-  endHandle?: ConnectionHandle;
-  routePreference?: ArrowRoutePreference;
-  routingMode?: ArrowRoutingMode;
-  existingPoints?: Point[];
-  preserveManualBends?: boolean;
-}
+import type { RouteEngineEdge } from "@/core/routing/types";
+export type { RouteEngineEdge };
 
 export interface RouteEngineConfig {
   /** All obstacles on the canvas. */

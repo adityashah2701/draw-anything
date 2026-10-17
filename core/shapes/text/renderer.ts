@@ -1,6 +1,6 @@
 import { isDarkRender } from "@/core/theme/render-theme";
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
-import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
+import { getAdaptiveColor } from "@/core/color/adaptive-color";
 import { renderRichTextLines } from "@/features/whiteboard/utils/rich-text-renderer";
 import { TextShape } from "@/core/shapes/text/types";
 

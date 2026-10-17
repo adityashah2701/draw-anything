@@ -1,6 +1,6 @@
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
 
-export const distanceToSegment = (point: Point, from: Point, to: Point): number => {
+const distanceToSegment = (point: Point, from: Point, to: Point): number => {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const lengthSq = dx * dx + dy * dy;

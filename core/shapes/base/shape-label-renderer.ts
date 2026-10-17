@@ -1,5 +1,5 @@
 import { isDarkRender } from "@/core/theme/render-theme";
-import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
+import { getAdaptiveColor } from "@/core/color/adaptive-color";
 import {
   measureRichTextLineWidth,
   RichTextSpan,

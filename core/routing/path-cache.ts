@@ -8,7 +8,7 @@ interface CachedPath {
 // Max cache entries to prevent memory bloat
 const MAX_CACHE_SIZE = 500;
 
-export class PathCache {
+class PathCache {
   private cache = new Map<string, CachedPath>();
 
   private buildKey(

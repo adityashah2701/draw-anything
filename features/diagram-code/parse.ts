@@ -9,8 +9,8 @@ import type {
   ParsedNode,
 } from "./types";
 
-export const MAX_SOURCE_CHARS = 100_000;
-export const MAX_SOURCE_LINES = 2_000;
+const MAX_SOURCE_CHARS = 100_000;
+const MAX_SOURCE_LINES = 2_000;
 
 type Connector = "<-->" | "-->" | "<>" | "--" | ">" | "<" | "-";
 // Longest first so "<-->" is not read as "<" followed by "-->", and "-->" not as "--".

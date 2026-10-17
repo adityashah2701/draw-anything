@@ -35,7 +35,7 @@ const json = (status: number, error: string, headers?: Record<string, string>) =
  * get a friendly sentence; everything else is replaced by a generic one so
  * provider payloads, URLs or credentials never reach the browser.
  */
-export const toPublicErrorMessage = (error: unknown): string => {
+const toPublicErrorMessage = (error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error ?? "");
   if (error instanceof Error && error.name === "MissingAIProviderKeyError") {
     return "The selected AI provider is not configured on this server.";

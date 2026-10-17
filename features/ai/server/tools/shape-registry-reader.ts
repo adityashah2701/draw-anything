@@ -1,6 +1,6 @@
 import { AISemanticNodeKind } from "@/features/ai/types";
 
-export const SEMANTIC_NODE_KINDS: AISemanticNodeKind[] = [
+const SEMANTIC_NODE_KINDS: AISemanticNodeKind[] = [
   "service",
   "database",
   "server",

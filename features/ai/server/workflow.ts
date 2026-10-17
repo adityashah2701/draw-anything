@@ -146,7 +146,7 @@ const shouldExpand = (state: GraphState): "expand" | "finalize" => {
   return canExpand ? "expand" : "finalize";
 };
 
-export const createAIDiagramWorkflow = (model: StructuredChatModel) => {
+const createAIDiagramWorkflow = (model: StructuredChatModel) => {
   const runtime: AgentRuntime = {
     model,
     createGenerationId,
@@ -196,7 +196,7 @@ export const createAIDiagramWorkflow = (model: StructuredChatModel) => {
     });
 };
 
-export const createAIWorkflowInput = (request: AIGenerateDiagramRequest) => {
+const createAIWorkflowInput = (request: AIGenerateDiagramRequest) => {
   const frame = createInitialAIFrame(request);
   return {
     input: {

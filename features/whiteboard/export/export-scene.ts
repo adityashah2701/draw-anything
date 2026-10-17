@@ -30,7 +30,7 @@ export interface ExportResult {
 
 /** Empty margin around the drawn content, in board units. */
 export const EXPORT_PADDING = 24;
-export const EXPORT_BACKGROUND = "#ffffff";
+const EXPORT_BACKGROUND = "#ffffff";
 /** A PDF holds the pixels three times over (RGBA, RGB, compressed), so its pixel limit is lower. */
 export const EXPORT_LIMITS = { maxSide: 16_384, maxPixels: 64_000_000, maxPdfPixels: 24_000_000, maxSvgChars: 50_000_000 };
 /** PDF user-space units per CSS pixel (72 / 96). */
@@ -56,7 +56,7 @@ const createCanvas = (width: number, height: number) => {
   return { canvas, ctx };
 };
 
-export const pickElements = (elements: DrawingElement[], selectedIds: string[], selectionOnly: boolean): DrawingElement[] => {
+const pickElements = (elements: DrawingElement[], selectedIds: string[], selectionOnly: boolean): DrawingElement[] => {
   if (selectionOnly) {
     const picked = elementsForSelectionExport(elements, selectedIds);
     if (picked.length === 0) throw new ExportError("no-selection", "Select at least one shape to export a selection.");

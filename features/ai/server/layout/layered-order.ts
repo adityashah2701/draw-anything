@@ -229,6 +229,9 @@ const placeRow = (desired: number[], widths: number[], gaps: number[]): number[]
   return fitted.map((value, i) => value + offset[i]);
 };
 
+/** Largest horizontal offset of a one-to-one link that is still treated as an accidental jog. */
+const SMALL_JOG = 100;
+
 /**
  * Horizontal center of every node. Rows start centered; then each row is
  * pulled toward the mean center of its neighbours (down, then up, a few times)
@@ -294,6 +297,29 @@ export const assignCenters = (
   for (let sweep = 0; sweep < sweeps; sweep += 1) {
     for (const depth of depths) pull(depth, above);
     for (const depth of [...depths].reverse()) pull(depth, below);
+  }
+
+  // A strict one-to-one link (the parent's only child, whose only parent it is) with only a small offset is
+  // drawn straight down when the row allows it. Larger offsets are real layout trade-offs and stay.
+  // Only edges between neighbouring rows count: a back edge (a retry loop) must not hide a plain chain.
+  const nextRow = (map: Map<string, string[]>, id: string, dir: 1 | -1) =>
+    new Set((map.get(id) ?? []).filter((other) => depthOf.get(other) === depthOf.get(id)! + dir));
+  const only = (map: Map<string, string[]>, id: string, dir: 1 | -1) => {
+    const unique = nextRow(map, id, dir);
+    return unique.size === 1 ? [...unique][0] : undefined;
+  };
+  for (const depth of depths) {
+    const ids = rows.get(depth)!;
+    const desired = ids.map((id) => {
+      const parent = only(above, id, -1);
+      const straight =
+        parent !== undefined &&
+        only(below, parent, 1) === id &&
+        Math.abs(center.get(parent)! - center.get(id)!) <= SMALL_JOG;
+      return straight ? center.get(parent)! : center.get(id)!;
+    });
+    const placed = placeRow(desired, ids.map((id) => width.get(id)!), gapsFor(ids));
+    ids.forEach((id, i) => center.set(id, placed[i]));
   }
   return center;
 };

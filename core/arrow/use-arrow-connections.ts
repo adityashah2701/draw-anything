@@ -13,15 +13,15 @@ import {
   generateAnchorsForElement,
   parseAnchorSide,
 } from "@/core/anchors/generate-anchors";
+import type { RouteArrowDescriptor } from "@/core/routing/orthogonal-router";
 import {
-  RouteArrowDescriptor,
   routeWithEngine,
   createRouteEngineState,
   markEdgeDirty,
   clearEdgeDirty,
   pruneRouteEngineState,
-  AdjacencyMap,
-} from "@/core/routing/orthogonal-router";
+} from "@/core/routing/route-engine";
+import { AdjacencyMap } from "@/core/routing/adjacency-map";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { recordPath } from "@/core/routing/congestion-map";
 import { ArrowElement, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
@@ -99,6 +99,63 @@ const buildRouteCacheSignature = (
     descriptor.preserveManualBends ? "manual" : "auto",
     serializePoints(descriptor.existingPoints),
   ].join("|");
+
+type RouteEngineState = ReturnType<typeof createRouteEngineState>;
+
+/** Routes descriptors, serving each from `globalPathCache` when possible and caching what the engine computes. */
+const routeThroughCaches = (
+  state: RouteEngineState,
+  descriptors: RouteArrowDescriptor[],
+  obstacles: RoutingObstacle[],
+  obstacleSignature: string,
+  engineInputs: () => {
+    existingRoutes: { arrowId: string; points: Point[] }[];
+    allParallelCandidates: RouteArrowDescriptor[];
+  },
+): Map<string, Point[]> => {
+  const routes = new Map<string, Point[]>();
+  const toRoute: RouteArrowDescriptor[] = [];
+
+  for (const descriptor of descriptors) {
+    const signature = buildRouteCacheSignature(descriptor, obstacleSignature);
+    const cached = globalPathCache.get(
+      descriptor.arrowId,
+      descriptor.start,
+      descriptor.end,
+      signature,
+    );
+    if (cached) {
+      routes.set(descriptor.arrowId, cached);
+      state.routeCache.set(descriptor.arrowId, cached);
+      // Primed from globalPathCache, not computed by the engine: leave no hash
+      // behind so the engine never treats this entry as validated.
+      state.pathHashCache.delete(descriptor.arrowId);
+      recordPath(state.congestionMap, descriptor.arrowId, cached);
+      clearEdgeDirty(state, descriptor.arrowId);
+    } else {
+      toRoute.push(descriptor);
+    }
+  }
+  if (toRoute.length === 0) return routes;
+
+  toRoute.forEach((descriptor) => markEdgeDirty(state, descriptor.arrowId));
+  const result = routeWithEngine(toRoute, { obstacles, ...engineInputs() }, state);
+  for (const descriptor of toRoute) {
+    const points = result.routes.get(descriptor.arrowId);
+    if (!points) continue;
+    routes.set(descriptor.arrowId, points);
+    globalPathCache.set(
+      descriptor.arrowId,
+      descriptor.start,
+      descriptor.end,
+      points,
+      buildRouteCacheSignature(descriptor, obstacleSignature),
+    );
+    state.routeCache.set(descriptor.arrowId, points);
+    recordPath(state.congestionMap, descriptor.arrowId, points);
+  }
+  return routes;
+};
 
 const getSideFromConnection = (
   connection: ArrowConnection | undefined,
@@ -366,61 +423,17 @@ export const useArrowConnections = ({
         return arrow;
       }
 
-      const cacheSignature = buildRouteCacheSignature(
-        descriptor,
-        baseRoutingObstacleSignature,
-      );
-
-      // 1. Try to read from Path Cache
-      const cachedPoints = globalPathCache.get(
-        arrow.id,
-        descriptor.start,
-        descriptor.end,
-        cacheSignature,
-      );
-      if (cachedPoints) {
-        routeEngineStateRef.current.routeCache.set(arrow.id, cachedPoints);
-        // Primed from globalPathCache, not computed by the engine: leave no hash
-        // behind so the engine never treats this entry as validated.
-        routeEngineStateRef.current.pathHashCache.delete(arrow.id);
-        recordPath(routeEngineStateRef.current.congestionMap, arrow.id, cachedPoints);
-        clearEdgeDirty(routeEngineStateRef.current, arrow.id);
-        return {
-          ...arrow,
-          points: cachedPoints,
-        };
-      }
-
-      // 2. Otherwise run routing engine
-      markEdgeDirty(routeEngineStateRef.current, arrow.id);
-      const result = routeWithEngine(
+      const routes = routeThroughCaches(
+        routeEngineStateRef.current,
         [descriptor],
-        {
-          obstacles: getRoutingObstacles(),
+        getRoutingObstacles(),
+        baseRoutingObstacleSignature,
+        () => ({
           existingRoutes: getExistingRoutes(new Set([arrow.id])),
           allParallelCandidates: getAllParallelCandidates(),
-        },
-        routeEngineStateRef.current,
+        }),
       );
-      const points = result.routes.get(arrow.id);
-
-      // 3. Cache the newly computed route
-      if (points) {
-        globalPathCache.set(
-          arrow.id,
-          descriptor.start,
-          descriptor.end,
-          points,
-          cacheSignature,
-        );
-        routeEngineStateRef.current.routeCache.set(arrow.id, points);
-        recordPath(routeEngineStateRef.current.congestionMap, arrow.id, points);
-      }
-
-      return {
-        ...arrow,
-        points: points ?? arrow.points,
-      };
+      return { ...arrow, points: routes.get(arrow.id) ?? arrow.points };
     },
     [
       buildRouteDescriptor,
@@ -482,71 +495,20 @@ export const useArrowConnections = ({
       const routingObstacles = getRoutingObstacles(boundsOverrides);
       const routingObstacleSignature = serializeObstacles(routingObstacles);
 
-      // Check path cache for each descriptor first
-      const descriptorsToRoute: RouteArrowDescriptor[] = [];
-      const cachedRoutes = new Map<string, Point[]>();
-
-      descriptors.forEach((descriptor) => {
-        const cacheSignature = buildRouteCacheSignature(
-          descriptor,
-          routingObstacleSignature,
-        );
-        const cached = globalPathCache.get(
-          descriptor.arrowId,
-          descriptor.start,
-          descriptor.end,
-          cacheSignature,
-        );
-        if (cached) {
-          cachedRoutes.set(descriptor.arrowId, cached);
-          routeEngineStateRef.current.routeCache.set(descriptor.arrowId, cached);
-          routeEngineStateRef.current.pathHashCache.delete(descriptor.arrowId);
-          recordPath(
-            routeEngineStateRef.current.congestionMap,
-            descriptor.arrowId,
-            cached,
-          );
-          clearEdgeDirty(routeEngineStateRef.current, descriptor.arrowId);
-        } else {
-          descriptorsToRoute.push(descriptor);
-        }
-      });
-
-      let rerouted = { routes: new Map<string, Point[]>() };
-      if (descriptorsToRoute.length > 0) {
-        descriptorsToRoute.forEach((d) => {
-          markEdgeDirty(routeEngineStateRef.current, d.arrowId);
-        });
-        rerouted = routeWithEngine(
-          descriptorsToRoute,
-          {
-            obstacles: routingObstacles,
-            existingRoutes: getExistingRoutes(affectedIds),
-            allParallelCandidates: getAllParallelCandidates(anchorOverrides),
-          },
-          routeEngineStateRef.current,
-        );
-
-        // Cache newly routed paths
-        descriptorsToRoute.forEach((descriptor) => {
-          const points = rerouted.routes.get(descriptor.arrowId);
-          if (points) {
-            globalPathCache.set(
-              descriptor.arrowId,
-              descriptor.start,
-              descriptor.end,
-              points,
-              buildRouteCacheSignature(descriptor, routingObstacleSignature),
-            );
-            routeEngineStateRef.current.routeCache.set(descriptor.arrowId, points);
-            recordPath(routeEngineStateRef.current.congestionMap, descriptor.arrowId, points);
-          }
-        });
-      }
+      const routes = routeThroughCaches(
+        routeEngineStateRef.current,
+        descriptors,
+        routingObstacles,
+        routingObstacleSignature,
+        () => ({
+          existingRoutes: getExistingRoutes(affectedIds),
+          allParallelCandidates: getAllParallelCandidates(anchorOverrides),
+        }),
+      );
 
       const updates: ArrowElement[] = [];
       affectedArrows.forEach((arrow) => {
-        const points = cachedRoutes.get(arrow.id) ?? rerouted.routes.get(arrow.id);
+        const points = routes.get(arrow.id);
         if (!points || arePointsEqual(points, arrow.points)) return;
         updates.push({ ...arrow, points });
       });

@@ -15,7 +15,7 @@ export interface ConnectionHandlePoint {
   y: number;
 }
 
-export const getConnectionHandlesForBounds = (
+const getConnectionHandlesForBounds = (
   bounds: BoundsLike,
 ): ConnectionHandlePoint[] => {
   const cx = (bounds.minX + bounds.maxX) / 2;

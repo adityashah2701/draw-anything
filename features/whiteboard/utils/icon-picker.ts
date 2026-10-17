@@ -94,7 +94,7 @@ export const moveGridIndex = (index: number, key: GridKey, columns: number, coun
   }
 };
 
-export const iconName = (id: string) =>
+const iconName = (id: string) =>
   id.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 
 /** Edge of a freshly inserted icon, in world units (it can be resized afterwards). */

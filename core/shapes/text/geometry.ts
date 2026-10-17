@@ -26,7 +26,7 @@ const splitMarkdownLines = (text: string) => {
   return lines;
 };
 
-export const measureTextShapeBlock = (
+const measureTextShapeBlock = (
   text: string,
   fontSize: number,
   fontWeight: string | number,

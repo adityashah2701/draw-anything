@@ -230,7 +230,7 @@ export const sanitizeGraphDraft = (
   return { nodes, edges, groups, duplicateIds, invalidEdges };
 };
 
-export const buildValidationReport = (
+const buildValidationReport = (
   nodes: AIDiagramNode[],
   edges: AIDiagramEdge[],
   groups: AIDiagramGroup[],

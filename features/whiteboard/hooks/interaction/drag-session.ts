@@ -1,4 +1,5 @@
-import type { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
+import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 
 export interface Guide {
   axis: "x" | "y";
@@ -106,4 +107,33 @@ export const unionBounds = (boxes: readonly Bounds[]): Bounds | null => {
   const maxX = Math.max(...boxes.map((b) => b.maxX));
   const maxY = Math.max(...boxes.map((b) => b.maxY));
   return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+};
+
+/** What a move started from. Positions are always `origin` plus the total pointer travel, never accumulated per event. */
+export interface DragSession {
+  start: Point;
+  origin: DrawingElement[];
+  selection: Bounds;
+  targets: Bounds[];
+}
+
+/** Null when none of the moving elements has bounds. Connectors, freehand and group frames are not alignment targets. */
+export const startDragSession = (
+  movingIds: readonly string[],
+  elements: readonly DrawingElement[],
+  point: Point,
+  getBounds: (element: DrawingElement) => Bounds | null,
+): DragSession | null => {
+  const moving = new Set(movingIds);
+  const origin = elements.filter((el) => moving.has(el.id));
+  const selection = unionBounds(origin.flatMap((el) => getBounds(el) ?? []));
+  if (!selection) return null;
+  return {
+    start: point,
+    origin,
+    selection,
+    targets: elements.flatMap((el) =>
+      moving.has(el.id) || el.isGuide || el.type === "freehand" || isArrowElement(el) ? [] : (getBounds(el) ?? []),
+    ),
+  };
 };

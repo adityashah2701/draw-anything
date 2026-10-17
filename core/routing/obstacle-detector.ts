@@ -102,7 +102,7 @@ export const buildObstacleIndex = (
  * Query all obstacles whose expanded bounds intersect the given area.
  * Returns deduplicated results.
  */
-export const queryNearbyObstacles = (
+const queryNearbyObstacles = (
   index: ObstacleIndex,
   bounds: Aabb,
 ): RoutingObstacle[] => {

@@ -9,7 +9,7 @@ export interface Aabb {
 
 const EPSILON = 0.0001;
 
-export const toAabb = (bounds: Aabb): Aabb => ({
+const toAabb = (bounds: Aabb): Aabb => ({
   minX: Math.min(bounds.minX, bounds.maxX),
   minY: Math.min(bounds.minY, bounds.maxY),
   maxX: Math.max(bounds.minX, bounds.maxX),
@@ -29,7 +29,7 @@ export const intersectsAabb = (a: Aabb, b: Aabb): boolean =>
   a.minY <= b.maxY &&
   a.maxY >= b.minY;
 
-export const containsPoint = (box: Aabb, point: Point): boolean =>
+const containsPoint = (box: Aabb, point: Point): boolean =>
   point.x >= box.minX - EPSILON &&
   point.x <= box.maxX + EPSILON &&
   point.y >= box.minY - EPSILON &&

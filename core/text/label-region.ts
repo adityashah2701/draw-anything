@@ -10,7 +10,7 @@ export interface LabelRegion {
   maxLines?: number;
 }
 
-export const SEMANTIC_ICON_MAX = 28;
+const SEMANTIC_ICON_MAX = 28;
 const ICON_LEFT_MARGIN = 14;
 const ICON_LABEL_GAP = 12; // label starts iconSize + 26 from the edge: margin + gap
 const LABEL_RIGHT_MARGIN = 12;

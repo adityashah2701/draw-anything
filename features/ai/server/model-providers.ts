@@ -206,7 +206,7 @@ export const describeSchemaForPrompt = (schema: unknown): string => {
 };
 
 /** The instruction appended to every structured request, for every provider. */
-export const buildJsonInstruction = (schema: unknown): string =>
+const buildJsonInstruction = (schema: unknown): string =>
   `Respond with ONLY a single JSON object that matches this JSON Schema:\n${describeSchemaForPrompt(schema)}\n` +
   "Rules: no markdown code fences and no text before or after the JSON; leave out optional fields you do not need instead of sending null; keep to the length limits in the schema.";
 

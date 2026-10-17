@@ -1,4 +1,12 @@
 import {
+  getFallbackOrthogonalPath,
+  pinPathEndpointStubs,
+  reanchorPathEndpoints,
+  stabilizeArrowRouteEndpoints,
+} from "@/core/routing/endpoint-stubs";
+export { stabilizeArrowRouteEndpoints } from "@/core/routing/endpoint-stubs";
+export { moveOrthogonalSegment } from "@/core/routing/path-editing";
+import {
   ArrowRoutePreference,
   ArrowRoutingMode,
   ConnectionHandle,
@@ -16,8 +24,8 @@ import {
 } from "@/core/routing/obstacle-avoidance";
 import {
   compressOrthogonalPath,
+  isOrthogonalPath,
   isOrthogonalSegment,
-  arePointsEqual as samePoint,
   orthogonalizePath,
   EPSILON,
 } from "@/core/routing/routing-utils";
@@ -80,164 +88,6 @@ const applyParallelOffset = (
 
   // Re-orthogonalize after shifting points to fix any diagonals at the shift boundaries.
   return orthogonalizePath(shifted, preference);
-};
-
-const isOrthogonalPathInternal = (points: Point[]): boolean => {
-  for (let i = 0; i < points.length - 1; i += 1) {
-    if (!isOrthogonalSegment(points[i], points[i + 1])) {
-      return false;
-    }
-  }
-  return true;
-};
-
-const getFallbackOrthogonalPath = (
-  start: Point,
-  end: Point,
-  preference: ArrowRoutePreference = "hv",
-): Point[] => {
-  if (start.x === end.x || start.y === end.y) return [start, end];
-  if (preference === "vh") {
-    return [start, { x: start.x, y: end.y }, end];
-  }
-  return [start, { x: end.x, y: start.y }, end];
-};
-
-const getHandleDirection = (handle: ConnectionHandle): Point => {
-  switch (handle) {
-    case "top":
-      return { x: 0, y: -1 };
-    case "right":
-      return { x: 1, y: 0 };
-    case "bottom":
-      return { x: 0, y: 1 };
-    case "left":
-      return { x: -1, y: 0 };
-  }
-};
-
-const pinPathEndpointStubs = (
-  points: Point[],
-  start: Point,
-  end: Point,
-  startHandle?: ConnectionHandle,
-  endHandle?: ConnectionHandle,
-  stubDistance = 24,
-  preference: ArrowRoutePreference = "hv",
-): Point[] => {
-  if (points.length < 4 || (!startHandle && !endHandle)) {
-    return points;
-  }
-
-  // Distance along the handle's ray at which `point` lies, or null if it is not on that ray.
-  const distanceAlongRay = (origin: Point, dir: Point, point: Point) => {
-    const dx = point.x - origin.x;
-    const dy = point.y - origin.y;
-    const along = dx * dir.x + dy * dir.y;
-    const across = Math.abs(dx * dir.y) + Math.abs(dy * dir.x);
-    return across < 0.5 && along > 0.5 ? along : null;
-  };
-
-  const pinned = points.map((point) => ({ ...point }));
-  if (startHandle) {
-    const dir = getHandleDirection(startHandle);
-    const startExit = {
-      x: start.x + dir.x * stubDistance,
-      y: start.y + dir.y * stubDistance,
-    };
-    pinned[0] = { ...start };
-    const along = distanceAlongRay(start, dir, pinned[1]);
-    if (along === null) {
-      // The next point is a real bend, not the stub: keep it and add the stub in front of it.
-      pinned.splice(1, 0, startExit);
-    } else if (along < stubDistance) {
-      pinned[1] = startExit; // stub too short: extend it
-    } // else the first segment already leaves the handle by at least the stub: keep it
-  }
-
-  if (endHandle) {
-    const dir = getHandleDirection(endHandle);
-    const endEntry = {
-      x: end.x + dir.x * stubDistance,
-      y: end.y + dir.y * stubDistance,
-    };
-    const endIndex = pinned.length - 1;
-    pinned[endIndex] = { ...end };
-    const along = distanceAlongRay(end, dir, pinned[endIndex - 1]);
-    if (along === null) {
-      pinned.splice(endIndex, 0, endEntry);
-    } else if (along < stubDistance) {
-      pinned[endIndex - 1] = endEntry;
-    }
-  }
-
-  return orthogonalizePath(pinned, preference);
-};
-
-export const stabilizeArrowRouteEndpoints = (
-  points: Point[],
-  start: Point,
-  end: Point,
-  startHandle?: ConnectionHandle,
-  endHandle?: ConnectionHandle,
-  preference?: ArrowRoutePreference,
-): Point[] =>
-  compressOrthogonalPath(
-    pinPathEndpointStubs(
-      points,
-      start,
-      end,
-      startHandle,
-      endHandle,
-      undefined,
-      preference ??
-        (startHandle
-          ? startHandle === "top" || startHandle === "bottom"
-            ? "hv"
-            : "vh"
-          : endHandle
-            ? endHandle === "top" || endHandle === "bottom"
-              ? "vh"
-              : "hv"
-            : "hv"),
-    ),
-  );
-
-export const reanchorPathEndpoints = (
-  points: Point[],
-  start: Point,
-  end: Point,
-): Point[] => {
-  if (points.length <= 2) return [start, end];
-
-  const oldStart = points[0];
-  const oldSecond = points[1];
-  const oldPrevToEnd = points[points.length - 2];
-  const oldEnd = points[points.length - 1];
-
-  const next = points.map((point) => ({ ...point }));
-  next[0] = { ...start };
-  next[next.length - 1] = { ...end };
-
-  if (oldSecond.x === oldStart.x) {
-    next[1] = { ...next[1], x: start.x };
-  } else {
-    next[1] = { ...next[1], y: start.y };
-  }
-
-  const penultimate = next.length - 2;
-  if (oldPrevToEnd.x === oldEnd.x) {
-    next[penultimate] = { ...next[penultimate], x: end.x };
-  } else {
-    next[penultimate] = { ...next[penultimate], y: end.y };
-  }
-
-  const compressed = compressOrthogonalPath(next);
-  if (compressed.length >= 2 && isOrthogonalPathInternal(compressed)) {
-    return compressed;
-  }
-
-  return getFallbackOrthogonalPath(start, end);
 };
 
 export interface RouteArrowInput
@@ -404,7 +254,7 @@ const routeArrowPointsInternal = ({
     );
     // The user's bends are kept while they still fit the anchors. Once a shape has moved so that the path would
     // run along or into a shape's side, they no longer do, and the arrow is routed afresh instead.
-    if (isOrthogonalPathInternal(kept) && meetsAnchorsCleanly(kept, startHandle, endHandle)) return kept;
+    if (isOrthogonalPath(kept) && meetsAnchorsCleanly(kept, startHandle, endHandle)) return kept;
   }
 
   const ignoreIds = new Set<string>(ignoreObstacleIds ?? []);
@@ -677,118 +527,4 @@ export const routeArrowBatch = ({
   return routed;
 };
 
-export const isOrthogonalPathStrict = isOrthogonalPathInternal;
-
-export const insertBendPoint = (
-  points: Point[],
-  segmentIndex: number,
-): Point[] => {
-  if (segmentIndex < 0 || segmentIndex >= points.length - 1) {
-    return points;
-  }
-  const a = points[segmentIndex];
-  const b = points[segmentIndex + 1];
-  const midpoint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  return [
-    ...points.slice(0, segmentIndex + 1),
-    midpoint,
-    ...points.slice(segmentIndex + 1),
-  ];
-};
-
-export const removeBendPoint = (
-  points: Point[],
-  bendIndex: number,
-): Point[] => {
-  if (points.length <= 2 || bendIndex <= 0 || bendIndex >= points.length - 1) {
-    return points;
-  }
-  const next = [...points];
-  next.splice(bendIndex, 1);
-  return compressOrthogonalPath(next);
-};
-
-export const moveOrthogonalSegment = (
-  points: Point[],
-  segmentIndex: number,
-  target: Point,
-): Point[] => {
-  const lastSegment = points.length - 2;
-  if (points.length < 3 || segmentIndex <= 0 || segmentIndex >= lastSegment) {
-    return points;
-  }
-
-  const next = points.map((point) => ({ ...point }));
-  const from = next[segmentIndex];
-  const to = next[segmentIndex + 1];
-  if (from.y === to.y) {
-    next[segmentIndex] = { ...next[segmentIndex], y: target.y };
-    next[segmentIndex + 1] = { ...next[segmentIndex + 1], y: target.y };
-  } else if (from.x === to.x) {
-    next[segmentIndex] = { ...next[segmentIndex], x: target.x };
-    next[segmentIndex + 1] = { ...next[segmentIndex + 1], x: target.x };
-  }
-  return compressOrthogonalPath(next);
-};
-
-export const getOrthogonalPath = ({
-  start,
-  end,
-  startHandle,
-  endHandle,
-  routePreference,
-}: {
-  start: Point;
-  end: Point;
-  startHandle?: ConnectionHandle;
-  endHandle?: ConnectionHandle;
-  routePreference?: ArrowRoutePreference;
-}): Point[] =>
-  routeArrowPoints({
-    start,
-    end,
-    startHandle,
-    endHandle,
-    routePreference,
-  });
-
 export const compressPath = compressOrthogonalPath;
-
-export const isOrthogonalPath = (points: Point[]) =>
-  isOrthogonalPathStrict(points);
-
-export const pathHasDuplicateNeighborPoints = (points: Point[]) => {
-  for (let i = 0; i < points.length - 1; i += 1) {
-    if (samePoint(points[i], points[i + 1])) return true;
-  }
-  return false;
-};
-
-// Re-export route engine for consumers
-export {
-  routeWithEngine,
-  createRouteEngineState,
-  markEdgeDirty,
-  clearEdgeDirty,
-  markShapeEdgesDirty,
-  invalidateAllRoutes,
-  pruneRouteEngineState,
-} from "@/core/routing/route-engine";
-export type {
-  RouteEngineEdge,
-  RouteEngineConfig,
-  RouteEngineResult,
-  RouteEngineState,
-} from "@/core/routing/route-engine";
-
-// Re-export new data structures and utilities for consumers
-export { SpatialHashGrid } from "@/core/routing/spatial-hash-grid";
-export { AdjacencyMap } from "@/core/routing/adjacency-map";
-export {
-  isValidPoint,
-  isValidPointArray,
-  validateEdge,
-  isFullyConnectedEdge,
-  sanitizeEdges,
-  sanitizeObstacles,
-} from "@/core/routing/routing-guards";

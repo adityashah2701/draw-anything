@@ -6,7 +6,7 @@ import type { IconDef } from "./registry";
  * `validateCustomIcon`, which accepts only plain path data, never markup.
  */
 
-export const CUSTOM_ICON_LIMITS = {
+const CUSTOM_ICON_LIMITS = {
   maxPaths: 64,
   maxPathChars: 20_000,
   /** All paths together; one icon is copied into every node that uses it. */

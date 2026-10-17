@@ -434,4 +434,49 @@ suite("editor flows", () => {
     await s.drag({ x: 100, y: 450 }, { x: 200, y: 520 });
     expect(await ofType(s, "rectangle")).toHaveLength(2);
   });
+  it("a marquee over empty space selects what it covers; a tiny one selects nothing", async () => {
+    await shape("r", { x: 100, y: 100 }, { x: 200, y: 160 });
+    await shape("r", { x: 300, y: 100 }, { x: 400, y: 160 });
+    await shape("r", { x: 100, y: 400 }, { x: 200, y: 460 });
+    const [a, b] = await ofType(s, "rectangle");
+    await s.click({ x: 700, y: 300 });
+    expect(await s.selected()).toEqual([]);
+
+    await s.drag({ x: 60, y: 60 }, { x: 440, y: 200 });
+    expect((await s.selected()).sort()).toEqual([a.id, b.id].sort());
+
+    await s.click({ x: 700, y: 300 });
+    await s.drag({ x: 700, y: 300 }, { x: 702, y: 302 });
+    expect(await s.selected()).toEqual([]);
+  });
+
+  it("a plain click on one member of a multi-selection collapses to it on release, but a drag moves them all", async () => {
+    await shape("r", { x: 100, y: 100 }, { x: 200, y: 160 });
+    await shape("r", { x: 300, y: 100 }, { x: 400, y: 160 });
+    const [a, b] = await ofType(s, "rectangle");
+    await s.click({ x: 700, y: 300 });
+    await s.drag({ x: 60, y: 60 }, { x: 440, y: 200 });
+    expect(await s.selected()).toHaveLength(2);
+
+    await s.drag({ x: 150, y: 130 }, { x: 150, y: 230 });
+    const moved = await ofType(s, "rectangle");
+    expect(moved.map((e) => e.points[0].y)).toEqual([a.points[0].y + 100, b.points[0].y + 100]);
+    expect(await s.selected()).toHaveLength(2);
+
+    await s.click({ x: 150, y: 230 });
+    expect(await s.selected()).toEqual([a.id]);
+  });
+  it("the label editor's Bold, Italic and size buttons work without throwing", async () => {
+    await shape("r", { x: 100, y: 100 }, { x: 260, y: 200 });
+    await s.dblclick({ x: 180, y: 150 });
+    await editorFocused(s);
+    await s.type("styled");
+    const before = s.problems.length;
+    for (const title of ["Bold", "Italic", "Increase size", "Decrease size"]) {
+      await s.page.click(`button[title="${title}"]`);
+    }
+    await s.press("Escape");
+    expect(s.problems.slice(before).filter((p) => p.startsWith("pageerror"))).toEqual([]);
+    expect((await ofType(s, "rectangle"))[0].label).toBe("styled");
+  });
 });

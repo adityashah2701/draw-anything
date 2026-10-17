@@ -37,15 +37,11 @@ import type { ShortcutCommand } from "@/features/whiteboard/hooks/interaction/ke
 import { useElementCommands } from "@/features/whiteboard/hooks/interaction/use-element-commands";
 import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/data/use-whiteboard-auto-save";
 import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whiteboard-ui-state";
-import {
-  ArrowElement,
-  getArrowHeadVisibility,
-  isArrowElement,
-} from "@/core/shapes/arrow/arrow-utils";
-import {
-  insertBendPoint,
-  removeBendPoint,
-} from "@/core/routing/orthogonal-router";
+import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
+import { aiAnchorShift, planDiagramCode, shiftElement } from "./diagram-placement";
+import { useEditingText } from "./use-editing-text";
+import { useSelectedArrow } from "./use-selected-arrow";
+import { useSelectionStyle } from "./use-selection-style";
 import { createGestureHistory } from "@/features/whiteboard/hooks/interaction/gesture-history";
 import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
@@ -542,69 +538,22 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [elements, selectedElements],
   );
 
-  const selectedArrow = useMemo(() => {
-    if (!selectedElement || !isArrowElement(selectedElement)) {
-      return null;
-    }
-    const heads = getArrowHeadVisibility(selectedElement);
-    return {
-      type: selectedElement.type,
-      routingMode: selectedElement.routingMode ?? "orthogonal",
-      dashed: Boolean(selectedElement.dashed),
-      arrowHeadStart: heads.start,
-      arrowHeadEnd: heads.end,
-    };
-  }, [selectedElement]);
-
-  const updateSelectedArrow = useCallback(
-    (
-      patch: Partial<
-        Pick<
-          ArrowElement,
-          | "type"
-          | "routingMode"
-          | "dashed"
-          | "arrowHeadStart"
-          | "arrowHeadEnd"
-          | "isManuallyRouted"
-        >
-      >,
-    ) => {
-      if (!whiteboardAccess.hasEditAccess) return;
-      if (!selectedElement || !isArrowElement(selectedElement)) return;
-
-      let next: ArrowElement = {
-        ...selectedElement,
-        ...patch,
-      };
-
-      if (patch.type === "arrow-bidirectional") {
-        next.arrowHeadStart = patch.arrowHeadStart ?? true;
-        next.arrowHeadEnd = patch.arrowHeadEnd ?? true;
-      }
-
-      if (patch.type === "arrow") {
-        next.arrowHeadStart = patch.arrowHeadStart ?? false;
-        next.arrowHeadEnd = patch.arrowHeadEnd ?? true;
-      }
-
-      if (patch.routingMode === "straight") {
-        const endIndex = Math.max(1, next.points.length - 1);
-        next.points = [next.points[0], next.points[endIndex]];
-        next.isManuallyRouted = false;
-      } else if (patch.routingMode === "orthogonal") {
-        next = routeArrowByConnections(next);
-      }
-
-      updateElement(next as unknown as DrawingElementJson);
-    },
-    [
-      routeArrowByConnections,
-      selectedElement,
-      updateElement,
-      whiteboardAccess.hasEditAccess,
-    ],
-  );
+  const {
+    selectedArrow,
+    updateSelectedArrow,
+    updateArrowBendsAtPoint,
+    handleArrowTypeChange,
+    handleArrowRoutingModeChange,
+    handleArrowDashedChange,
+    handleArrowHeadStartChange,
+    handleArrowHeadEndChange,
+  } = useSelectedArrow({
+    selectedElement,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    zoom: canvasViewport.zoom,
+    routeArrowByConnections,
+    updateElement,
+  });
 
   const otherUsersDrafts = others
     .map((o) => o.presence.pencilDraft as unknown as DrawingElement)
@@ -622,185 +571,14 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     {},
   );
 
-  const updateArrowBendsAtPoint = useCallback(
-    (arrow: DrawingElement, point: { x: number; y: number }) => {
-      if (!whiteboardAccess.hasEditAccess || !isArrowElement(arrow)) {
-        return false;
-      }
-
-      const removeThreshold = 10 / canvasViewport.zoom;
-      const insertThreshold = 12 / canvasViewport.zoom;
-
-      for (let i = 1; i < arrow.points.length - 1; i += 1) {
-        const bend = arrow.points[i];
-        const distance = Math.hypot(point.x - bend.x, point.y - bend.y);
-        if (distance <= removeThreshold) {
-          const points = removeBendPoint(arrow.points, i);
-          updateElement({
-            ...arrow,
-            points,
-            routingMode: "orthogonal",
-            isManuallyRouted: true,
-          } as unknown as DrawingElementJson);
-          return true;
-        }
-      }
-
-      let closestSegment = -1;
-      let closestDistance = Number.POSITIVE_INFINITY;
-      for (let i = 0; i < arrow.points.length - 1; i += 1) {
-        const from = arrow.points[i];
-        const to = arrow.points[i + 1];
-        const distance =
-          from.x === to.x
-            ? Math.abs(point.x - from.x) +
-              (point.y < Math.min(from.y, to.y) ||
-              point.y > Math.max(from.y, to.y)
-                ? Math.min(
-                    Math.abs(point.y - from.y),
-                    Math.abs(point.y - to.y),
-                  )
-                : 0)
-            : Math.abs(point.y - from.y) +
-              (point.x < Math.min(from.x, to.x) ||
-              point.x > Math.max(from.x, to.x)
-                ? Math.min(
-                    Math.abs(point.x - from.x),
-                    Math.abs(point.x - to.x),
-                  )
-                : 0);
-
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestSegment = i;
-        }
-      }
-
-      if (closestSegment >= 0 && closestDistance <= insertThreshold) {
-        const points = insertBendPoint(arrow.points, closestSegment);
-        updateElement({
-          ...arrow,
-          points,
-          routingMode: "orthogonal",
-          isManuallyRouted: true,
-        } as unknown as DrawingElementJson);
-        return true;
-      }
-
-      return false;
-    },
-    [canvasViewport.zoom, updateElement, whiteboardAccess.hasEditAccess],
-  );
-
-  const handleColorChange = useCallback(
-    (color: string) => {
-      uiState.setCurrentColor(color);
-      uiState.setShowOutlineColorPicker(false);
-
-      if (selectedElements.length > 0 && whiteboardAccess.hasEditAccess) {
-        selectedElements.forEach((id) => {
-          const el = elements.find((e) => e.id === id);
-          if (el) {
-            updateElement({ ...el, color } as unknown as DrawingElementJson);
-          }
-        });
-      }
-    },
-    [
+  const { handleColorChange, handleFillColorChange, handleStrokeWidthChange, handleFontSizeChange } =
+    useSelectionStyle({
+      uiState,
       elements,
       selectedElements,
-      uiState,
+      hasEditAccess: whiteboardAccess.hasEditAccess,
       updateElement,
-      whiteboardAccess.hasEditAccess,
-    ],
-  );
-
-  const handleFillColorChange = useCallback(
-    (color: string) => {
-      uiState.setFillColor(color);
-      uiState.setShowFillColorPicker(false);
-
-      if (selectedElements.length > 0 && whiteboardAccess.hasEditAccess) {
-        selectedElements.forEach((id) => {
-          const el = elements.find((e) => e.id === id);
-          if (el) {
-            updateElement({
-              ...el,
-              fill: color,
-            } as unknown as DrawingElementJson);
-          }
-        });
-      }
-    },
-    [
-      elements,
-      selectedElements,
-      uiState,
-      updateElement,
-      whiteboardAccess.hasEditAccess,
-    ],
-  );
-
-  const handleStrokeWidthChange = useCallback(
-    (width: number) => {
-      uiState.setStrokeWidth(width);
-      if (selectedElements.length > 0 && whiteboardAccess.hasEditAccess) {
-        selectedElements.forEach((id) => {
-          const el = elements.find((e) => e.id === id);
-          if (el) {
-            updateElement({
-              ...el,
-              strokeWidth: width,
-            } as unknown as DrawingElementJson);
-          }
-        });
-      }
-    },
-    [elements, selectedElements, uiState, updateElement, whiteboardAccess.hasEditAccess],
-  );
-
-  const handleFontSizeChange = useCallback(
-    (size: number) => {
-      uiState.setFontSize(size);
-      if (selectedElements.length > 0 && whiteboardAccess.hasEditAccess) {
-        selectedElements.forEach((id) => {
-          const el = elements.find((e) => e.id === id);
-          if (el) {
-            updateElement({
-              ...el,
-              fontSize: size,
-            } as unknown as DrawingElementJson);
-          }
-        });
-      }
-    },
-    [elements, selectedElements, uiState, updateElement, whiteboardAccess.hasEditAccess],
-  );
-
-  const handleArrowTypeChange = useCallback(
-    (type: ArrowType) => updateSelectedArrow({ type }),
-    [updateSelectedArrow],
-  );
-
-  const handleArrowRoutingModeChange = useCallback(
-    (mode: ArrowRoutingMode) => updateSelectedArrow({ routingMode: mode }),
-    [updateSelectedArrow],
-  );
-
-  const handleArrowDashedChange = useCallback(
-    (value: boolean) => updateSelectedArrow({ dashed: value }),
-    [updateSelectedArrow],
-  );
-
-  const handleArrowHeadStartChange = useCallback(
-    (value: boolean) => updateSelectedArrow({ arrowHeadStart: value }),
-    [updateSelectedArrow],
-  );
-
-  const handleArrowHeadEndChange = useCallback(
-    (value: boolean) => updateSelectedArrow({ arrowHeadEnd: value }),
-    [updateSelectedArrow],
-  );
+    });
 
   const handleClearSelection = useCallback(() => setSelectedElements([]), []);
   const handleSelectAllElements = useCallback(
@@ -903,41 +681,19 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
 
   const aiShiftRef = useRef<{ x: number; y: number } | null>(null);
 
-  // Anchor the diagram's top-left corner just inside the viewport. The anchor
-  // must come from the whole diagram: taking it from whichever element happens
-  // to arrive first leaves wider rows hanging off the left edge.
   const anchorAIShift = useCallback(
-    (elements: DrawingElement[]) => {
+    (batch: DrawingElement[]) => {
       if (aiShiftRef.current) return;
-      const points = elements.flatMap((element) => element.points);
-      if (points.length === 0) return;
-      let minX = Infinity;
-      let minY = Infinity;
-      for (const point of points) {
-        minX = Math.min(minX, point.x);
-        minY = Math.min(minY, point.y);
-      }
-      aiShiftRef.current = {
-        x: -canvasViewport.panOffset.x / canvasViewport.zoom + 80 - minX,
-        y: -canvasViewport.panOffset.y / canvasViewport.zoom + 80 - minY,
-      };
+      aiShiftRef.current = aiAnchorShift(batch, canvasViewport);
     },
-    [canvasViewport.panOffset, canvasViewport.zoom],
+    [canvasViewport],
   );
 
   const handleAddAIElement = useCallback(
     (element: DrawingElement) => {
       anchorAIShift([element]);
       if (!aiShiftRef.current) return;
-
-      const shifted = {
-        ...element,
-        points: element.points.map((p) => ({
-          x: p.x + aiShiftRef.current!.x,
-          y: p.y + aiShiftRef.current!.y,
-        })),
-      };
-      addElement(shifted as unknown as DrawingElementJson);
+      addElement(shiftElement(element, aiShiftRef.current) as unknown as DrawingElementJson);
     },
     [addElement, anchorAIShift],
   );
@@ -982,30 +738,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     ({ elements: next, replaceIds, anchored }: ApplyDiagramCodePayload) => {
       if (!whiteboardAccess.hasEditAccess || next.length === 0) return;
 
-      const cornerOf = (list: DrawingElement[]) => {
-        let minX = Infinity;
-        let minY = Infinity;
-        for (const element of list) {
-          for (const point of element.points) {
-            minX = Math.min(minX, point.x);
-            minY = Math.min(minY, point.y);
-          }
-        }
-        return { x: minX, y: minY };
-      };
-
       const replaced = elements.filter((element) => replaceIds.includes(element.id));
-      const from = cornerOf(next);
-      const to =
-        replaced.length > 0
-          ? cornerOf(replaced)
-          : {
-              x: -canvasViewport.panOffset.x / canvasViewport.zoom + 80,
-              y: -canvasViewport.panOffset.y / canvasViewport.zoom + 80,
-            };
-      // Anchored elements already sit where the user wants them: do not slide them to the old corner.
-      const dx = anchored ? 0 : to.x - from.x;
-      const dy = anchored ? 0 : to.y - from.y;
+      const { shift, fit } = planDiagramCode({ next, replaced, anchored: Boolean(anchored), viewport: canvasViewport });
 
       gestureHistory.begin();
       try {
@@ -1013,7 +747,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         next.forEach((element) =>
           addElement({
             ...element,
-            points: element.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+            points: shiftElement(element, shift).points,
           } as unknown as DrawingElementJson),
         );
       } finally {
@@ -1021,27 +755,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       }
 
       setSelectedElements((prev) => prev.filter((id) => !replaceIds.includes(id)));
-      if (replaced.length === 0) {
-        const corner = cornerOf(next);
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        next.forEach((element) =>
-          element.points.forEach((p) => {
-            maxX = Math.max(maxX, p.x);
-            maxY = Math.max(maxY, p.y);
-          }),
-        );
-        setTimeout(
-          () =>
-            canvasViewport.fitToBounds({
-              minX: corner.x + dx,
-              minY: corner.y + dy,
-              maxX: maxX + dx,
-              maxY: maxY + dy,
-            }),
-          0,
-        );
-      }
+      if (fit) setTimeout(() => canvasViewport.fitToBounds(fit), 0);
     },
     [
       addElement,
@@ -1053,89 +767,13 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     ],
   );
 
-  const handleEditingTextChange = useCallback(
-    (text: string, format: { fontSize: number; fontWeight: string | number; fontStyle: string }) => {
-      uiState.setEditingTextElement((prev) =>
-        prev
-          ? {
-              ...prev,
-              text,
-              fontSize: format.fontSize,
-              fontWeight: format.fontWeight,
-              fontStyle: format.fontStyle,
-            }
-          : prev,
-      );
-    },
-    [uiState],
-  );
-
-  const handleEditingTextCommit = useCallback(
-    (
-      text: string,
-      format: {
-        fontSize: number;
-        fontWeight: string | number;
-        fontStyle: string;
-      },
-    ) => {
-      const editingTextElement = uiState.editingTextElement;
-      if (!editingTextElement) return;
-
-      if (uiState.isNewTextElement) {
-        if (text.trim()) {
-          addElement({
-            ...editingTextElement,
-            text: text.trim(),
-            fontSize: format.fontSize,
-            fontWeight: format.fontWeight,
-            fontStyle: format.fontStyle,
-          } as unknown as DrawingElementJson);
-        }
-      } else {
-        const base =
-          elements.find((e) => e.id === editingTextElement.id) ||
-          editingTextElement;
-        if (text.trim()) {
-          updateElement({
-            ...base,
-            text: text.trim(),
-            fontSize: format.fontSize,
-            fontWeight: format.fontWeight,
-            fontStyle: format.fontStyle,
-          } as unknown as DrawingElementJson);
-        } else {
-          deleteElementsLive([editingTextElement.id]);
-        }
-      }
-
-      uiState.setEditingTextElement(null);
-      uiState.setIsNewTextElement(false);
-    },
-    [
-      addElement,
-      deleteElementsLive,
-      elements,
-      uiState,
-      updateElement,
-    ],
-  );
-
-  const handleEditingTextMove = useCallback(
-    (newPoint: { x: number; y: number }) => {
-      const editingTextElement = uiState.editingTextElement;
-      if (!editingTextElement) return;
-      const updated: DrawingElement = {
-        ...editingTextElement,
-        points: [newPoint, ...editingTextElement.points.slice(1)],
-      };
-      if (!uiState.isNewTextElement) {
-        updateElement(updated as unknown as DrawingElementJson);
-      }
-      uiState.setEditingTextElement(updated);
-    },
-    [uiState, updateElement],
-  );
+  const { handleEditingTextChange, handleEditingTextCommit, handleEditingTextMove } = useEditingText({
+    uiState,
+    elements,
+    addElement,
+    updateElement,
+    deleteElementsLive,
+  });
 
   const handleFitToViewport = handleFitToScreen;
 

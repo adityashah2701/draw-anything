@@ -5,11 +5,11 @@ import { checkDiagram } from "./tools/check-diagram";
 import { runTool } from "./tools/index";
 import type { AgentMessage, ModelTurn, ToolCall, ToolTransport } from "./types";
 
-export const DEFAULT_MAX_TURNS = 4;
+const DEFAULT_MAX_TURNS = 4;
 /** Extra turns granted for turns that only searched icons. */
-export const MAX_LOOKUP_TURNS = 3;
+const MAX_LOOKUP_TURNS = 3;
 /** Stop when what would be resent (after `compactHistory`) exceeds this many characters, about 7.5k tokens. */
-export const MAX_CONVERSATION_CHARS = 30_000;
+const MAX_CONVERSATION_CHARS = 30_000;
 
 export type AgentProgress =
   | { type: "model.turn"; turn: number }

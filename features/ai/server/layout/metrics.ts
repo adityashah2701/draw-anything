@@ -70,7 +70,7 @@ export const nodeBox = (element: DrawingElement): Box => {
   };
 };
 
-export const edgeLabelBox = (element: DrawingElement): Box => {
+const edgeLabelBox = (element: DrawingElement): Box => {
   const { x, y } = element.points[0];
   const width = estimateTextWidth(element.text ?? "", element.fontSize ?? EDGE_LABEL_FONT_SIZE, element.fontWeight ?? "500");
   return { minX: x, minY: y, maxX: x + width, maxY: y + (element.fontSize ?? EDGE_LABEL_FONT_SIZE) * LINE_HEIGHT_RATIO };

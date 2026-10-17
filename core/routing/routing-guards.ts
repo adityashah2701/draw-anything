@@ -6,8 +6,7 @@
  */
 
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
-import type { RouteEngineEdge } from "@/core/routing/route-engine";
-import type { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
+import type { RouteEngineEdge, RoutingObstacle } from "@/core/routing/types";
 
 // ─────────────────── Type Guards ───────────────────
 
@@ -54,7 +53,7 @@ export const toValidPoint = (value: unknown): Point | null =>
  * Validate a RouteEngineEdge for fully-connected routing.
  * Rejects edges where start/end points are missing or invalid.
  */
-export const validateEdge = (edge: RouteEngineEdge): boolean => {
+const validateEdge = (edge: RouteEngineEdge): boolean => {
   if (!edge) return false;
   if (!isValidPoint(edge.start)) return false;
   if (!isValidPoint(edge.end)) return false;
@@ -103,7 +102,7 @@ export const sanitizeRoutes = <T extends { arrowId: string; points: Point[] }>(
 /**
  * Validate that a RoutingObstacle has a finite, non-degenerate bounding box.
  */
-export const validateObstacleBounds = (obstacle: RoutingObstacle): boolean => {
+const validateObstacleBounds = (obstacle: RoutingObstacle): boolean => {
   if (!obstacle || !obstacle.bounds) return false;
   const { minX, minY, maxX, maxY } = obstacle.bounds;
   if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY))

@@ -33,7 +33,7 @@ export const parseOklch = (value: string): Rgba | null => {
 };
 
 /** `top` painted over an opaque `bottom`. */
-export const over = (top: Rgba, bottom: Rgba): Rgba => ({
+const over = (top: Rgba, bottom: Rgba): Rgba => ({
   r: top.r * top.a + bottom.r * (1 - top.a),
   g: top.g * top.a + bottom.g * (1 - top.a),
   b: top.b * top.a + bottom.b * (1 - top.a),

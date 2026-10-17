@@ -9,8 +9,8 @@ import { LINE_HEIGHT_RATIO, MIN_FONT_SIZE, makeFontString } from "./typography";
 
 /** All lengths are world units: the same label wraps identically at every zoom. */
 export const LABEL_PADDING = 12;
-export const MAX_FONT_SIZE = 72;
-export const MAX_LABEL_LINES = 4;
+const MAX_FONT_SIZE = 72;
+const MAX_LABEL_LINES = 4;
 export const DEFAULT_LABEL_FONT_SIZE = 16;
 
 export interface ShapeLabelLayoutInput {

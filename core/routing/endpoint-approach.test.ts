@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Point } from "@/features/whiteboard/types/whiteboard.types";
-import { createRouteEngineState, routeArrowPoints, routeWithEngine } from "./orthogonal-router";
+import { routeArrowPoints } from "./orthogonal-router";
+import { createRouteEngineState, routeWithEngine } from "./route-engine";
 
 type Side = "left" | "right" | "top" | "bottom";
 interface Box { id: string; x: number; y: number; w: number; h: number }

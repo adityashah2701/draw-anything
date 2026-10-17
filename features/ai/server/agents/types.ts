@@ -96,7 +96,7 @@ export const logAIPhase = (
   });
 };
 
-export const callStructured = async <T extends Record<string, unknown>>(
+const callStructured = async <T extends Record<string, unknown>>(
   model: StructuredChatModel,
   schema: unknown,
   name: string,

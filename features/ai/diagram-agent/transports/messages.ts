@@ -10,7 +10,7 @@ export const TOOL_PARAM: Record<ToolName, string> = {
 };
 
 let counter = 0;
-export const newCallId = () => `call_${(counter += 1).toString(36)}`;
+const newCallId = () => `call_${(counter += 1).toString(36)}`;
 
 /** Messages for the text protocol: tool traffic becomes ordinary text, which every model accepts. */
 export const toTextMessages = (messages: readonly AgentMessage[]): BaseMessage[] =>

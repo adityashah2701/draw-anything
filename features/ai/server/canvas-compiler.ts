@@ -11,6 +11,11 @@ import type {
   PlacementInput,
 } from "@/features/ai/server/layout/types";
 import type { Box } from "@/features/ai/server/layout/geometry";
+import {
+  chooseHandles,
+  decisionExitHandle,
+  spreadParallelEdges,
+} from "@/features/ai/server/layout/handle-selection";
 import { getConnectionHandlePoint } from "@/core/routing/connection-handles";
 import {
   RouteArrowDescriptor,
@@ -188,38 +193,6 @@ const getDepths = (document: AIDiagramDocumentV1) => {
     }
   }
   return depth;
-};
-
-/** Leave from the side that faces the target: below/above when it is in another row, else left/right. */
-const chooseHandles = (
-  source: PositionedNode,
-  target: PositionedNode,
-): { from: ConnectionHandle; to: ConnectionHandle } => {
-  if (target.bounds.minY >= source.bounds.maxY - 1) return { from: "bottom", to: "top" };
-  if (target.bounds.maxY <= source.bounds.minY + 1) return { from: "top", to: "bottom" };
-  if (target.bounds.minX >= source.bounds.minX) return { from: "right", to: "left" };
-  return { from: "left", to: "right" };
-};
-
-/**
- * Two edges between the same pair of nodes (a request and its response, or two labelled calls) would
- * leave the same handles and be drawn on top of each other. The second uses the nodes' right sides
- * and the third their left sides (bottom/top sides when the pair sits side by side), which routes it
- * around as a visible loop instead of hiding it behind the first.
- */
-const spreadParallelEdges = (
-  handles: { from: ConnectionHandle; to: ConnectionHandle },
-  source: PositionedNode,
-  target: PositionedNode,
-  used: Map<string, number>,
-): { from: ConnectionHandle; to: ConnectionHandle } => {
-  const ends = [`${source.node.id}.${handles.from}`, `${target.node.id}.${handles.to}`].sort().join("|");
-  const seen = used.get(ends) ?? 0;
-  used.set(ends, seen + 1);
-  if (seen === 0) return handles;
-  const vertical = handles.from === "top" || handles.from === "bottom";
-  const side: ConnectionHandle = vertical ? (seen === 1 ? "right" : "left") : seen === 1 ? "bottom" : "top";
-  return { from: side, to: side };
 };
 
 const asObstacle = (positioned: PositionedNode): RoutingObstacle => ({
@@ -550,11 +523,22 @@ export const buildCanvas = (
   }> = [];
 
   const usedHandlePairs = new Map<string, number>();
+  const outDegree = new Map<string, number>();
+  document.edges.forEach((edge) => outDegree.set(edge.from, (outDegree.get(edge.from) ?? 0) + 1));
+  const usedOutHandles = new Set<string>();
   document.edges.forEach((edge, index) => {
     const source = positionedByNodeId.get(edge.from);
     const target = positionedByNodeId.get(edge.to);
     if (!source || !target) return;
-    const handles = spreadParallelEdges(chooseHandles(source, target), source, target, usedHandlePairs);
+    const base = decisionExitHandle(
+      source,
+      target,
+      chooseHandles(source, target),
+      outDegree.get(edge.from) ?? 0,
+      usedOutHandles,
+    );
+    usedOutHandles.add(`${edge.from}.${base.from}`);
+    const handles = spreadParallelEdges(base, source, target, usedHandlePairs);
     const start = getConnectionHandlePoint(source.bounds, handles.from);
     const end = getConnectionHandlePoint(target.bounds, handles.to);
     const edgeId = `${document.metadata.generationId}-${edge.id || `edge-${index + 1}`}`;

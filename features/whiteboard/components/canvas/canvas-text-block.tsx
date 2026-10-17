@@ -93,7 +93,7 @@ function resolveFontWeight(fmt: TextFormat): string {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function CanvasTextBlock({
+function CanvasTextBlock({
   element,
   zoom,
   panOffset,

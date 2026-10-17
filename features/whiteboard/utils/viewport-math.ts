@@ -6,8 +6,8 @@ export interface View {
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 5;
 /** Fit-to-content never enlarges past 100%: a 3-node diagram should not fill the screen at 400%. */
-export const FIT_MAX_ZOOM = 1;
-export const FIT_PADDING = 80;
+const FIT_MAX_ZOOM = 1;
+const FIT_PADDING = 80;
 
 export const clampZoom = (zoom: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 
@@ -37,7 +37,7 @@ export const pinchView = (view: View, from: Pair, to: Pair): View => {
   return { zoom, panOffset: { x: m1.x - worldX * zoom, y: m1.y - worldY * zoom } };
 };
 
-export const ZOOM_STEP = 1.2;
+const ZOOM_STEP = 1.2;
 
 export const fitView = (
   bounds: { minX: number; minY: number; maxX: number; maxY: number },

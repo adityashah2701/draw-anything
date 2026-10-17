@@ -197,7 +197,7 @@ export const needsIconLibrary = (elements: ReadonlyArray<{ ai?: { icon?: string;
   libraryVersion === 0 &&
   elements.some((el) => typeof el.ai?.icon === "string" && el.ai.customIcon === undefined && resolveIconId(el.ai.icon) === undefined);
 
-export const GENERIC_ICON_ID = "generic";
+const GENERIC_ICON_ID = "generic";
 
 /** Registry id for any id, alias or vendor word; `undefined` when nothing matches. */
 export const resolveIconId = (reference: unknown): string | undefined => {

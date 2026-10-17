@@ -6,7 +6,7 @@ import type { DiagramCodeIssue, ParsedDiagramCode } from "@/features/diagram-cod
 import { lintDiagram, type LintFinding } from "./lint";
 
 /** Tool input bound: a model cannot make the check expensive. */
-export const MAX_CHECK_CHARS = 20_000;
+const MAX_CHECK_CHARS = 20_000;
 const MAX_REPORT_CHARS = 1_500;
 
 export interface CheckReport {

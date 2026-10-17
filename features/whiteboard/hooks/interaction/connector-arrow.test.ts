@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildConnectorArrow } from "./connector-arrow";
+import { buildConnectorArrow, handleUnderPoint, resolveConnectionDrop } from "./connector-arrow";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
 const base = {
@@ -47,5 +47,40 @@ describe("buildConnectorArrow", () => {
       },
     })!;
     expect(arrow.points[0]).toEqual({ x: 100, y: 50 });
+  });
+});
+
+describe("resolveConnectionDrop", () => {
+  const el = (id: string) => ({ id, type: "rectangle", points: [] }) as never;
+  const handles = (id: string, x: number) => [
+    { id: `${id}:left`, name: "left" as const, x, y: 50 },
+    { id: `${id}:right`, name: "right" as const, x: x + 100, y: 50 },
+  ];
+  const getHandles = (element: { id: string }) => handles(element.id, element.id === "a" ? 0 : 300);
+  const draft = { fromElementId: "a", fromAnchorId: "a:right", fromHandle: "right" as const, currentPoint: { x: 310, y: 50 } };
+
+  it("ends on the target handle nearest the pointer", () => {
+    const drop = resolveConnectionDrop({ draft, elements: [el("a"), el("b")], candidates: [el("b")], snapAnchor: null, getHandles });
+    expect(drop?.from).toMatchObject({ elementId: "a", anchorId: "a:right", x: 100, side: "right" });
+    expect(drop?.to).toMatchObject({ elementId: "b", anchorId: "b:left", x: 300, side: "left" });
+  });
+
+  it("prefers the snapped anchor over the nearest handle", () => {
+    const snapAnchor = { id: "b:right", name: "right" as const, x: 400, y: 50 };
+    const drop = resolveConnectionDrop({ draft, elements: [el("a"), el("b")], candidates: [el("b")], snapAnchor, getHandles });
+    expect(drop?.to).toMatchObject({ anchorId: "b:right", x: 400 });
+  });
+
+  it("ignores the source itself and drops on empty space", () => {
+    expect(resolveConnectionDrop({ draft, elements: [el("a")], candidates: [el("a")], snapAnchor: null, getHandles })).toBeNull();
+    expect(resolveConnectionDrop({ draft, elements: [el("a")], candidates: [], snapAnchor: null, getHandles })).toBeNull();
+  });
+});
+
+describe("handleUnderPoint", () => {
+  const hs = [{ id: "h1", name: "top" as const, x: 0, y: 0 }, { id: "h2", name: "left" as const, x: 5, y: 0 }];
+  it("returns the first handle in reach", () => {
+    expect(handleUnderPoint(hs, { x: 4, y: 0 }, 12)?.id).toBe("h1");
+    expect(handleUnderPoint(hs, { x: 40, y: 0 }, 12)).toBeNull();
   });
 });

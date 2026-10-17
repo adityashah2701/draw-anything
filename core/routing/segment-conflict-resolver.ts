@@ -234,7 +234,7 @@ const moveSegmentBy = (
   return orthogonalizePath(next);
 };
 
-export const createSegmentSpatialIndex = (
+const createSegmentSpatialIndex = (
   cellSize = DEFAULT_CELL_SIZE,
 ): SegmentSpatialIndex => ({
   cellSize,

@@ -172,3 +172,29 @@ describe("assignCenters", () => {
     expect((one.get(row[0]) as number) < (one.get(row[1]) as number)).toBe(true);
   });
 });
+
+describe("assignCenters chain straightening", () => {
+  it("draws a plain chain straight even when a retry edge loops back to its start", () => {
+    const nodes = [
+      ["start", 0],
+      ["enter", 1],
+      ["check", 2],
+      ["mfa", 3],
+      ["fail", 3],
+      ["ok", 4],
+      ["bad", 4],
+    ].map(([id, depth]) => ({ id, depth, width: 160 }));
+    const edges = [
+      ["start", "enter"],
+      ["enter", "check"],
+      ["check", "mfa"],
+      ["check", "fail"],
+      ["mfa", "ok"],
+      ["mfa", "bad"],
+      ["fail", "enter"],
+    ].map(([from, to]) => ({ from, to }));
+    const rows = orderRows(nodes as never, edges as never);
+    const centers = assignCenters(rows, nodes as never, edges as never, { gap: 40, centerX: 0 });
+    expect(centers.get("check")).toBe(centers.get("enter"));
+  });
+});

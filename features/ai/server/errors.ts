@@ -28,7 +28,7 @@ export class QuotaExceededError extends AIServiceError {
   }
 }
 
-export class ModelUnavailableError extends AIServiceError {
+class ModelUnavailableError extends AIServiceError {
   constructor(model: string, cause?: unknown) {
     super(`Model "${model}" is unavailable`, "MODEL_UNAVAILABLE", cause);
     this.name = "ModelUnavailableError";
@@ -70,7 +70,7 @@ export class UnparseableModelOutputError extends AIServiceError {
   }
 }
 
-export class AuthenticationError extends AIServiceError {
+class AuthenticationError extends AIServiceError {
   constructor(provider: string, cause?: unknown) {
     super(
       `Authentication failed for provider "${provider}"`,

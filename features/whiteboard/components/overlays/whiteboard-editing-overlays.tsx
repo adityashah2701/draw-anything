@@ -175,14 +175,8 @@ function ShapeLabelEditor({
           onClick={() => {
             document.execCommand("bold");
             editorRef.current?.focus();
-            const next = editableHtmlToMarkdown(
-              editorRef.current || document.createElement("div"),
-            );
-            // Detect bold state from selection
             const isBold = document.queryCommandState("bold");
             setFontWeight(isBold ? "700" : String(initialFontWeight));
-            // Also fire onChange with updated markdown
-            _ = next;
           }}
           className={`h-7 w-7 rounded text-xs font-bold ${
             fontWeight === "700" || fontWeight === "600"
@@ -295,9 +289,6 @@ function ShapeLabelEditor({
     </>
   );
 }
-
-// Suppress unused variable lint warning for the `_ = next` hack above
-declare let _: unknown;
 
 // ─── Main Overlays Component ──────────────────────────────────────────────────
 

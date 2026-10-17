@@ -23,7 +23,7 @@ interface GroupedEdge {
   groupKey: string;
 }
 
-export const isValidParallelEdgeDescriptor = (
+const isValidParallelEdgeDescriptor = (
   descriptor: Partial<ParallelEdgeDescriptor> | null | undefined,
 ): descriptor is ParallelEdgeDescriptor => {
   if (!descriptor) return false;

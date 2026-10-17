@@ -4,7 +4,7 @@ import { BaseShapeDefinition } from "@/core/shapes/base/base-shape-definition";
 type ShapeType = DrawingElement["type"];
 type AnyShapeDefinition = BaseShapeDefinition<DrawingElement>;
 
-export class ShapeRegistry {
+class ShapeRegistry {
   private registry = new Map<ShapeType, AnyShapeDefinition>();
 
   register<T extends DrawingElement>(definition: BaseShapeDefinition<T>) {

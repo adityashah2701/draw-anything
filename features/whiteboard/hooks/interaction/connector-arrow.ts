@@ -65,3 +65,64 @@ export const buildConnectorArrow = ({
   }
   return arrow as ArrowShape;
 };
+
+export interface HandlePoint {
+  id: string;
+  name: AnchorSide;
+  x: number;
+  y: number;
+}
+
+export interface ConnectionDraftLike {
+  fromElementId: string;
+  fromAnchorId: string;
+  fromHandle: AnchorSide;
+  currentPoint: { x: number; y: number };
+}
+
+/** The handle within `radius` of `point`, first in list order. */
+export const handleUnderPoint = (handles: readonly HandlePoint[], point: { x: number; y: number }, radius: number) =>
+  handles.find((handle) => Math.hypot(point.x - handle.x, point.y - handle.y) <= radius) ?? null;
+
+/**
+ * Both ends of the connector a handle drag creates when it is dropped, or null when the drop is not on a
+ * connectable shape. `candidates` are the shapes under the drop (the snapped shape when there is one),
+ * topmost last; the end lands on the snapped anchor, else the handle nearest the pointer.
+ */
+export const resolveConnectionDrop = ({
+  draft,
+  elements,
+  candidates,
+  snapAnchor,
+  getHandles,
+}: {
+  draft: ConnectionDraftLike;
+  elements: readonly DrawingElement[];
+  candidates: readonly DrawingElement[];
+  snapAnchor: HandlePoint | null;
+  getHandles: (element: DrawingElement) => HandlePoint[];
+}): { from: ConnectorEnd; to: ConnectorEnd } | null => {
+  const target = [...candidates]
+    .reverse()
+    .find((element) => element.id !== draft.fromElementId && getHandles(element).length > 0);
+  const source = elements.find((el) => el.id === draft.fromElementId);
+  if (!target || !source) return null;
+
+  const fromHandle = getHandles(source).find((h) => h.name === draft.fromHandle);
+  const toHandles = snapAnchor ? [snapAnchor] : getHandles(target);
+  let nearest = toHandles[0];
+  let best = Infinity;
+  for (const handle of toHandles) {
+    const distance = Math.hypot(draft.currentPoint.x - handle.x, draft.currentPoint.y - handle.y);
+    if (distance < best) {
+      best = distance;
+      nearest = handle;
+    }
+  }
+  if (!fromHandle || !nearest) return null;
+
+  return {
+    from: { elementId: source.id, anchorId: draft.fromAnchorId, x: fromHandle.x, y: fromHandle.y, side: fromHandle.name },
+    to: { elementId: target.id, anchorId: nearest.id, x: nearest.x, y: nearest.y, side: nearest.name },
+  };
+};
