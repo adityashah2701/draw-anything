@@ -267,9 +267,26 @@ export const createPromptedStructuredModel = (
 // Provider factory
 // ---------------------------------------------------------------------------
 
+/** Groq's default model cannot read images; this one can (override with GROQ_VISION_MODEL). */
+const GROQ_VISION_DEFAULT = "meta-llama/llama-4-scout-17b-16e-instruct";
+
+export interface ModelOptions {
+  /** A model that accepts images: `<PROVIDER>_VISION_MODEL` when set, else the provider's usual model (Groq: a Llama 4 vision model). */
+  vision?: boolean;
+}
+
 export const getAIModelProviderConfig = (
   providerInput?: AIModelProvider,
+  options: ModelOptions = {},
 ): AIModelProviderConfig => {
+  const config = baseProviderConfig(providerInput);
+  if (!options.vision) return config;
+  const override = process.env[`${config.provider.toUpperCase()}_VISION_MODEL`];
+  if (override) return { ...config, modelName: override };
+  return config.provider === "groq" ? { ...config, modelName: GROQ_VISION_DEFAULT } : config;
+};
+
+const baseProviderConfig = (providerInput?: AIModelProvider): AIModelProviderConfig => {
   const provider = readProvider(providerInput);
   switch (provider) {
     case "gemini":
@@ -319,8 +336,9 @@ export const getAIModelProviderConfig = (
  */
 export const createBaseChatModel = (
   providerInput?: AIModelProvider,
+  options: ModelOptions = {},
 ): BaseChatModel | null => {
-  const config = getAIModelProviderConfig(providerInput);
+  const config = getAIModelProviderConfig(providerInput, options);
 
   switch (config.provider) {
     case "gemini":
@@ -370,9 +388,10 @@ export const createBaseChatModel = (
 
 export const createAIChatModel = (
   providerInput?: AIModelProvider,
+  options: ModelOptions = {},
 ): StructuredChatModel => {
-  const config = getAIModelProviderConfig(providerInput);
-  const base = createBaseChatModel(providerInput);
+  const config = getAIModelProviderConfig(providerInput, options);
+  const base = createBaseChatModel(providerInput, options);
   if (!base) {
     return new GeminiChatModel({
       apiKey: requireEnv(config.provider, "GEMINI_API_KEY"),

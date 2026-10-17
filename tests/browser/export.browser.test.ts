@@ -311,6 +311,23 @@ suite("export in real Chrome", () => {
     expect(r.roundStrokes).toBeGreaterThanOrEqual(r.nodes);
   });
 
+  it("a bare icon with a caption exports as SVG, PNG and PDF, with its caption text", async () => {
+    const r = await s.page.evaluate(async () => {
+      const H = window.H;
+      const els = [
+        { id: "i1", type: "icon", points: [{ x: 0, y: 0 }, { x: 96, y: 100 }], color: "#334155", strokeWidth: 2, label: "Customers", fontSize: 14, fontWeight: "600", ai: { icon: "user", role: "node", semanticId: "c" } },
+      ];
+      const svg = await (await H.run(els, [], { format: "svg" })).blob.text();
+      const png = await H.run(els, [], { format: "png", scale: 1 });
+      const pdf = await H.run(els, [], { format: "pdf", scale: 1 });
+      return { svg, pngSize: png.blob.size, pdfSize: pdf.blob.size };
+    });
+    expect(r.svg).toContain("Customers");
+    expect(r.svg).toContain('stroke-linecap="round"');
+    expect(r.pngSize).toBeGreaterThan(200);
+    expect(r.pdfSize).toBeGreaterThan(200);
+  });
+
   it("refuses an oversized raster with a message, but still exports the same board as SVG", async () => {
     const r = await s.page.evaluate(async () => {
       const H = window.H;

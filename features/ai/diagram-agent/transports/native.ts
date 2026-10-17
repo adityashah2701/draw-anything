@@ -1,18 +1,19 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { messageText } from "@/features/ai/server/model-providers";
-import { TOOL_NAMES, type AgentMessage, type ModelTurn, type ToolCall, type ToolName, type ToolTransport } from "../types";
+import type { AgentMessage, ModelTurn, ToolCall, ToolName, ToolSpec, ToolTransport } from "../types";
 import { TOOL_PARAM, toNativeMessages } from "./messages";
 import { parseTextReply } from "./text-protocol";
 
-const TOOL_SPECS: Array<{ name: ToolName; description: string }> = [
+/** The one-shot diagram agent's tools. */
+export const AGENT_TOOL_SPECS: ToolSpec[] = [
   { name: "search_icons", description: "Find icon ids for technologies or concepts. Pass several at once, comma-separated (e.g. `kafka, postgres, load balancer`): one call answers all of them. Returns ranked ids to use as `icon:`." },
   { name: "check_diagram", description: "Validate diagram code and preview its layout: parse errors with line numbers, connector crossings, longest connector, and design advice. Call before finishing." },
   { name: "finish", description: "Submit the final diagram code. Ends the task." },
 ];
 
 /** OpenAI-style tool definitions; every tool takes one plain string. */
-export const nativeToolDefinitions = () =>
-  TOOL_SPECS.map(({ name, description }) => ({
+export const nativeToolDefinitions = (specs: readonly ToolSpec[] = AGENT_TOOL_SPECS) =>
+  specs.map(({ name, description }) => ({
     type: "function" as const,
     function: {
       name,
@@ -24,8 +25,6 @@ export const nativeToolDefinitions = () =>
       },
     },
   }));
-
-const knownNames = new Set<string>(TOOL_NAMES);
 
 /**
  * A tool call's argument as one string, whatever shape the model produced: a bare string, the
@@ -49,9 +48,10 @@ export const coerceToolArg = (args: unknown, name: ToolName): string => {
 };
 
 /** Real function calling through LangChain `bindTools` (OpenAI-compatible providers, Anthropic). */
-export const createNativeTransport = (model: BaseChatModel): ToolTransport => {
+export const createNativeTransport = (model: BaseChatModel, specs: readonly ToolSpec[] = AGENT_TOOL_SPECS): ToolTransport => {
+  const knownNames = new Set<string>(specs.map((s) => s.name));
   const bound = (model as unknown as { bindTools?: (tools: unknown[]) => Pick<BaseChatModel, "invoke"> }).bindTools?.(
-    nativeToolDefinitions(),
+    nativeToolDefinitions(specs),
   );
   if (!bound) throw new Error("This model does not support tool calling.");
   return {

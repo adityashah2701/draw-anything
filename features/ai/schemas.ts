@@ -162,7 +162,7 @@ export const aiDiagramNodeSchema = z.object({
   parentId: z.string().min(1).max(80).optional(),
   description: z.string().max(240).optional(),
   priority: z.number().min(0).max(10).optional(),
-  shape: z.enum(["diamond", "pill"]).optional(),
+  shape: z.enum(["diamond", "pill", "icon"]).optional(),
   color: z.string().max(7).optional(),
 }) satisfies z.ZodType<AIDiagramNode>;
 
@@ -476,7 +476,7 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       parentId: text(record.parentId, 80),
       description: text(record.description, 240),
       priority,
-      shape: record.shape === "diamond" || record.shape === "pill" ? record.shape : undefined,
+      shape: record.shape === "diamond" || record.shape === "pill" || record.shape === "icon" ? record.shape : undefined,
       color: normalizeColor(record.color),
     });
   });

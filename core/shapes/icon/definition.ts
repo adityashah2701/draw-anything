@@ -10,7 +10,7 @@ import { containsPointInIcon, getIconResizeHandles, resizeIcon } from "@/core/sh
 
 /**
  * A standalone icon: a glyph from the icon registry (`ai.icon`) or a user's own (`ai.customIcon`) on the
- * board, with no node box and no label. It moves, resizes, takes a colour and connects like any shape. It is
+ * board, with no node box. It has no label of its own (an AI diagram can give it a caption under the glyph). It moves, resizes, takes a colour and connects like any shape. It is
  * inserted from the icon picker, so it has no drawing tool.
  */
 export const iconDefinition = createShapeDefinition<IconShape>({
@@ -22,6 +22,7 @@ export const iconDefinition = createShapeDefinition<IconShape>({
     points: props.points ?? [{ x: 0, y: 0 }, { x: 64, y: 64 }],
     color: props.color ?? "#475569",
     strokeWidth: props.strokeWidth ?? 2,
+    ...(props.label ? { label: props.label, fontSize: props.fontSize, fontWeight: props.fontWeight, fontStyle: props.fontStyle } : {}),
     ai: props.ai,
   }),
   render: () => null,

@@ -2,6 +2,7 @@ import { estimateLabelBox } from "./estimate";
 import { LABEL_PADDING } from "./label-layout";
 import { DIAMOND_LABEL_FRACTION, PILL_MAX_LINES, pillSizeForLabel, SEMANTIC_INSET_WIDTH, SEMANTIC_MAX_LINES } from "./label-region";
 import { LINE_HEIGHT_RATIO } from "./typography";
+import { ICON_CAPTION_HEIGHT, ICON_NODE_GLYPH } from "@/core/shapes/icon/caption";
 
 export interface NodeSize {
   width: number;
@@ -43,6 +44,12 @@ export const sizeSemanticNode = (input: NodeSizeInput): NodeSize => {
     if (box.fits) return { width: box.width, height: heightFor(box.lineCount), lineCount: box.lineCount, fits: true };
   }
   return { width: input.maxWidth, height: heightFor(SEMANTIC_MAX_LINES), lineCount: SEMANTIC_MAX_LINES, fits: false };
+};
+
+/** Size of an icon node: the glyph with its caption underneath, as wide as the caption needs (two lines at most). */
+export const sizeIconNode = (input: Pick<NodeSizeInput, "label" | "fontSize" | "fontWeight">): NodeSize => {
+  const box = estimateLabelBox({ ...input, maxLines: 2, minWidth: 96, maxWidth: 200 });
+  return { width: box.width, height: ICON_NODE_GLYPH + ICON_CAPTION_HEIGHT, lineCount: box.lineCount, fits: box.fits };
 };
 
 /** A text block of w x h fits a W x H rhombus when w/W + h/H <= 1; keep a little air. */

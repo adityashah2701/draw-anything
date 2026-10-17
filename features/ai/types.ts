@@ -96,7 +96,7 @@ export interface AIDiagramNode {
   description?: string;
   priority?: number;
   /** Drawn as a real diamond (decisions always are) or a pill (start and end always are). */
-  shape?: "diamond" | "pill";
+  shape?: "diamond" | "pill" | "icon";
   /** #rrggbb stroke; the fill is a tint of it. */
   color?: string;
 }
@@ -379,6 +379,17 @@ export type AIStreamEvent =
       type: "element.batch";
       frameId: string;
       elements: DrawingElement[];
+    }
+  | {
+      /** Elements already on the canvas that changed (a node moved, a connection re-routed), by id. */
+      type: "element.update";
+      frameId: string;
+      elements: DrawingElement[];
+    }
+  | {
+      type: "element.remove";
+      frameId: string;
+      elementIds: string[];
     }
   | {
       type: "frame.done";

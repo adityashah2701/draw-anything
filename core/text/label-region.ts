@@ -1,3 +1,4 @@
+import { ICON_CAPTION_HEIGHT } from "@/core/shapes/icon/caption";
 import type { Bounds } from "@/features/whiteboard/types/whiteboard.types";
 
 /** Where a shape's label lives, in world units. Canvas drawing and the DOM editor both read this. */
@@ -52,6 +53,10 @@ const SHAPE_LABEL_FRACTION: Record<string, number> = {
 const FRACTION_MAX_LINES = 3;
 
 export const getShapeLabelRegion = (type: string, bounds: Bounds): LabelRegion => {
+  if (type === "icon") {
+    // An icon node names itself in a caption under the glyph (see core/shapes/icon/caption.ts).
+    return { centerX: bounds.minX + bounds.width / 2, centerY: bounds.maxY - ICON_CAPTION_HEIGHT / 2, width: bounds.width, height: ICON_CAPTION_HEIGHT, maxLines: 2 };
+  }
   if (type === "pill") {
     const box = pillLabelBox(bounds.width, bounds.height);
     return { centerX: bounds.minX + bounds.width / 2, centerY: bounds.minY + bounds.height / 2, ...box };

@@ -7,6 +7,12 @@ export interface NodePin {
   y: number;
 }
 
+/** How far from its automatic place a node should sit. Unlike a pin it follows the layout when the diagram grows. */
+export interface NodeOffset {
+  dx: number;
+  dy: number;
+}
+
 const MAX_NUDGES = 60;
 
 /**
@@ -60,4 +66,24 @@ export const withPins =
       settled.add(id);
     }
     return placement;
+  };
+
+/**
+ * Wraps an engine so listed nodes sit at a fixed offset from where the engine puts them. Built on
+ * `withPins`, so overlaps the move causes are resolved the same way. Offsets for nodes that no
+ * longer exist are ignored.
+ */
+export const withOffsets =
+  (engine: PlacementEngine, offsets: Map<string, NodeOffset>): PlacementEngine =>
+  (input: PlacementInput) => {
+    const base = engine(input);
+    const size = new Map(input.nodes.map((n) => [n.id, n]));
+    const pins = new Map<string, NodePin>();
+    for (const [id, offset] of offsets) {
+      const node = size.get(id);
+      const at = base.get(id);
+      if (!node || !at) continue;
+      pins.set(id, { x: at.x + node.width / 2 + offset.dx, y: at.y + node.height / 2 + offset.dy });
+    }
+    return pins.size > 0 ? withPins(() => base, pins)(input) : base;
   };

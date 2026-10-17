@@ -3,7 +3,7 @@ import type { AIDiagramType } from "@/features/ai/types";
 export interface SerializableGraph {
   diagramType?: AIDiagramType;
   title?: string;
-  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: "diamond" | "pill"; color?: string }>;
+  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: "diamond" | "pill" | "icon"; color?: string }>;
   edges: Array<{
     from: string;
     to: string;

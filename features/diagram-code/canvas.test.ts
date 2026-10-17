@@ -167,3 +167,74 @@ describe("node colours survive the canvas", () => {
     expect(nodes.find((n) => n.label === "Start")?.color).toBe("#0d9488");
   });
 });
+
+describe("icon-only nodes (shape: icon)", () => {
+  const ICONS = `
+type architecture
+
+Web App [icon: browser, shape: icon]
+API [icon: server, shape: icon]
+Orders DB [kind: database, icon: database, shape: icon]
+
+Web App > API: HTTPS
+API > Orders DB
+`;
+
+  it("parses shape: icon", () => {
+    const parsed = parseDiagramCode(ICONS);
+    expect(parsed.issues.filter((i) => i.severity === "error")).toEqual([]);
+    expect(parsed.nodes.map((n) => [n.label, n.shape, n.icon])).toEqual([
+      ["Web App", "icon", "browser"],
+      ["API", "icon", "server"],
+      ["Orders DB", "icon", "database"],
+    ]);
+  });
+
+  it("draws each as a bare icon element with a caption and no node box, and connects them", () => {
+    const { elements, issues } = compile(ICONS);
+    expect(issues.filter((i) => i.severity === "error")).toEqual([]);
+    const icons = elements.filter((e) => e.type === "icon");
+    expect(icons.map((e) => e.label)).toEqual(expect.arrayContaining(["Web App", "API", "Orders DB"]));
+    expect(elements.filter((e) => e.type === "semantic-node")).toHaveLength(0);
+    for (const icon of icons) {
+      expect(icon.fill).toBeUndefined();
+      expect(icon.ai).toMatchObject({ role: "node" });
+      expect(icon.ai?.icon ?? icon.ai?.semanticKind).toBeTruthy();
+      const [a, b] = icon.points;
+      expect(b.y - a.y).toBeGreaterThanOrEqual(64 + 36);
+    }
+    const arrows = elements.filter((e) => e.type === "arrow");
+    expect(arrows).toHaveLength(2);
+    for (const arrow of arrows as unknown as Array<{ startConnection?: unknown; endConnection?: unknown }>) {
+      expect(arrow.startConnection).toBeTruthy();
+      expect(arrow.endConnection).toBeTruthy();
+    }
+  });
+
+  it("round-trips back to the same code meaning", () => {
+    const { elements } = compile(ICONS);
+    const { graph } = graphFromElements(elements);
+    // The glyph is the named icon, or the kind's own when the icon: equalled it.
+    expect(graph.nodes.map((n) => [n.label, n.shape, n.icon ?? n.kind])).toEqual(
+      expect.arrayContaining([
+        ["Web App", "icon", "browser"],
+        ["API", "icon", "server"],
+        ["Orders DB", "icon", "database"],
+      ]),
+    );
+    const again = serializeDiagramCode(graph);
+    expect(again).toContain("shape: icon");
+    expect(meaning(again).edges).toEqual(meaning(ICONS).edges);
+  });
+
+  it("falls back to a normal node when no icon is named", () => {
+    const { elements } = compile("Lonely [shape: icon]\nOther\nLonely > Other");
+    expect(elements.filter((e) => e.type === "icon")).toHaveLength(0);
+    expect(elements.filter((e) => e.type === "semantic-node").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not treat an icon the user inserted by hand as a diagram node", () => {
+    const manual = { id: "i1", type: "icon", points: [{ x: 0, y: 0 }, { x: 64, y: 64 }], color: "#475569", strokeWidth: 2, ai: { icon: "database" } } as DrawingElement;
+    expect(graphFromElements([manual]).graph.nodes).toHaveLength(0);
+  });
+});

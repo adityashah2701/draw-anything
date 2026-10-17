@@ -18,7 +18,7 @@ const MAX_TERMS = 10;
 const formatTerm = (term: string, perTerm: number): string => {
   const matches = searchIcons(term, perTerm);
   if (matches.length === 0) return `No icon matches "${term.slice(0, 60)}". Use a broader word (e.g. database, queue, api) or leave the icon off.`;
-  return [`Icons for "${term.slice(0, 60)}" (use as icon: <id>):`, ...matches.map((m) => `- ${m.id} (${m.category}${m.via === "alias" ? ", via alias" : ""})`)].join("\n");
+  return [`Icons for "${term.slice(0, 60)}" (use as icon: <id>; add shape: icon to draw it alone, without a box):`, ...matches.map((m) => `- ${m.id} (${m.category}${m.via === "alias" ? ", via alias" : ""})`)].join("\n");
 };
 
 /** One query or several separated by commas or newlines: models tend to ask once per turn, so one call should be enough for a whole diagram. */
@@ -46,5 +46,8 @@ export const runTool = (call: ToolCall): ToolOutcome => {
       }
       return { content: "Accepted.", report, code: arg, accepted: true };
     }
+    default:
+      // add, adjust and view belong to the builder agent, which runs them against its own state.
+      return { content: `${call.name} is not available here.` };
   }
 };

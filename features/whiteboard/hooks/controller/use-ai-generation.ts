@@ -31,6 +31,10 @@ export interface AIChatMessage {
 
 interface UseAIGenerationOptions {
   onAddElement: (element: DrawingElement) => void;
+  /** Elements the agent changed after drawing them (moved, re-routed), by id. */
+  onUpdateElements?: (elements: DrawingElement[]) => void;
+  /** Elements the agent took off the canvas again. */
+  onRemoveElements?: (elementIds: string[]) => void;
   /** Called with a whole batch before its elements are added one by one. */
   onBeforeBatch?: (elements: DrawingElement[]) => void;
   onGenerationStart?: () => void;
@@ -41,6 +45,8 @@ interface UseAIGenerationOptions {
 
 export const useAIGeneration = ({
   onAddElement,
+  onUpdateElements,
+  onRemoveElements,
   onBeforeBatch,
   onGenerationStart,
   onGenerationEnd,
@@ -280,6 +286,17 @@ export const useAIGeneration = ({
           });
           return false;
         }
+        case "element.update":
+          setAiFrameId(event.frameId);
+          activeFrameIdRef.current = event.frameId;
+          onUpdateElements?.(event.elements);
+          return false;
+        case "element.remove":
+          setAiFrameId(event.frameId);
+          activeFrameIdRef.current = event.frameId;
+          event.elementIds.forEach((id) => seenElementIdsRef.current.delete(id));
+          onRemoveElements?.(event.elementIds);
+          return false;
         case "frame.done":
           setAiFrameId(event.frameId);
           activeFrameIdRef.current = event.frameId;
@@ -344,6 +361,8 @@ export const useAIGeneration = ({
       addChatMessage,
       addGeneratedElement,
       onBeforeBatch,
+      onUpdateElements,
+      onRemoveElements,
       aiPlacedCount,
       appendAICheckpoint,
       completeAIFrame,

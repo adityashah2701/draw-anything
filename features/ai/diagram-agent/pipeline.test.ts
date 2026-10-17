@@ -12,4 +12,8 @@ describe("resolvePipelineName", () => {
     expect(resolvePipelineName({ AI_PIPELINE: " Agent " })).toBe("agent");
     expect(resolvePipelineName({ AI_PIPELINE: "legacy" })).toBe("legacy");
   });
+  it("selects the step-by-step builder only when asked", () => {
+    expect(resolvePipelineName({ AI_PIPELINE: "builder" })).toBe("builder");
+    expect(resolvePipelineName({ AI_PIPELINE: " BUILDER " })).toBe("builder");
+  });
 });

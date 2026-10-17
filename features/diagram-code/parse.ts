@@ -172,8 +172,9 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
         const shape = value.toLowerCase();
         // oval and ellipse are drawn as pills (rectangles with fully rounded ends): the closest shape we have.
         if (shape === "diamond") props.shape = "diamond";
+        else if (shape === "icon") props.shape = "icon";
         else if (shape === "pill" || shape === "oval" || shape === "ellipse") props.shape = "pill";
-        else if (shape !== "rectangle") add(line, "warning", `Shape "${value}" is not supported yet; only diamond, pill (also oval, ellipse) and rectangle are. It was ignored.`);
+        else if (shape !== "rectangle") add(line, "warning", `Shape "${value}" is not supported yet; only diamond, pill (also oval, ellipse), icon (needs an icon: id) and rectangle are. It was ignored.`);
       } else if (key === "color") {
         const color = normalizeColor(value);
         if (color) props.color = color;
@@ -236,7 +237,7 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
     if (props.icon !== undefined) node.icon = props.icon;
     if (props.label !== undefined) node.label = props.label;
     if (props.dashed !== undefined) node.dashed = props.dashed.toLowerCase() === "true";
-    if (props.shape === "diamond" || props.shape === "pill") node.shape = props.shape;
+    if (props.shape === "diamond" || props.shape === "pill" || props.shape === "icon") node.shape = props.shape;
     if (props.color !== undefined) node.color = props.color;
   };
 

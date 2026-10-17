@@ -7,6 +7,7 @@ import { EXAMPLES } from "./examples";
 import { iconVocabulary } from "./icon-vocabulary";
 import { PLAYBOOKS } from "./playbooks";
 import { buildSystemPrompt, buildUserPrompt } from "./system";
+import { runTool } from "../tools";
 
 describe("worked examples", () => {
   it.each(EXAMPLES.map((e) => [e.request, e.code]))("%s parses without errors or warnings", (_name, code) => {
@@ -68,5 +69,15 @@ describe("prompts", () => {
 
   it("system prompt stays a sensible size", () => {
     expect(buildSystemPrompt("text").length).toBeLessThan(12_000);
+  });
+});
+
+describe("icon-only nodes in the prompt and tools", () => {
+  it.each(["native", "text"] as const)("%s: the prompt teaches shape: icon", (transport) => {
+    expect(buildSystemPrompt(transport)).toContain("shape: icon");
+  });
+
+  it("search_icons tells the model how to draw a result as a bare icon", () => {
+    expect(runTool({ name: "search_icons", arg: "database" }).content).toContain("shape: icon");
   });
 });

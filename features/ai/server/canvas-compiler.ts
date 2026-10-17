@@ -4,7 +4,7 @@ import { bundleFans } from "@/features/ai/server/layout/bus";
 import { FRAME_NEST_STEP, FRAME_PADDING, FRAME_TITLE_HEIGHT, frameTopBand } from "@/features/ai/server/layout/frame-constants";
 import { placeGrid } from "@/features/ai/server/layout/grid-placement";
 import { placeLayered } from "@/features/ai/server/layout/layered-placement";
-import { withPins, type NodePin } from "@/features/ai/server/layout/pins";
+import { withOffsets, withPins, type NodeOffset, type NodePin } from "@/features/ai/server/layout/pins";
 import type {
   Placement,
   PlacementEngine,
@@ -16,6 +16,7 @@ import {
   decisionExitHandle,
   spreadParallelEdges,
 } from "@/features/ai/server/layout/handle-selection";
+import { categoryTint, iconForNode } from "@/core/icons/registry";
 import { getConnectionHandlePoint } from "@/core/routing/connection-handles";
 import {
   RouteArrowDescriptor,
@@ -24,7 +25,7 @@ import {
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { tint } from "@/core/color/named-colors";
-import { sizeDiamondNode, sizePillNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
+import { sizeDiamondNode, sizeIconNode, sizePillNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import {
   AIDiagramDocumentV1,
@@ -108,8 +109,13 @@ const NODE_WIDEST_WIDTH = 520;
  * Decisions are real diamonds and start/end are pills, both with no icon tile; the rest are semantic
  * nodes. An explicit `shape:` wins over what the kind implies.
  */
-const shapeOf = (node: AIDiagramNode): "diamond" | "pill" | undefined =>
-  node.shape ?? (node.kind === "decision" ? "diamond" : node.kind === "start" || node.kind === "end" ? "pill" : undefined);
+const shapeOf = (node: AIDiagramNode): "diamond" | "pill" | "icon" | undefined => {
+  // `shape: icon` draws just the glyph, so it needs one: a named icon, or a kind that has its own (the
+  // normaliser drops an `icon:` equal to the kind's, so `[kind: database, shape: icon]` is enough).
+  if (node.shape === "icon") return node.icon || node.kind !== "generic" ? "icon" : undefined;
+  return node.shape ?? (node.kind === "decision" ? "diamond" : node.kind === "start" || node.kind === "end" ? "pill" : undefined);
+};
+const ICON_NODE_FONT_SIZE = 14;
 const DECISION_NODE_HEIGHT = 92;
 const PILL_NODE_HEIGHT = 64;
 
@@ -120,6 +126,7 @@ const PILL_NODE_HEIGHT = 64;
  */
 export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize => {
   const shape = shapeOf(node);
+  if (shape === "icon") return sizeIconNode({ label: node.label, fontSize: ICON_NODE_FONT_SIZE, fontWeight: NODE_FONT_WEIGHT });
   const sizeWith = (maxWidth: number) => {
     const input = {
       label: node.label,
@@ -447,6 +454,7 @@ export const buildCanvas = (
   frameId: string,
   prepared: ReturnType<typeof prepareDiagram>,
   placement: Placement,
+  edgeSides?: EdgeSides,
 ): CompileResult => {
   const { input, sizes } = prepared;
   const nodeById = new Map(document.nodes.map((node) => [node.id, node]));
@@ -477,18 +485,23 @@ export const buildCanvas = (
       width: size.width,
       height: size.height,
     };
+    const shape = shapeOf(node);
+    const isIcon = shape === "icon";
+    // A bare icon on a dark or light canvas needs a colour that reads on both: the icon's own, unless the code or kind chose one.
+    const glyph = isIcon && !node.color && !KIND_COLORS[node.kind] ? iconForNode({ icon: node.icon, semanticKind: node.kind }) : null;
     const element: DrawingElement = {
       id: `${document.metadata.generationId}-${node.id}`,
-      type: shapeOf(node) ?? "semantic-node",
+      type: shape ?? "semantic-node",
       points: [
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },
       ],
-      color: style.stroke,
+      color: glyph ? (glyph.color ?? categoryTint(glyph.category)) : style.stroke,
       strokeWidth: importance >= 8 ? 3 : 2,
-      fill: style.fill,
+      // A bare icon has no box to fill.
+      ...(isIcon ? {} : { fill: style.fill }),
       label: node.label,
-      fontSize: NODE_FONT_SIZE,
+      fontSize: isIcon ? ICON_NODE_FONT_SIZE : NODE_FONT_SIZE,
       fontWeight: NODE_FONT_WEIGHT,
       ai: {
         frameId,
@@ -538,7 +551,7 @@ export const buildCanvas = (
       usedOutHandles,
     );
     usedOutHandles.add(`${edge.from}.${base.from}`);
-    const handles = spreadParallelEdges(base, source, target, usedHandlePairs);
+    const handles = edgeSides?.get(`${edge.from}>${edge.to}`) ?? spreadParallelEdges(base, source, target, usedHandlePairs);
     const start = getConnectionHandlePoint(source.bounds, handles.from);
     const end = getConnectionHandlePoint(target.bounds, handles.to);
     const edgeId = `${document.metadata.generationId}-${edge.id || `edge-${index + 1}`}`;
@@ -672,8 +685,15 @@ export const buildCanvas = (
   };
 };
 
+/** Sides a connection must use, keyed by `fromNodeId>toNodeId`. */
+export type EdgeSides = Map<string, { from: ConnectionHandle; to: ConnectionHandle }>;
+
 export interface CompileOptions {
   engine?: PlacementEngine;
+  /** Nodes (by diagram node id) moved relative to their automatic place; they keep that offset as the diagram grows. */
+  offsets?: Map<string, NodeOffset>;
+  /** Connections whose sides were chosen explicitly instead of by the compiler. */
+  edgeSides?: EdgeSides;
   /** Nodes (by diagram node id) that must keep their centre; everything else is laid out around them. */
   pins?: Map<string, NodePin>;
 }
@@ -681,10 +701,11 @@ export interface CompileOptions {
 export const compileAIDiagramDetailed = (
   document: AIDiagramDocumentV1,
   frameId: string,
-  { engine = placeLayered, pins }: CompileOptions = {},
+  { engine = placeLayered, pins, offsets, edgeSides }: CompileOptions = {},
 ): CompileResult => {
   const prepared = prepareDiagram(document);
-  const place = pins && pins.size > 0 ? withPins(engine, pins) : engine;
+  const offsetEngine = offsets && offsets.size > 0 ? withOffsets(engine, offsets) : engine;
+  const place = pins && pins.size > 0 ? withPins(offsetEngine, pins) : offsetEngine;
   let placement: Placement;
   let layoutFallback: string | undefined;
   try {
@@ -694,7 +715,7 @@ export const compileAIDiagramDetailed = (
     layoutFallback = error instanceof Error ? error.message : String(error);
     placement = placeGrid(prepared.input);
   }
-  const result = buildCanvas(document, frameId, prepared, placement);
+  const result = buildCanvas(document, frameId, prepared, placement, edgeSides);
   return layoutFallback ? { ...result, diagnostics: { ...result.diagnostics, layoutFallback } } : result;
 };
 

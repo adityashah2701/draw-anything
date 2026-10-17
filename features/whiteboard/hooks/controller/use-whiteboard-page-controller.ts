@@ -719,8 +719,19 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     ],
   );
 
+  const handleUpdateAIElements = useCallback(
+    (batch: DrawingElement[]) => {
+      const shift = aiShiftRef.current;
+      if (!shift || batch.length === 0) return;
+      updateElements(batch.map((element) => shiftElement(element, shift) as unknown as DrawingElementJson));
+    },
+    [updateElements],
+  );
+
   const aiState = useAIGeneration({
     onAddElement: handleAddAIElement,
+    onUpdateElements: handleUpdateAIElements,
+    onRemoveElements: deleteElementsLive,
     onBeforeBatch: anchorAIShift,
     onGenerationStart: () => {
       aiShiftRef.current = null;

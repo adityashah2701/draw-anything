@@ -19,14 +19,14 @@ export interface DiagramAgentOptions {
   maxTurns?: number;
 }
 
-const createGenerationId = () => `ai_gen_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+export const createGenerationId = () => `ai_gen_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 
 /**
  * Runs `work` while yielding the events it emits as they happen, then returns its result. This is
  * what lets "searching icons", "reviewing layout" reach the client during the model's turns
  * instead of after them.
  */
-async function* withLiveEvents<T>(work: (emit: (event: AIStreamEvent) => void) => Promise<T>): AsyncGenerator<AIStreamEvent, T> {
+export async function* withLiveEvents<T>(work: (emit: (event: AIStreamEvent) => void) => Promise<T>): AsyncGenerator<AIStreamEvent, T> {
   const queue: AIStreamEvent[] = [];
   let wake: (() => void) | undefined;
   let done = false;

@@ -58,7 +58,7 @@ const EDGE_LABEL_FONT_SIZE = 13;
 
 /** Generated node: a semantic node, or a diamond or pill the compiler drew for a decision, start or end. */
 export const isNodeElement = (e: DrawingElement) =>
-  e.type === "semantic-node" || ((e.type === "diamond" || e.type === "pill") && e.ai?.role === "node");
+  e.type === "semantic-node" || ((e.type === "diamond" || e.type === "pill" || e.type === "icon") && e.ai?.role === "node");
 
 export const nodeBox = (element: DrawingElement): Box => {
   const [a, b] = element.points;
@@ -209,7 +209,7 @@ export const measureLayout = (
         ? { width: width * 0.66, height: height * 0.66, maxLines: 3 }
         : node.type === "pill"
           ? pillLabelBox(width, height)
-          : getShapeLabelRegion("semantic-node", { ...b, width, height });
+          : getShapeLabelRegion(node.type === "icon" ? "icon" : "semantic-node", { ...b, width, height });
     const layout = layoutShapeLabel(ctx, {
       label: node.label ?? "",
       boxWidth: region.width,

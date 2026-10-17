@@ -65,6 +65,11 @@ describe("lintDiagram rules", () => {
     expect(lintRules(`A [icon: postgres] > B [kind: api] > C [icon: kafka] > D [icon: redis]`)).not.toContain("generic-icons");
   });
 
+  it("warns when shape: icon has no icon to draw, and not when it has one or its kind does", () => {
+    expect(lintRules(`A [shape: icon] > B [icon: postgres, shape: icon]`)).toContain("icon-shape-needs-icon");
+    expect(lintRules(`A [icon: server, shape: icon] > B [kind: database, shape: icon]`)).not.toContain("icon-shape-needs-icon");
+  });
+
   it("flags label-heavy diagrams and wide fan-out, not sparse labels", () => {
     expect(lintRules(`A > B: x\nB > C: y\nC > D: z\nD > E: w\nE > F: v`)).toContain("label-heavy");
     expect(lintRules(`A > B: x\nB > C\nC > D\nD > E\nE > F`)).not.toContain("label-heavy");

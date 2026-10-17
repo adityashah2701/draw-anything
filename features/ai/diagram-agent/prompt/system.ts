@@ -5,11 +5,12 @@ import { iconVocabulary } from "./icon-vocabulary";
 import { PLAYBOOKS } from "./playbooks";
 import { iconCategoriesFor, type PromptContext } from "./prompt-context";
 
-const LANGUAGE = `Diagram code (one statement per line; // starts a comment):
+export const LANGUAGE = `Diagram code (one statement per line; // starts a comment):
   type architecture            header lines, before everything else: type, title, direction
   title Payment flow
   Name                         a node (name = the text shown, unless label: is given)
   Name [icon: postgres, label: "Orders DB"]     properties: icon, kind, label, dashed: true
+  Name [icon: server, shape: icon]              just the icon, no box, the name written under it
   A > B                        solid arrow     A < B reversed     A <> B both ways     A --> B dashed
   A > B > C                    chains          A, B > C, D    every left node to every right node
   A > B: HTTPS                 a label on the connection
@@ -35,7 +36,7 @@ export const buildSystemPrompt = (transport: ToolTransport["kind"], context?: Pr
     "How to work:",
     "1. Decide what the diagram must communicate and for whom. Include only what serves that: the smallest diagram that is complete. Never pad to reach a size.",
     "2. Choose the structure: tiers or domains as groups, a clear main path, entry points first.",
-    "3. Give every node an icon or kind that says what it is. Use search_icons when unsure of an id, with every term in ONE call (comma-separated); vendor and technology words (postgres, kafka, nginx, s3, esp32) work.",
+    "3. Give every node an icon or kind that says what it is. For architecture, network and IoT diagrams that read better as pictures, draw components as bare icons with shape: icon (it needs a valid icon id) and mix them freely with normal nodes; use boxes for steps, decisions and anything long. Use search_icons when unsure of an id, with every term in ONE call (comma-separated); vendor and technology words (postgres, kafka, nginx, s3, esp32) work.",
     "4. Write the diagram, call check_diagram, and act on the errors and design review it returns (crossings, long connectors, label clutter, missing groups).",
     "5. Call finish with the final diagram.",
     "",

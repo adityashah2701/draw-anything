@@ -70,6 +70,11 @@ export const lintDiagram = (parsed: ParsedDiagramCode, metrics?: LintMetrics): L
     add("generic-icons", `${generic.length} of ${nodes.length} nodes have no recognisable icon/kind. Use search_icons and set icon: or kind: on each (e.g. ${generic.slice(0, 2).map((n) => n.label).join(", ")}).`);
   }
 
+  const bareIcons = nodes.filter((n) => n.shape === "icon" && generic.includes(n));
+  if (bareIcons.length > 0) {
+    add("icon-shape-needs-icon", `shape: icon needs an icon id or a kind with one, otherwise the node is drawn as a plain box: ${bareIcons.slice(0, 3).map((n) => n.label).join(", ")}. Use search_icons.`);
+  }
+
   const labelled = edges.filter((e) => e.label).length;
   if (edges.length >= 5 && labelled / edges.length > 0.6) {
     add("label-heavy", `${labelled} of ${edges.length} connections carry labels. Keep labels only where the relationship is not obvious (protocols, conditions, yes/no).`);

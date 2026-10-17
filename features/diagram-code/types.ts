@@ -21,7 +21,7 @@ export interface ParsedNode {
   icon?: string;
   dashed?: boolean;
   /** `diamond` or `pill` (`oval`/`ellipse` read as pill); other Eraser shapes are reported and ignored. */
-  shape?: "diamond" | "pill";
+  shape?: "diamond" | "pill" | "icon";
   /** #rrggbb */
   color?: string;
 }
