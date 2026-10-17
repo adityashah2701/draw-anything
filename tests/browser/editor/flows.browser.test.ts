@@ -100,20 +100,20 @@ suite("editor flows", () => {
     expect(arrow.endConnection).toBeUndefined();
   });
 
-  it("inserts an icon from the picker by keyboard, then drags and deletes it", async () => {
+  it("inserts an icon (only the icon, no node box) from the picker by keyboard, then drags and deletes it", async () => {
     await s.press("i");
     await s.page.getByRole("dialog").waitFor();
     await s.type("k8s");
     await s.press("Enter");
     await s.page.getByRole("dialog").waitFor({ state: "detached" });
-    const [node] = await ofType(s, "semantic-node");
+    const [node] = await ofType(s, "icon");
     expect(node.ai.icon).toBe("kubernetes");
     expect(await s.selected()).toEqual([node.id]);
     await s.drag(mid(node), { x: mid(node).x + 150, y: mid(node).y + 100 });
-    const moved = (await ofType(s, "semantic-node"))[0];
+    const moved = (await ofType(s, "icon"))[0];
     expect(mid(moved).x).toBeGreaterThan(mid(node).x + 100);
     await s.press("Delete");
-    expect(await ofType(s, "semantic-node")).toHaveLength(0);
+    expect(await ofType(s, "icon")).toHaveLength(0);
   });
 
   it("the icon picker filters by category and shows an empty state", async () => {
@@ -129,7 +129,7 @@ suite("editor flows", () => {
     await s.page.getByText(/No icon matches/).waitFor();
     await s.press("Escape");
     await s.page.getByRole("dialog").waitFor({ state: "detached" });
-    expect(await ofType(s, "semantic-node")).toHaveLength(0);
+    expect(await ofType(s, "icon")).toHaveLength(0);
   });
 
   it("changes the order of overlapping shapes from the context menu, and undo/redo restore it", async () => {
@@ -250,8 +250,8 @@ suite("editor flows", () => {
     const [file] = await Promise.all([s.page.waitForEvent("download"), s.page.getByRole("button", { name: "Export SVG", exact: true }).click()]);
     const svg = (await (await import("node:fs/promises")).readFile((await file.path())!)).toString();
     expect(svg).toContain("Gateway");
-    expect(svg).toContain("Database");
-    expect((svg.match(/<path/g) ?? []).length).toBeGreaterThan(5); // shapes, the arrow and the icon glyph
+    expect((svg.match(/<path/g) ?? []).length).toBeGreaterThan(4); // shapes, the arrow and the icon glyph
+    expect(svg).not.toContain("Database"); // the icon has no label
     expect(svg).not.toMatch(/<image|<script|href=/);
   });
 
@@ -303,9 +303,9 @@ suite("editor flows", () => {
     await s.page.getByRole("textbox", { name: "Search icons" }).fill("kubernetes");
     await s.press("Enter");
     await s.page.getByRole("dialog").waitFor({ state: "detached" });
-    const [node] = await ofType(s, "semantic-node");
+    const [node] = await ofType(s, "icon");
     expect(node.ai.icon).toBe("logo-kubernetes");
-    expect(node.label).toBe("Kubernetes");
+    expect(node.label).toBeUndefined(); // an icon, not a labelled node
     await s.click({ x: 900, y: 600 });
     await s.press("Control+Shift+E");
     await s.page.getByRole("dialog").waitFor();
@@ -334,15 +334,15 @@ suite("editor flows", () => {
     await s.page.getByRole("option", { name: /my gizmo/i }).waitFor();
     await s.press("Enter");
     await s.page.getByRole("dialog").waitFor({ state: "detached" });
-    const [node] = await ofType(s, "semantic-node");
-    expect(node.label).toBe("my gizmo");
+    const [node] = await ofType(s, "icon");
+    expect(node.label).toBeUndefined();
     expect(node.ai.customIcon.paths).toHaveLength(2);
     expect(node.ai.customIcon.color).toBe("#ff0066");
     expect(JSON.stringify(node)).not.toMatch(/evil|alert|onclick|script|href/);
 
     await s.waitForIdle();
     await s.reload();
-    expect(((await ofType(s, "semantic-node"))[0] as El).ai.customIcon.id).toBe(node.ai.customIcon.id);
+    expect(((await ofType(s, "icon"))[0] as El).ai.customIcon.id).toBe(node.ai.customIcon.id);
     await openPicker();
     await s.page.getByRole("button", { name: "Custom", exact: true }).click();
     await s.page.getByRole("option", { name: /my gizmo/i }).waitFor();

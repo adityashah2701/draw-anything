@@ -3,7 +3,7 @@ import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { DEFAULT_LABEL_FONT_SIZE, defaultLabelWeight } from "@/core/text/label-layout";
 import { normalizeRichTextInput } from "@/features/whiteboard/utils/rich-text-renderer";
 import type { IconDef } from "@/core/icons/registry";
-import { buildIconNode } from "@/features/whiteboard/utils/icon-picker";
+import { buildIconElement } from "@/features/whiteboard/utils/icon-picker";
 import { moveShape } from "@/core/shapes/shape-runtime";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
@@ -405,7 +405,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   const insertIcon = useCallback(
     (icon: IconDef) => {
       const { minX, minY, maxX, maxY } = canvasViewport.viewportBounds;
-      const node = buildIconNode(icon, { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, generateId());
+      const node = buildIconElement(icon, { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, generateId());
       addElement(node as unknown as DrawingElementJson);
       setSelectedElements([node.id]);
       uiState.setCurrentTool("select");

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { getIcon } from "@/core/icons/registry";
 import { validateCustomIcon } from "@/core/icons/custom-icon";
-import { buildIconNode, iconCategories, iconTitle, moveGridIndex, pickerIcons } from "./icon-picker";
+import { categoryTint } from "@/core/icons/registry";
+import { buildIconElement, DEFAULT_ICON_SIZE, iconCategories, iconTitle, moveGridIndex, pickerIcons } from "./icon-picker";
 
 describe("pickerIcons", () => {
   it("lists every icon by title when there is no query", () => {
@@ -48,22 +49,30 @@ describe("moveGridIndex", () => {
   });
 });
 
-describe("buildIconNode", () => {
-  it("is a semantic node centred on the point whose icon resolves", () => {
-    const node = buildIconNode(getIcon("kubernetes"), { x: 100, y: 50 }, "n1");
-    expect(node.type).toBe("semantic-node");
-    expect(node.ai?.icon).toBe("kubernetes");
-    const [a, b] = node.points;
-    expect((a.x + b.x) / 2).toBe(100);
-    expect((a.y + b.y) / 2).toBe(50);
-    expect(b.x - a.x).toBeGreaterThanOrEqual(140);
+describe("buildIconElement", () => {
+  it("is a standalone icon, not a node: no label, no fill, centred on the point", () => {
+    const el = buildIconElement(getIcon("kubernetes"), { x: 100, y: 50 }, "n1");
+    expect(el.type).toBe("icon");
+    expect(el.ai?.icon).toBe("kubernetes");
+    expect(el.label).toBeUndefined();
+    expect(el.fill).toBeUndefined();
+    const [a, b] = el.points;
+    expect([(a.x + b.x) / 2, (a.y + b.y) / 2]).toEqual([100, 50]);
+    expect(b.x - a.x).toBe(DEFAULT_ICON_SIZE);
+    expect(b.y - a.y).toBe(DEFAULT_ICON_SIZE);
   });
+
+  it("starts a line icon in its category colour and a logo in its own", () => {
+    expect(buildIconElement(getIcon("database"), { x: 0, y: 0 }, "a").color).toBe(categoryTint("data"));
+    expect(buildIconElement(getIcon("logo-docker"), { x: 0, y: 0 }, "b").color).toBe(getIcon("logo-docker").color);
+  });
+
   it("stores a custom icon inside the element, without undefined fields", () => {
     const mine = validateCustomIcon({ id: "custom-x", title: "Gizmo", paths: ["M0 0h4v4Z"], viewBox: { width: 24, height: 24 } })!;
-    const node = buildIconNode(mine, { x: 0, y: 0 }, "n2");
-    expect(node.ai?.icon).toBeUndefined();
-    expect(node.ai?.customIcon?.id).toBe("custom-x");
-    expect(JSON.parse(JSON.stringify(node.ai?.customIcon))).toEqual(node.ai?.customIcon);
-    expect(node.label).toBe("Gizmo");
+    const el = buildIconElement(mine, { x: 0, y: 0 }, "n2");
+    expect(el.ai?.icon).toBeUndefined();
+    expect(el.ai?.customIcon?.id).toBe("custom-x");
+    expect(JSON.parse(JSON.stringify(el.ai?.customIcon))).toEqual(el.ai?.customIcon);
+    expect(el.label).toBeUndefined();
   });
 });

@@ -31,6 +31,55 @@ const pathFor = (def: IconDef): Path2D | null => {
   return path;
 };
 
+/** Paints the glyph (not its tile) centred at (cx, cy) inside a `box` px square; `color` overrides the icon's own. */
+const paintGlyph = (ctx: CanvasRenderingContext2D, def: IconDef, cx: number, cy: number, box: number, color: string, strokeWidth?: number) => {
+  const logo = def.style === "logo";
+  const sink = takesPathData(ctx);
+  const path = sink ? null : pathFor(def);
+  if (!sink && !path) return false;
+  const scale = box / Math.max(def.viewBox.width, def.viewBox.height);
+  ctx.translate(cx - (def.viewBox.width * scale) / 2, cy - (def.viewBox.height * scale) / 2);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = strokeWidth ?? def.strokeWidth ?? STROKE;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // One call per path string: a relative "m" in a later path starts at the origin, not where the last one ended.
+  if (sink) for (const d of def.paths) logo ? ctx.fillPathData(d, def.viewBox) : ctx.strokePathData(d, def.viewBox);
+  else if (logo) ctx.fill(path!);
+  else ctx.stroke(path!);
+  return true;
+};
+
+/**
+ * A standalone icon: just the glyph filling a `size` px square at (cx, cy), in `color` (default: the icon's
+ * own). Brand marks keep their colours on a white tile, since they are drawn for light backgrounds. Falls
+ * back to the text badge if the glyph cannot be drawn.
+ */
+export const drawIconGlyph = (ctx: CanvasRenderingContext2D, def: IconDef, cx: number, cy: number, size: number, color?: string, strokeWidth?: number) => {
+  const logo = def.style === "logo";
+  const tint = color ?? def.color ?? categoryTint(def.category);
+  ctx.save();
+  if (logo) {
+    ctx.beginPath();
+    ctx.roundRect(cx - size / 2, cy - size / 2, size, size, size * 0.2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.18)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  if (!paintGlyph(ctx, def, cx, cy, logo ? size * 0.68 : size * 0.92, logo ? (def.color ?? tint) : tint, strokeWidth)) {
+    ctx.fillStyle = tint;
+    ctx.font = makeFontString(Math.max(6, size * 0.34), 700, "normal");
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(def.badge, cx, cy);
+  }
+  ctx.restore();
+};
+
 /**
  * Draws an icon tile centred at (cx, cy), `size` screen pixels square. Everything scales from `size`,
  * so a glyph looks the same at every zoom. If the glyph cannot be drawn (no Path2D, bad path data),
@@ -53,23 +102,7 @@ export const drawIconTile = (ctx: CanvasRenderingContext2D, def: IconDef, cx: nu
     ctx.stroke();
   }
 
-  const sink = takesPathData(ctx);
-  const path = sink ? null : pathFor(def);
-  if (sink || path) {
-    const box = size * GLYPH_SHARE;
-    const scale = box / Math.max(def.viewBox.width, def.viewBox.height);
-    ctx.translate(cx - (def.viewBox.width * scale) / 2, cy - (def.viewBox.height * scale) / 2);
-    ctx.scale(scale, scale);
-    ctx.fillStyle = tint;
-    ctx.strokeStyle = tint;
-    ctx.lineWidth = def.strokeWidth ?? STROKE;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    // One call per path string: a relative "m" in a later path starts at the origin, not where the last one ended.
-    if (sink) for (const d of def.paths) logo ? ctx.fillPathData(d, def.viewBox) : ctx.strokePathData(d, def.viewBox);
-    else if (logo) ctx.fill(path!);
-    else ctx.stroke(path!);
-  } else {
+  if (!paintGlyph(ctx, def, cx, cy, size * GLYPH_SHARE, tint)) {
     ctx.fillStyle = tint;
     ctx.font = makeFontString(Math.max(6, size * 0.34), 700, "normal");
     ctx.textAlign = "center";

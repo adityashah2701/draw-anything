@@ -24,14 +24,22 @@ import { renderEvalReport, scoreDiagram, type EvalRow } from "./score";
  *   AI_EVAL_TRANSPORTS=native,text  (default both; gemini is always text)
  *   AI_EVAL_LEGACY=1                also run the legacy 12-agent workflow for comparison
  *   AI_EVAL_LIMIT=4                 only the first N golden prompts
+ *   AI_EVAL_DELAY_MS=30000          pause between runs (free tiers allow only a few thousand tokens a minute;
+ *                                   default 20000 for groq, 0 otherwise)
  */
-try {
-  process.loadEnvFile(".env.local");
-} catch {
-  // keys may already be in the environment
+// .env.local first (it wins), then .env: process.loadEnvFile never overrides a variable that is already set.
+for (const file of [".env.local", ".env"]) {
+  try {
+    process.loadEnvFile(file);
+  } catch {
+    // the file may not exist; keys may already be in the environment
+  }
 }
 
 const list = (name: string, fallback: string) => (process.env[name] ?? fallback).split(",").map((s) => s.trim()).filter(Boolean);
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const delayFor = (provider: string) => Number(process.env.AI_EVAL_DELAY_MS ?? (provider === "groq" ? 20_000 : 0));
 
 const transportFor = (provider: AIModelProvider, kind: string): ToolTransport | null => {
   if (kind === "text" || provider === "gemini") return createTextTransport(createAIChatModel(provider));
@@ -52,6 +60,7 @@ describe.skipIf(process.env.AI_EVAL !== "1")("live AI diagram evaluation", () =>
           if (provider === "gemini" && kind === "native") continue;
           for (const golden of prompts) {
             const pipeline = `agent/${provider}/${kind}`;
+            if (rows.length > 0) await pause(delayFor(provider));
             const t0 = Date.now();
             try {
               const transport = transportFor(provider, kind);

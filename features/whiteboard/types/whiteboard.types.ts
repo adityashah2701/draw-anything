@@ -96,6 +96,11 @@ export interface EllipseShape extends BaseDrawingElement {
   type: "ellipse";
 }
 
+/** A standalone glyph from the icon registry or the user's own (see `ai.icon` / `ai.customIcon`), with no node box. */
+export interface IconShape extends BaseDrawingElement {
+  type: "icon";
+}
+
 export interface DiamondShape extends BaseDrawingElement {
   type: "diamond";
 }
@@ -154,6 +159,7 @@ export type DrawingElement =
   | DiamondShape
   | PillShape
   | EllipseShape
+  | IconShape
   | TriangleShape
   | LineShape
   | TextShape

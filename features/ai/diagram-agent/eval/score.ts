@@ -78,7 +78,7 @@ export const renderEvalReport = (rows: EvalRow[], meta: { date: string; note?: s
   out.push("", "## Runs", "", "| pipeline | prompt | nodes | clean | icons | crossings | longest | collisions | groups dropped | error |", "|---|---|---|---|---|---|---|---|---|---|");
   for (const r of rows) {
     const s = r.score;
-    out.push(`| ${r.pipeline} | ${r.prompt} | ${s?.nodes ?? "-"} | ${s ? (s.clean ? "yes" : "no") : "-"} | ${s ? pct(s.iconCoverage) : "-"} | ${s?.crossings ?? "-"} | ${s?.longestEdge ?? "-"} | ${s?.labelCollisions ?? "-"} | ${s?.groupsDropped ?? "-"} | ${(r.error ?? "").replace(/\|/g, "/").slice(0, 80)} |`);
+    out.push(`| ${r.pipeline} | ${r.prompt} | ${s?.nodes ?? "-"} | ${s ? (s.clean ? "yes" : "no") : "-"} | ${s ? pct(s.iconCoverage) : "-"} | ${s?.crossings ?? "-"} | ${s?.longestEdge ?? "-"} | ${s?.labelCollisions ?? "-"} | ${s?.groupsDropped ?? "-"} | ${(r.error ?? "").replace(/\|/g, "/").slice(0, 220)} |`);
   }
   return out.join("\n") + "\n";
 };

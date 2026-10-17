@@ -1,7 +1,5 @@
 import { categoryTint, listIcons, searchIcons, type IconCategory, type IconDef } from "@/core/icons/registry";
-import { tint } from "@/core/color/named-colors";
 import { validateCustomIcon } from "@/core/icons/custom-icon";
-import { sizeSemanticNode } from "@/core/text/node-size";
 import type { DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
 
 export const ICON_CATEGORY_LABELS: Record<IconCategory, string> = {
@@ -96,30 +94,31 @@ export const moveGridIndex = (index: number, key: GridKey, columns: number, coun
 export const iconName = (id: string) =>
   id.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 
-/** A semantic node showing the icon, centred on `center`: the same element the AI compiler draws, so it moves, resizes and exports like one. */
-export const buildIconNode = (icon: IconDef, center: Point, id: string): DrawingElement => {
-  const label = iconTitle(icon);
-  const { width, height } = sizeSemanticNode({ label, fontSize: 17, fontWeight: "600", minWidth: 140, maxWidth: 260, minHeight: 78 });
-  const color = icon.color ?? categoryTint(icon.category);
+/** Edge of a freshly inserted icon, in world units (it can be resized afterwards). */
+export const DEFAULT_ICON_SIZE = 64;
+
+/**
+ * A standalone `icon` element centred on `center`: just the glyph, no node box and no label, so what the
+ * user picked is all that lands on the board. Line icons start in their category colour (changeable with
+ * the colour picker); brand marks keep their own.
+ */
+export const buildIconElement = (icon: IconDef, center: Point, id: string): DrawingElement => {
+  const half = DEFAULT_ICON_SIZE / 2;
   const custom = icon.id.startsWith("custom-");
   return {
     id,
-    type: "semantic-node",
+    type: "icon",
     points: [
-      { x: center.x - width / 2, y: center.y - height / 2 },
-      { x: center.x + width / 2, y: center.y + height / 2 },
+      { x: center.x - half, y: center.y - half },
+      { x: center.x + half, y: center.y + half },
     ],
-    color,
-    strokeWidth: 2,
-    fill: tint(color, 0.9),
-    label,
-    fontSize: 17,
-    fontWeight: "600",
+    color: icon.color ?? categoryTint(icon.category),
+    strokeWidth: icon.strokeWidth ?? 2,
     ai: custom
       ? {
           customIcon: {
             id: icon.id,
-            title: icon.title ?? label,
+            title: iconTitle(icon),
             paths: icon.paths,
             viewBox: icon.viewBox,
             // Optional fields are left out, not set to undefined: storage JSON has no undefined.
