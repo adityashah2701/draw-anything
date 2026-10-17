@@ -65,6 +65,7 @@ interface UseWhiteboardDrawingProps {
     handle: string,
     point: Point,
     originalBounds: Bounds,
+    base?: DrawingElement,
   ) => DrawingElement | null;
   updateElement: (element: DrawingElement) => void;
   getElementBounds: (element: DrawingElement) => Bounds | null;
@@ -170,6 +171,9 @@ export const useWhiteboardDrawing = ({
   const [cursorPosition, setCursorPosition] = useState<Point | null>(null);
   const lastPointRef = useRef<Point | null>(null);
   const resizeInitialBoundsRef = useRef<Bounds | null>(null);
+  // The element as it was when a resize began: every frame is computed from it, so a path whose points are
+  // inserted, merged or re-indexed by earlier frames cannot make a dragged segment jump to another one.
+  const resizeBaseRef = useRef<DrawingElement | null>(null);
   const lastResizePointRef = useRef<Point | null>(null);
   const pendingArrowRerouteRef = useRef<DrawingElement | null>(null);
   // A plain click on one member of a multi-selection: collapse to it on release unless the pointer moved.
@@ -297,6 +301,7 @@ export const useWhiteboardDrawing = ({
               lastResizePointRef.current = point;
               previousSnapRef.current = { start: null, end: null };
               resizeInitialBoundsRef.current = getElementBounds(element);
+              resizeBaseRef.current = element;
               foundResizeHandle = true;
               break;
             }
@@ -566,6 +571,7 @@ export const useWhiteboardDrawing = ({
                 resizeHandle,
                 resizePoint,
                 resizeInitialBoundsRef.current,
+                resizeBaseRef.current ?? undefined,
               );
               if (updated) {
                 if (
@@ -904,6 +910,7 @@ export const useWhiteboardDrawing = ({
     dragSessionRef.current = null;
     setAlignmentGuides([]);
     lastResizePointRef.current = null;
+    resizeBaseRef.current = null;
     pendingArrowRerouteRef.current = null;
     previousSnapRef.current = { start: null, end: null };
     onArrowSnapPreviewChange?.(null);

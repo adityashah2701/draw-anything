@@ -75,9 +75,13 @@ export const useWhiteboardUtils = (
 
   const generateId = useCallback(() => Math.random().toString(36).substr(2, 9), []);
 
+  // The cache holds the bounds of the elements as stored. An element that was moved or resized in this very
+  // frame is a different object with the same id: asking the cache would return where it was one frame ago,
+  // which left every connected arrow one pointer-move behind its shape (and detached after the last move).
   const getElementBounds = useCallback(
-    (element: DrawingElement) => boundsById.get(element.id) ?? getBoundsStatic(element),
-    [boundsById, getBoundsStatic],
+    (element: DrawingElement) =>
+      (elementsById.get(element.id) === element ? boundsById.get(element.id) : undefined) ?? getBoundsStatic(element),
+    [boundsById, elementsById, getBoundsStatic],
   );
 
   const isPointInElement = useCallback(
@@ -206,8 +210,10 @@ export const useWhiteboardUtils = (
       handle: string,
       point: Point,
       originalBounds: Bounds,
+      /** The element as it was when the gesture began; resizing from it makes the result depend only on the pointer, not on earlier frames. */
+      base?: DrawingElement,
     ): DrawingElement | null => {
-      const element = elements.find((entry) => entry.id === elementId);
+      const element = base ?? elements.find((entry) => entry.id === elementId);
       if (!element) return null;
 
       return resizeShape(element, handle, point, originalBounds);

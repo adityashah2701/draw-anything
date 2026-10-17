@@ -103,19 +103,26 @@ const snapValue = (value: number, gridSize: number): number =>
   Math.round(value / gridSize) * gridSize;
 
 /**
- * Snap all internal coordinates to grid.
- * Preserves first and last points (endpoint attachments).
+ * Snap the free coordinates of internal points to the grid.
+ *
+ * The first and last segments are not free: their fixed coordinate is the one the endpoint sits on (a
+ * horizontal segment leaving a left/right anchor stays at that anchor's y). Snapping it moved the segment
+ * off the anchor and left a short jog right at the shape, so those two coordinates are kept as they are.
  */
 const snapToGrid = (points: Point[], gridSize: number): Point[] => {
   if (points.length <= 2) return points;
 
+  const last = points.length - 1;
+  const keepFirst = points[0].y === points[1].y ? "y" : points[0].x === points[1].x ? "x" : null;
+  const keepLast = points[last].y === points[last - 1].y ? "y" : points[last].x === points[last - 1].x ? "x" : null;
+
   const result = points.map((p, i) => {
     // Preserve endpoints exactly
-    if (i === 0 || i === points.length - 1) return { ...p };
+    if (i === 0 || i === last) return { ...p };
 
     return {
-      x: snapValue(p.x, gridSize),
-      y: snapValue(p.y, gridSize),
+      x: (i === 1 && keepFirst === "x") || (i === last - 1 && keepLast === "x") ? p.x : snapValue(p.x, gridSize),
+      y: (i === 1 && keepFirst === "y") || (i === last - 1 && keepLast === "y") ? p.y : snapValue(p.y, gridSize),
     };
   });
 

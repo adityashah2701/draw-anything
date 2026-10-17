@@ -37,7 +37,7 @@ import {
   normalizeRoutes,
   PathNormalizerOptions,
 } from "@/core/routing/path-normalizer";
-import { getObstacleAwareOrthogonalPath } from "@/core/routing/obstacle-avoidance";
+import { getObstacleAwareOrthogonalPath, meetsAnchorsCleanly } from "@/core/routing/obstacle-avoidance";
 import {
   isNonEmptyString,
   isValidPoint,
@@ -394,7 +394,7 @@ const routeArrowPointsInternal = ({
   }
 
   if (preserveManualBends && isValidPointArray(existingPoints, 3)) {
-    return stabilizeArrowRouteEndpoints(
+    const kept = stabilizeArrowRouteEndpoints(
       reanchorPathEndpoints(existingPoints, start, end),
       start,
       end,
@@ -402,6 +402,9 @@ const routeArrowPointsInternal = ({
       endHandle,
       endpointPreference,
     );
+    // The user's bends are kept while they still fit the anchors. Once a shape has moved so that the path would
+    // run along or into a shape's side, they no longer do, and the arrow is routed afresh instead.
+    if (isOrthogonalPathInternal(kept) && meetsAnchorsCleanly(kept, startHandle, endHandle)) return kept;
   }
 
   const ignoreIds = new Set<string>(ignoreObstacleIds ?? []);

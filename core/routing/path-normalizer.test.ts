@@ -82,11 +82,12 @@ const digest = (routes: Map<string, Point[]>) =>
     .digest("hex");
 
 // Captured from the pre-optimization implementation (full-graph crossing recount per arrow).
-// A mismatch means the optimization changed normalizer behavior.
+// A mismatch means the normalizer's behavior changed. Two seeds were re-recorded on 2026-10-17 on purpose:
+// the grid snap no longer moves the first and last segments off their anchors (see "keeps terminal segments").
 const GOLDEN: Record<string, string> = {
-  "seed11-cols5-arrows60": "dd48ddc13c9305e7aae28d9d792b9c73c9b3cb26",
+  "seed11-cols5-arrows60": "a6b3be2e66b4025ed952a27f69bcf2b5f720811f",
   "seed22-cols6-arrows90": "c08f38a1e2a4c1189b3603bb1d209e5b21ff1097",
-  "seed33-cols4-arrows40": "ebb5601e9dfacd99d4af3222011c2cab67b260de",
+  "seed33-cols4-arrows40": "8efa532e85be26a964c704284f032e057e353d26",
   "seed44-cols8-arrows150": "87648791b8d6eb78ba5dbda7007d6d4fe032d22f",
 };
 
@@ -159,3 +160,16 @@ describe("normalizeRoutes – scaling", () => {
 
 // Measured ~85ms after the fix vs ~16.5s before; the budget leaves >20x headroom for slow CI.
 const PERF_BUDGET_MS = 2000;
+
+describe("normalizeRoutes – keeps terminal segments on their anchors", () => {
+  const opts = { obstacles: [], gridSize: 16, snapToGrid: true, corridorTolerance: 2, minStubLength: 24 };
+  it("snaps the free lane to the grid but not the segments that meet the endpoints", () => {
+    // Anchors at y=130 and y=330 (off the 16px grid); the vertical lane at x=360 is free.
+    const out = normalizeRoutes(new Map([["a", [{ x: 220, y: 130 }, { x: 360, y: 130 }, { x: 360, y: 330 }, { x: 500, y: 330 }]]]), opts).get("a")!;
+    expect(out[0]).toEqual({ x: 220, y: 130 });
+    expect(out[out.length - 1]).toEqual({ x: 500, y: 330 });
+    // no short jog next to the end: the last segment is horizontal at the end's own y
+    expect(out[out.length - 2].y).toBe(330);
+    expect(out[1].y).toBe(130);
+  });
+});

@@ -286,8 +286,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       updateElements([...moved, ...arrows] as unknown as DrawingElementJson[]);
     },
     zoom: canvasViewport.zoom,
-    resizeElement: (id, handle, pt, bounds) => {
-      const resized = resizeElement(id, handle, pt, bounds);
+    resizeElement: (id, handle, pt, bounds, base) => {
+      const resized = resizeElement(id, handle, pt, bounds, base);
       if (resized) {
         const arrows = rerouteConnectedArrowsForChanges([resized]);
         arrows.forEach((a) =>

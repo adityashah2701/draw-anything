@@ -221,6 +221,27 @@ const collectCandidateLanes = (
   };
 };
 
+const OUTWARD: Record<ConnectionHandle, readonly [number, number]> = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
+
+/** True when a path moves from `anchor` straight away from the shape side `handle` (not along it, not into it). */
+const movesOutward = (anchor: Point, next: Point, handle: ConnectionHandle): boolean => {
+  const [dx, dy] = OUTWARD[handle];
+  return Math.sign(next.x - anchor.x) === dx && Math.sign(next.y - anchor.y) === dy && (dx === 0 ? next.x === anchor.x : next.y === anchor.y);
+};
+
+/**
+ * A path must leave the start anchor and arrive at the end anchor straight out of the shape's side. The source
+ * and target are ignored by the obstacle test (the arrow touches them), so without this a path from a left anchor
+ * to a target on the right runs straight through its own shape: the stub it starts with is a backtrack that
+ * compression erases.
+ */
+export const meetsAnchorsCleanly = (path: Point[], startHandle?: ConnectionHandle, endHandle?: ConnectionHandle): boolean => {
+  if (path.length < 2) return true;
+  if (startHandle && !movesOutward(path[0], path[1], startHandle)) return false;
+  if (endHandle && !movesOutward(path[path.length - 1], path[path.length - 2], endHandle)) return false;
+  return true;
+};
+
 const wrapWithHandles = (
   start: Point,
   end: Point,
@@ -386,6 +407,7 @@ export const getObstacleAwareOrthogonalPath = ({
   let bestScore = Number.POSITIVE_INFINITY;
   baseCandidates.forEach((candidate) => {
     if (candidate.length < 2) return;
+    if (!meetsAnchorsCleanly(candidate, startHandle, endHandle)) return;
     if (
       pathIntersectsObstacles(candidate, obstacles, ignoreIds, obstaclePadding)
     ) {
@@ -446,6 +468,7 @@ export const getObstacleAwareOrthogonalPath = ({
 
       expandedCandidates.forEach((candidate) => {
         if (candidate.length < 2) return;
+        if (!meetsAnchorsCleanly(candidate, startHandle, endHandle)) return;
         if (
           pathIntersectsObstacles(
             candidate,
@@ -489,7 +512,8 @@ export const getObstacleAwareOrthogonalPath = ({
 
   // Level 3: Accept the best intersecting candidate (least-cost) as last resort.
   if (bestScore === Number.POSITIVE_INFINITY) {
-    best = [...baseCandidates].sort(
+    const clean = baseCandidates.filter((candidate) => meetsAnchorsCleanly(candidate, startHandle, endHandle));
+    best = [...(clean.length > 0 ? clean : baseCandidates)].sort(
       (a, b) =>
         scoreCandidate(
           a,

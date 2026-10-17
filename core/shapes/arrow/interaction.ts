@@ -41,6 +41,59 @@ export const getArrowResizeHandles = (shape: ArrowElement): ShapeResizeHandle[] 
     }));
 };
 
+/** Room kept between an anchor and the first bend, so the arrowhead and the shape's edge stay clear. */
+const MIN_STUB = 12;
+
+const OUTWARD_SIGN = { left: -1, right: 1, top: -1, bottom: 1 } as const;
+
+/** `raw` kept on the outward side of `anchor` by at least MIN_STUB, along the axis the terminal segment runs on. */
+const keepOutward = (anchor: Point, near: Point, handle: ReturnType<typeof getConnectionSide>, raw: number): number => {
+  const horizontal = anchor.y === near.y;
+  const sign = handle ? OUTWARD_SIGN[handle] : Math.sign((horizontal ? near.x - anchor.x : near.y - anchor.y) || 1);
+  const origin = horizontal ? anchor.x : anchor.y;
+  return sign > 0 ? Math.max(raw, origin + MIN_STUB) : Math.min(raw, origin - MIN_STUB);
+};
+
+/**
+ * Drag of the first (or last) segment: move the lane it connects to along the segment's own axis, never
+ * closer to the anchor than MIN_STUB and never to the wrong side of it. A single-bend path has no lane to
+ * slide and is returned as it is.
+ */
+const slideTerminalLane = (points: Point[], atStart: boolean, point: Point, shape: ArrowElement): Point[] => {
+  if (points.length < 4) return points;
+  const n = points.length;
+  // A Z path has one lane, shared by both terminal segments: it must respect both anchors.
+  if (n === 4) return moveOrthogonalSegment(points, 1, clampLaneTarget(points, 1, point, shape));
+  const [anchor, near] = atStart ? [points[0], points[1]] : [points[n - 1], points[n - 2]];
+  const horizontal = anchor.y === near.y; // the terminal segment runs along x
+  const handle = getConnectionSide(atStart ? shape.startConnection : shape.endConnection);
+  const value = keepOutward(anchor, near, handle, horizontal ? point.x : point.y);
+
+  const next = points.map((p) => ({ ...p }));
+  const [i1, i2] = atStart ? [1, 2] : [n - 2, n - 3];
+  if (horizontal) {
+    next[i1].x = value;
+    next[i2].x = value;
+  } else {
+    next[i1].y = value;
+    next[i2].y = value;
+  }
+  return next;
+};
+
+/** An inner lane next to an endpoint keeps to the outward side of that endpoint's anchor, like the terminal segment itself. */
+const clampLaneTarget = (points: Point[], segmentIndex: number, point: Point, shape: ArrowElement): Point => {
+  const n = points.length;
+  const target = { ...point };
+  const apply = (anchor: Point, near: Point, handle: ReturnType<typeof getConnectionSide>) => {
+    if (anchor.y === near.y) target.x = keepOutward(anchor, near, handle, target.x);
+    else if (anchor.x === near.x) target.y = keepOutward(anchor, near, handle, target.y);
+  };
+  if (segmentIndex === 1) apply(points[0], points[1], getConnectionSide(shape.startConnection));
+  if (segmentIndex === n - 3) apply(points[n - 1], points[n - 2], getConnectionSide(shape.endConnection));
+  return target;
+};
+
 export const resizeArrowElement = <T extends ArrowElement>(
   shape: T,
   handle: string,
@@ -100,44 +153,12 @@ export const resizeArrowElement = <T extends ArrowElement>(
           end,
         ];
       }
-    } else if (segmentIndex === 0 && orthogonalPoints.length >= 2) {
-      const start = orthogonalPoints[0];
-      const second = orthogonalPoints[1];
-      if (start.x === second.x) {
-        orthogonalPoints = [
-          start,
-          { x: point.x, y: start.y },
-          { x: point.x, y: second.y },
-          ...orthogonalPoints.slice(1),
-        ];
-      } else {
-        orthogonalPoints = [
-          start,
-          { x: start.x, y: point.y },
-          { x: second.x, y: point.y },
-          ...orthogonalPoints.slice(1),
-        ];
-      }
-    } else if (segmentIndex === lastSegmentIndex && orthogonalPoints.length >= 2) {
-      const penultimate = orthogonalPoints[lastPointIndex - 1];
-      const end = orthogonalPoints[lastPointIndex];
-      if (penultimate.x === end.x) {
-        orthogonalPoints = [
-          ...orthogonalPoints.slice(0, lastPointIndex),
-          { x: point.x, y: penultimate.y },
-          { x: point.x, y: end.y },
-          end,
-        ];
-      } else {
-        orthogonalPoints = [
-          ...orthogonalPoints.slice(0, lastPointIndex),
-          { x: penultimate.x, y: point.y },
-          { x: end.x, y: point.y },
-          end,
-        ];
-      }
+    } else if (segmentIndex === 0 || segmentIndex === lastSegmentIndex) {
+      // A segment touching an endpoint cannot move sideways (it is pinned to the anchor and must stay
+      // perpendicular to the shape's side). Dragging it slides the lane it leads to along its own axis.
+      orthogonalPoints = slideTerminalLane(orthogonalPoints, segmentIndex === 0, point, shape);
     } else {
-      orthogonalPoints = moveOrthogonalSegment(orthogonalPoints, segmentIndex, point);
+      orthogonalPoints = moveOrthogonalSegment(orthogonalPoints, segmentIndex, clampLaneTarget(orthogonalPoints, segmentIndex, point, shape));
     }
 
     resizedPoints = compressPath(orthogonalPoints);
