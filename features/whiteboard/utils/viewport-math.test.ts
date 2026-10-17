@@ -97,3 +97,18 @@ describe("pinchView", () => {
     expect(Number.isFinite(pinchView(view, pair(5, 5, 5, 5), pair(5, 5, 5, 5)).panOffset.x)).toBe(true);
   });
 });
+
+describe("fitView with a panel over the right edge", () => {
+  it("fits the drawing into what the panel leaves free, centred there", () => {
+    const bounds = { minX: 0, minY: 0, maxX: 400, maxY: 200 };
+    const full = fitView(bounds, { width: 1000, height: 800 }, { padding: 0, maxZoom: 10 })!;
+    const covered = fitView(bounds, { width: 1000, height: 800 }, { padding: 0, maxZoom: 10, rightInset: 500 })!;
+    expect(covered.zoom).toBeCloseTo(full.zoom / 2, 5);
+    // The middle of the drawing lands in the middle of the free part (250), not of the whole canvas (500).
+    expect(200 * covered.zoom + covered.panOffset.x).toBeCloseTo(250, 5);
+  });
+
+  it("returns nothing when the panels cover the whole canvas", () => {
+    expect(fitView({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, { width: 400, height: 400 }, { rightInset: 400 })).toBeNull();
+  });
+});

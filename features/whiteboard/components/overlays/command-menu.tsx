@@ -25,6 +25,8 @@ import {
   Maximize,
   Grid3X3,
   Shapes,
+  Bot,
+  Code2,
 } from "lucide-react";
 
 import {
@@ -196,6 +198,14 @@ export function CommandMenu({
             <Save className="mr-2 h-4 w-4" />
             <span>Save Whiteboard</span>
             <CommandShortcut>⌘S</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("open-agent"))}>
+            <Bot className="mr-2 h-4 w-4" />
+            <span>Open the AI agent</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("open-code"))}>
+            <Code2 className="mr-2 h-4 w-4" />
+            <span>Open diagram code</span>
           </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onAction?.("insert-icon"))}>
             <Shapes className="mr-2 h-4 w-4" />

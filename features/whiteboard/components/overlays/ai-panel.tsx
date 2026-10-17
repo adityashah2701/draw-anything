@@ -1,20 +1,11 @@
 "use client";
 
 import * as React from "react";
-import {
-  X,
-  ChevronRight,
-  Wand2,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  Send,
-} from "lucide-react";
-import { AIModelProvider } from "@/features/ai/types";
+import { ArrowUp, Code2, Maximize, RotateCcw, X } from "lucide-react";
+import type { AIModelProvider } from "@/features/ai/types";
 import type { AIChatMessage } from "@/features/whiteboard/hooks/controller/use-ai-generation";
-import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
-import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
-import { DiagramCodeEditor } from "@/features/whiteboard/components/overlays/diagram-code-editor";
+import { AGENT_WIDTH_CSS } from "@/features/whiteboard/components/overlays/panel-layout";
+import { AITimeline } from "@/features/whiteboard/components/overlays/ai-timeline";
 
 interface AIPanelProps {
   isOpen: boolean;
@@ -22,47 +13,72 @@ interface AIPanelProps {
   triggerAIGeneration: (prompt: string, model: AIModelProvider) => void;
   isGenerating: boolean;
   messages: AIChatMessage[];
+  /** What the agent is doing right now (the latest step's title). */
+  workingLabel: string | null;
   disabled?: boolean;
-  /** For the Code tab: read the canvas, and write a diagram back to it. */
-  elements: DrawingElement[];
-  selectedElementIds: string[];
-  onApplyDiagramCode: (payload: ApplyDiagramCodePayload) => void;
+  onClear: () => void;
+  /** Open the code editor, optionally filled with the diagram that is on the canvas. */
+  onOpenCode: (fromCanvas: boolean) => void;
+  onFitToScreen: () => void;
 }
 
 const PROVIDER_OPTIONS: Array<{ value: AIModelProvider; label: string }> = [
-  { value: "gemini", label: "Gemini 3.5 Flash" },
-  { value: "groq", label: "Groq (GPT-OSS 120B)" },
+  { value: "gemini", label: "Gemini 3.8 Flash" },
+  { value: "groq", label: "Groq · GPT-OSS 120B" },
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
   { value: "openrouter", label: "OpenRouter" },
-  { value: "local", label: "Local" },
+  { value: "local", label: "Local model" },
 ];
 
-const SUGGESTIONS = [
-  "Flowchart for a user login process",
-  "System architecture with frontend, backend, and database",
-  "Mind map for a project plan",
-  "UML class diagram with three related classes",
-  "Network topology with 4 connected nodes",
-  "Decision tree for customer support",
+const EXAMPLES: Array<{ tag: string; text: string }> = [
+  { tag: "Flow", text: "A user login with MFA and a retry after a failed password" },
+  { tag: "Arch", text: "A web app backend with a CDN, API gateway, auth, orders service and Postgres" },
+  { tag: "Net", text: "Network topology with a router, two switches and four hosts" },
+  { tag: "UML", text: "Three related classes for an order system" },
+  { tag: "Tree", text: "A decision tree for routing customer support tickets" },
+  { tag: "Mind", text: "A mind map for planning a product launch" },
 ];
 
-const PHASE_LABELS: Record<string, string> = {
-  contextRetriever: "Loading context",
-  architecturePlanner: "Planning architecture",
-  domainModeler: "Modeling domains",
-  infrastructureExpander: "Expanding infrastructure",
-  relationshipAgent: "Mapping relationships",
-  criticAgent: "Reviewing architecture",
-  expansionAgent: "Expanding diagram",
-  repairAgent: "Repairing issues",
-  canvasCompiler: "Finalizing diagram",
+const IconButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; text?: string }> = ({ label, text, children, ...props }) => (
+  <button
+    type="button"
+    aria-label={label}
+    title={label}
+    {...props}
+    className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+  >
+    {children}
+    {text && <span>{text}</span>}
+  </button>
+);
+
+/** What was asked. A long request is cut to three lines and opens on demand: the work below matters more. */
+const RequestBlock: React.FC<{ prompt: string }> = ({ prompt }) => {
+  const [open, setOpen] = React.useState(false);
+  const long = prompt.length > 150;
+  return (
+    <section className="border-b border-border px-5 py-4">
+      <h3 className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Request</h3>
+      <p className={`mt-1.5 text-[13px] leading-relaxed text-foreground ${long && !open ? "line-clamp-3" : ""}`}>{prompt}</p>
+      {long && (
+        <button type="button" onClick={() => setOpen((v) => !v)} className="mt-1 font-mono text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+          {open ? "Show less" : "Show all"}
+        </button>
+      )}
+    </section>
+  );
 };
 
-function formatPhaseName(phase?: string): string {
-  if (!phase) return "";
-  return PHASE_LABELS[phase] || phase.replace(/([A-Z])/g, " $1").trim();
-}
+const ActionButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, ...props }) => (
+  <button
+    type="button"
+    {...props}
+    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  >
+    {children}
+  </button>
+);
 
 export const AIPanel: React.FC<AIPanelProps> = ({
   isOpen,
@@ -70,15 +86,19 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   triggerAIGeneration,
   isGenerating,
   messages,
+  workingLabel,
   disabled = false,
-  elements,
-  selectedElementIds,
-  onApplyDiagramCode,
+  onClear,
+  onOpenCode,
+  onFitToScreen,
 }) => {
-  const [mode, setMode] = React.useState<"describe" | "code">("describe");
   const [model, setModel] = React.useState<AIModelProvider>("gemini");
   // Providers the server has credentials for; null until known (then show all).
   const [available, setAvailable] = React.useState<AIModelProvider[] | null>(null);
+  const [input, setInput] = React.useState("");
+  const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const stickToBottom = React.useRef(true);
 
   // Ask every time the panel opens: the server's keys can change (restart, new
   // .env.local) while the page stays open, and a stale list leaves a dead option.
@@ -90,9 +110,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
       .then((data: { providers?: AIModelProvider[] } | null) => {
         if (cancelled || !Array.isArray(data?.providers)) return;
         setAvailable(data.providers);
-        setModel((current) =>
-          data.providers!.includes(current) ? current : (data.providers![0] ?? current),
-        );
+        setModel((current) => (data.providers!.includes(current) ? current : (data.providers![0] ?? current)));
       })
       .catch(() => {
         /* keep showing every provider; the server still validates */
@@ -102,262 +120,171 @@ export const AIPanel: React.FC<AIPanelProps> = ({
     };
   }, [isOpen]);
 
-  const providerOptions = PROVIDER_OPTIONS.filter(
-    (option) => available === null || available.includes(option.value),
-  );
-  const [input, setInput] = React.useState("");
-  const inputRef = React.useRef<HTMLTextAreaElement>(null);
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const hasSentRef = React.useRef(false);
-
   React.useEffect(() => {
-    if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 150);
-    }
+    if (isOpen) setTimeout(() => inputRef.current?.focus(), 120);
   }, [isOpen]);
 
-  const hasMessages = messages.length > 0;
-
+  // Follow the run as it grows, unless the person has scrolled up to read.
   React.useEffect(() => {
-    if (!isOpen) {
-      hasSentRef.current = false;
-    }
-  }, [isOpen]);
+    const el = scrollRef.current;
+    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
+  }, [messages, workingLabel]);
 
-  React.useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+  const providerOptions = PROVIDER_OPTIONS.filter((o) => available === null || available.includes(o.value));
+  const hasRun = messages.length > 0;
+  const prompt = messages.find((m) => m.kind === "prompt")?.content;
+  const finished = !isGenerating && messages.some((m) => m.kind === "success" || m.noteKind === "summary" || m.noteKind === "stopped");
 
-  const handleSend = () => {
-    if (!input.trim() || disabled || isGenerating) return;
-    hasSentRef.current = true;
-    triggerAIGeneration(input, model);
+  const send = (text: string) => {
+    const value = text.trim();
+    if (!value || disabled || isGenerating) return;
+    stickToBottom.current = true;
+    triggerAIGeneration(value, model);
     setInput("");
-  };
-
-  const handleSuggestionClick = (s: string) => {
-    setInput(s);
-    hasSentRef.current = true;
-    triggerAIGeneration(s, model);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed right-0 top-0 bottom-0 w-[380px] bg-card border-l border-border shadow-2xl flex flex-col z-50 animate-in slide-in-from-right duration-200">
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between border-b border-border bg-muted/30 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-500">
-            <Wand2 size={16} />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">AI Agent</h2>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value as AIModelProvider)}
-              disabled={providerOptions.length === 0}
-              className="text-[11px] bg-transparent text-muted-foreground border-none outline-none cursor-pointer hover:text-foreground p-0 mt-0.5"
-            >
-              {providerOptions.length === 0 && (
-                <option value="">No AI provider configured</option>
-              )}
-              {providerOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-        >
-          <X size={16} />
-        </button>
-      </div>
-
-      {/* Mode tabs */}
-      <div role="tablist" className="flex shrink-0 gap-1 border-b border-border px-3 pt-2">
-        {(["describe", "code"] as const).map((tab) => (
-          <button
-            key={tab}
-            role="tab"
-            type="button"
-            aria-selected={mode === tab}
-            onClick={() => setMode(tab)}
-            className={`rounded-t-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === tab
-                ? "border-b-2 border-violet-500 text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+    <aside
+      role="complementary"
+      aria-label="AI agent"
+      style={{ width: AGENT_WIDTH_CSS }}
+      className="fixed bottom-0 right-0 top-0 z-50 flex max-w-[100vw] flex-col border-l border-border bg-card text-card-foreground shadow-xl animate-in slide-in-from-right duration-150"
+    >
+      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border pl-5 pr-2">
+        <div className="min-w-0">
+          <h2 className="text-[13px] font-semibold leading-none">Agent</h2>
+          <label className="sr-only" htmlFor="agent-model">
+            Model
+          </label>
+          <select
+            id="agent-model"
+            value={model}
+            onChange={(e) => setModel(e.target.value as AIModelProvider)}
+            disabled={providerOptions.length === 0 || isGenerating}
+            className="mt-1 block max-w-[220px] cursor-pointer truncate bg-transparent p-0 font-mono text-[11px] leading-none text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground disabled:cursor-default"
           >
-            {tab === "describe" ? "Describe" : "Code"}
-          </button>
-        ))}
-      </div>
+            {providerOptions.length === 0 && <option value="">No AI provider configured</option>}
+            {providerOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center">
+          <IconButton label="Open the diagram code editor" text="Code" onClick={() => onOpenCode(false)}>
+            <Code2 size={14} />
+          </IconButton>
+          {hasRun && (
+            <IconButton label="Clear this run" onClick={onClear} disabled={isGenerating}>
+              <RotateCcw size={14} />
+            </IconButton>
+          )}
+          <IconButton label="Close the agent" onClick={onClose}>
+            <X size={15} />
+          </IconButton>
+        </div>
+      </header>
 
-      {mode === "code" ? (
-        <DiagramCodeEditor
-          elements={elements}
-          selectedElementIds={selectedElementIds}
-          onApply={onApplyDiagramCode}
-          disabled={disabled}
-        />
-      ) : (
-      <>
-      {/* Messages / Suggestions */}
-      <div className="flex-1 flex flex-col min-h-0">
-        {!hasMessages ? (
-          /* Empty state: suggestions */
-          <div className="flex-1 flex flex-col justify-center p-5 space-y-5">
-            <div className="text-center space-y-1.5">
-              <p className="text-sm font-medium text-foreground">
-                What would you like to build?
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Describe a diagram and the AI will create it on your canvas.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => handleSuggestionClick(s)}
-                  disabled={disabled || isGenerating}
-                  className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground transition-all border border-transparent hover:border-border hover:bg-muted/50 hover:text-foreground disabled:opacity-50 cursor-pointer"
-                >
-                  <ChevronRight
-                    size={12}
-                    className="shrink-0 text-muted-foreground/50 group-hover:text-violet-500 transition-colors"
-                  />
-                  <span className="truncate">{s}</span>
-                </button>
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
+        {!hasRun ? (
+          <div className="px-5 py-5">
+            <p className="max-w-[34ch] text-[13px] leading-relaxed text-muted-foreground">
+              Describe a diagram. The agent builds it on the canvas step by step, shows what it is thinking, then reviews its own work and fixes what looks wrong.
+            </p>
+            <h3 className="mt-7 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Try</h3>
+            <ul className="mt-2 divide-y divide-border border-y border-border">
+              {EXAMPLES.map(({ tag, text }) => (
+                <li key={tag}>
+                  <button
+                    type="button"
+                    disabled={disabled || isGenerating}
+                    onClick={() => send(text)}
+                    className="flex w-full items-baseline gap-3 py-2.5 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none disabled:opacity-50"
+                  >
+                    <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{tag}</span>
+                    <span className="text-[13px] leading-snug text-foreground">{text}</span>
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         ) : (
-          /* Chat messages */
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto p-4 space-y-3"
-          >
-            {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
-            ))}
-            {isGenerating && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse pl-1">
-                <Loader2 size={12} className="animate-spin" />
-                <span>Working...</span>
-              </div>
+          <>
+            {prompt && (
+              <RequestBlock prompt={prompt} />
             )}
-          </div>
+            <div className="pt-4">
+              <AITimeline
+                messages={messages}
+                working={isGenerating ? (workingLabel ?? "") : null}
+                closingActions={
+                  finished ? (
+                    <>
+                      <ActionButton onClick={() => onOpenCode(true)}>
+                        <Code2 size={13} />
+                        Open as code
+                      </ActionButton>
+                      <ActionButton onClick={onFitToScreen}>
+                        <Maximize size={13} />
+                        Fit to view
+                      </ActionButton>
+                    </>
+                  ) : undefined
+                }
+              />
+            </div>
+          </>
         )}
       </div>
 
-      {/* Input */}
-      <div className="border-t border-border p-3 shrink-0">
-        <div className="flex items-end gap-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(input);
+        }}
+        className="shrink-0 border-t border-border p-3"
+      >
+        <div className="rounded-lg border border-input bg-background transition-colors focus-within:border-foreground/40">
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isGenerating
-                ? "Generating..."
-                : "Describe your diagram..."
-            }
-            rows={1}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                send(input);
+              }
+            }}
+            aria-label="Describe your diagram"
+            placeholder={isGenerating ? "The agent is working…" : hasRun ? "Describe another diagram…" : "Describe your diagram…"}
+            rows={2}
             disabled={disabled || isGenerating}
-            className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 disabled:opacity-50 transition-all shadow-sm max-h-32 min-h-[40px]"
+            className="block max-h-40 min-h-[52px] w-full resize-none bg-transparent px-3 pt-2.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || disabled || isGenerating}
-            className="shrink-0 h-10 w-10 flex items-center justify-center rounded-xl bg-violet-600 hover:bg-violet-700 text-primary-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm cursor-pointer"
-          >
-            {isGenerating ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Send size={16} />
-            )}
-          </button>
+          <div className="flex items-center justify-between px-2 pb-2 pl-3">
+            <span className="font-mono text-[10px] text-muted-foreground">Enter to send · Shift+Enter for a new line</span>
+            <button
+              type="submit"
+              aria-label="Send"
+              disabled={!input.trim() || disabled || isGenerating}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ArrowUp size={15} strokeWidth={2.25} />
+            </button>
+          </div>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
-          Press <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[9px] border border-border">Enter</kbd> to send, <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[9px] border border-border">Shift+Enter</kbd> for newline
-        </p>
-      </div>
-      </>
-      )}
-    </div>
+      </form>
+    </aside>
   );
 };
-
-// ─── Chat Message Bubble ──────────────────────────────────────────────────────
-
-function ChatMessage({ message }: { message: AIChatMessage }) {
-  const isUser = message.role === "user";
-
-  const icon = (() => {
-    switch (message.kind) {
-      case "error":
-        return <AlertCircle size={14} className="text-destructive shrink-0" />;
-      case "success":
-        return <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />;
-      case "element":
-        return <Loader2 size={14} className="text-violet-400 shrink-0 animate-spin" />;
-      default:
-        return null;
-    }
-  })();
-
-  if (isUser) {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-violet-600 px-3.5 py-2 text-sm text-primary-foreground whitespace-pre-wrap break-words">
-          {message.content}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex gap-2 items-start">
-      <div className="mt-0.5">
-        {icon || (
-          <div className="w-3.5 h-3.5 rounded-full bg-violet-500/20 border border-violet-500/30 shrink-0" />
-        )}
-      </div>
-      <div className="max-w-[85%] min-w-0">
-        {message.phase && (
-          <span className="text-[10px] font-medium uppercase tracking-wider text-violet-500/80 mb-0.5 block">
-            {formatPhaseName(message.phase)}
-          </span>
-        )}
-        <p
-          className={`text-sm whitespace-pre-wrap break-words leading-relaxed ${
-            message.kind === "error"
-              ? "text-destructive"
-              : message.kind === "success"
-                ? "text-emerald-600 dark:text-emerald-400 font-medium"
-                : "text-foreground/80"
-          }`}
-        >
-          {message.content}
-        </p>
-      </div>
-    </div>
-  );
-}

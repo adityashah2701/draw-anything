@@ -24,7 +24,15 @@ export interface ParsedNode {
   shape?: "diamond" | "pill" | "icon";
   /** #rrggbb */
   color?: string;
+  /** Top-left corner and size in canvas units; when given, the node is drawn exactly there. */
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 }
+
+/** A side of a node a connection can leave or enter by. */
+export type EdgeSide = "top" | "right" | "bottom" | "left";
 
 export interface ParsedEdge {
   from: string;
@@ -35,6 +43,9 @@ export interface ParsedEdge {
   /** `-` / `--`: a line with no arrowhead. */
   plain?: boolean;
   color?: string;
+  /** Side of the source node the connection leaves by / side of the target it enters by. */
+  fromSide?: EdgeSide;
+  toSide?: EdgeSide;
   line: number;
 }
 

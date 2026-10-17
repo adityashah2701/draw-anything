@@ -6,7 +6,7 @@ import type { AgentMessage, ModelTurn, ToolCall, ToolTransport } from "../types"
 import { buildCanvas, diffElements, type BuiltCanvas, type CanvasDiff } from "./canvas";
 import { buildStateMessage } from "./prompt";
 import { reportCanvas, type CanvasReport } from "./report";
-import { addLines, adjust, createState, describeMoved, type BuilderState } from "./state";
+import { addLines, adjust, createState, describeFlow, describeMoved, type BuilderState } from "./state";
 
 /** Each turn is a model call, and free tiers allow few calls a minute: keep the default small. */
 const DEFAULT_MAX_TURNS = 12;
@@ -22,12 +22,16 @@ export interface CanvasUpdate extends CanvasDiff {
   elements: DrawingElement[];
 }
 
-export type BuilderStep =
-  | { kind: "add"; turn: number; summary: string }
-  | { kind: "adjust"; turn: number; summary: string }
-  | { kind: "icons"; turn: number; summary: string }
-  | { kind: "view"; turn: number; summary: string }
-  | { kind: "review"; turn: number; summary: string; problems: string[] };
+/** What the agent did or found at a step, with the facts behind it; the stream turns these into the panel's timeline. */
+export type BuilderNote = { turn: number } & (
+  | { kind: "reasoning"; text: string }
+  | { kind: "icons"; terms: string }
+  | { kind: "add"; added: string[]; nodes: number; edges: number; flow: string; layout: string; skipped: number }
+  | { kind: "adjust"; applied: string[]; failed: string[] }
+  | { kind: "undo"; reason: string; undone: string[] }
+  | { kind: "review"; problems: string[]; round: number }
+  | { kind: "view" }
+);
 
 export interface BuilderInput {
   transport: ToolTransport;
@@ -45,7 +49,7 @@ export interface BuilderInput {
   retry?: Partial<RetryOptions>;
   /** Called as soon as a step changed the canvas, so the client can draw it before the next model call. */
   onCanvas?: (update: CanvasUpdate) => void | Promise<void>;
-  onStep?: (step: BuilderStep) => void;
+  onNote?: (note: BuilderNote) => void;
 }
 
 export interface BuilderResult {
@@ -57,6 +61,9 @@ export interface BuilderResult {
   reviews: number;
   /** The provider's quota or rate limit ended the run; what was built so far is kept. */
   stoppedByQuota: boolean;
+  /** Problems the report listed when the agent first asked to finish, and those still listed at the end. */
+  firstReviewProblems: number;
+  remainingProblems: string[];
   toolTrail: string[];
   transport: ToolTransport["kind"];
 }
@@ -93,6 +100,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
   let turn = 0;
   let finished = false;
   let stoppedByQuota = false;
+  let firstReviewProblems = 0;
 
   const redraw = async () => {
     live.built = buildCanvas(state, input.generationId, input.frameId);
@@ -159,10 +167,18 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
     }
     emptyTurns = 0;
 
+    // The model's own reasoning, when it gave any, is the most useful thing to show.
+    const reasoning = reply.text.replace(/<\/?tool[^>]*>/gi, "").trim();
+    if (reasoning) input.onNote?.({ kind: "reasoning", turn, text: reasoning.length > 700 ? `${reasoning.slice(0, 699)}…` : reasoning });
+
     const before = state;
     const scoreBefore = live.report?.score;
     let finishRequested = false;
     let lookupOnly = true;
+    let addedNow: string[] = [];
+    let skippedNow = 0;
+    let appliedNow: string[] = [];
+    let failedNow: string[] = [];
     for (const call of calls) {
       toolTrail.push(call.name);
       if (call.name !== "search_icons") lookupOnly = false;
@@ -170,7 +186,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
         case "search_icons": {
           const found = runTool(call).content;
           notes.push(found);
-          input.onStep?.({ kind: "icons", turn, summary: "Choosing icons" });
+          input.onNote?.({ kind: "icons", turn, terms: call.arg.trim().slice(0, 160) });
           break;
         }
         case "add": {
@@ -181,7 +197,8 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
             state = result.state;
             notes.push(result.added.length > 0 ? `Added ${result.added.join(", ")}.` : "That was already on the canvas.");
             if (result.skipped > 0) notes.push(`Only the first statements were used; ${result.skipped} more were left out. Add them next.`);
-            if (result.added.length > 0) input.onStep?.({ kind: "add", turn, summary: `Added ${result.added.slice(0, 3).join(", ")}${result.added.length > 3 ? "…" : ""}` });
+            addedNow = [...addedNow, ...result.added];
+            skippedNow += result.skipped;
           }
           break;
         }
@@ -189,13 +206,14 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
           const result = adjust(state, call.arg, live.built?.centres ?? NO_CENTRES);
           state = result.state;
           notes.push(...result.applied, ...result.errors.map((e) => `could not apply ${e}`));
-          if (result.applied.length > 0) input.onStep?.({ kind: "adjust", turn, summary: result.applied.slice(0, 2).join("; ") });
+          appliedNow = [...appliedNow, ...result.applied];
+          failedNow = [...failedNow, ...result.errors];
           break;
         }
         case "view":
           wantDetail = true;
           wantImage = Boolean(input.renderImage);
-          input.onStep?.({ kind: "view", turn, summary: "Looking at the canvas" });
+          input.onNote?.({ kind: "view", turn });
           break;
         case "finish":
           finishRequested = true;
@@ -207,6 +225,12 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
 
     if (state !== before) await redraw();
 
+    if (addedNow.length > 0 && live.report) {
+      const nodes = addedNow.filter((a) => !a.includes(" > ")).length;
+      input.onNote?.({ kind: "add", turn, added: addedNow, nodes, edges: addedNow.length - nodes, flow: describeFlow(state), layout: live.report.summary, skipped: skippedNow });
+    }
+    if (appliedNow.length > 0 || failedNow.length > 0) input.onNote?.({ kind: "adjust", turn, applied: appliedNow, failed: failedNow });
+
     // A tidy-up that made things worse is taken back, so a run of well-meant nudges cannot drift into a mess.
     const adjustedOnly = calls.some((c) => c.name === "adjust") && !calls.some((c) => c.name === "add");
     if ((input.guardAdjustments ?? true) && adjustedOnly && state !== before && state.code === before.code && scoreBefore && live.report) {
@@ -215,6 +239,12 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
       if (worse) {
         state = before;
         await redraw();
+        input.onNote?.({
+          kind: "undo",
+          turn,
+          undone: appliedNow,
+          reason: `It made the picture worse (problems ${scoreBefore.problems} → ${after.problems}, connectors ${Math.round(scoreBefore.connectorLength)} → ${Math.round(after.connectorLength)}px), so it was taken back.`,
+        });
         notes.push(
           `Undid that adjustment: it made the picture worse (problems ${scoreBefore.problems} -> ${after.problems}, connector length ${Math.round(scoreBefore.connectorLength)} -> ${Math.round(after.connectorLength)}px). Try something smaller, or a different fix.`,
         );
@@ -237,7 +267,8 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
         lastFinishKey = key;
         phase = "review";
         wantImage = Boolean(input.renderImage);
-        input.onStep?.({ kind: "review", turn, summary: `Reviewing: ${report.problems.length} thing${report.problems.length === 1 ? "" : "s"} to fix`, problems: report.problems });
+        if (reviews === 1) firstReviewProblems = report.problems.length;
+        input.onNote?.({ kind: "review", turn, problems: report.problems, round: reviews });
       }
     } else if (phase === "review" && state !== before && live.report && live.report.problems.length === 0) {
       notes.push("The problems list is empty now.");
@@ -250,5 +281,5 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
   }
 
   if (!live.built) throw new UnparseableModelOutputError("empty", "");
-  return { state, built: live.built, finished, turns: Math.min(turn, maxTurns), reviews, stoppedByQuota, toolTrail, transport: transport.kind };
+  return { state, built: live.built, finished, turns: Math.min(turn, maxTurns), reviews, stoppedByQuota, toolTrail, transport: transport.kind, firstReviewProblems, remainingProblems: live.report?.problems ?? [] };
 };

@@ -39,6 +39,8 @@ interface FloatingPropertiesPanelProps {
   onArrowHeadEndChange: (value: boolean) => void;
   disabled?: boolean;
   hasSelection: boolean;
+  /** Width (px) of the side panels over the right edge; the bar is centred in what is left. */
+  rightInset?: number;
 }
 
 const FloatingPropertiesPanel: React.FC<FloatingPropertiesPanelProps> = ({
@@ -63,6 +65,7 @@ const FloatingPropertiesPanel: React.FC<FloatingPropertiesPanelProps> = ({
   onArrowHeadEndChange,
   disabled = false,
   hasSelection,
+  rightInset = 0,
 }) => {
   if (!hasSelection) return null;
 
@@ -75,7 +78,8 @@ const FloatingPropertiesPanel: React.FC<FloatingPropertiesPanelProps> = ({
 
   return (
     <div
-      className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-border bg-popover/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2 duration-150 text-foreground pointer-events-auto flex items-center gap-2 ${
+      style={{ left: `calc((100vw - ${rightInset}px) / 2)` }}
+      className={`fixed bottom-6 z-50 -translate-x-1/2 rounded-xl border border-border bg-popover/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2 duration-150 text-foreground pointer-events-auto flex items-center gap-2 ${
         disabled ? "opacity-75" : ""
       }`}
     >

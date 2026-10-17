@@ -1,4 +1,5 @@
 import { Eye, EyeOff } from "lucide-react";
+import { usePanelInset } from "@/features/whiteboard/components/overlays/panel-layout";
 import TopToolbar from "@/features/whiteboard/components/chrome/top-toolbar";
 import FloatingPropertiesPanel from "@/features/whiteboard/components/chrome/floating-properties-panel";
 import Sidebar from "@/features/whiteboard/components/chrome/sidebar";
@@ -41,13 +42,15 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
     handleArrowHeadStartChange,
     handleArrowHeadEndChange,
   } = controller;
+  // The open side panels cover the right edge: what floats on the canvas stays in what they leave free.
+  const panelInset = usePanelInset(controller.showAIModal, controller.showCodePanel);
 
   return (
     <>
       <div
-        className={`absolute right-4 z-[70] transition-all ${
-          hideCanvasUi ? "top-4" : "top-16"
-        }`}
+        className={`absolute z-[70] transition-all ${hideCanvasUi ? "top-4" : "top-16"}`}
+        // Beside the open panels, not on top of them.
+        style={{ right: panelInset + 16 }}
       >
         <button
           onClick={() => setHideCanvasUi((prev: boolean) => !prev)}
@@ -107,6 +110,7 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
           onArrowHeadEndChange={handleArrowHeadEndChange}
           disabled={!whiteboardAccess.hasEditAccess}
           hasSelection={controller.selectedElements.length > 0}
+          rightInset={panelInset}
         />
       )}
 
@@ -116,6 +120,7 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
           onToolChange={controller.setCurrentTool}
           disabled={!whiteboardAccess.hasEditAccess}
           onOpenAIPanel={handleGenerateDiagram}
+          onOpenCodePanel={() => controller.setShowCodePanel(true)}
           onOpenIconPicker={() => controller.setShowIconPicker(true)}
         />
       )}

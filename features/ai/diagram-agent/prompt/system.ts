@@ -14,6 +14,7 @@ export const LANGUAGE = `Diagram code (one statement per line; // starts a comme
   A > B                        solid arrow     A < B reversed     A <> B both ways     A --> B dashed
   A > B > C                    chains          A, B > C, D    every left node to every right node
   A > B: HTTPS                 a label on the connection
+  A > B: [from: right, to: left]   which side it leaves and enters (top, right, bottom, left); needed only to separate lines that overlap
   Group Name { ... }           a group; nodes declared inside belong to it; groups can nest
 Names must be unique. Quote names that contain punctuation: "Auth (v2)" > Users.`;
 

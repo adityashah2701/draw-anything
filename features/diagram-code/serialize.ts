@@ -3,7 +3,7 @@ import type { AIDiagramType } from "@/features/ai/types";
 export interface SerializableGraph {
   diagramType?: AIDiagramType;
   title?: string;
-  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: "diamond" | "pill" | "icon"; color?: string }>;
+  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: "diamond" | "pill" | "icon"; color?: string; x?: number; y?: number; width?: number; height?: number }>;
   edges: Array<{
     from: string;
     to: string;
@@ -12,6 +12,8 @@ export interface SerializableGraph {
     bidirectional?: boolean;
     plain?: boolean;
     color?: string;
+    fromSide?: "top" | "right" | "bottom" | "left";
+    toSide?: "top" | "right" | "bottom" | "left";
   }>;
   groups: Array<{ id: string; label: string; nodeIds: string[] }>;
 }
@@ -61,6 +63,11 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
     // A kind already implies its shape (decision: diamond, start/end: pill), so only say it when it adds something.
     if (node.shape && node.shape !== IMPLIED_SHAPE[node.kind ?? ""]) props.push(`shape: ${node.shape}`);
     if (node.color) props.push(`color: ${node.color}`);
+    // Where it is and how big, so the code can reproduce the picture exactly.
+    if (node.x !== undefined) props.push(`x: ${Math.round(node.x)}`);
+    if (node.y !== undefined) props.push(`y: ${Math.round(node.y)}`);
+    if (node.width !== undefined) props.push(`w: ${Math.round(node.width)}`);
+    if (node.height !== undefined) props.push(`h: ${Math.round(node.height)}`);
     if (clean(node.label) !== name) props.push(`label: "${clean(node.label)}"`);
     return props.length > 0 ? `${writeName(name)} [${props.join(", ")}]` : writeName(name);
   };
@@ -124,8 +131,13 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
   const edgeLines = graph.edges
     .filter((edge) => known.has(edge.from) && known.has(edge.to))
     .map((edge) => {
-      const color = edge.color ? ` [color: ${edge.color}]` : "";
-      const label = edge.label ? `: ${clean(edge.label)}${color}` : color ? `:${color}` : "";
+      const edgeProps = [
+        ...(edge.color ? [`color: ${edge.color}`] : []),
+        ...(edge.fromSide ? [`from: ${edge.fromSide}`] : []),
+        ...(edge.toSide ? [`to: ${edge.toSide}`] : []),
+      ];
+      const props = edgeProps.length > 0 ? ` [${edgeProps.join(", ")}]` : "";
+      const label = edge.label ? `: ${clean(edge.label)}${props}` : props ? `:${props}` : "";
       return `${writeName(nameOf.get(edge.from)!)} ${connectorFor(edge)} ${writeName(nameOf.get(edge.to)!)}${label}`;
     });
   if (edgeLines.length > 0) {

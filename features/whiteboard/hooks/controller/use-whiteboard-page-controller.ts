@@ -40,6 +40,7 @@ import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whit
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { aiAnchorShift, planDiagramCode, shiftElement } from "./diagram-placement";
 import { useEditingText } from "./use-editing-text";
+import { coveredByPanels } from "@/features/whiteboard/components/overlays/panel-layout";
 import { useSelectedArrow } from "./use-selected-arrow";
 import { useSelectionStyle } from "./use-selection-style";
 import { createGestureHistory } from "@/features/whiteboard/hooks/interaction/gesture-history";
@@ -212,8 +213,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       return;
     }
 
-    canvasViewport.fitToBounds({ minX, minY, maxX, maxY });
-  }, [elements, getElementBounds, canvasViewport]);
+    canvasViewport.fitToBounds({ minX, minY, maxX, maxY }, { rightInset: coveredByPanels(uiState.showAIModal, uiState.showCodePanel) });
+  }, [elements, getElementBounds, canvasViewport, uiState.showAIModal, uiState.showCodePanel]);
 
   const magneticSnap = useMagneticSnap({
     elements,
@@ -640,6 +641,12 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "insert-icon":
           uiState.setShowIconPicker(true);
           break;
+        case "open-agent":
+          uiState.setShowAIModal(true);
+          break;
+        case "open-code":
+          uiState.setShowCodePanel(true);
+          break;
         case "copy-image":
           void boardExport.copyImage(selectedElements.length > 0).then((message) => message && toast.error(message));
           break;
@@ -728,6 +735,9 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [updateElements],
   );
 
+  const fitToScreenRef = useRef(handleFitToScreen);
+  fitToScreenRef.current = handleFitToScreen;
+
   const aiState = useAIGeneration({
     onAddElement: handleAddAIElement,
     onUpdateElements: handleUpdateAIElements,
@@ -735,6 +745,11 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     onBeforeBatch: anchorAIShift,
     onGenerationStart: () => {
       aiShiftRef.current = null;
+    },
+    // Once it is drawn, bring it into the part of the canvas the panels leave free. A moment later, so the
+    // board holds the finished diagram, and through a ref, since this callback is from when the run began.
+    onGenerationEnd: () => {
+      setTimeout(() => fitToScreenRef.current(), 300);
     },
     whiteboardId,
     getCanvasContext: getAICanvasContext,
@@ -766,7 +781,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       }
 
       setSelectedElements((prev) => prev.filter((id) => !replaceIds.includes(id)));
-      if (fit) setTimeout(() => canvasViewport.fitToBounds(fit), 0);
+      if (fit) setTimeout(() => canvasViewport.fitToBounds(fit, { rightInset: coveredByPanels(uiState.showAIModal, uiState.showCodePanel) }), 0);
     },
     [
       addElement,
@@ -775,6 +790,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       elements,
       gestureHistory,
       whiteboardAccess.hasEditAccess,
+      uiState.showAIModal,
+      uiState.showCodePanel,
     ],
   );
 

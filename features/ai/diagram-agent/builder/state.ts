@@ -300,3 +300,31 @@ export const describeMoved = (state: BuilderState): string[] => {
     .filter(([id, o]) => name.has(id) && (Math.abs(o.dx) >= 1 || Math.abs(o.dy) >= 1))
     .map(([id, o]) => `${name.get(id)} (${o.dx >= 0 ? "+" : ""}${Math.round(o.dx)}, ${o.dy >= 0 ? "+" : ""}${Math.round(o.dy)})`);
 };
+
+/**
+ * How the diagram reads, in one line: the longest path from an entry point, and where it branches.
+ * A real description of the structure, so what the agent shows about its own work is not decoration.
+ */
+export const describeFlow = (state: BuilderState): string => {
+  const { nodes, edges } = state.parsed;
+  if (nodes.length === 0) return "";
+  const name = new Map(nodes.map((n) => [n.id, n.name]));
+  const next = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
+  const incoming = new Map(nodes.map((n) => [n.id, 0]));
+  for (const e of edges) {
+    next.get(e.from)?.push(e.to);
+    incoming.set(e.to, (incoming.get(e.to) ?? 0) + 1);
+  }
+  const best: string[] = [];
+  const walk = (id: string, path: string[]) => {
+    if (path.length > best.length) best.splice(0, best.length, ...path);
+    if (path.length > 12) return;
+    for (const to of next.get(id) ?? []) if (!path.includes(to)) walk(to, [...path, to]);
+  };
+  const sources = nodes.filter((n) => (incoming.get(n.id) ?? 0) === 0);
+  for (const n of sources.length > 0 ? sources : nodes.slice(0, 1)) walk(n.id, [n.id]);
+  const shown = best.slice(0, 6).map((id) => name.get(id)).join(" → ");
+  const more = best.length > 6 ? ` (+${best.length - 6} more)` : "";
+  const branches = nodes.filter((n) => new Set(next.get(n.id)).size > 1).map((n) => n.name);
+  return `${shown}${more}${branches.length > 0 ? `; it branches at ${branches.slice(0, 3).join(", ")}${branches.length > 3 ? "…" : ""}` : ""}`;
+};

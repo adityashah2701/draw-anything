@@ -51,8 +51,8 @@ describe.skipIf(process.env.AI_EVAL !== "1")("live builder evaluation", () => {
               generationId: "eval",
               frameId: "eval",
               renderImage: useVision ? async (els) => (await import("../builder/render-png")).renderCanvasPng(els) : undefined,
-              onStep: (step) => {
-                if (step.kind === "review") firstProblems.push(step.problems);
+              onNote: (note) => {
+                if (note.kind === "review") firstProblems.push(note.problems);
               },
             });
             rows.push({ pipeline, prompt: golden.id, ms: Date.now() - t0, score: scoreDiagram(result.built.document, result.built.elements, golden) });

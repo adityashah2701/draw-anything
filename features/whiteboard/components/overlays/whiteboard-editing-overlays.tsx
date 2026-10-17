@@ -5,6 +5,7 @@ import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text
 import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
 import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
 import { AIPanel } from "@/features/whiteboard/components/overlays/ai-panel";
+import { DiagramCodePanel } from "@/features/whiteboard/components/overlays/diagram-code-panel";
 import { ExportDialog } from "@/features/whiteboard/components/overlays/export-dialog";
 import { CommandMenu } from "@/features/whiteboard/components/overlays/command-menu";
 import { DrawingElementJson } from "@/liveblocks.config";
@@ -346,10 +347,22 @@ export const WhiteboardEditingOverlays = ({
         triggerAIGeneration={controller.triggerAIGeneration}
         isGenerating={controller.isAIGenerating}
         messages={controller.aiMessages}
+        workingLabel={controller.aiThoughtPhase}
         disabled={!whiteboardAccess.hasEditAccess}
+        onClear={controller.clearAIMessages}
+        onOpenCode={controller.openCodePanel}
+        onFitToScreen={controller.handleFitToScreen}
+      />
+
+      <DiagramCodePanel
+        isOpen={controller.showCodePanel}
+        onClose={() => controller.setShowCodePanel(false)}
+        agentOpen={showAIModal}
         elements={controller.elements}
         selectedElementIds={controller.selectedElements}
-        onApplyDiagramCode={controller.applyDiagramCode}
+        onApply={controller.applyDiagramCode}
+        loadToken={controller.codeLoadToken}
+        disabled={!whiteboardAccess.hasEditAccess}
       />
 
       <ExportDialog

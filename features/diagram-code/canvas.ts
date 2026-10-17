@@ -7,6 +7,7 @@ import {
 import type { AIDiagramType, AIModelProvider } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { tint } from "@/core/color/named-colors";
+import { parseAnchorSide } from "@/core/anchors/generate-anchors";
 import { parseDiagramCode } from "./parse";
 import type { SerializableGraph } from "./serialize";
 import type { NodePin } from "@/features/ai/server/layout/pins";
@@ -25,7 +26,7 @@ export const documentFromParsedCode = (
   meta: { prompt?: string; provider?: AIModelProvider; modelName?: string } = {},
 ) => {
   const { graph, warnings } = normalizeModelGraphDraftDetailed({
-    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon, shape: node.shape, color: node.color })),
+    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon, shape: node.shape, color: node.color, x: node.x, y: node.y, width: node.width, height: node.height })),
     edges: parsed.edges.map((edge) => ({
       from: edge.from,
       to: edge.to,
@@ -34,6 +35,8 @@ export const documentFromParsedCode = (
       bidirectional: edge.bidirectional,
       plain: edge.plain,
       color: edge.color,
+      fromSide: edge.fromSide,
+      toSide: edge.toSide,
     })),
     groups: parsed.groups.map((group) => ({ id: group.id, label: group.label, nodeIds: group.nodeIds })),
   });
@@ -105,6 +108,23 @@ const boundsOf = (element: DrawingElement) => ({
  * is exactly `tint(color, 0.88)`; kind and default colours use hand-picked fills, so that pair is the
  * signature of a custom colour and nothing else needs to be remembered.
  */
+/** Where a node is and how big, in whole canvas units. */
+const layoutOf = (el: DrawingElement) => {
+  const b = boundsOf(el);
+  return { x: Math.round(b.minX), y: Math.round(b.minY), width: Math.round(b.maxX - b.minX), height: Math.round(b.maxY - b.minY) };
+};
+
+/** An explicit line colour: not the black (white in the dark theme) the agent draws, nor the tool's default grey. */
+const customEdgeColor = (el: DrawingElement): string | undefined =>
+  el.color && /^#[0-9a-f]{6}$/i.test(el.color) && !["#000000", "#ffffff", "#475569"].includes(el.color.toLowerCase()) ? el.color.toLowerCase() : undefined;
+
+/** The sides a connection leaves and enters by, from its anchors; swapped back when the arrow was drawn reversed. */
+const sidesOf = (arrow: { startConnection?: { anchorId?: string }; endConnection?: { anchorId?: string } }, reversed: boolean) => {
+  const start = arrow.startConnection?.anchorId ? parseAnchorSide(arrow.startConnection.anchorId) : undefined;
+  const end = arrow.endConnection?.anchorId ? parseAnchorSide(arrow.endConnection.anchorId) : undefined;
+  return reversed ? { fromSide: end ?? undefined, toSide: start ?? undefined } : { fromSide: start ?? undefined, toSide: end ?? undefined };
+};
+
 const customColorOf = (el: DrawingElement): string | undefined => {
   if (!el.fill || !el.color || !/^#[0-9a-f]{6}$/i.test(el.color) || el.fill !== tint(el.color, 0.88)) return undefined;
   const byKind = kindColors(el.ai?.semanticKind);
@@ -123,7 +143,13 @@ export interface GraphFromElements {
  * two of them are connections, and generated group frames become groups.
  * Anything else (notes, drawings, dangling arrows) is ignored and left alone.
  */
-export const graphFromElements = (elements: DrawingElement[]): GraphFromElements => {
+export const graphFromElements = (
+  elements: DrawingElement[],
+  { layout = false }: {
+    /** Also write where each node is and how big, and which sides the connections use. */
+    layout?: boolean;
+  } = {},
+): GraphFromElements => {
   const consumed = new Set<string>();
   const nodeElements = elements.filter(
     (el) =>
@@ -132,6 +158,9 @@ export const graphFromElements = (elements: DrawingElement[]): GraphFromElements
       el.ai?.role !== "group" &&
       el.points.length >= 2,
   );
+
+  // With positions the code reads top to bottom, left to right, like the picture.
+  if (layout) nodeElements.sort((a, b) => boundsOf(a).minY - boundsOf(b).minY || boundsOf(a).minX - boundsOf(b).minX);
 
   let unlabeled = 0;
   const idOfElement = new Map<string, string>();
@@ -146,6 +175,7 @@ export const graphFromElements = (elements: DrawingElement[]): GraphFromElements
       icon: el.ai?.icon,
       shape: el.type === "diamond" || el.type === "pill" || el.type === "icon" ? el.type : undefined,
       color: customColorOf(el),
+      ...(layout ? layoutOf(el) : {}),
     };
   });
 
@@ -156,8 +186,8 @@ export const graphFromElements = (elements: DrawingElement[]): GraphFromElements
   for (const el of elements) {
     if (el.type !== "arrow" && el.type !== "arrow-bidirectional") continue;
     const arrow = el as DrawingElement & {
-      startConnection?: { elementId: string };
-      endConnection?: { elementId: string };
+      startConnection?: { elementId: string; anchorId?: string };
+      endConnection?: { elementId: string; anchorId?: string };
       arrowHeadStart?: boolean;
       arrowHeadEnd?: boolean;
       dashed?: boolean;
@@ -176,6 +206,8 @@ export const graphFromElements = (elements: DrawingElement[]): GraphFromElements
       dashed: arrow.dashed || undefined,
       bidirectional: both ? true : undefined,
       plain: arrow.arrowHeadEnd === false && !arrow.arrowHeadStart ? true : undefined,
+      color: customEdgeColor(el),
+      ...(layout ? sidesOf(arrow, Boolean(reversed)) : {}),
     });
     consumed.add(el.id);
     if (label) consumed.add(label.id);

@@ -5,7 +5,8 @@ import {
   MousePointer,
   Eraser,
   Hand,
-  Sparkles,
+  Bot,
+  Code2,
   Shapes,
   RectangleHorizontal,
   MessageSquare,
@@ -26,6 +27,7 @@ interface SidebarProps {
   onToolChange: (tool: Tool) => void;
   disabled?: boolean;
   onOpenAIPanel?: () => void;
+  onOpenCodePanel?: () => void;
   onOpenIconPicker?: () => void;
 }
 
@@ -34,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onToolChange,
   disabled = false,
   onOpenAIPanel,
+  onOpenCodePanel,
   onOpenIconPicker,
 }) => {
   const allTools = getToolDefinitions();
@@ -128,22 +131,36 @@ const Sidebar: React.FC<SidebarProps> = ({
     <div className="absolute left-0 top-0 bottom-0 w-[52px] bg-card border-r border-border flex flex-col items-center py-3 justify-between z-50 pointer-events-auto shadow-2xl">
       {/* Top tools section */}
       <div className="flex flex-col items-center gap-3 w-full px-2">
-        {/* AI sparkle button at the top */}
+        {/* The two ways to make a diagram without drawing it: describe it, or write it. */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={onOpenAIPanel}
               disabled={disabled}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all bg-violet-600 text-foreground hover:bg-violet-500 shadow-lg cursor-pointer ${
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors bg-primary text-primary-foreground hover:opacity-85 cursor-pointer ${
                 disabled ? "opacity-50 cursor-not-allowed" : ""
               }`}
-              aria-label="Generate AI Diagram"
+              aria-label="Open the AI agent"
             >
-              <Sparkles size={18} className="animate-pulse" />
+              <Bot size={18} />
             </button>
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={12} className="bg-popover border border-border text-foreground">
-            Generate AI Diagram ✨
+            AI agent
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={onOpenCodePanel}
+              className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+              aria-label="Open the diagram code editor"
+            >
+              <Code2 size={18} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={12} className="bg-popover border border-border text-foreground">
+            Diagram code
           </TooltipContent>
         </Tooltip>
 

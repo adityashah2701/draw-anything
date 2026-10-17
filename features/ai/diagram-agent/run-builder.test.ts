@@ -40,10 +40,19 @@ describe("streamDiagramBuilderEvents", () => {
     expect(types.indexOf("element.remove")).toBeGreaterThan(types.indexOf("element.update"));
   });
 
-  it("reports each step as a phase the chat can show", async () => {
-    const events = await collect([turn(call("add", "A > B")), turn(call("finish"))]);
-    const messages = events.filter((e) => e.type === "phase.completed").map((e) => ("message" in e ? e.message : ""));
-    expect(messages.some((m) => /Added A/.test(m))).toBe(true);
+  it("reports each step as a note for the timeline, with the facts behind it", async () => {
+    const events = await collect([
+      { text: "Putting the entry point first so the flow reads top to bottom.", toolCalls: [call("add", "Start > Check\nCheck > Done")] },
+      turn(call("finish")),
+    ]);
+    const notes = events.filter((e): e is Extract<AIStreamEvent, { type: "agent.note" }> => e.type === "agent.note").map((e) => e.note);
+    expect(notes[0]).toMatchObject({ kind: "reasoning", text: expect.stringContaining("entry point first") });
+    const add = notes.find((n) => n.kind === "add")!;
+    expect(add.title).toBe("Added 3 components and 2 connections");
+    expect(add.items).toEqual(expect.arrayContaining(["Start", "Check", "Start > Check"]));
+    expect(add.text).toMatch(/It reads: Start → Check → Done/);
+    expect(notes.at(-1)).toMatchObject({ kind: "summary" });
+    expect(notes.at(-1)?.title).toMatch(/^Done: 3 components and 2 connections/);
   });
 
   it("ends with the final graph and the element count on frame.done", async () => {
@@ -93,7 +102,7 @@ describe("streamDiagramBuilderEvents when the quota runs out", () => {
     const events: AIStreamEvent[] = [];
     for await (const e of streamDiagramBuilderEvents({ request: { prompt: "x", provider: "groq" }, transport, revealMs: 0 })) events.push(e);
     expect(events.at(-1)?.type).toBe("frame.done");
-    expect(events.some((e) => e.type === "phase.completed" && /quota or rate limit/.test(e.message))).toBe(true);
+    expect(events.some((e) => e.type === "agent.note" && e.note.kind === "stopped" && /quota or rate limit/.test(e.note.text ?? ""))).toBe(true);
     expect(events.some((e) => e.type === "element.batch")).toBe(true);
   });
 });

@@ -42,6 +42,7 @@ export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], conte
     LANGUAGE,
     "",
     "How you work:",
+    "0. Start every reply with one or two plain sentences saying what you are about to do and why: the structure you chose, a trade-off, what you noticed on the canvas. The person watching reads them as your thinking, so make them specific (\"Grouping the data stores so the backend reads as one block\"), never filler (\"Let me add the next part\"). Then make your tool calls.",
     `1. Build in steps. Each turn look at the canvas and add the NEXT part: several nodes with their connections, or a group (at most ${MAX_ADD_STATEMENTS} statements). Start at the entry point and follow the flow. Large diagrams take two or three steps, not one.`,
     "2. Give nodes icons that say what they are (call search_icons once for all you need). For architecture, network and IoT pictures use bare icons (shape: icon); use boxes for steps, decisions and long names.",
     "3. When the structure is complete, polish. Read the Problems list: each names the connections or nodes involved. Fix them with adjust, for example:",

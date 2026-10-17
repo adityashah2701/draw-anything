@@ -42,18 +42,28 @@ const ZOOM_STEP = 1.2;
 export const fitView = (
   bounds: { minX: number; minY: number; maxX: number; maxY: number },
   size: { width: number; height: number },
-  { padding = FIT_PADDING, maxZoom = FIT_MAX_ZOOM }: { padding?: number; maxZoom?: number } = {},
+  {
+    padding = FIT_PADDING,
+    maxZoom = FIT_MAX_ZOOM,
+    rightInset = 0,
+  }: {
+    padding?: number;
+    maxZoom?: number;
+    /** Width (px) of what covers the right edge (side panels): the drawing is fitted into what is left. */
+    rightInset?: number;
+  } = {},
 ): View | null => {
-  if (size.width <= 0 || size.height <= 0) return null;
+  const visible = { width: Math.max(0, size.width - rightInset), height: size.height };
+  if (visible.width <= 0 || visible.height <= 0) return null;
   const width = Math.max(1, bounds.maxX - bounds.minX);
   const height = Math.max(1, bounds.maxY - bounds.minY);
   const zoom = Math.max(
     MIN_ZOOM,
-    Math.min(maxZoom, (size.width - padding * 2) / width, (size.height - padding * 2) / height),
+    Math.min(maxZoom, (visible.width - padding * 2) / width, (visible.height - padding * 2) / height),
   );
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
-  return { zoom, panOffset: { x: size.width / 2 - cx * zoom, y: size.height / 2 - cy * zoom } };
+  return { zoom, panOffset: { x: visible.width / 2 - cx * zoom, y: visible.height / 2 - cy * zoom } };
 };
 
 export interface WheelLike {

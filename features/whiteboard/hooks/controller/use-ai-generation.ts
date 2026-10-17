@@ -10,6 +10,7 @@ import {
   AIDiagramValidationReport,
   AICriticNote,
   AIWorkflowPhase,
+  AgentNote,
 } from "@/features/ai/types";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { toUserFacingMessage } from "@/features/ai/server/errors";
@@ -26,7 +27,11 @@ export interface AIChatMessage {
   content: string;
   phase?: AIWorkflowPhase;
   timestamp: number;
-  kind: "prompt" | "phase" | "element" | "error" | "success" | "thought";
+  kind: "prompt" | "phase" | "element" | "error" | "success" | "thought" | "note";
+  /** `note` messages: what the agent did or found (title), the facts behind it (items) and its kind. */
+  title?: string;
+  items?: string[];
+  noteKind?: AgentNote["kind"];
 }
 
 interface UseAIGenerationOptions {
@@ -137,12 +142,7 @@ export const useAIGeneration = ({
         case "frame.created":
           setAiFrameId(event.frame.frameId);
           activeFrameIdRef.current = event.frame.frameId;
-          setAiThoughtPhase("AI frame created");
-          addChatMessage({
-            role: "agent",
-            content: "AI Agent started. Analyzing your request...",
-            kind: "phase",
-          });
+          setAiThoughtPhase("Reading the request");
           persist(
             createAIFrame({
               frameId: event.frame.frameId,
@@ -286,6 +286,19 @@ export const useAIGeneration = ({
           });
           return false;
         }
+        case "agent.note":
+          setAiFrameId(event.frameId);
+          activeFrameIdRef.current = event.frameId;
+          setAiThoughtPhase(event.note.title);
+          addChatMessage({
+            role: "agent",
+            kind: "note",
+            noteKind: event.note.kind,
+            title: event.note.title,
+            content: event.note.text ?? "",
+            items: event.note.items,
+          });
+          return false;
         case "element.update":
           setAiFrameId(event.frameId);
           activeFrameIdRef.current = event.frameId;

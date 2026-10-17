@@ -127,7 +127,7 @@ suite("editor comments", () => {
     await list.waitFor();
     expect(await list.getByRole("option").allTextContents()).toEqual(["Sam Rivera"]); // Alex does not match "sa"
     await s.press("Enter"); // chooses, does not send
-    expect(await s.page.locator("textarea").inputValue()).toBe("ping @Sam Rivera ");
+    expect(await s.page.getByRole("textbox", { name: "Add a comment…" }).inputValue()).toBe("ping @Sam Rivera ");
     await s.type("please review");
     await s.press("Enter");
     await s.page.getByRole("dialog", { name: "Comment thread" }).waitFor();

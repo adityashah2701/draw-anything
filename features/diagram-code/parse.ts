@@ -17,8 +17,15 @@ type Connector = "<-->" | "-->" | "<>" | "--" | ">" | "<" | "-";
 const CONNECTORS: Connector[] = ["<-->", "-->", "<>", "--", ">", "<", "-"];
 
 const UNSUPPORTED_PROPS = new Set(["colormode", "stylemode", "typeface", "icon-color"]);
-/** A trailing `[color: x]` on a connection, after its optional label. */
-const EDGE_COLOR_PROP = /\s*\[\s*color\s*:\s*([^\]]*)\]\s*$/i;
+/** A trailing `[color: x, from: right, to: left]` on a connection, after its optional label. */
+const EDGE_PROPS_TAIL = /\s*\[([^\]]*)\]\s*$/;
+const EDGE_PROP_KEYS = new Set(["color", "colour", "from", "to"]);
+const SIDE_NAMES = new Set(["top", "right", "bottom", "left"]);
+/** Layout numbers a node may carry: where it is and how big (canvas units). */
+const NUMBER_PROPS: Record<string, "x" | "y" | "width" | "height"> = { x: "x", y: "y", w: "width", width: "width", h: "height", height: "height" };
+const MAX_COORDINATE = 100_000;
+const MIN_SIZE = 24;
+const MAX_SIZE = 4_000;
 const DIRECTIVE = /^(title|type|direction)\s+(.+)$/i;
 
 /** Remove `//` comments (not inside quotes) and whole-line `#` comments. */
@@ -181,6 +188,14 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
         else add(line, "warning", `Color "${value}" was not recognised (use a name such as blue, or "#rrggbb"); it was ignored.`);
       } else if (["kind", "icon", "label", "dashed"].includes(key)) {
         props[key] = value;
+      } else if (NUMBER_PROPS[key]) {
+        const field = NUMBER_PROPS[key];
+        const number = Number(value);
+        const size = field === "width" || field === "height";
+        const limit = size ? MAX_SIZE : MAX_COORDINATE;
+        if (!Number.isFinite(number) || value.trim() === "") add(line, "warning", `"${key}" needs a number (e.g. ${key}: 120); it was ignored.`);
+        else if (size ? number < MIN_SIZE || number > limit : Math.abs(number) > limit) add(line, "warning", `"${key}: ${value}" is out of range (${size ? `${MIN_SIZE} to ${limit}` : `-${limit} to ${limit}`}); it was ignored.`);
+        else props[field] = String(Math.round(number * 10) / 10);
       } else {
         add(line, "warning", `Unknown property "${key}" was ignored.`);
       }
@@ -239,6 +254,9 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
     if (props.dashed !== undefined) node.dashed = props.dashed.toLowerCase() === "true";
     if (props.shape === "diamond" || props.shape === "pill" || props.shape === "icon") node.shape = props.shape;
     if (props.color !== undefined) node.color = props.color;
+    for (const field of ["x", "y", "width", "height"] as const) {
+      if (props[field] !== undefined) node[field] = Number(props[field]);
+    }
   };
 
   /** Find or create a node; new nodes join every group currently open. */
@@ -323,13 +341,34 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
       const resolved = sides.map((side) => side.map((ref) => resolveNode(ref, line, false)));
       let edgeLabel = edgeTokens.label;
       let edgeColor: string | undefined;
-      const colorProp = edgeLabel === undefined ? null : EDGE_COLOR_PROP.exec(edgeLabel);
-      if (colorProp) {
-        edgeColor = normalizeColor(unquote(colorProp[1]));
-        if (!edgeColor) add(line, "warning", `Color "${colorProp[1].trim()}" was not recognised; it was ignored.`);
-        edgeLabel = edgeLabel!.slice(0, colorProp.index).trim();
-      } else if (edgeLabel !== undefined && /\[\s*colou?r\b/i.test(edgeLabel)) {
-        add(line, "warning", 'This looks like an edge color but is not "[color: name]" at the end of the connection; it was kept as label text.');
+      let fromSide: ParsedEdge["fromSide"];
+      let toSide: ParsedEdge["toSide"];
+      const tail = edgeLabel === undefined ? null : EDGE_PROPS_TAIL.exec(edgeLabel);
+      const entries = tail ? splitTopLevel(tail[1], ",").filter((e) => e.trim() !== "") : [];
+      // Only a list made entirely of edge properties is one; "array[0]" in a label stays label text.
+      const isEdgeProps = entries.length > 0 && entries.every((e) => EDGE_PROP_KEYS.has(e.split(":")[0].trim().toLowerCase()) && e.includes(":"));
+      if (tail && isEdgeProps) {
+        for (const entry of entries) {
+          const colon = entry.indexOf(":");
+          const key = entry.slice(0, colon).trim().toLowerCase();
+          const value = unquote(entry.slice(colon + 1));
+          if (key === "color" || key === "colour") {
+            edgeColor = normalizeColor(value);
+            if (!edgeColor) add(line, "warning", `Color "${value}" was not recognised; it was ignored.`);
+          } else if (!SIDE_NAMES.has(value.toLowerCase())) {
+            add(line, "warning", `"${key}: ${value}" is not a side (use top, right, bottom or left); it was ignored.`);
+          } else if (key === "from") fromSide = value.toLowerCase() as ParsedEdge["fromSide"];
+          else toSide = value.toLowerCase() as ParsedEdge["toSide"];
+        }
+        edgeLabel = edgeLabel!.slice(0, tail.index).trim();
+      } else if (edgeLabel !== undefined && /\[\s*(colou?r|from|to)\b/i.test(edgeLabel)) {
+        add(
+          line,
+          "warning",
+          /\[\s*colou?r\b/i.test(edgeLabel)
+            ? 'This looks like an edge color but is not "[color: name]" at the end of the connection; it was kept as label text.'
+            : 'This looks like edge sides but is not "[from: side, to: side]" at the end of the connection; it was kept as label text.',
+        );
       }
       edgeTokens.connectors.forEach((connector, i) => {
         for (const left of resolved[i]) {
@@ -347,6 +386,9 @@ export const parseDiagramCode = (source: string): ParsedDiagramCode => {
               dashed: connector === "-->" || connector === "<-->" || connector === "--" ? true : undefined,
               plain: connector === "-" || connector === "--" ? true : undefined,
               color: edgeColor,
+              // A reversed connector (`<`) swaps the ends, so the sides swap with them.
+              fromSide: connector === "<" ? toSide : fromSide,
+              toSide: connector === "<" ? fromSide : toSide,
               line,
             });
           }

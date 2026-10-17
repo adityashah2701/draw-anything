@@ -97,6 +97,11 @@ export interface AIDiagramNode {
   priority?: number;
   /** Drawn as a real diamond (decisions always are) or a pill (start and end always are). */
   shape?: "diamond" | "pill" | "icon";
+  /** Top-left corner and size in canvas units; when given the node is drawn exactly there. */
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
   /** #rrggbb stroke; the fill is a tint of it. */
   color?: string;
 }
@@ -113,6 +118,9 @@ export interface AIDiagramEdge {
   plain?: boolean;
   /** #rrggbb line colour. */
   color?: string;
+  /** Side of the source the line leaves by and side of the target it enters by; chosen automatically when absent. */
+  fromSide?: "top" | "right" | "bottom" | "left";
+  toSide?: "top" | "right" | "bottom" | "left";
 }
 
 export interface AIDiagramGroup {
@@ -316,6 +324,14 @@ export interface AIFrame {
   finalElementIds: string[];
 }
 
+/** One entry of the agent's timeline: a short title, optional explanation, and the facts behind it. */
+export interface AgentNote {
+  kind: "reasoning" | "icons" | "add" | "adjust" | "undo" | "review" | "view" | "summary" | "stopped";
+  title: string;
+  text?: string;
+  items?: string[];
+}
+
 export type AIStreamEvent =
   | {
       type: "frame.created";
@@ -379,6 +395,12 @@ export type AIStreamEvent =
       type: "element.batch";
       frameId: string;
       elements: DrawingElement[];
+    }
+  | {
+      /** Something the agent did or found, for the panel's timeline. */
+      type: "agent.note";
+      frameId: string;
+      note: AgentNote;
     }
   | {
       /** Elements already on the canvas that changed (a node moved, a connection re-routed), by id. */

@@ -1,8 +1,9 @@
 import { phaseCompleted, phaseStarted } from "@/features/ai/server/agents/types";
 import { createInitialAIFrame } from "@/features/ai/server/workflow";
-import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent, AIWorkflowPhase } from "@/features/ai/types";
+import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
-import { runDiagramBuilder, type BuilderStep } from "./builder/loop";
+import { runDiagramBuilder } from "./builder/loop";
+import { noteFor, summaryNote } from "./builder/notes";
 import { BUILDER_TOOL_SPECS, buildBuilderSystemPrompt } from "./builder/prompt";
 import { inferDiagramType } from "./prompt/prompt-context";
 import { createGenerationId, withLiveEvents } from "./run";
@@ -53,14 +54,6 @@ export interface DiagramBuilderOptions {
   renderImage?: (elements: DrawingElement[]) => Promise<string | undefined>;
 }
 
-const PHASE: Record<BuilderStep["kind"], AIWorkflowPhase> = {
-  add: "diagramComposer",
-  adjust: "repairAgent",
-  icons: "architecturePlanner",
-  view: "validationAgent",
-  review: "criticAgent",
-};
-
 const visionRequested = (env: Record<string, string | undefined> = process.env) => /^(1|true|on)$/i.test(env.AI_VISION?.trim() ?? "");
 
 /**
@@ -78,8 +71,6 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
 
   try {
     yield { type: "frame.created", frame };
-    yield phaseStarted(frameId, "contextRetriever", "Reading your request");
-    yield phaseCompleted(frameId, "contextRetriever", "Request understood");
     yield phaseStarted(frameId, "diagramComposer", "Building the diagram step by step");
 
     const vision = visionRequested() && supportsVision(provider);
@@ -121,7 +112,7 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
             if (revealMs > 0 && i < chunks.length - 1) await sleep(revealMs);
           }
         },
-        onStep: (step) => emit(phaseCompleted(frameId, PHASE[step.kind], step.summary)),
+        onNote: (note) => emit({ type: "agent.note", frameId, note: noteFor(note) }),
       }),
     );
 
@@ -131,15 +122,7 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
         `[diagramBuilder] ${frameId}: provider=${provider} transport=${result.transport} vision=${vision} turns=${result.turns} reviews=${result.reviews} finished=${result.finished} tools=${result.toolTrail.join(",")} nodes=${result.state.parsed.nodes.length}`,
       );
     }
-    yield phaseCompleted(
-      frameId,
-      "canvasCompiler",
-      result.finished
-        ? `Done: ${result.state.parsed.nodes.length} components`
-        : result.stoppedByQuota
-          ? `Stopped early: the AI provider's quota or rate limit was reached. Kept what was built (${result.state.parsed.nodes.length} components); try again in a minute, or switch provider.`
-          : `Stopped at the step limit with ${result.state.parsed.nodes.length} components; this is the best version`,
-    );
+    yield { type: "agent.note", frameId, note: summaryNote(result) };
     yield { type: "frame.done", frameId, count: result.built.elements.length, graph: result.built.document };
   } finally {
     controller.abort();

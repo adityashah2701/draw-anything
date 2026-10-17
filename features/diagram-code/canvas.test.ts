@@ -267,3 +267,119 @@ Reserve Stock > Payment > Notify Customer > Done`;
     expect(rows.size).toBeGreaterThanOrEqual(7);
   });
 });
+
+describe("code with layout: exact position, size and sides", () => {
+  const boxOf = (elements: DrawingElement[], label: string) => {
+    const el = elements.find((e) => e.ai?.role === "node" && e.label === label)!;
+    return { x: Math.min(el.points[0].x, el.points[1].x), y: Math.min(el.points[0].y, el.points[1].y), w: Math.abs(el.points[1].x - el.points[0].x), h: Math.abs(el.points[1].y - el.points[0].y) };
+  };
+
+  it("draws a node exactly where and how big the code says", () => {
+    const { elements } = compile("A [x: 300, y: 120, w: 220, h: 90]\nB\nA > B");
+    expect(boxOf(elements, "A")).toEqual({ x: 300, y: 120, w: 220, h: 90 });
+    // The node without coordinates is laid out around it, not on top of it.
+    const b = boxOf(elements, "B");
+    expect(b.x < 520 && b.x + b.w > 300 && b.y < 210 && b.y + b.h > 120).toBe(false);
+  });
+
+  it("uses the sides the code names, and picks the other automatically", () => {
+    const { elements } = compile("A [x: 0, y: 0]\nB [x: 400, y: 0]\nA > B: [from: bottom, to: left]");
+    const arrow = elements.find((e) => e.type === "arrow") as { startConnection?: { anchorId: string }; endConnection?: { anchorId: string } };
+    expect(arrow.startConnection?.anchorId).toMatch(/bottom/);
+    expect(arrow.endConnection?.anchorId).toMatch(/left/);
+    const half = compile("A [x: 0, y: 0]\nB [x: 400, y: 0]\nA > B: [from: top]").elements.find((e) => e.type === "arrow") as { startConnection?: { anchorId: string } };
+    expect(half.startConnection?.anchorId).toMatch(/top/);
+  });
+
+  it("round-trips a diagram through the code with layout: same positions, sizes and sides", () => {
+    const original = compile(SHOP).elements;
+    const { graph } = graphFromElements(original, { layout: true });
+    const code = serializeDiagramCode(graph);
+    expect(code).toMatch(/x: -?\d+, y: -?\d+, w: \d+, h: \d+/);
+    expect(code).toMatch(/\[from: (top|right|bottom|left), to: (top|right|bottom|left)\]/);
+    const again = compile(code).elements;
+    for (const label of graph.nodes.map((n) => n.label)) expect(boxOf(again, label)).toEqual(boxOf(original, label));
+    const sides = (els: DrawingElement[]) =>
+      els.filter((e) => e.type === "arrow").map((e) => {
+        const a = e as unknown as { startConnection: { anchorId: string }; endConnection: { anchorId: string } };
+        return `${a.startConnection.anchorId.split(":").pop()}>${a.endConnection.anchorId.split(":").pop()}`;
+      });
+    expect(sides(again).sort()).toEqual(sides(original).sort());
+  });
+
+  it("keeps an edge colour the user chose, but not the default line colour", () => {
+    const { elements } = compile("A > B: [color: red]\nB > C");
+    const { graph } = graphFromElements(elements);
+    expect(graph.edges.find((e) => e.color)).toMatchObject({ color: "#dc2626" });
+    expect(graph.edges.filter((e) => e.color)).toHaveLength(1);
+  });
+
+  it("writes no layout unless asked", () => {
+    const { graph } = graphFromElements(compile(SHOP).elements);
+    expect(serializeDiagramCode(graph)).not.toMatch(/\bx: \d|\[from:/);
+  });
+});
+
+describe("how the agent's drawing looks", () => {
+  it("draws a group with a bold border and a big bold heading, in black (white in the dark theme)", () => {
+    const { elements } = compile(SHOP);
+    const frame = elements.find((e) => e.ai?.role === "group")!;
+    const heading = elements.find((e) => e.ai?.role === "group-label")!;
+    expect(frame).toMatchObject({ color: "#000000", strokeWidth: 3 });
+    expect(heading).toMatchObject({ color: "#000000", fontSize: 24, fontWeight: "800", text: "Backend" });
+  });
+
+  it("makes room for the heading: nothing inside the frame sits under it", () => {
+    const { elements } = compile(SHOP);
+    const frame = elements.find((e) => e.ai?.role === "group")!;
+    const heading = elements.find((e) => e.ai?.role === "group-label")!;
+    const headingBottom = heading.points[0].y + 24 * 1.2;
+    const nodeTops = elements.filter((e) => e.ai?.role === "node" && e.points[0].x >= frame.points[0].x && e.points[1].x <= frame.points[1].x && e.points[0].y >= frame.points[0].y && e.points[1].y <= frame.points[1].y).map((e) => Math.min(e.points[0].y, e.points[1].y));
+    expect(nodeTops.length).toBeGreaterThan(0);
+    for (const top of nodeTops) expect(top).toBeGreaterThanOrEqual(headingBottom);
+  });
+
+  it("draws connectors and their labels black by default, but keeps a colour the code chose", () => {
+    const { elements } = compile("A > B: hi\nB > C: [color: red]");
+    const arrows = elements.filter((e) => e.type === "arrow");
+    expect(arrows.map((a) => a.color).sort()).toEqual(["#000000", "#dc2626"]);
+    expect(elements.find((e) => e.ai?.role === "edge-label")?.color).toBe("#000000");
+  });
+
+  it("writes the code in reading order when it carries positions", () => {
+    const { elements } = compile("Zeta > Alpha > Mid");
+    const code = serializeDiagramCode(graphFromElements(elements, { layout: true }).graph);
+    expect(code.indexOf("Zeta [")).toBeLessThan(code.indexOf("Alpha ["));
+    expect(code.indexOf("Alpha [")).toBeLessThan(code.indexOf("Mid ["));
+  });
+});
+
+describe("group headings and connectors", () => {
+  it("no connector runs through a group's heading", async () => {
+    const { segmentHitsBox } = await import("@/features/ai/server/layout/geometry");
+    const { estimateTextWidth } = await import("@/core/text/estimate");
+    const { elements } = compile(`type architecture
+Backend {
+  API Gateway [icon: api, shape: icon]
+  Orders [kind: service]
+  Orders DB [kind: database, shape: icon]
+}
+Customer [icon: user, shape: icon]
+Web App [icon: browser, shape: icon]
+Customer > Web App: HTTPS
+Web App > API Gateway
+API Gateway > Orders
+Orders > Orders DB: SQL`);
+    const heading = elements.find((e) => e.ai?.role === "group-label")!;
+    const box = {
+      minX: heading.points[0].x,
+      minY: heading.points[0].y,
+      maxX: heading.points[0].x + estimateTextWidth(heading.text ?? "", 24, "800"),
+      maxY: heading.points[0].y + 24 * 1.2,
+    };
+    for (const arrow of elements.filter((e) => e.type === "arrow")) {
+      const hit = arrow.points.slice(0, -1).some((p, i) => segmentHitsBox(p, arrow.points[i + 1], box));
+      expect(hit, `an arrow runs through the "${heading.text}" heading`).toBe(false);
+    }
+  });
+});

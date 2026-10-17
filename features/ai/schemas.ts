@@ -147,6 +147,17 @@ export const parseDiagramType = (diagramType: unknown): AIDiagramType | null => 
   return DIAGRAM_TYPE_ALIASES[key] ?? null;
 };
 
+const SIDES = ["top", "right", "bottom", "left"] as const;
+const side = (value: unknown) => (SIDES as readonly unknown[]).includes(value) ? (value as (typeof SIDES)[number]) : undefined;
+const finite = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
+/** Position and size a node was given, when they are usable numbers. */
+const layoutFields = (record: Record<string, unknown>) => ({
+  x: finite(record.x),
+  y: finite(record.y),
+  width: finite(record.width),
+  height: finite(record.height),
+});
+
 const normalizeDiagramType = (diagramType: unknown): AIDiagramType =>
   parseDiagramType(diagramType) ?? "architecture";
 
@@ -163,6 +174,10 @@ export const aiDiagramNodeSchema = z.object({
   description: z.string().max(240).optional(),
   priority: z.number().min(0).max(10).optional(),
   shape: z.enum(["diamond", "pill", "icon"]).optional(),
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+  width: z.number().finite().optional(),
+  height: z.number().finite().optional(),
   color: z.string().max(7).optional(),
 }) satisfies z.ZodType<AIDiagramNode>;
 
@@ -176,6 +191,8 @@ export const aiDiagramEdgeSchema = z.object({
   dashed: z.boolean().optional(),
   plain: z.boolean().optional(),
   color: z.string().max(7).optional(),
+  fromSide: z.enum(["top", "right", "bottom", "left"]).optional(),
+  toSide: z.enum(["top", "right", "bottom", "left"]).optional(),
 }) satisfies z.ZodType<AIDiagramEdge>;
 
 const optionalStringArraySchema = z.array(z.string().min(1).max(120)).default([]);
@@ -478,6 +495,7 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       priority,
       shape: record.shape === "diamond" || record.shape === "pill" || record.shape === "icon" ? record.shape : undefined,
       color: normalizeColor(record.color),
+      ...layoutFields(record),
     });
   });
 
@@ -519,6 +537,8 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       dashed: typeof source.dashed === "boolean" ? source.dashed : undefined,
       plain: typeof source.plain === "boolean" ? source.plain : undefined,
       color: normalizeColor(source.color),
+      fromSide: side(source.fromSide),
+      toSide: side(source.toSide),
     });
   });
   if (unusableEdges > 0) warnings.push(`Ignored ${unusableEdges} unusable edge(s).`);

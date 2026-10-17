@@ -378,3 +378,42 @@ describe("pill shape", () => {
     expect(parsed.issues).toEqual([]);
   });
 });
+
+describe("layout properties: position, size and connection sides", () => {
+  it("reads x, y, w and h on a node (width and height are aliases)", () => {
+    const { nodes, issues } = parseDiagramCode("API [x: 120, y: -40, w: 200, h: 80]\nDB [x: 10.55, width: 90, height: 60]");
+    expect(issues).toEqual([]);
+    expect(nodes[0]).toMatchObject({ x: 120, y: -40, width: 200, height: 80 });
+    expect(nodes[1]).toMatchObject({ x: 10.6, width: 90, height: 60 });
+  });
+
+  it("ignores a number that is not a number or is out of range, and says so", () => {
+    const parsed = parseDiagramCode('A [x: left, y: 9999999, w: 5, h: 100000]');
+    expect(parsed.nodes[0].x).toBeUndefined();
+    expect(parsed.nodes[0].y).toBeUndefined();
+    expect(parsed.nodes[0].width).toBeUndefined();
+    expect(parsed.nodes[0].height).toBeUndefined();
+    expect(parsed.issues.filter((i) => i.severity === "warning")).toHaveLength(4);
+  });
+
+  it("reads the sides a connection leaves and enters by, with or without a label", () => {
+    const parsed = parseDiagramCode("A > B: HTTPS [from: right, to: left]\nB > C: [from: bottom, to: top, color: red]");
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.edges[0]).toMatchObject({ label: "HTTPS", fromSide: "right", toSide: "left" });
+    expect(parsed.edges[1]).toMatchObject({ label: undefined, fromSide: "bottom", toSide: "top", color: "#dc2626" });
+  });
+
+  it("swaps the sides together with the ends of a reversed connection", () => {
+    const parsed = parseDiagramCode("A < B: [from: right, to: left]");
+    expect(parsed.edges[0]).toMatchObject({ from: parsed.nodes.find((n) => n.name === "B")!.id, fromSide: "left", toSide: "right" });
+  });
+
+  it("warns about a side that is not one, and keeps square brackets in a label that are not properties", () => {
+    const bad = parseDiagramCode("A > B: [from: middle]");
+    expect(bad.edges[0].fromSide).toBeUndefined();
+    expect(bad.issues.map((i) => i.message).join(" ")).toMatch(/not a side/);
+    const label = parseDiagramCode("A > B: rows[0] and [1]");
+    expect(label.edges[0].label).toBe("rows[0] and [1]");
+    expect(label.issues).toEqual([]);
+  });
+});

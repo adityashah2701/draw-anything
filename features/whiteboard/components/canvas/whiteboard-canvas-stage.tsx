@@ -296,6 +296,7 @@ export const WhiteboardCanvasStage = ({
             <CanvasEmptyState
               canEdit={whiteboardAccess.hasEditAccess}
               onGenerate={controller.handleGenerateDiagram}
+              onOpenCode={() => controller.setShowCodePanel(true)}
             />
           )}
         {!controller.hideCanvasUi && elements.length > 0 && (

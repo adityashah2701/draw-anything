@@ -1,9 +1,22 @@
 import { buildAnchorId } from "@/core/anchors/generate-anchors";
 import { placeEdgeLabels, EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT } from "@/features/ai/server/layout/edge-labels";
 import { bundleFans } from "@/features/ai/server/layout/bus";
-import { FRAME_NEST_STEP, FRAME_PADDING, FRAME_TITLE_HEIGHT, frameTopBand } from "@/features/ai/server/layout/frame-constants";
+import {
+  FRAME_NEST_STEP,
+  FRAME_PADDING,
+  FRAME_STROKE_WIDTH,
+  FRAME_TITLE_FONT_SIZE,
+  FRAME_TITLE_FONT_WEIGHT,
+  FRAME_TITLE_HEIGHT,
+  frameTopBand,
+} from "@/features/ai/server/layout/frame-constants";
+
+/** Where a group heading starts, from its frame's top-left corner. */
+const FRAME_TITLE_INSET = 16;
+const FRAME_TITLE_TOP = 8;
 import { placeGrid } from "@/features/ai/server/layout/grid-placement";
 import { placeLayered } from "@/features/ai/server/layout/layered-placement";
+import { placeGroupHeadings, type HeadingRequest } from "@/features/ai/server/layout/group-headings";
 import { measureLayout } from "@/features/ai/server/layout/metrics";
 import { withOffsets, withPins, type NodeOffset, type NodePin } from "@/features/ai/server/layout/pins";
 import type {
@@ -304,7 +317,7 @@ const buildGroupFrames = (
   document: AIDiagramDocumentV1,
   positioned: Map<string, PositionedNode>,
   frameId: string,
-): { elements: DrawingElement[]; titleBoxes: Box[]; dropped: string[] } => {
+): { elements: DrawingElement[]; headings: HeadingRequest[]; members: Map<string, Set<string>>; dropped: string[] } => {
   const boxes = nestingDepths(usableGroups(document, positioned));
   const accepted: Array<{ box: GroupBox; bounds: ReturnType<typeof frameBounds> }> = [];
 
@@ -323,11 +336,13 @@ const buildGroupFrames = (
   const acceptedIds = new Set(accepted.map(({ box }) => box.group.id));
   const dropped = boxes.filter(({ group }) => !acceptedIds.has(group.id)).map(({ group }) => group.id);
 
-  const titleBoxes: Box[] = accepted.map(({ box, bounds }) => ({
-    minX: bounds.minX + 12,
-    minY: bounds.minY + 8,
-    maxX: bounds.minX + 12 + estimateTextWidth(box.group.label, 13, "600"),
-    maxY: bounds.minY + 8 + 13 * LINE_HEIGHT_RATIO,
+  const headings: HeadingRequest[] = accepted.map(({ box, bounds }) => ({
+    id: `${document.metadata.generationId}-group-${box.group.id}-label`,
+    frame: bounds,
+    width: Math.ceil(estimateTextWidth(box.group.label, FRAME_TITLE_FONT_SIZE, FRAME_TITLE_FONT_WEIGHT)),
+    height: FRAME_TITLE_FONT_SIZE * LINE_HEIGHT_RATIO,
+    top: FRAME_TITLE_TOP,
+    inset: FRAME_TITLE_INSET,
   }));
 
   const elements = accepted.flatMap(({ box, bounds }) => {
@@ -345,27 +360,30 @@ const buildGroupFrames = (
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },
       ],
-      color: "#94a3b8",
-      strokeWidth: 1.5,
+      // Black and white by theme (the renderer swaps them), like every other line the agent draws.
+      color: "#000000",
+      strokeWidth: FRAME_STROKE_WIDTH,
       isGuide: true,
       ai: { ...ai, role: "group" },
     };
     const title: DrawingElement = {
       id: `${base}-label`,
       type: "text",
-      points: [{ x: bounds.minX + 12, y: bounds.minY + 8 }],
-      color: "#64748b",
+      points: [{ x: bounds.minX + FRAME_TITLE_INSET, y: bounds.minY + FRAME_TITLE_TOP }],
+      color: "#000000",
       strokeWidth: 1,
       text: box.group.label,
-      fontSize: 13,
-      fontWeight: "600",
+      fontSize: FRAME_TITLE_FONT_SIZE,
+      fontWeight: FRAME_TITLE_FONT_WEIGHT,
       fontStyle: "normal",
       isGuide: true,
       ai: { ...ai, role: "group-label" },
     };
     return [frame, title];
   });
-  return { elements, titleBoxes, dropped };
+  // Which nodes belong to each heading's group, for the check that a frame may grow.
+  const members = new Map(accepted.map(({ box }) => [`${document.metadata.generationId}-group-${box.group.id}-label`, new Set(box.members.map((m) => m.node.id))]));
+  return { elements, headings, members, dropped };
 };
 
 // ── Compile ───────────────────────────────────────────────────────────────
@@ -432,7 +450,13 @@ export const prepareDiagram = (document: AIDiagramDocumentV1, mode: DepthMode = 
     if (path.length > 0) pathOf.set(node.id, path.map((g) => g.id));
   });
 
-  const sizes = new Map(document.nodes.map((node) => [node.id, sizeDiagramNode(node, density)]));
+  // A size given in the code wins over the one worked out from the label.
+  const sizes = new Map(
+    document.nodes.map((node) => {
+      const computed = sizeDiagramNode(node, density);
+      return [node.id, node.width !== undefined || node.height !== undefined ? { ...computed, width: node.width ?? computed.width, height: node.height ?? computed.height } : computed];
+    }),
+  );
   const knownIds = new Set(document.nodes.map((n) => n.id));
   const input: PlacementInput = {
     nodes: ordered.map((node) => ({
@@ -561,7 +585,11 @@ export const buildCanvas = (
       usedOutHandles,
     );
     usedOutHandles.add(`${edge.from}.${base.from}`);
-    const handles = edgeSides?.get(`${edge.from}>${edge.to}`) ?? spreadParallelEdges(base, source, target, usedHandlePairs);
+    const automatic = spreadParallelEdges(base, source, target, usedHandlePairs);
+    // Sides: chosen by an explicit override (the builder), else by the code (`from:` / `to:`), else automatically.
+    const handles =
+      edgeSides?.get(`${edge.from}>${edge.to}`) ??
+      (edge.fromSide || edge.toSide ? { from: edge.fromSide ?? automatic.from, to: edge.toSide ?? automatic.to } : automatic);
     const start = getConnectionHandlePoint(source.bounds, handles.from);
     const end = getConnectionHandlePoint(target.bounds, handles.to);
     const edgeId = `${document.metadata.generationId}-${edge.id || `edge-${index + 1}`}`;
@@ -629,7 +657,8 @@ export const buildCanvas = (
       id: draft.edgeId,
       type: draft.bidirectional ? "arrow-bidirectional" : "arrow",
       points,
-      color: draft.color ?? "#64748b",
+      // Black and white by theme unless the code or the user chose a colour.
+      color: draft.color ?? "#000000",
       strokeWidth: 2,
       dashed: draft.dashed,
       arrowHeadStart: draft.bidirectional && !draft.plain,
@@ -655,11 +684,32 @@ export const buildCanvas = (
     });
   });
 
+  // Headings next to the routed connectors: a connector entering a group must not run through its name.
+  const headingSpots = placeGroupHeadings(frames.headings, Array.from(paths.values()), (id, grown) => {
+    // A frame may grow to make room for its name unless that would cover a node that is not in it or cut into another frame.
+    const own = frames.headings.find((h) => h.id === id)!;
+    const memberIds = frames.members.get(id) ?? new Set<string>();
+    const coversStranger = [...positionedByNodeId.values()].some((p) => !memberIds.has(p.node.id) && intersects(grown, p.bounds));
+    const cutsFrame = frames.headings.some((h) => h.id !== id && intersects(grown, h.frame) && !contains(h.frame, grown) && !contains(grown, h.frame));
+    return !coversStranger && !cutsFrame && grown.maxX >= own.frame.maxX;
+  });
+  for (const element of frames.elements) {
+    const label = headingSpots.get(element.id);
+    if (label) element.points = [{ x: label.x, y: label.y }];
+    // A frame that grew: the rectangle is the element named like its heading, without the suffix.
+    const grewFor = headingSpots.get(`${element.id}-label`);
+    if (grewFor?.frameMaxX !== undefined && element.ai?.role === "group") element.points = [element.points[0], { x: grewFor.frameMaxX, y: element.points[1].y }];
+  }
+  const titleBoxes: Box[] = frames.headings.map((h) => {
+    const spot = headingSpots.get(h.id)!;
+    return { minX: spot.x, minY: spot.y, maxX: spot.x + h.width, maxY: spot.y + h.height };
+  });
+
   // Labels go last: they need the routed paths, the nodes and the frame titles to stay clear of.
   const labelDrafts = arrowDrafts.filter((draft) => draft.label);
   const placed = placeEdgeLabels(
     labelDrafts.map((draft) => ({ id: draft.edgeId, text: draft.label!, points: paths.get(draft.edgeId)! })),
-    [...Array.from(positionedByNodeId.values()).map((p) => p.bounds), ...frames.titleBoxes],
+    [...Array.from(positionedByNodeId.values()).map((p) => p.bounds), ...titleBoxes],
     paths,
   );
   const labelElements: DrawingElement[] = placed.map((label) => {
@@ -668,7 +718,7 @@ export const buildCanvas = (
       id: `${draft.edgeId}-label`,
       type: "text",
       points: [label.position],
-      color: "#475569",
+      color: "#000000",
       strokeWidth: 1,
       text: draft.label,
       fontSize: EDGE_LABEL_FONT_SIZE,
@@ -716,7 +766,13 @@ const compileWith = (
 ): CompileResult => {
   const prepared = prepareDiagram(document, mode);
   const offsetEngine = offsets && offsets.size > 0 ? withOffsets(engine, offsets) : engine;
-  const place = pins && pins.size > 0 ? withPins(offsetEngine, pins) : offsetEngine;
+  // Nodes whose code gives x and y sit exactly there (x, y is the top-left corner); the rest are laid out around them.
+  const fixed = new Map(pins ?? []);
+  for (const node of document.nodes) {
+    const size = prepared.sizes.get(node.id);
+    if (node.x !== undefined && node.y !== undefined && size) fixed.set(node.id, { x: node.x + size.width / 2, y: node.y + size.height / 2 });
+  }
+  const place = fixed.size > 0 ? withPins(offsetEngine, fixed) : offsetEngine;
   let placement: Placement;
   let layoutFallback: string | undefined;
   try {

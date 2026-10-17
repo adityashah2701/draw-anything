@@ -42,6 +42,8 @@ export const toV1CompatibilityEvents = (
       return [{ type: "thought", message: `Created ${event.node.label}` }];
     case "element.batch":
       return event.elements.map((element) => ({ type: "element", element }));
+    case "agent.note":
+      return [{ type: "thought", message: event.note.title }];
     case "frame.done":
       return [{ type: "done", count: event.count }];
     case "frame.error":

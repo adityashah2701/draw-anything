@@ -42,7 +42,7 @@ export default function RootLayout({
           <ConvexClientProvider>
             <MemberProvider>{children}</MemberProvider>
           </ConvexClientProvider>
-          <Toaster />
+          <Toaster position="bottom-left" offset={{ left: 68, bottom: 24 }} />
         </ThemeProvider>
       </body>
     </html>

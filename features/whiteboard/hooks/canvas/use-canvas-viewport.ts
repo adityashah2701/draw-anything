@@ -77,8 +77,8 @@ export const useCanvasViewport = () => {
   const handleResetZoom = useCallback(() => setView({ zoom: 1, panOffset: { x: 0, y: 0 } }), []);
 
   const fitToBounds = useCallback(
-    (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
-      const next = fitView(bounds, canvasSize);
+    (bounds: { minX: number; minY: number; maxX: number; maxY: number }, options?: { rightInset?: number }) => {
+      const next = fitView(bounds, canvasSize, options);
       if (next) setView(next);
     },
     [canvasSize],

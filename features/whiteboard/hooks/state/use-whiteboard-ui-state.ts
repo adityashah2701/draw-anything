@@ -24,6 +24,10 @@ export const useWhiteboardUiState = () => {
   const [showOutlineColorPicker, setShowOutlineColorPicker] = useState(false);
   const [showFillColorPicker, setShowFillColorPicker] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
+  // The diagram code editor is a panel of its own, so it can be open with or without the agent.
+  const [showCodePanel, setShowCodePanel] = useState(false);
+  // Counts requests to (re)load the editor from the canvas, e.g. "Open as code" after a generation.
+  const [codeLoadToken, setCodeLoadToken] = useState(0);
   const [hideCanvasUi, setHideCanvasUi] = useState(false);
 
   const [arrowSnapPreview, setArrowSnapPreview] =
@@ -134,6 +138,14 @@ export const useWhiteboardUiState = () => {
     setShowFillColorPicker,
     showAIModal,
     setShowAIModal,
+    showCodePanel,
+    setShowCodePanel,
+    codeLoadToken,
+    /** Open the code editor; `fromCanvas` also fills it with the diagram on the canvas. */
+    openCodePanel: (fromCanvas = false) => {
+      setShowCodePanel(true);
+      if (fromCanvas) setCodeLoadToken((token) => token + 1);
+    },
     hideCanvasUi,
     setHideCanvasUi,
     arrowSnapPreview,
