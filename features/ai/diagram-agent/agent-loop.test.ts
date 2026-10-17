@@ -137,38 +137,43 @@ describe("runDiagramAgent", () => {
 describe("compactHistory", () => {
   const sys: AgentMessage = { role: "system", content: "sys" };
   const user: AgentMessage = { role: "user", content: "draw" };
+  const code = (n: number) => `type architecture\n${Array.from({ length: n }, (_, i) => `N${i} [icon: api] > N${i + 1}`).join("\n")}`;
 
-  it("leaves a short history alone", () => {
+  it("leaves a history with no older turns alone", () => {
     const h: AgentMessage[] = [sys, user, { role: "assistant", content: "draft 1" }];
     expect(compactHistory(h)).toEqual(h);
   });
 
-  it("keeps the request and the latest reply with what followed it, and drops older drafts and their tool results", () => {
-    const calls = [{ id: "a", name: "check_diagram" as const, arg: "old code" }];
+  it("shrinks old diagram code and long reviews but keeps every call, every icon lookup and every pairing", () => {
     const h: AgentMessage[] = [
       sys,
       user,
-      { role: "assistant", content: "old draft", toolCalls: calls },
-      { role: "tool", name: "check_diagram", content: "old review", callId: "a" },
-      { role: "assistant", content: "latest draft", toolCalls: [{ id: "b", name: "check_diagram", arg: "new code" }] },
-      { role: "tool", name: "check_diagram", content: "new review", callId: "b" },
+      { role: "assistant", content: "", toolCalls: [{ id: "a", name: "search_icons", arg: "kafka" }] },
+      { role: "tool", name: "search_icons", content: "- message-broker (data)", callId: "a" },
+      { role: "assistant", content: code(60), toolCalls: [{ id: "b", name: "check_diagram", arg: code(60) }] },
+      { role: "tool", name: "check_diagram", content: "x".repeat(2000), callId: "b" },
+      { role: "assistant", content: "latest draft", toolCalls: [{ id: "c", name: "check_diagram", arg: code(60) }] },
+      { role: "tool", name: "check_diagram", content: "latest review ".repeat(100), callId: "c" },
     ];
     const out = compactHistory(h);
-    expect(out.map((m) => m.role)).toEqual(["system", "user", "assistant", "tool"]);
-    expect(out[1].content).toMatch(/omitted/);
-    expect(JSON.stringify(out)).not.toMatch(/old draft|old review|old code/);
-    expect(out[3]).toMatchObject({ callId: "b" }); // the kept tool result still has its call
+    expect(out.map((m) => m.role)).toEqual(h.map((m) => m.role)); // nothing dropped
+    expect(JSON.stringify(out[2])).toContain("kafka"); // the lookup survives...
+    expect(out[3].content).toBe("- message-broker (data)"); // ...with its answer
+    expect(JSON.stringify(out[4])).not.toContain("N59"); // an old draft is replaced
+    expect(out[4].role === "assistant" && out[4].toolCalls?.[0].id).toBe("b"); // its call id still pairs
+    expect(out[5].content.length).toBeLessThan(700);
+    expect(out[6]).toEqual(h[6]); // the latest reply and what followed are untouched
+    expect(out[7]).toEqual(h[7]);
   });
 
   it("does not mutate the history it is given", () => {
-    const h: AgentMessage[] = [sys, user, { role: "assistant", content: "a" }, { role: "user", content: "fix" }, { role: "assistant", content: "b" }];
+    const h: AgentMessage[] = [sys, user, { role: "assistant", content: code(60) }, { role: "user", content: "fix" }, { role: "assistant", content: "b" }];
     compactHistory(h);
-    expect(h[1].content).toBe("draw");
-    expect(h).toHaveLength(5);
+    expect(h[2].content).toBe(code(60));
   });
 
-  it("keeps what is sent to the model bounded across many turns", async () => {
-    const big = `type architecture\n${Array.from({ length: 60 }, (_, i) => `N${i} [icon: api] > N${i + 1}`).join("\n")}`;
+  it("keeps what is sent bounded across many turns even with large drafts", async () => {
+    const big = code(60);
     const { transport, calls } = scripted(
       say({ text: big, toolCalls: [{ name: "check_diagram", arg: big }] }),
       say({ text: big, toolCalls: [{ name: "check_diagram", arg: big }] }),
@@ -176,9 +181,39 @@ describe("compactHistory", () => {
       finish(big),
     );
     await run(transport, { maxTurns: 4 });
-    const size = (m: readonly AgentMessage[]) => m.reduce((n, x) => n + x.content.length, 0);
+    const size = (m: readonly AgentMessage[]) => m.reduce((n, x) => n + x.content.length + JSON.stringify((x as { toolCalls?: unknown }).toolCalls ?? "").length, 0);
     const sizes = calls.map(size);
-    // Without compaction the 4th request would be about 4x the 1st reply; with it, it stays near one reply plus feedback.
-    expect(sizes[3]).toBeLessThan(sizes[1] * 1.6);
+    // Unshrunk, request 4 would carry three full drafts twice over; shrunk it carries one.
+    expect(sizes[3]).toBeLessThan(sizes[1] * 1.8);
+  });
+
+  it("stops a model that only searches icons: after two lookups it is told to write the diagram", async () => {
+    const { transport, calls } = scripted(
+      say({ toolCalls: [{ name: "search_icons", arg: "stripe" }] }),
+      say({ toolCalls: [{ name: "search_icons", arg: "kafka" }] }),
+      finish(GOOD),
+    );
+    const r = await run(transport);
+    expect(r.finished).toBe(true);
+    const third = calls[2];
+    expect(third.some((m) => m.role === "user" && /Write the complete diagram code now/.test(m.content))).toBe(true);
+    expect(third.filter((m) => m.role === "tool" && m.name === "search_icons")).toHaveLength(2); // it still sees both answers
+  });
+
+  it("turns that only search icons do not use up the turn budget", async () => {
+    const { transport } = scripted(
+      say({ toolCalls: [{ name: "search_icons", arg: "stripe" }] }),
+      say({ toolCalls: [{ name: "search_icons", arg: "kafka" }] }),
+      say({ toolCalls: [{ name: "search_icons", arg: "redis" }] }),
+      finish(GOOD),
+    );
+    const r = await run(transport, { maxTurns: 2 }); // two turns allowed, but three were lookups
+    expect(r.finished).toBe(true);
+    expect(r.toolTrail).toEqual(["search_icons", "search_icons", "search_icons", "finish"]);
+  });
+
+  it("but a model that only ever searches is cut off", async () => {
+    const { transport } = scripted(say({ toolCalls: [{ name: "search_icons", arg: "x" }] }));
+    await expect(run(transport, { maxTurns: 2 })).rejects.toThrow();
   });
 });

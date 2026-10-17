@@ -1,11 +1,11 @@
-import { listIcons, type IconCategory } from "@/core/icons/registry";
+import { listCoreIcons, type IconCategory } from "@/core/icons/registry";
 
 const ORDER: IconCategory[] = ["client", "network", "compute", "data", "security", "devops", "observability", "ai", "hardware", "flow"];
 
 /** Registry ids grouped by category, one line each: the vocabulary `icon:` and `kind:` accept. */
 export const iconVocabulary = (only?: IconCategory[]): string => {
   const byCategory = new Map<IconCategory, string[]>();
-  for (const icon of listIcons()) {
+  for (const icon of listCoreIcons()) {
     if (icon.id === "generic") continue;
     byCategory.set(icon.category, [...(byCategory.get(icon.category) ?? []), icon.id]);
   }

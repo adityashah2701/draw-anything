@@ -119,6 +119,7 @@ suite("editor flows", () => {
   it("the icon picker filters by category and shows an empty state", async () => {
     await s.press("i");
     await s.page.getByRole("dialog").waitFor();
+    await s.page.waitForFunction(() => document.querySelectorAll("[role=option]").length > 300); // the library has loaded
     const all = await s.page.getByRole("option").count();
     await s.page.getByRole("button", { name: "Data", exact: true }).click();
     const data = await s.page.getByRole("option").count();
@@ -373,5 +374,64 @@ suite("editor flows", () => {
     expect(await s.selected()).toEqual([]);
     await s.page.mouse.click(on.x, on.y + 6);
     expect(await s.selected()).toEqual([line.id]);
+  });
+
+  it("a board that uses a library icon draws and exports it after a reload, before the picker was ever opened", async () => {
+    const { GLYPHS_EXTRA } = await import("@/core/icons/glyphs-extra");
+    await openPicker();
+    await s.page.getByRole("textbox", { name: "Search icons" }).fill("bolt");
+    await s.press("Enter");
+    await s.page.getByRole("dialog").waitFor({ state: "detached" });
+    expect(((await ofType(s, "icon"))[0] as El).ai.icon).toBe("bolt");
+    await s.waitForIdle();
+    await s.reload(); // a fresh page: the library is not loaded until the board asks for it
+    await s.click({ x: 900, y: 650 });
+    await s.press("Control+Shift+E");
+    await s.page.getByRole("dialog").waitFor();
+    await s.page.getByRole("radio", { name: "SVG", exact: true }).click();
+    const [file] = await Promise.all([s.page.waitForEvent("download"), s.page.getByRole("button", { name: "Export SVG", exact: true }).click()]);
+    const svg = (await (await import("node:fs/promises")).readFile((await file.path())!)).toString();
+    expect(svg).toContain(GLYPHS_EXTRA.bolt[0]);
+  });
+
+  it("redraws a library icon on the canvas once the library has loaded (not left as the placeholder)", async () => {
+    const board = (icon: string) =>
+      [{ id: "i1", type: "icon", color: "#0f766e", strokeWidth: 2, points: [{ x: 300, y: 200 }, { x: 428, y: 328 }], ai: { icon } }] as never;
+    const clipOf = async (icon: string) => {
+      const session = await openEditor({ elements: board(icon) });
+      try {
+        await session.page.waitForTimeout(600); // the library chunk loads, then the canvas redraws
+        const at = await session.toScreen({ x: 300, y: 200 });
+        return await session.page.screenshot({ clip: { x: at.x, y: at.y, width: 128 * (await session.view()).zoom, height: 128 * (await session.view()).zoom } });
+      } finally {
+        await session.close();
+      }
+    };
+    const bolt = await clipOf("bolt");
+    const unknown = await clipOf("no-such-icon-anywhere"); // draws the generic placeholder
+    expect(bolt.equals(unknown)).toBe(false);
+  });
+
+  it("a pointer-down that arrives while a gesture is still open (its pointer-up was lost) starts clean", async () => {
+    await s.pickTool("r");
+    const [a, b, c, d] = await Promise.all([{ x: 100, y: 100 }, { x: 180, y: 160 }, { x: 400, y: 300 }, { x: 520, y: 380 }].map((p) => s.toScreen(p)));
+    await s.page.mouse.move(a.x, a.y);
+    await s.page.mouse.down();
+    await s.page.mouse.move(b.x, b.y, { steps: 4 });
+    // the pointer-up never comes; the next press must not stack a second gesture on the first
+    await s.page.mouse.down();
+    await s.page.mouse.move(c.x, c.y);
+    await s.page.mouse.down();
+    await s.page.mouse.move(d.x, d.y, { steps: 4 });
+    await s.page.mouse.up();
+    const rects = await ofType(s, "rectangle");
+    expect(rects).toHaveLength(1);
+    expect(rects[0].points[0].x).toBeCloseTo(400, 0);
+    expect(rects[0].points[1].x).toBeCloseTo(520, 0);
+    expect(await s.tool()).toBe("select");
+    // and the editor is not stuck: a normal gesture still works
+    await s.pickTool("r");
+    await s.drag({ x: 100, y: 450 }, { x: 200, y: 520 });
+    expect(await ofType(s, "rectangle")).toHaveLength(2);
   });
 });

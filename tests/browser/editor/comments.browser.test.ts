@@ -115,4 +115,53 @@ suite("editor comments", () => {
     await s.press("Escape");
     await s.page.getByRole("dialog", { name: "Comment thread" }).waitFor({ state: "detached" });
   });
+
+  it("@ in the composer offers the people on the board, inserts the choice, and highlights it afterwards", async () => {
+    await s.page.evaluate(() => window.__editor.backend.seedComment({ x: 600, y: 300, text: "From Sam", authorName: "Sam Rivera", authorId: "sam" }));
+    await s.page.evaluate(() => window.__editor.backend.seedComment({ x: 700, y: 300, text: "From Alex", authorName: "Alex Kim", authorId: "alex" }));
+    await s.press("m");
+    await s.click({ x: 300, y: 250 });
+    await s.page.waitForSelector("textarea:focus");
+    await s.type("ping @sa");
+    const list = s.page.getByRole("listbox", { name: "Mention someone" });
+    await list.waitFor();
+    expect(await list.getByRole("option").allTextContents()).toEqual(["Sam Rivera"]); // Alex does not match "sa"
+    await s.press("Enter"); // chooses, does not send
+    expect(await s.page.locator("textarea").inputValue()).toBe("ping @Sam Rivera ");
+    await s.type("please review");
+    await s.press("Enter");
+    await s.page.getByRole("dialog", { name: "Comment thread" }).waitFor();
+    const mine = (await comments()).find((c) => c.text.startsWith("ping"))!;
+    expect(mine.text).toBe("ping @Sam Rivera please review");
+    expect(mine.sentMentions).toEqual(["sam"]);
+    expect(await s.page.getByText("@Sam Rivera", { exact: true }).count()).toBe(1); // drawn as its own highlighted run
+  });
+
+  it("Escape closes only the mention list; a mention whose text was deleted is not sent", async () => {
+    await s.page.evaluate(() => window.__editor.backend.seedComment({ x: 600, y: 300, text: "From Sam", authorName: "Sam Rivera", authorId: "sam" }));
+    await s.press("m");
+    await s.click({ x: 300, y: 250 });
+    await s.page.waitForSelector("textarea:focus");
+    await s.type("@");
+    const list = s.page.getByRole("listbox", { name: "Mention someone" });
+    await list.waitFor();
+    await s.press("Escape");
+    await list.waitFor({ state: "detached" });
+    expect(await s.page.getByRole("dialog", { name: "New comment" }).count()).toBe(1); // the composer is still open
+    await s.press("Backspace");
+    await s.type("@sam");
+    await list.waitFor();
+    await s.press("Tab");
+    for (let i = 0; i < "@Sam Rivera ".length; i += 1) await s.press("Backspace");
+    await s.type("never mind");
+    await s.press("Enter");
+    await s.page.getByRole("dialog", { name: "Comment thread" }).waitFor();
+    const sent = (await s.page.evaluate(() => window.__editor.backend.comments())).find((c) => c.text === "never mind");
+    expect(sent?.sentMentions).toEqual([]); // the @Name was deleted, so nobody is mentioned
+  });
+
+  it("a pin that mentions you says so", async () => {
+    await s.page.evaluate(() => window.__editor.backend.seedComment({ x: 600, y: 300, text: "@Test User take a look", mentionsMe: true }));
+    await s.page.getByRole("button", { name: /mentions you/ }).waitFor();
+  });
 });

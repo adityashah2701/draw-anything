@@ -1,15 +1,25 @@
 // Vendors a curated set of brand marks from Simple Icons (CC0 data) into core/icons/logos.ts.
 // Run: npm i --no-save simple-icons && node scripts/generate-logo-glyphs.mjs   (no runtime dependency on it)
-// Simple Icons has removed some marks at their owners' request (Amazon Web Services, Microsoft Azure, OpenAI,
-// Slack, ...); those cannot be vendored here, and users add them through custom SVG icons instead.
+// Simple Icons has removed some marks at their owners' request (Amazon Web Services and its services, Microsoft Azure, OpenAI,
+// Slack, Oracle, ...); those cannot be vendored here, and users add them through custom SVG icons instead.
 import { writeFileSync } from "node:fs";
 import * as si from "simple-icons";
 
-const SLUGS = `googlecloud docker kubernetes terraform ansible jenkins github gitlab githubactions nginx kong istio vault
-postgresql mysql mariadb sqlite mongodb redis apachekafka rabbitmq apachecassandra elasticsearch snowflake databricks apachespark
-nodedotjs react nextdotjs typescript python go rust graphql linux ubuntu
-cloudflare vercel supabase firebase stripe clerk convex anthropic
-grafana prometheus datadog sentry figma notion postman`.split(/\s+/);
+const SLUGS = `googlecloud docker kubernetes terraform ansible jenkins github gitlab githubactions nginx kong istio vault postgresql
+mysql mariadb sqlite mongodb redis apachekafka rabbitmq apachecassandra elasticsearch snowflake databricks apachespark
+nodedotjs react nextdotjs typescript python go rust graphql linux ubuntu cloudflare vercel supabase firebase stripe
+clerk convex anthropic grafana prometheus datadog sentry figma notion postman javascript kotlin swift php ruby rubyonrails
+dotnet cplusplus c scala elixir erlang haskell dart flutter angular vuedotjs svelte astro remix gatsby express nestjs
+fastapi django flask spring springboot laravel tailwindcss bootstrap sass webpack vite babel eslint prettier jest
+vitest cypress storybook trpc prisma drizzle clickhouse neo4j couchbase influxdb cockroachlabs planetscale opensearch
+apachehadoop apacheairflow apacheflink digitalocean netlify flydotio railway alibabacloud hetzner vultr fastly akamai
+argo helm podman vagrant packer pulumi consul nomad jaeger opentelemetry newrelic splunk pagerduty gitea bitbucket
+circleci travisci teamcity apachepulsar mqtt socketdotio mailchimp auth0 okta keycloak huggingface langchain ollama
+pytorch tensorflow scikitlearn pandas numpy jupyter kaggle nvidia intel amd arm raspberrypi arduino espressif discord
+telegram whatsapp zoom jira confluence trello asana airtable miro linear paypal shopify wordpress contentful sanity
+strapi apple android redhat debian fedora archlinux alpinelinux openapiinitiative swagger apollographql caddy envoyproxy
+githubcopilot googlegemini mistralai perplexity claude cloudflareworkers googlebigquery googlecloudstorage appwrite
+apachesolr kibana logstash bun deno npm pnpm yarn selenium insomnia`.split(/\s+/);
 
 const all = Object.values(si).filter((x) => x && x.slug);
 const bySlug = new Map(all.map((x) => [x.slug, x]));

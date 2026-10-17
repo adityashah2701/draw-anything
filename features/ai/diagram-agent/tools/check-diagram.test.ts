@@ -81,3 +81,22 @@ describe("lintDiagram rules", () => {
     expect(lintRules("")).toEqual(["empty"]);
   });
 });
+
+describe("search_icons with several terms", () => {
+  it("answers every comma-separated term in one call", async () => {
+    const { runTool } = await import("./index");
+    const out = runTool({ name: "search_icons", arg: "kafka, postgres\nredis; kafka" }).content;
+    expect(out).toContain('Icons for "kafka"');
+    expect(out).toContain('Icons for "postgres"');
+    expect(out).toContain('Icons for "redis"');
+    expect(out.match(/Icons for "kafka"/g)).toHaveLength(1); // duplicates are asked once
+    expect(out).toContain("message-broker");
+  });
+
+  it("keeps a single term as before, and caps the number of terms", async () => {
+    const { runTool } = await import("./index");
+    expect(runTool({ name: "search_icons", arg: "kafka" }).content.split("\n").length).toBeGreaterThanOrEqual(2);
+    const many = Array.from({ length: 30 }, (_, i) => `term${i}`).join(",");
+    expect((runTool({ name: "search_icons", arg: many }).content.match(/term\d+/g) ?? []).length).toBeLessThanOrEqual(10);
+  });
+});

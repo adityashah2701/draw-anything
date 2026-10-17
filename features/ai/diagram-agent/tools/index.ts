@@ -13,10 +13,18 @@ export interface ToolOutcome {
   accepted?: boolean;
 }
 
-const formatIcons = (query: string): string => {
-  const matches = searchIcons(query, 8);
-  if (matches.length === 0) return `No icon matches "${query.slice(0, 60)}". Use a broader word (e.g. database, queue, api) or leave the icon off.`;
-  return [`Icons for "${query.slice(0, 60)}" (use as icon: <id>):`, ...matches.map((m) => `- ${m.id} (${m.category}${m.via === "alias" ? ", via alias" : ""})`)].join("\n");
+const MAX_TERMS = 10;
+
+const formatTerm = (term: string, perTerm: number): string => {
+  const matches = searchIcons(term, perTerm);
+  if (matches.length === 0) return `No icon matches "${term.slice(0, 60)}". Use a broader word (e.g. database, queue, api) or leave the icon off.`;
+  return [`Icons for "${term.slice(0, 60)}" (use as icon: <id>):`, ...matches.map((m) => `- ${m.id} (${m.category}${m.via === "alias" ? ", via alias" : ""})`)].join("\n");
+};
+
+/** One query or several separated by commas or newlines: models tend to ask once per turn, so one call should be enough for a whole diagram. */
+export const formatIcons = (query: string): string => {
+  const terms = [...new Set(query.split(/[,\n;]/).map((t) => t.trim()).filter(Boolean))].slice(0, MAX_TERMS);
+  return terms.map((term) => formatTerm(term, terms.length > 1 ? 4 : 8)).join("\n");
 };
 
 /** Runs one tool call. Total: bad input becomes a message the model can act on, never an exception. */

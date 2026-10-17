@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canDeleteComment, cleanCommentText, isValidPosition, MAX_COMMENT_CHARS } from "./commentRules";
+import { canDeleteComment, cleanCommentText, isValidPosition, MAX_COMMENT_CHARS, MAX_MENTIONS, pickValidMentions } from "./commentRules";
 
 describe("cleanCommentText", () => {
   it("trims and accepts normal text, including Unicode and newlines", () => {
@@ -29,5 +29,17 @@ describe("canDeleteComment", () => {
     expect(canDeleteComment("alice", comment, board)).toBe(true);
     expect(canDeleteComment("owner", comment, board)).toBe(true);
     expect(canDeleteComment("bob", comment, board)).toBe(false);
+  });
+});
+
+describe("pickValidMentions", () => {
+  const participants = new Set(["a", "b", "c"]);
+  it("keeps participants, drops strangers and the author, removes duplicates", () => {
+    expect(pickValidMentions(["b", "z", "a", "b", "me"], participants, "me")).toEqual(["b", "a"]);
+  });
+  it("caps the count and tolerates undefined", () => {
+    const many = new Set(Array.from({ length: 30 }, (_, i) => `u${i}`));
+    expect(pickValidMentions([...many], many, "me")).toHaveLength(MAX_MENTIONS);
+    expect(pickValidMentions(undefined, participants, "me")).toEqual([]);
   });
 });

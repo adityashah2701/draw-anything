@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateCustomIcon } from "./custom-icon";
-import { getIcon, iconForNode, listIcons } from "./registry";
+import { iconForNode } from "./registry";
 
 const good = {
   id: "custom-abc",
@@ -42,23 +42,5 @@ describe("custom icons on nodes", () => {
   it("iconForNode prefers a valid customIcon and falls back when it is damaged", () => {
     expect(iconForNode({ icon: "database", customIcon: good }).id).toBe("custom-abc");
     expect(iconForNode({ icon: "database", customIcon: { ...good, paths: ["<x>"] } }).id).toBe("database");
-  });
-});
-
-describe("logo icons", () => {
-  const logos = listIcons().filter((icon) => icon.category === "logo");
-  it("ships a set of filled brand marks with a title and a readable colour", () => {
-    expect(logos.length).toBeGreaterThan(40);
-    for (const logo of logos) {
-      expect(logo.id).toMatch(/^logo-/);
-      expect(logo.style).toBe("logo");
-      expect(logo.title).toBeTruthy();
-      expect(logo.color).toMatch(/^#[0-9a-f]{6}$/);
-      expect(logo.paths[0]).toMatch(/^[Mm]/);
-    }
-  });
-  it("never hijacks a vendor word: docker still resolves to the neutral container glyph", () => {
-    expect(getIcon("docker").id).toBe("container");
-    expect(getIcon("logo-docker").style).toBe("logo");
   });
 });

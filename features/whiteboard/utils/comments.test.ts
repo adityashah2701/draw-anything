@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { cardPosition, friendlyError, groupThreads, isSendKey, relativeTime, visibleThreads, worldToScreen, type CommentDto } from "./comments";
+import { cardPosition, filterParticipants, friendlyError, groupThreads, insertMention, isSendKey, mentionQueryAt, mentionSegments, mentionsStillIn, relativeTime, visibleThreads, worldToScreen, type CommentDto, type Participant } from "./comments";
 
 const c = (id: string, createdAt: number, over: Partial<CommentDto> = {}): CommentDto => ({
-  _id: id, x: 0, y: 0, text: id, resolved: false, createdAt, authorId: "u", authorName: "U", authorImageUrl: "", mine: false, ...over,
+  _id: id, x: 0, y: 0, text: id, resolved: false, createdAt, authorId: "u", authorName: "U", authorImageUrl: "", mine: false, mentions: [], mentionsMe: false, ...over,
 });
 
 describe("groupThreads", () => {
@@ -73,5 +73,62 @@ describe("isSendKey", () => {
     expect(isSendKey({ key: "Enter", shiftKey: true })).toBe(false);
     expect(isSendKey({ key: "Enter", shiftKey: false, isComposing: true })).toBe(false);
     expect(isSendKey({ key: "a", shiftKey: false })).toBe(false);
+  });
+});
+
+describe("mentions", () => {
+  const people: Participant[] = [
+    { _id: "1", name: "Sam Rivera", imageUrl: "" },
+    { _id: "2", name: "Alex Kim", imageUrl: "" },
+    { _id: "3", name: "Samira Noor", imageUrl: "" },
+  ];
+
+  describe("mentionQueryAt", () => {
+    it("finds the @name being typed before the caret", () => {
+      expect(mentionQueryAt("hi @sa", 6)).toEqual({ start: 3, query: "sa" });
+      expect(mentionQueryAt("@", 1)).toEqual({ start: 0, query: "" });
+      expect(mentionQueryAt("hi @Sam Ri", 10)).toEqual({ start: 3, query: "Sam Ri" });
+    });
+    it("ignores an @ inside a word (an email), after a newline, or too far back", () => {
+      expect(mentionQueryAt("mail me@x.com", 13)).toBeNull();
+      expect(mentionQueryAt("@sam\nnext line", 14)).toBeNull();
+      expect(mentionQueryAt(`@${"a".repeat(40)}`, 41)).toBeNull();
+      expect(mentionQueryAt("no at sign", 10)).toBeNull();
+    });
+    it("only looks before the caret", () => {
+      expect(mentionQueryAt("@sam is here", 2)).toEqual({ start: 0, query: "s" });
+    });
+  });
+
+  it("filters by name, starts-with first, case-insensitively, and never more than the limit", () => {
+    expect(filterParticipants(people, "sam").map((p) => p.name)).toEqual(["Sam Rivera", "Samira Noor"]);
+    expect(filterParticipants(people, "KIM").map((p) => p.name)).toEqual(["Alex Kim"]);
+    expect(filterParticipants(people, "").length).toBe(3);
+    expect(filterParticipants(people, "zzz")).toEqual([]);
+    expect(filterParticipants(people, "", 2)).toHaveLength(2);
+  });
+
+  it("inserts the chosen name in place of the query and moves the caret after it", () => {
+    expect(insertMention("hi @sa there", 3, 6, "Sam Rivera")).toEqual({ text: "hi @Sam Rivera  there", caret: 15 });
+  });
+
+  it("keeps a mention only while its @Name is still in the text", () => {
+    expect(mentionsStillIn("hello @Sam Rivera", people)).toEqual(["1"]);
+    expect(mentionsStillIn("hello Sam", people)).toEqual([]);
+  });
+
+  describe("mentionSegments", () => {
+    it("marks mentions, longest name first, and leaves other @ text alone", () => {
+      const segs = mentionSegments("ping @Samira Noor and @Sam Rivera, not @Sammy", [{ name: "Sam Rivera" }, { name: "Samira Noor" }]);
+      expect(segs.filter((s) => s.mention).map((s) => s.text)).toEqual(["@Samira Noor", "@Sam Rivera"]);
+      expect(segs.map((s) => s.text).join("")).toBe("ping @Samira Noor and @Sam Rivera, not @Sammy");
+    });
+    it("does not match inside a longer word", () => {
+      expect(mentionSegments("@Samuel", [{ name: "Sam" }]).some((s) => s.mention)).toBe(false);
+    });
+    it("returns the plain text when there are no mentions", () => {
+      expect(mentionSegments("hello", [])).toEqual([{ text: "hello", mention: false }]);
+      expect(mentionSegments("", [])).toEqual([]);
+    });
   });
 });

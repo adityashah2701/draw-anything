@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { iconLibraryVersion, loadIconLibrary, needsIconLibrary, subscribeIconLibrary } from "@/core/icons/registry";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import useCanvasEngine from "@/features/whiteboard/hooks/canvas/use-canvas-engine";
 import { CanvasContextMenu } from "@/features/whiteboard/components/canvas/canvas-context-menu";
@@ -52,7 +53,14 @@ export const WhiteboardCanvasStage = ({
     editingShapeLabelId,
   } = controller;
 
+  // Boards that use icons beyond the curated set fetch the rest of the library, then redraw.
+  const iconLibraryVersionNow = useSyncExternalStore(subscribeIconLibrary, iconLibraryVersion, iconLibraryVersion);
+  useEffect(() => {
+    if (needsIconLibrary(elements)) void loadIconLibrary();
+  }, [elements]);
+
   useCanvasEngine({
+    iconLibraryVersion: iconLibraryVersionNow,
     canvasRef,
     elements,
     currentElement,

@@ -27,11 +27,26 @@ export interface FakeComment {
   authorName: string;
   authorImageUrl: string;
   mine: boolean;
+  mentions: Array<{ id: string; name: string }>;
+  mentionsMe: boolean;
+  /** The ids the client sent (what the server would validate); for tests. */
+  sentMentions?: string[];
 }
 
 const listeners = new Set<() => void>();
 let comments: FakeComment[] = [];
 let commentSeq = 0;
+let participantsCache: { source: FakeComment[]; value: Array<{ _id: string; name: string; imageUrl: string }> } | null = null;
+
+/** Other people who have commented (the fake has no creator or organization); stable between changes for useSyncExternalStore. */
+const participants = () => {
+  if (participantsCache?.source !== comments) {
+    const seen = new Map<string, { _id: string; name: string; imageUrl: string }>();
+    for (const c of comments) if (!c.mine && !seen.has(c.authorId)) seen.set(c.authorId, { _id: c.authorId, name: c.authorName, imageUrl: "" });
+    participantsCache = { source: comments, value: [...seen.values()] };
+  }
+  return participantsCache.value;
+};
 let board: FakeBoard | null = null;
 let saves = 0;
 let readOnly = false;
@@ -74,6 +89,9 @@ const mutateComments = (name: string, args: Record<string, unknown>): string | n
         authorName: "Test User",
         authorImageUrl: "",
         mine: true,
+        mentions: (Array.isArray(args.mentions) ? (args.mentions as string[]) : []).flatMap((id) => participants().filter((p) => p._id === id).map((p) => ({ id: p._id, name: p.name }))),
+        mentionsMe: false,
+        sentMentions: Array.isArray(args.mentions) ? (args.mentions as string[]) : [],
       },
     ];
   } else if (name === "comments:setResolved") {
@@ -114,6 +132,7 @@ export const backend = {
   query(name: string): unknown {
     if (name === "whiteboard:getById" || name === "whiteboard:getAccess") return board;
     if (name === "comments:list") return board ? comments : [];
+    if (name === "comments:participants") return board ? participants() : [];
     return null;
   },
   async mutate(name: string, args: Record<string, unknown> | undefined): Promise<unknown> {
@@ -144,7 +163,7 @@ export const backend = {
     commentSeq += 1;
     comments = [
       ...comments,
-      { _id: `c${commentSeq}`, resolved: false, createdAt: Date.now(), authorId: "other", authorName: "Sam Rivera", authorImageUrl: "", mine: false, ...comment },
+      { _id: `c${commentSeq}`, resolved: false, createdAt: Date.now(), authorId: "other", authorName: "Sam Rivera", authorImageUrl: "", mine: false, mentions: [], mentionsMe: false, ...comment },
     ];
     persistComments();
     notify();

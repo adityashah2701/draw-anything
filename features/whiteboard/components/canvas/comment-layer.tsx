@@ -1,17 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Check, MessageSquare, RotateCcw, Trash2, X } from "lucide-react";
 import { useComments } from "@/features/whiteboard/hooks/data/use-comments";
 import type { Point } from "@/features/whiteboard/types/whiteboard.types";
 import {
   cardPosition,
+  filterParticipants,
   friendlyError,
+  insertMention,
   isSendKey,
+  mentionQueryAt,
+  mentionSegments,
+  mentionsStillIn,
   relativeTime,
   visibleThreads,
   worldToScreen,
   type CommentDto,
+  type Participant,
   type Thread,
 } from "@/features/whiteboard/utils/comments";
 
@@ -40,7 +46,17 @@ const Message = ({ comment, now }: { comment: CommentDto; now: number }) => (
       <p className="text-xs text-muted-foreground">
         <span className="font-medium text-foreground">{comment.mine ? "You" : comment.authorName}</span> · {relativeTime(comment.createdAt, now)}
       </p>
-      <p className="whitespace-pre-wrap break-words text-sm">{comment.text}</p>
+      <p className="whitespace-pre-wrap break-words text-sm">
+        {mentionSegments(comment.text, comment.mentions).map((segment, i) =>
+          segment.mention ? (
+            <span key={i} className="rounded bg-primary/15 px-0.5 font-medium text-foreground">
+              {segment.text}
+            </span>
+          ) : (
+            segment.text
+          ),
+        )}
+      </p>
     </div>
   </div>
 );
@@ -50,16 +66,22 @@ const Composer = ({
   placeholder,
   submitLabel,
   autoFocus,
+  participants,
   onSubmit,
   onCancel,
 }: {
   placeholder: string;
   submitLabel: string;
   autoFocus?: boolean;
-  onSubmit: (text: string) => Promise<unknown>;
+  participants: Participant[];
+  onSubmit: (text: string, mentions: string[]) => Promise<unknown>;
   onCancel?: () => void;
 }) => {
   const [text, setText] = useState("");
+  const [caret, setCaret] = useState(0);
+  const [picked, setPicked] = useState<Participant[]>([]);
+  const [highlight, setHighlight] = useState(0);
+  const [pickerDismissed, setPickerDismissed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
@@ -71,13 +93,34 @@ const Composer = ({
     return () => window.clearTimeout(id);
   }, [autoFocus]);
 
+  // The @name being typed, when it matches anyone; ArrowUp/Down/Enter/Tab choose, Escape closes just the list.
+  const query = pickerDismissed ? null : mentionQueryAt(text, caret);
+  const matches = query ? filterParticipants(participants, query.query) : [];
+  const choose = (person: Participant) => {
+    if (!query) return;
+    const next = insertMention(text, query.start, caret, person.name);
+    setText(next.text);
+    setCaret(next.caret);
+    setPicked((current) => (current.some((p) => p._id === person._id) ? current : [...current, person]));
+    pendingCaret.current = next.caret;
+  };
+
+  // Put the caret after the inserted name once React has written the new text (a timer here raced with typing).
+  const pendingCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null) return;
+    fieldRef.current?.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    pendingCaret.current = null;
+  }, [text]);
+
   const send = async () => {
     if (!text.trim() || sending) return;
     setSending(true);
     setError(null);
     try {
-      await onSubmit(text);
+      await onSubmit(text, mentionsStillIn(text, picked));
       setText("");
+      setPicked([]);
     } catch (e) {
       setError(friendlyError(e));
     } finally {
@@ -94,8 +137,35 @@ const Composer = ({
         maxLength={2000}
         aria-label={placeholder}
         placeholder={placeholder}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setCaret(e.target.selectionStart);
+          setPickerDismissed(false);
+          setHighlight(0);
+        }}
+        onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+        aria-autocomplete="list"
+        aria-controls={matches.length > 0 ? "mention-list" : undefined}
+        aria-activedescendant={matches.length > 0 ? `mention-${matches[Math.min(highlight, matches.length - 1)]._id}` : undefined}
         onKeyDown={(e) => {
+          if (matches.length > 0) {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setHighlight((h) => (h + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+              return;
+            }
+            if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              choose(matches[Math.min(highlight, matches.length - 1)]);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              setPickerDismissed(true);
+              return;
+            }
+          }
           if (e.key === "Escape") {
             e.preventDefault();
             onCancel?.();
@@ -106,6 +176,25 @@ const Composer = ({
         }}
         className="w-full resize-none rounded-md border border-border bg-muted/40 px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
       />
+      {matches.length > 0 && (
+        <ul id="mention-list" role="listbox" aria-label="Mention someone" className="max-h-32 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md">
+          {matches.map((person, i) => (
+            <li
+              key={person._id}
+              id={`mention-${person._id}`}
+              role="option"
+              aria-selected={i === Math.min(highlight, matches.length - 1)}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep focus in the textarea
+                choose(person);
+              }}
+              className={`cursor-pointer rounded px-2 py-1 text-sm ${i === Math.min(highlight, matches.length - 1) ? "bg-muted" : ""}`}
+            >
+              {person.name}
+            </li>
+          ))}
+        </ul>
+      )}
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}
@@ -170,7 +259,7 @@ export function CommentLayer({ whiteboardId, zoom, panOffset, stageSize, canEdit
             key={thread.root._id}
             type="button"
             data-comment-ui
-            aria-label={`Comment by ${thread.root.authorName}: ${thread.root.text.slice(0, 60)}${replies ? `, ${replies} ${replies === 1 ? "reply" : "replies"}` : ""}${thread.root.resolved ? ", resolved" : ""}`}
+            aria-label={`Comment by ${thread.root.authorName}: ${thread.root.text.slice(0, 60)}${replies ? `, ${replies} ${replies === 1 ? "reply" : "replies"}` : ""}${thread.root.resolved ? ", resolved" : ""}${[thread.root, ...thread.replies].some((c) => c.mentionsMe) ? ", mentions you" : ""}`}
             aria-expanded={openId === thread.root._id}
             onClick={() => setOpenId(openId === thread.root._id ? null : thread.root._id)}
             style={{ left: at.x, top: at.y }}
@@ -179,6 +268,9 @@ export function CommentLayer({ whiteboardId, zoom, panOffset, stageSize, canEdit
             } ${openId === thread.root._id ? "ring-2 ring-ring" : ""}`}
           >
             {thread.root.resolved ? <Check size={14} aria-hidden /> : <MessageSquare size={14} aria-hidden />}
+            {[thread.root, ...thread.replies].some((c) => c.mentionsMe) && !thread.root.resolved && (
+              <span aria-hidden className="absolute -left-1 -top-1 h-3 w-3 rounded-full border-2 border-popover bg-primary" />
+            )}
             {replies > 0 && (
               <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
                 {replies}
@@ -255,7 +347,12 @@ export function CommentLayer({ whiteboardId, zoom, panOffset, stageSize, canEdit
                 ))}
               </div>
               {canEdit && (
-                <Composer placeholder="Reply…" submitLabel="Reply" onSubmit={(text) => comments.reply(open.root._id, text)} />
+                <Composer
+                  placeholder="Reply…"
+                  submitLabel="Reply"
+                  participants={comments.participants}
+                  onSubmit={(text, mentions) => comments.reply(open.root._id, text, mentions)}
+                />
               )}
             </div>
           );
@@ -280,9 +377,10 @@ export function CommentLayer({ whiteboardId, zoom, panOffset, stageSize, canEdit
                   autoFocus
                   placeholder="Add a comment…"
                   submitLabel="Comment"
+                  participants={comments.participants}
                   onCancel={() => onDraftChange(null)}
-                  onSubmit={async (text) => {
-                    const id = await comments.startThread(draft.x, draft.y, text);
+                  onSubmit={async (text, mentions) => {
+                    const id = await comments.startThread(draft.x, draft.y, text, mentions);
                     onDraftChange(null);
                     setOpenId(String(id));
                   }}

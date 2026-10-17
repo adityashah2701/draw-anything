@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { getIcon } from "@/core/icons/registry";
 import { validateCustomIcon } from "@/core/icons/custom-icon";
-import { categoryTint } from "@/core/icons/registry";
+import { categoryTint, loadIconLibrary } from "@/core/icons/registry";
 import { buildIconElement, DEFAULT_ICON_SIZE, iconCategories, iconTitle, moveGridIndex, pickerIcons } from "./icon-picker";
 
 describe("pickerIcons", () => {
+  beforeAll(loadIconLibrary);
+
   it("lists every icon by title when there is no query", () => {
     const titles = pickerIcons("", null).map(iconTitle);
     expect(titles.length).toBeGreaterThan(20);
@@ -50,6 +52,8 @@ describe("moveGridIndex", () => {
 });
 
 describe("buildIconElement", () => {
+  beforeAll(loadIconLibrary);
+
   it("is a standalone icon, not a node: no label, no fill, centred on the point", () => {
     const el = buildIconElement(getIcon("kubernetes"), { x: 100, y: 50 }, "n1");
     expect(el.type).toBe("icon");

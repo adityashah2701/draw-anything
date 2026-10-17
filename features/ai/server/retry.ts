@@ -35,6 +35,18 @@ const isQuota = (msg: string): boolean =>
 const isNetwork = (msg: string): boolean =>
   NETWORK_SIGNALS.some((s) => msg.includes(s));
 
+/**
+ * How long the provider asked us to wait ("Please try again in 7.605s", "try again in 450ms", Groq and
+ * OpenAI style), in ms, or undefined when the message says nothing about it.
+ */
+export const retryAfterMs = (message: string): number | undefined => {
+  const m = /try again in\s+(?:(\d+(?:\.\d+)?)\s*m(?!s)\s*)?(?:(\d+(?:\.\d+)?)\s*(ms|s))?/i.exec(message);
+  if (!m || (m[1] === undefined && m[2] === undefined)) return undefined;
+  const minutes = m[1] === undefined ? 0 : Number(m[1]) * 60_000;
+  const rest = m[2] === undefined ? 0 : Number(m[2]) * (m[3].toLowerCase() === "ms" ? 1 : 1000);
+  return Math.round(minutes + rest);
+};
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const jitter = (base: number): number =>
@@ -104,8 +116,11 @@ export const withRetry = async <T>(
         throw lastError;
       }
 
+      const errText = lastError instanceof Error ? lastError.message : String(lastError);
+      const asked = lastError instanceof RateLimitError ? retryAfterMs(errText) : undefined;
+      // The provider's own "try again in Ns" beats a guess; a little extra covers its rounding.
       const delay = Math.min(
-        jitter(opts.baseDelayMs * Math.pow(2, attempt)),
+        asked !== undefined ? asked + 500 : jitter(opts.baseDelayMs * Math.pow(2, attempt)),
         opts.maxDelayMs,
       );
 

@@ -1,4 +1,5 @@
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { loadIconLibrary, needsIconLibrary } from "@/core/icons/registry";
 import { ExportError } from "./errors";
 import { buildPdf, deflate } from "./pdf";
 import { drawScene } from "./scene";
@@ -87,6 +88,8 @@ const blobOf = (canvas: HTMLCanvasElement) =>
  */
 export const exportScene = async ({ elements, selectedIds, options, title, signal }: ExportInput): Promise<ExportResult> => {
   const scene = pickElements(elements, selectedIds, options.selectionOnly);
+  // Icons beyond the curated set load on demand; an export must not draw their placeholders.
+  if (needsIconLibrary(scene)) await loadIconLibrary();
   try {
     // Pass 1: record SVG and measure the ink at scale 1 (the geometry every format shares).
     const measurer = createCanvas(1, 1);

@@ -1,6 +1,5 @@
 import { validateCustomIcon } from "./custom-icon";
 import { GLYPHS } from "./glyphs";
-import { LOGOS } from "./logos";
 
 export type IconCategory =
   | "compute"
@@ -12,6 +11,9 @@ export type IconCategory =
   | "ai"
   | "observability"
   | "hardware"
+  | "business"
+  | "media"
+  | "devices"
   | "flow"
   | "logo"
   | "generic";
@@ -134,20 +136,66 @@ add("loop", "flow", "repeat", "LP", "repeat", "iterate");
 add("external", "flow", "external-link", "EXT", "third-party", "saas", "vendor", "stripe", "payment");
 add("package", "devops", "package", "PKG", "library", "module", "npm", "sdk");
 
-// Brand marks (Simple Icons, CC0 data; the marks stay their owners' trademarks, see logos.ts). Ids are
-// prefixed so a vendor word in an AI diagram keeps resolving to the neutral glyph above, not to a logo.
-for (const logo of LOGOS) {
-  registerIcon({
-    id: `logo-${logo.slug}`,
-    title: logo.title,
-    category: "logo",
-    paths: [logo.path],
-    viewBox: SQUARE,
-    badge: logo.title.slice(0, 3).toUpperCase(),
-    style: "logo",
-    color: logo.color,
-  });
-}
+/** The curated set above: the only icons an AI prompt lists (the rest are found with `search_icons`, so the prompt stays small). */
+const CORE_IDS = new Set(registry.keys());
+
+type LibraryModule = typeof import("./library");
+
+/**
+ * Registers the library: core/icons/catalog.json lists "glyph|alias,alias" per category (the id is the glyph
+ * name) and logos.ts the brand marks. A name or alias that an icon above already owns (docker, postgres,
+ * cloud...) is left alone, so extending the library can never change what an existing board or AI diagram
+ * shows. Logo ids are prefixed, so a vendor word keeps resolving to the neutral glyph, not to a logo.
+ */
+const installLibrary = ({ CATALOG, GLYPHS_EXTRA, LOGOS }: LibraryModule) => {
+  for (const [category, entries] of Object.entries(CATALOG as Record<string, string[]>)) {
+    for (const entry of entries) {
+      const [glyph, list = ""] = entry.split("|");
+      const paths = GLYPHS[glyph] ?? GLYPHS_EXTRA[glyph];
+      if (!paths || registry.has(key(glyph)) || aliases.has(key(glyph))) continue;
+      registerIcon({ id: glyph, category: category as IconCategory, paths, viewBox: SQUARE, badge: glyph.slice(0, 3).toUpperCase() });
+      for (const alias of list.split(",").filter(Boolean)) {
+        if (!registry.has(key(alias)) && !aliases.has(key(alias))) aliases.set(key(alias), glyph);
+      }
+    }
+  }
+  for (const logo of LOGOS) {
+    registerIcon({
+      id: `logo-${logo.slug}`,
+      title: logo.title,
+      category: "logo",
+      paths: [logo.path],
+      viewBox: SQUARE,
+      badge: logo.title.slice(0, 3).toUpperCase(),
+      style: "logo",
+      color: logo.color,
+    });
+  }
+};
+
+let libraryPromise: Promise<void> | null = null;
+let libraryVersion = 0;
+const libraryListeners = new Set<() => void>();
+
+/** Loads the rest of the icons once (a separate chunk, about 350 KB, so boards without them never pay for it). */
+export const loadIconLibrary = (): Promise<void> =>
+  (libraryPromise ??= import("./library").then((library) => {
+    installLibrary(library);
+    libraryVersion += 1;
+    libraryListeners.forEach((listener) => listener());
+  }));
+
+/** For `useSyncExternalStore`: changes once the library has been installed. */
+export const subscribeIconLibrary = (listener: () => void) => {
+  libraryListeners.add(listener);
+  return () => void libraryListeners.delete(listener);
+};
+export const iconLibraryVersion = () => libraryVersion;
+
+/** True when an element names an icon the loaded registry cannot resolve, which the library may hold. */
+export const needsIconLibrary = (elements: ReadonlyArray<{ ai?: { icon?: string; customIcon?: unknown } }>): boolean =>
+  libraryVersion === 0 &&
+  elements.some((el) => typeof el.ai?.icon === "string" && el.ai.customIcon === undefined && resolveIconId(el.ai.icon) === undefined);
 
 export const GENERIC_ICON_ID = "generic";
 
@@ -187,7 +235,7 @@ export const searchIcons = (query: unknown, limit = 8): IconMatch[] => {
   if (typeof query !== "string") return [];
   const q = key(query);
   if (!q) return [];
-  const words = q.split("-").filter((w) => w.length >= 2);
+  const words = q.split("-").filter((w) => w.length >= 3); // "no", "of" would match half the library
   const scored = new Map<string, { score: number; via: IconMatch["via"] }>();
   const offer = (id: string, score: number, via: IconMatch["via"]) => {
     const best = scored.get(id);
@@ -218,10 +266,13 @@ export const searchIcons = (query: unknown, limit = 8): IconMatch[] => {
 
 export const listIcons = (): IconDef[] => [...registry.values()];
 
+/** The curated icons an AI prompt may list in full; see `CORE_IDS`. */
+export const listCoreIcons = (): IconDef[] => listIcons().filter((icon) => CORE_IDS.has(icon.id));
+
 /** Ids the model may use in `icon`, for prompts. Compact on purpose. */
 export const ICON_IDS_FOR_PROMPT = (): string =>
-  listIcons()
-    .filter((i) => i.id !== GENERIC_ICON_ID && i.category !== "logo")
+  listCoreIcons()
+    .filter((i) => i.id !== GENERIC_ICON_ID)
     .map((i) => i.id)
     .join(", ");
 
@@ -236,6 +287,9 @@ const CATEGORY_TINT: Record<IconCategory, string> = {
   observability: "#16a34a",
   hardware: "#b45309",
   flow: "#4f46e5",
+  business: "#0f766e",
+  media: "#be185d",
+  devices: "#4f46e5",
   logo: "#475569",
   generic: "#64748b",
 };

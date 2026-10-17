@@ -35,7 +35,7 @@ export const buildSystemPrompt = (transport: ToolTransport["kind"], context?: Pr
     "How to work:",
     "1. Decide what the diagram must communicate and for whom. Include only what serves that: the smallest diagram that is complete. Never pad to reach a size.",
     "2. Choose the structure: tiers or domains as groups, a clear main path, entry points first.",
-    "3. Give every node an icon or kind that says what it is. Use search_icons when unsure of an id; vendor and technology words (postgres, kafka, nginx, s3, esp32) work.",
+    "3. Give every node an icon or kind that says what it is. Use search_icons when unsure of an id, with every term in ONE call (comma-separated); vendor and technology words (postgres, kafka, nginx, s3, esp32) work.",
     "4. Write the diagram, call check_diagram, and act on the errors and design review it returns (crossings, long connectors, label clutter, missing groups).",
     "5. Call finish with the final diagram.",
     "",

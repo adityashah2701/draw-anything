@@ -21,6 +21,12 @@ export const cleanCommentText = (text: unknown): { ok: true; text: string } | { 
 export const isValidPosition = (x: unknown, y: unknown): boolean =>
   typeof x === "number" && typeof y === "number" && Number.isFinite(x) && Number.isFinite(y) && Math.abs(x) <= MAX_COORDINATE && Math.abs(y) <= MAX_COORDINATE;
 
+export const MAX_MENTIONS = 10;
+
+/** The requested mentions that are allowed: unique, participants of the board, never the author, at most MAX_MENTIONS. */
+export const pickValidMentions = (requested: readonly string[] | undefined, participants: ReadonlySet<string>, selfId: string): string[] =>
+  [...new Set(requested ?? [])].filter((id) => id !== selfId && participants.has(id)).slice(0, MAX_MENTIONS);
+
 /** A comment's author may remove it, and so may the board's creator (moderation). */
 export const canDeleteComment = (callerId: string, comment: { authorId: string }, whiteboard: { createdBy: string }): boolean =>
   comment.authorId === callerId || whiteboard.createdBy === callerId;

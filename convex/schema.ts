@@ -36,6 +36,8 @@ export default defineSchema({
     text: v.string(),
     authorId: v.id("users"),
     resolved: v.optional(v.boolean()),
+    // People named with @ in the text; only participants of the board (see convex/comments.ts).
+    mentions: v.optional(v.array(v.id("users"))),
     createdAt: v.number(),
   })
     .index("by_whiteboardId", ["whiteboardId"])

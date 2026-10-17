@@ -5,7 +5,7 @@ import { TOOL_PARAM, toNativeMessages } from "./messages";
 import { parseTextReply } from "./text-protocol";
 
 const TOOL_SPECS: Array<{ name: ToolName; description: string }> = [
-  { name: "search_icons", description: "Find icon ids for a technology or concept (e.g. kafka, postgres, load balancer). Returns ranked ids to use as `icon:`." },
+  { name: "search_icons", description: "Find icon ids for technologies or concepts. Pass several at once, comma-separated (e.g. `kafka, postgres, load balancer`): one call answers all of them. Returns ranked ids to use as `icon:`." },
   { name: "check_diagram", description: "Validate diagram code and preview its layout: parse errors with line numbers, connector crossings, longest connector, and design advice. Call before finishing." },
   { name: "finish", description: "Submit the final diagram code. Ends the task." },
 ];

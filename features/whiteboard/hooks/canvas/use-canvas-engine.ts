@@ -55,6 +55,8 @@ interface CanvasEngineProps {
   editingShapeLabelId?: string | null;
   /** Alignment lines shown while dragging */
   alignmentGuides?: Guide[];
+  /** Changes when more icons finish loading, so icons drawn as placeholders are redrawn. */
+  iconLibraryVersion?: number;
 }
 
 const useCanvasEngine = ({
@@ -79,6 +81,7 @@ const useCanvasEngine = ({
   connectionDraft,
   magneticSnapPreview,
   editingShapeLabelId,
+  iconLibraryVersion,
 }: CanvasEngineProps & {
   getElementBounds: (
     element: DrawingElement,
@@ -324,6 +327,7 @@ const useCanvasEngine = ({
     magneticSnapPreview,
     canvasSize,
     editingShapeLabelId,
+    iconLibraryVersion,
   ]);
 
   // Render canvas

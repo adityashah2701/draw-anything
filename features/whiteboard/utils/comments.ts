@@ -13,7 +13,70 @@ export interface CommentDto {
   authorName: string;
   authorImageUrl: string;
   mine: boolean;
+  mentions: Array<{ id: string; name: string }>;
+  mentionsMe: boolean;
 }
+
+/** Someone who can be @mentioned on a board. */
+export interface Participant {
+  _id: string;
+  name: string;
+  imageUrl: string;
+}
+
+const MAX_QUERY = 30;
+
+/** The `@name` being typed just before the caret, if any: `@` at the start or after whitespace, no line break since. */
+export const mentionQueryAt = (text: string, caret: number): { start: number; query: string } | null => {
+  const before = text.slice(0, caret);
+  const at = before.lastIndexOf("@");
+  if (at === -1 || (at > 0 && !/\s/.test(before[at - 1]))) return null;
+  const query = before.slice(at + 1);
+  return query.length > MAX_QUERY || query.includes("\n") ? null : { start: at, query };
+};
+
+/** People whose name contains the query (names starting with it first), at most `limit`. */
+export const filterParticipants = (people: readonly Participant[], query: string, limit = 6): Participant[] => {
+  const q = query.trim().toLowerCase();
+  const rank = (p: Participant) => (p.name.toLowerCase().startsWith(q) ? 0 : p.name.toLowerCase().includes(q) ? 1 : 2);
+  return people
+    .filter((p) => rank(p) < 2)
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+    .slice(0, limit);
+};
+
+/** Replaces the `@query` that starts at `start` (ending at `caret`) with `@Name ` and returns the new caret. */
+export const insertMention = (text: string, start: number, caret: number, name: string): { text: string; caret: number } => {
+  const inserted = `@${name} `;
+  return { text: text.slice(0, start) + inserted + text.slice(caret), caret: start + inserted.length };
+};
+
+const isWordChar = (c: string | undefined) => c !== undefined && /[\p{L}\p{N}_]/u.test(c);
+
+/** Ids of the picked people whose `@Name` is still in the text (deleting the text withdraws the mention). */
+export const mentionsStillIn = (text: string, picked: readonly Participant[]): string[] =>
+  picked.filter((p) => text.includes(`@${p.name}`)).map((p) => p._id);
+
+/** Splits text into plain and @mention runs, so mentions can be drawn highlighted. Longest names match first. */
+export const mentionSegments = (text: string, mentions: ReadonlyArray<{ name: string }>): Array<{ text: string; mention: boolean }> => {
+  const names = [...new Set(mentions.map((m) => `@${m.name}`))].sort((a, b) => b.length - a.length);
+  const out: Array<{ text: string; mention: boolean }> = [];
+  let plain = "";
+  for (let i = 0; i < text.length; ) {
+    const hit = names.find((n) => text.startsWith(n, i) && !isWordChar(text[i + n.length]) && (i === 0 || !isWordChar(text[i - 1])));
+    if (hit) {
+      if (plain) out.push({ text: plain, mention: false });
+      plain = "";
+      out.push({ text: hit, mention: true });
+      i += hit.length;
+    } else {
+      plain += text[i];
+      i += 1;
+    }
+  }
+  if (plain) out.push({ text: plain, mention: false });
+  return out;
+};
 
 export interface Thread {
   root: CommentDto;

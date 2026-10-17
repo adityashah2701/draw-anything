@@ -6,6 +6,8 @@ import { runTool } from "./tools/index";
 import type { AgentMessage, ModelTurn, ToolCall, ToolTransport } from "./types";
 
 export const DEFAULT_MAX_TURNS = 4;
+/** Extra turns granted for turns that only searched icons. */
+export const MAX_LOOKUP_TURNS = 3;
 /** Stop when what would be resent (after `compactHistory`) exceeds this many characters, about 7.5k tokens. */
 export const MAX_CONVERSATION_CHARS = 30_000;
 
@@ -46,14 +48,17 @@ const evaluate = (code: string): Candidate => {
   return { code, errors: parsed.issues.filter((i) => i.severity === "error").length, nodes: parsed.nodes.length };
 };
 
-const OMITTED_NOTE = "(Your earlier drafts and their reviews are omitted to save space; continue from your latest draft below.)";
+const OMITTED = "(earlier draft omitted to save space)";
+const OLD_TEXT_CHARS = 400;
+const OLD_REVIEW_CHARS = 600;
 
 /**
  * What is actually sent to the model. History is resent every turn, and a provider with a small
- * per-request token limit (Groq's free tier) fails once old drafts pile up. Only the original request,
- * the model's latest reply and everything after it (its tool results, our feedback) are kept: the latest
- * draft is the one that matters, and an assistant reply is dropped together with its tool results so
- * native tool calls never lose their answers.
+ * per-request token limit (Groq's free tier) fails once old drafts pile up. So everything before the
+ * model's latest reply is shrunk, never dropped: diagram code in old tool calls and replies is replaced by
+ * a marker and long reviews are cut, but every call, every tool answer (an icon lookup is small and the
+ * model must not repeat it) and every pairing of a call with its result stays. Dropping whole turns made
+ * the model forget its lookups and repeat them until the turns ran out.
  */
 export const compactHistory = (messages: readonly AgentMessage[]): AgentMessage[] => {
   let lastAssistant = -1;
@@ -63,9 +68,23 @@ export const compactHistory = (messages: readonly AgentMessage[]): AgentMessage[
       break;
     }
   }
-  if (lastAssistant <= 2) return [...messages]; // nothing older than the latest reply to drop
-  const [system, first] = messages;
-  return [system, { ...first, content: `${first.content}\n\n${OMITTED_NOTE}` }, ...messages.slice(lastAssistant)];
+  return messages.map((message, i) => {
+    if (i < 2 || i >= lastAssistant) return message;
+    switch (message.role) {
+      case "assistant":
+        return {
+          ...message,
+          content: message.content.length > OLD_TEXT_CHARS ? OMITTED : message.content,
+          toolCalls: message.toolCalls?.map((call) => (call.name === "search_icons" ? call : { ...call, arg: OMITTED })),
+        };
+      case "tool":
+        return message.name === "search_icons" || message.content.length <= OLD_REVIEW_CHARS
+          ? message
+          : { ...message, content: `${message.content.slice(0, OLD_REVIEW_CHARS)}…` };
+      default:
+        return message.content.length > OLD_REVIEW_CHARS ? { ...message, content: `${message.content.slice(0, OLD_REVIEW_CHARS)}…` } : message;
+    }
+  });
 };
 
 const FORMAT_REMINDER =
@@ -81,7 +100,11 @@ const abortError = () => Object.assign(new Error("Generation cancelled"), { name
  */
 export const runDiagramAgent = async (input: AgentRunInput): Promise<AgentResult> => {
   const { transport, signal, onProgress } = input;
-  const maxTurns = Math.max(1, input.maxTurns ?? DEFAULT_MAX_TURNS);
+  const baseTurns = Math.max(1, input.maxTurns ?? DEFAULT_MAX_TURNS);
+  // Turns spent only looking up icons do not use up the budget (up to MAX_LOOKUP_TURNS of them): the model
+  // that asks one question per turn would otherwise run out before it writes anything.
+  let maxTurns = baseTurns;
+  let lookupTurns = 0;
   const messages: AgentMessage[] = [
     { role: "system", content: input.system },
     { role: "user", content: input.user },
@@ -114,7 +137,7 @@ export const runDiagramAgent = async (input: AgentRunInput): Promise<AgentResult
 
     const reply: ModelTurn = await withRetry(
       () => transport.complete(compactHistory(messages), { signal }),
-      { maxAttempts: 2, baseDelayMs: 800, ...input.retry },
+      { maxAttempts: 3, baseDelayMs: 800, ...input.retry },
     );
     if (signal?.aborted) throw abortError();
     lastReply = reply.text;
@@ -157,6 +180,16 @@ export const runDiagramAgent = async (input: AgentRunInput): Promise<AgentResult
       if (outcome.accepted) accepted = true;
     }
     if (accepted) return result(true, turn);
+
+    const lookupOnly = reply.toolCalls.every((call) => call.name === "search_icons");
+    if (lookupOnly && lookupTurns < MAX_LOOKUP_TURNS) {
+      lookupTurns += 1;
+      maxTurns += 1;
+    }
+    // Lookups alone never make a diagram. A model that keeps searching gets told once it has enough.
+    if (!best && lookupOnly && lookupTurns >= 2 && turn < maxTurns) {
+      messages.push({ role: "user", content: `You have the icon ids you need. Write the complete diagram code now and call check_diagram or finish with it. ${FORMAT_REMINDER}` });
+    }
 
     if (compactHistory(messages).reduce((n, m) => n + m.content.length, 0) > MAX_CONVERSATION_CHARS) break;
   }

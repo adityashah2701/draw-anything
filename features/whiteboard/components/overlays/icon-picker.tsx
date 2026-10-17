@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Search, Upload } from "lucide-react";
 import {
   Dialog,
@@ -9,7 +9,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { importSvgIcon } from "@/core/icons/custom-icon";
-import { categoryTint, type IconDef } from "@/core/icons/registry";
+import {
+  categoryTint,
+  iconLibraryVersion,
+  loadIconLibrary,
+  subscribeIconLibrary,
+  type IconDef,
+} from "@/core/icons/registry";
 import {
   ICON_CATEGORY_LABELS,
   iconCategories,
@@ -72,11 +78,26 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const categories = useMemo(iconCategories, []);
+  // The full set loads the first time the picker opens (a separate chunk); until then only the curated icons show.
+  const libraryVersion = useSyncExternalStore(
+    subscribeIconLibrary,
+    iconLibraryVersion,
+    iconLibraryVersion,
+  );
+  const [libraryFailed, setLibraryFailed] = useState(false);
+  useEffect(() => {
+    if (open) loadIconLibrary().catch(() => setLibraryFailed(true));
+  }, [open]);
+  const loading = libraryVersion === 0 && !libraryFailed;
+
+  // libraryVersion is not read inside, it is the signal that the registry grew.
+  /* eslint-disable react-hooks/exhaustive-deps */
+  const categories = useMemo(iconCategories, [libraryVersion]);
   const icons = useMemo(
     () => pickerIcons(query, category, custom),
-    [query, category, custom],
+    [query, category, custom, libraryVersion],
   );
+  /* eslint-enable react-hooks/exhaustive-deps */
   const current = icons[Math.min(active, icons.length - 1)];
 
   useEffect(() => {
@@ -201,6 +222,11 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
             }}
           />
         </div>
+        {libraryFailed && (
+          <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            The full icon library could not be loaded. Showing the basic set.
+          </p>
+        )}
         {importError && (
           <p
             role="alert"
@@ -216,7 +242,11 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
           aria-label="Icons"
           className="max-h-[320px] overflow-y-auto"
         >
-          {icons.length === 0 ? (
+          {icons.length === 0 && loading ? (
+            <p role="status" className="py-10 text-center text-sm text-muted-foreground">
+              Loading the icon library…
+            </p>
+          ) : icons.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
               {category === "custom" && !query
                 ? "No custom icons yet. Add an SVG: only plain shapes are imported, never scripts or images."

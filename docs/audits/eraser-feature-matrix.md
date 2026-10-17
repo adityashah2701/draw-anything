@@ -72,4 +72,6 @@ Evidence: `tests/browser/editor/*.browser.test.ts` drive the real editor in Chro
 
 Added later the same day: touch pinch-zoom/two-finger pan, hit tolerances in screen pixels for line/arrow/freehand, resize handles drawn from the hit-tested list (architecture items 8 and 10), a Terminator (pill) tool.
 
+Added on 2026-10-17 (second pass): icons are inserted as standalone `icon` elements, not labelled nodes; the library grew to about 450 line icons in 12 categories and 204 logos, loaded on demand; comments got @mentions (participants only, no notifications) and real `convex-test` tests; pointer gestures are one state with stale-gesture recovery.
+
 Still unsupported or not done: comment @mentions and notifications, real-Convex testing of comments (no auth or access checks exercised, no two-user test), per-board shared custom icon library, selection handles for freehand/text (architecture doc item 8), hit-test tolerances in world units for lines/freehand (item 10), a formal interaction state machine (item 11), touch and pen testing, a contrast audit.

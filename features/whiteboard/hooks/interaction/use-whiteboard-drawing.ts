@@ -14,6 +14,7 @@ import { buildConnectorArrow } from "@/features/whiteboard/hooks/interaction/con
 import { resolveClickSelection } from "@/features/whiteboard/hooks/interaction/selection";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { computeDrag, unionBounds, type Guide } from "@/features/whiteboard/hooks/interaction/drag-session";
+import { isActive, isDrawingGesture, type Gesture } from "@/features/whiteboard/hooks/interaction/gesture-state";
 
 /** Pixels (on screen) within which a dragged shape snaps to another shape's edge or centre. */
 const SNAP_SCREEN_PX = 6;
@@ -143,9 +144,17 @@ export const useWhiteboardDrawing = ({
   handlePan,
   stopPanning,
 }: UseWhiteboardDrawingProps) => {
-  // Drawing state
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  // One gesture at a time: the booleans below are derived from it, never set on their own.
+  const [gesture, setGestureState] = useState<Gesture>("idle");
+  const gestureRef = useRef<Gesture>("idle");
+  const setGesture = useCallback((next: Gesture) => {
+    gestureRef.current = next;
+    setGestureState(next);
+  }, []);
+  const isDrawing = isDrawingGesture(gesture);
+  const isDragging = gesture === "dragging";
+  const isResizing = gesture === "resizing";
+  const isSelectingArea = gesture === "marquee";
   const [alignmentGuides, setAlignmentGuides] = useState<Guide[]>([]);
   // What a drag started from. Positions are always origin + total travel, so a missed or repeated
   // pointer event cannot make a shape drift away from the cursor.
@@ -156,7 +165,6 @@ export const useWhiteboardDrawing = ({
     targets: Bounds[];
   } | null>(null);
   const [dragStart, setDragStart] = useState<Point | null>(null);
-  const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [textPosition, setTextPosition] = useState<Point | null>(null);
   const [cursorPosition, setCursorPosition] = useState<Point | null>(null);
@@ -183,7 +191,6 @@ export const useWhiteboardDrawing = ({
     useState<ConnectionDraft | null>(null);
 
   // Multi-selection state
-  const [isSelectingArea, setIsSelectingArea] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{
     start: Point;
     end: Point;
@@ -199,8 +206,30 @@ export const useWhiteboardDrawing = ({
   );
 
   // Mouse event handlers
+  // A pointer-down while a gesture is still marked active means its pointer-up never arrived (released
+  // outside the window, a lost capture). Finish that gesture's leftovers instead of starting on top of it.
+  const resetStaleGesture = useCallback(() => {
+    setGesture("idle");
+    setConnectionDraft(null);
+    setCurrentElement(null);
+    setSelectionBox(null);
+    setResizeHandle(null);
+    setDragStart(null);
+    setAlignmentGuides([]);
+    dragSessionRef.current = null;
+    collapseOnReleaseRef.current = null;
+    pendingArrowRerouteRef.current = null;
+    lastResizePointRef.current = null;
+    arrowSnapRef.current = { start: null, end: null };
+    previousSnapRef.current = { start: null, end: null };
+    stopPanning();
+    endGesture?.();
+    onArrowSnapPreviewChange?.(null);
+  }, [setGesture, setCurrentElement, stopPanning, endGesture, onArrowSnapPreviewChange]);
+
   const startDrawing = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (isActive(gestureRef.current)) resetStaleGesture();
       if (
         !hasEditAccess &&
         currentTool !== "hand" &&
@@ -240,6 +269,7 @@ export const useWhiteboardDrawing = ({
             for (const handle of handles) {
               const dist = Math.hypot(point.x - handle.x, point.y - handle.y);
               if (dist <= HANDLE_RADIUS) {
+                setGesture("connecting");
                 setConnectionDraft({
                   fromElementId: hoveredElementId,
                   fromAnchorId: handle.id,
@@ -261,7 +291,7 @@ export const useWhiteboardDrawing = ({
             const handle = getResizeHandle(point, element);
             if (handle && hasEditAccess) {
               beginGesture?.();
-              setIsResizing(true);
+              setGesture("resizing");
               setResizeHandle(handle);
               setDragStart(point);
               lastResizePointRef.current = point;
@@ -312,10 +342,10 @@ export const useWhiteboardDrawing = ({
                 ),
               }
             : null;
-          setIsDragging(true);
+          setGesture("dragging");
           setDragStart(point);
         } else if (!hit && hasEditAccess) {
-          setIsSelectingArea(true);
+          setGesture("marquee");
           setSelectionBox({ start: point, end: point });
         }
         return;
@@ -328,14 +358,14 @@ export const useWhiteboardDrawing = ({
         if (elementsToDelete.length > 0) {
           deleteElements(elementsToDelete.map((el) => el.id));
         }
-        setIsDrawing(true);
+        setGesture("erasing");
         lastPointRef.current = point;
         return;
       }
 
       if (!hasEditAccess) return;
 
-      setIsDrawing(true);
+      setGesture("drawing");
 
       const shapeType = TOOL_TO_SHAPE_TYPE[currentTool] || currentTool;
       
@@ -400,6 +430,8 @@ export const useWhiteboardDrawing = ({
       findNearestAnchorSnap,
       onArrowSnapPreviewChange,
       zoom,
+      resetStaleGesture,
+      setGesture,
     ],
   );
 
@@ -694,9 +726,8 @@ export const useWhiteboardDrawing = ({
     if (!creating && !connectionDraft && !isSelectingArea) return false;
 
     setCurrentElement(null);
-    setIsDrawing(false);
+    setGesture("idle");
     setConnectionDraft(null);
-    setIsSelectingArea(false);
     setSelectionBox(null);
     collapseOnReleaseRef.current = null;
     pendingArrowRerouteRef.current = null;
@@ -799,6 +830,7 @@ export const useWhiteboardDrawing = ({
         }
       }
       setConnectionDraft(null);
+      setGesture("idle");
       onArrowSnapPreviewChange?.(null);
       pendingArrowRerouteRef.current = null;
       return;
@@ -819,7 +851,6 @@ export const useWhiteboardDrawing = ({
         );
         setSelectedElements(intersectedElements.map((el) => el.id));
       }
-      setIsSelectingArea(false);
       setSelectionBox(null);
     }
 
@@ -864,12 +895,9 @@ export const useWhiteboardDrawing = ({
     // now one undo step.
     endGesture?.();
 
-    setIsDrawing(false);
+    setGesture("idle");
     setCurrentElement(null);
     stopPanning();
-    setIsDragging(false);
-    setIsResizing(false);
-    setIsSelectingArea(false);
     setSelectionBox(null);
     setResizeHandle(null);
     setDragStart(null);
@@ -951,6 +979,7 @@ export const useWhiteboardDrawing = ({
 
   return {
     // State
+    gesture,
     isDrawing,
     isDragging,
     isResizing,
@@ -974,6 +1003,6 @@ export const useWhiteboardDrawing = ({
     setCursorPosition,
 
     // Computed
-    hasActiveDrawing: isDrawing || isDragging || isResizing || isSelectingArea,
+    hasActiveDrawing: isActive(gesture),
   };
 };
