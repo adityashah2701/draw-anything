@@ -31,8 +31,8 @@ describe("canvas shortcuts", () => {
     expect(resolveShortcut(ev("a", { ctrlKey: true }), ctx())).toEqual({ type: "select-all" });
   });
 
-  it("bare letters are tools, Ctrl+letter is a command (c = circle vs copy)", () => {
-    expect(resolveShortcut(ev("c"), ctx())).toEqual({ type: "tool", tool: "circle" });
+  it("bare letters are tools, Ctrl+letter is a command (c = ellipse vs copy)", () => {
+    expect(resolveShortcut(ev("c"), ctx())).toEqual({ type: "tool", tool: "ellipse" });
     expect(resolveShortcut(ev("c", { ctrlKey: true }), ctx())).toEqual({ type: "copy" });
     expect(resolveShortcut(ev("d"), ctx())).toEqual({ type: "tool", tool: "diamond" });
     expect(resolveShortcut(ev("d", { metaKey: true }), ctx())).toEqual({ type: "duplicate" });
@@ -81,5 +81,19 @@ describe("export shortcut", () => {
   });
   it("does nothing while typing", () => {
     expect(resolveShortcut(ev("E", { metaKey: true, shiftKey: true }), ctx({ textEntry: true }))).toBeNull();
+  });
+
+  it("m picks the comment tool for editors only", () => {
+    expect(resolveShortcut(ev("m"), ctx())).toEqual({ type: "tool", tool: "comment" });
+    expect(resolveShortcut(ev("m"), ctx({ hasEditAccess: false }))).toBeNull();
+    expect(resolveShortcut(ev("m"), ctx({ textEntry: true }))).toBeNull();
+  });
+
+  it("i opens the icon picker and Enter edits the selection, for editors only", () => {
+    expect(resolveShortcut(ev("i"), ctx())).toEqual({ type: "icon-picker" });
+    expect(resolveShortcut(ev("i"), ctx({ hasEditAccess: false }))).toBeNull();
+    expect(resolveShortcut(ev("Enter"), ctx({ hasSelection: true }))).toEqual({ type: "edit" });
+    expect(resolveShortcut(ev("Enter"), ctx({ hasSelection: false }))).toBeNull();
+    expect(resolveShortcut(ev("Enter"), ctx({ hasSelection: true, textEntry: true }))).toBeNull();
   });
 });

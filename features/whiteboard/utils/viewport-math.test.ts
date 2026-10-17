@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitView, stepZoom, wheelIntent, zoomAtPoint, MAX_ZOOM, MIN_ZOOM } from "./viewport-math";
+import { fitView, pinchView, stepZoom, wheelIntent, zoomAtPoint, MAX_ZOOM, MIN_ZOOM } from "./viewport-math";
 
 const world = (view: { zoom: number; panOffset: { x: number; y: number } }, s: { x: number; y: number }) => ({
   x: (s.x - view.panOffset.x) / view.zoom,
@@ -71,5 +71,29 @@ describe("wheelIntent", () => {
   it("normalises line and page deltas to pixels", () => {
     expect(wheelIntent({ ...base, deltaY: 3, deltaMode: 1 })).toEqual({ kind: "pan", dx: -0, dy: -48 });
     expect(wheelIntent({ ...base, deltaY: 1, deltaMode: 2 })).toEqual({ kind: "pan", dx: -0, dy: -800 });
+  });
+});
+
+describe("pinchView", () => {
+  const view = { zoom: 1, panOffset: { x: 0, y: 0 } };
+  const pair = (ax: number, ay: number, bx: number, by: number) => [{ x: ax, y: ay }, { x: bx, y: by }] as const;
+
+  it("doubles the zoom when the fingers move twice as far apart, keeping the midpoint's world point put", () => {
+    const next = pinchView(view, pair(100, 100, 200, 100), pair(50, 100, 250, 100));
+    expect(next.zoom).toBeCloseTo(2);
+    // world point under the old midpoint (150,100) is still under the new midpoint (150,100)
+    expect((150 - next.panOffset.x) / next.zoom).toBeCloseTo(150);
+  });
+
+  it("pans by the midpoint's travel when the distance is unchanged", () => {
+    const next = pinchView(view, pair(0, 0, 100, 0), pair(30, 40, 130, 40));
+    expect(next.zoom).toBe(1);
+    expect(next.panOffset).toEqual({ x: 30, y: 40 });
+  });
+
+  it("clamps the zoom and survives collapsed fingers", () => {
+    expect(pinchView(view, pair(0, 0, 10, 0), pair(0, 0, 10000, 0)).zoom).toBe(MAX_ZOOM);
+    expect(pinchView(view, pair(0, 0, 100, 0), pair(0, 0, 0.1, 0)).zoom).toBe(1);
+    expect(Number.isFinite(pinchView(view, pair(5, 5, 5, 5), pair(5, 5, 5, 5)).panOffset.x)).toBe(true);
   });
 });

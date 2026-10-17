@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
+import { IconPicker } from "@/features/whiteboard/components/overlays/icon-picker";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text-block";
 import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
@@ -43,7 +44,6 @@ interface ShapeLabelEditorProps {
     fontWeight: string,
     fontStyle: string,
   ) => void;
-  onCancel: () => void;
   updateElement: (el: DrawingElementJson) => void;
 }
 
@@ -60,7 +60,6 @@ function ShapeLabelEditor({
   availableHeightPx,
   maxLines,
   onCommit,
-  onCancel,
   updateElement,
 }: ShapeLabelEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -135,6 +134,8 @@ function ShapeLabelEditor({
         const selection = window.getSelection();
         const range = document.createRange();
         range.selectNodeContents(editorRef.current);
+        // Caret at the end: typing extends the label instead of silently replacing it.
+        range.collapse(false);
         selection?.removeAllRanges();
         selection?.addRange(range);
       } catch (_) {
@@ -143,13 +144,14 @@ function ShapeLabelEditor({
     }, 0);
   }, [initialMarkdown]);
 
+  // Escape, a click outside and unmounting can all fire; the label is saved once.
+  const committedRef = useRef(false);
   const doCommit = useCallback(() => {
-    const nextLabel =
-      editableHtmlToMarkdown(editorRef.current || "") ||
-      initialMarkdown ||
-      "TEXT";
-    onCommit(nextLabel, fontSize, fontWeight, fontStyle);
-  }, [onCommit, initialMarkdown, fontSize, fontWeight, fontStyle]);
+    if (committedRef.current) return;
+    committedRef.current = true;
+    // Emptying the editor is deliberate: the shape goes back to blank.
+    onCommit(editableHtmlToMarkdown(editorRef.current || ""), fontSize, fontWeight, fontStyle);
+  }, [onCommit, fontSize, fontWeight, fontStyle]);
 
   const isDark =
     typeof document !== "undefined" &&
@@ -264,13 +266,15 @@ function ShapeLabelEditor({
             setFontSize((s) => Math.max(12, s - 2));
             return;
           }
-          if (ev.key === "Escape") {
-            onCancel();
+          // Escape and Ctrl/Cmd+Enter finish editing and keep the text; Enter is a newline.
+          if (ev.key === "Escape" || (mod && ev.key === "Enter")) {
+            ev.preventDefault();
+            doCommit();
             return;
           }
           if (ev.key === "Enter") {
             ev.preventDefault();
-            doCommit();
+            document.execCommand("insertLineBreak");
           }
         }}
         onBlur={doCommit}
@@ -368,6 +372,12 @@ export const WhiteboardEditingOverlays = ({
         onCopySvg={boardExport.copySvg}
       />
 
+      <IconPicker
+        open={controller.showIconPicker}
+        onOpenChange={controller.setShowIconPicker}
+        onInsert={controller.insertIcon}
+      />
+
       <CommandMenu
         isOpen={showCommandMenu}
         onOpenChange={setShowCommandMenu}
@@ -403,7 +413,7 @@ export const WhiteboardEditingOverlays = ({
           const sy = region.centerY * canvasViewport.zoom + canvasViewport.panOffset.y;
 
           const labelMarkdown = normalizeRichTextInput(
-            editingShapeLabelDraft || "TEXT",
+            editingShapeLabelDraft,
           );
 
           const availableWidthPx = region.width * canvasViewport.zoom;
@@ -437,10 +447,6 @@ export const WhiteboardEditingOverlays = ({
                 setEditingShapeLabelFontSize(fontSize);
                 setEditingShapeLabelFontWeight(fontWeight);
                 setEditingShapeLabelFontStyle(fontStyle);
-              }}
-              onCancel={() => {
-                setEditingShapeLabelId(null);
-                setEditingShapeLabelDraft("");
               }}
             />
           );

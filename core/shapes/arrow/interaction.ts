@@ -7,7 +7,7 @@ import {
 import {
   ShapeResizeHandle,
 } from "@/core/shapes/base/base-shape-definition";
-import { isPointNearPolyline } from "@/core/shapes/base/shape-geometry-utils";
+import { isPointNearPolyline, screenTolerance } from "@/core/shapes/base/shape-geometry-utils";
 import {
   ArrowElement,
   getArrowEditHandles,
@@ -26,8 +26,9 @@ export const containsPointInArrow = (
   shape: ArrowElement,
   point: Point,
   radius = 0,
+  zoom = 1,
 ): boolean => {
-  return isPointNearPolyline(point, shape.points, 10 + radius);
+  return isPointNearPolyline(point, shape.points, screenTolerance(10, zoom) + radius);
 };
 
 export const getArrowResizeHandles = (shape: ArrowElement): ShapeResizeHandle[] => {

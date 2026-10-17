@@ -19,6 +19,24 @@ export const zoomAtPoint = (view: View, anchor: { x: number; y: number }, nextZo
   return { zoom, panOffset: { x: anchor.x - worldX * zoom, y: anchor.y - worldY * zoom } };
 };
 
+export type Pair = readonly [{ x: number; y: number }, { x: number; y: number }];
+
+/**
+ * Two-finger gesture: zoom by how much the fingers moved apart or together, and pan by how far their
+ * midpoint moved, so the world point between the fingers stays between them. Points are canvas-relative px.
+ * A pair that has collapsed to a point (no distance) only pans.
+ */
+export const pinchView = (view: View, from: Pair, to: Pair): View => {
+  const dist = (p: Pair) => Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+  const mid = (p: Pair) => ({ x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 });
+  const [d0, d1] = [dist(from), dist(to)];
+  const zoom = clampZoom(d0 > 1 && d1 > 1 ? view.zoom * (d1 / d0) : view.zoom);
+  const [m0, m1] = [mid(from), mid(to)];
+  const worldX = (m0.x - view.panOffset.x) / view.zoom;
+  const worldY = (m0.y - view.panOffset.y) / view.zoom;
+  return { zoom, panOffset: { x: m1.x - worldX * zoom, y: m1.y - worldY * zoom } };
+};
+
 export const ZOOM_STEP = 1.2;
 
 export const fitView = (

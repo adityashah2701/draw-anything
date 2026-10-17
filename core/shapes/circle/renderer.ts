@@ -1,6 +1,7 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
 import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { CircleShape } from "@/core/shapes/circle/types";
+import { ELLIPSE_LABEL_FRACTION } from "@/core/text/label-region";
 import { getCircleRadius } from "@/core/shapes/circle/geometry";
 
 export const renderCircleToCanvas = (
@@ -24,7 +25,7 @@ export const renderCircleToCanvas = (
 
   if (shape.label) {
     const diameter = radius * 2;
-    const labelBox = diameter * 0.72;
+    const labelBox = diameter * ELLIPSE_LABEL_FRACTION;
     renderShapeLabel({
       ctx,
       label: shape.label,

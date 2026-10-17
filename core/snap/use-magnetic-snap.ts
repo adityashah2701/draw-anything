@@ -31,7 +31,12 @@ interface FindNearestSnapInput {
   dragVector?: Point;
   previous?: MagneticSnapMatch | null;
   excludeElementIds?: string[];
+  /** World-unit snap distance; callers pass a screen-pixel size divided by zoom. Defaults to `snapRadius`. */
+  radius?: number;
 }
+
+/** Elements that are never a connection target even though they expose anchors. */
+const NOT_A_TARGET = new Set(["arrow", "bidirectional-arrow", "line", "freehand"]);
 
 interface AnchorGridIndex {
   cellSize: number;
@@ -107,6 +112,11 @@ export const useMagneticSnap = ({
     [elements, getElementBounds],
   );
 
+  const typeById = useMemo(
+    () => new Map(elements.map((element) => [element.id, element.type as string])),
+    [elements],
+  );
+
   const useSpatialFiltering = anchorIndex.shapes.length > 200;
 
   const gridIndex = useMemo(() => {
@@ -120,6 +130,7 @@ export const useMagneticSnap = ({
       dragVector,
       previous,
       excludeElementIds,
+      radius = snapRadius,
     }: FindNearestSnapInput): MagneticSnapMatch | null => {
       if (
         typeof point?.x !== "number" ||
@@ -130,8 +141,8 @@ export const useMagneticSnap = ({
         return null;
       }
 
-      const snapRadiusSq = snapRadius * snapRadius;
-      const hysteresisRadiusSq = (snapRadius * 1.35) * (snapRadius * 1.35);
+      const snapRadiusSq = radius * radius;
+      const hysteresisRadiusSq = radius * 1.35 * (radius * 1.35);
       const excludedIds = new Set(excludeElementIds ?? []);
 
       if (previous) {
@@ -142,7 +153,7 @@ export const useMagneticSnap = ({
       }
 
       const candidateIndices = useSpatialFiltering
-        ? getNeighborCandidateIndices(point, snapRadius, gridIndex)
+        ? getNeighborCandidateIndices(point, radius, gridIndex)
         : anchorIndex.anchors.map((_, index) => index);
 
       let best: MagneticSnapMatch | null = null;
@@ -163,7 +174,7 @@ export const useMagneticSnap = ({
 
         const score =
           distSq +
-          alignmentPenalty(record.anchor.side, dragVector, snapRadius) +
+          alignmentPenalty(record.anchor.side, dragVector, radius) +
           flickerPenalty;
 
         if (score < bestScore) {
@@ -176,9 +187,37 @@ export const useMagneticSnap = ({
         }
       });
 
-      return best;
+      if (best) return best;
+
+      // Pointer over a shape's body (or within `radius` of it): attach to the nearest of its anchors.
+      for (let i = anchorIndex.shapes.length - 1; i >= 0; i -= 1) {
+        const shape = anchorIndex.shapes[i];
+        const { x: minX, y: minY } = shape.bounds;
+        const maxX = minX + shape.bounds.width;
+        const maxY = minY + shape.bounds.height;
+        if (
+          excludedIds.has(shape.id) ||
+          NOT_A_TARGET.has(typeById.get(shape.id) ?? "") ||
+          point.x < minX - radius ||
+          point.x > maxX + radius ||
+          point.y < minY - radius ||
+          point.y > maxY + radius
+        ) {
+          continue;
+        }
+        let bestDistSq = Number.POSITIVE_INFINITY;
+        for (const anchor of shape.anchors) {
+          const distSq = squaredDistance(point, anchor);
+          if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            best = { elementId: shape.id, anchor, distanceSq: distSq };
+          }
+        }
+        if (best) return best; // topmost shape wins
+      }
+      return null;
     },
-    [anchorIndex.anchors, gridIndex, snapRadius, useSpatialFiltering],
+    [anchorIndex, gridIndex, snapRadius, typeById, useSpatialFiltering],
   );
 
   return {

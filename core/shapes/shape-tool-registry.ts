@@ -47,6 +47,15 @@ export function getToolDefinitions(): ToolDefinition[] {
       allowInReadOnly: false,
     },
     {
+      name: "comment",
+      icon: null, // Sidebar will use its own MessageSquare icon
+      label: "Comment",
+      shortcut: "M",
+      group: "tools",
+      order: 3,
+      allowInReadOnly: false,
+    },
+    {
       name: "hand",
       icon: null, // Sidebar will use its own Hand icon
       label: "Pan",

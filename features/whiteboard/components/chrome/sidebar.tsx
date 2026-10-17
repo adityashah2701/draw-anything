@@ -6,6 +6,9 @@ import {
   Eraser,
   Hand,
   Sparkles,
+  Shapes,
+  RectangleHorizontal,
+  MessageSquare,
   Square,
   Circle,
   Diamond,
@@ -23,6 +26,7 @@ interface SidebarProps {
   onToolChange: (tool: Tool) => void;
   disabled?: boolean;
   onOpenAIPanel?: () => void;
+  onOpenIconPicker?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -30,6 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onToolChange,
   disabled = false,
   onOpenAIPanel,
+  onOpenIconPicker,
 }) => {
   const allTools = getToolDefinitions();
 
@@ -44,8 +49,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         return Eraser;
       case "hand":
         return Hand;
+      case "comment":
+        return MessageSquare;
       case "rectangle":
         return Square;
+      case "pill":
+        return RectangleHorizontal;
+      case "ellipse":
       case "circle":
         return Circle;
       case "diamond":
@@ -74,7 +84,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const drawingTools = allTools.filter((t) => t.group === "drawing");
   const textTool = allTools.find((t) => t.name === "text");
   const bottomTools = allTools.filter(
-    (t) => (t.name === "eraser" || t.name === "hand")
+    (t) => (t.name === "comment" || t.name === "eraser" || t.name === "hand")
   );
 
   const renderToolButton = (tool: ToolDefinition) => {
@@ -162,6 +172,22 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex flex-col gap-1.5 w-full items-center">
           {drawingTools.map(renderToolButton)}
           {textTool && renderToolButton(textTool)}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onOpenIconPicker}
+                disabled={disabled}
+                className="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Insert icon"
+              >
+                <Shapes size={18} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={12} className="bg-popover border border-border text-foreground flex items-center gap-2">
+              <span>Insert icon</span>
+              <kbd className="bg-muted px-1 rounded text-[10px] font-mono">I</kbd>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 

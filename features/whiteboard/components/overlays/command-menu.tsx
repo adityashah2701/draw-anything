@@ -24,6 +24,7 @@ import {
   ZoomOut,
   Maximize,
   Grid3X3,
+  Shapes,
 } from "lucide-react";
 
 import {
@@ -94,10 +95,10 @@ export function CommandMenu({
             <CommandShortcut>R</CommandShortcut>
           </CommandItem>
           <CommandItem
-            onSelect={() => runCommand(() => onToolChange("circle"))}
+            onSelect={() => runCommand(() => onToolChange("ellipse"))}
           >
             <Circle className="mr-2 h-4 w-4" />
-            <span>Circle</span>
+            <span>Ellipse</span>
             <CommandShortcut>C</CommandShortcut>
           </CommandItem>
           <CommandItem
@@ -195,6 +196,11 @@ export function CommandMenu({
             <Save className="mr-2 h-4 w-4" />
             <span>Save Whiteboard</span>
             <CommandShortcut>⌘S</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("insert-icon"))}>
+            <Shapes className="mr-2 h-4 w-4" />
+            <span>Insert icon…</span>
+            <CommandShortcut>I</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onAction?.("export"))}>
             <Download className="mr-2 h-4 w-4" />

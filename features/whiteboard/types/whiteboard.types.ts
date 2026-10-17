@@ -63,6 +63,16 @@ export interface BaseDrawingElement {
     semanticKind?: string;
     /** Icon registry id; absent on older boards, which fall back to `semanticKind`. */
     icon?: string;
+    /** A user-supplied icon stored with the element (validated on read, see core/icons/custom-icon.ts). */
+    customIcon?: {
+      id: string;
+      title: string;
+      paths: string[];
+      viewBox: { width: number; height: number };
+      style?: "stroke" | "logo";
+      color?: string;
+      strokeWidth?: number;
+    };
     diagramType?: string;
     /** What a generated element is, so later edits can find or replace it. */
     role?: "node" | "edge" | "group" | "group-label" | "edge-label";
@@ -79,6 +89,11 @@ export interface RectangleShape extends BaseDrawingElement {
 
 export interface CircleShape extends BaseDrawingElement {
   type: "circle";
+}
+
+/** A box-fitted ellipse. `circle` (centre + radius) stays for boards saved before it. */
+export interface EllipseShape extends BaseDrawingElement {
+  type: "ellipse";
 }
 
 export interface DiamondShape extends BaseDrawingElement {
@@ -138,6 +153,7 @@ export type DrawingElement =
   | CircleShape
   | DiamondShape
   | PillShape
+  | EllipseShape
   | TriangleShape
   | LineShape
   | TextShape

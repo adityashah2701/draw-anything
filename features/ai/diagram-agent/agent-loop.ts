@@ -6,8 +6,8 @@ import { runTool } from "./tools/index";
 import type { AgentMessage, ModelTurn, ToolCall, ToolTransport } from "./types";
 
 export const DEFAULT_MAX_TURNS = 4;
-/** Stop growing the conversation past this many characters (history is resent every turn). */
-export const MAX_CONVERSATION_CHARS = 60_000;
+/** Stop when what would be resent (after `compactHistory`) exceeds this many characters, about 7.5k tokens. */
+export const MAX_CONVERSATION_CHARS = 30_000;
 
 export type AgentProgress =
   | { type: "model.turn"; turn: number }
@@ -44,6 +44,28 @@ interface Candidate {
 const evaluate = (code: string): Candidate => {
   const parsed = parseDiagramCode(code);
   return { code, errors: parsed.issues.filter((i) => i.severity === "error").length, nodes: parsed.nodes.length };
+};
+
+const OMITTED_NOTE = "(Your earlier drafts and their reviews are omitted to save space; continue from your latest draft below.)";
+
+/**
+ * What is actually sent to the model. History is resent every turn, and a provider with a small
+ * per-request token limit (Groq's free tier) fails once old drafts pile up. Only the original request,
+ * the model's latest reply and everything after it (its tool results, our feedback) are kept: the latest
+ * draft is the one that matters, and an assistant reply is dropped together with its tool results so
+ * native tool calls never lose their answers.
+ */
+export const compactHistory = (messages: readonly AgentMessage[]): AgentMessage[] => {
+  let lastAssistant = -1;
+  for (let i = messages.length - 1; i >= 2; i -= 1) {
+    if (messages[i].role === "assistant") {
+      lastAssistant = i;
+      break;
+    }
+  }
+  if (lastAssistant <= 2) return [...messages]; // nothing older than the latest reply to drop
+  const [system, first] = messages;
+  return [system, { ...first, content: `${first.content}\n\n${OMITTED_NOTE}` }, ...messages.slice(lastAssistant)];
 };
 
 const FORMAT_REMINDER =
@@ -91,7 +113,7 @@ export const runDiagramAgent = async (input: AgentRunInput): Promise<AgentResult
     onProgress?.({ type: "model.turn", turn });
 
     const reply: ModelTurn = await withRetry(
-      () => transport.complete(messages, { signal }),
+      () => transport.complete(compactHistory(messages), { signal }),
       { maxAttempts: 2, baseDelayMs: 800, ...input.retry },
     );
     if (signal?.aborted) throw abortError();
@@ -136,7 +158,7 @@ export const runDiagramAgent = async (input: AgentRunInput): Promise<AgentResult
     }
     if (accepted) return result(true, turn);
 
-    if (messages.reduce((n, m) => n + m.content.length, 0) > MAX_CONVERSATION_CHARS) break;
+    if (compactHistory(messages).reduce((n, m) => n + m.content.length, 0) > MAX_CONVERSATION_CHARS) break;
   }
 
   if (best) return result(false, used);

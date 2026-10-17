@@ -5,7 +5,9 @@ import { categoryTint, type IconDef } from "./registry";
 export interface PathDataSink {
   /** An explicit marker: a method-name check would also match test doubles that answer to any name. */
   readonly isPathDataSink: true;
-  strokePathData(data: string): void;
+  /** `extent` is the glyph's coordinate box; it defaults to the 24-unit box lucide icons use. */
+  strokePathData(data: string, extent?: { width: number; height: number }): void;
+  fillPathData(data: string, extent?: { width: number; height: number }): void;
 }
 const takesPathData = (ctx: unknown): ctx is PathDataSink => (ctx as Partial<PathDataSink>).isPathDataSink === true;
 
@@ -35,14 +37,21 @@ const pathFor = (def: IconDef): Path2D | null => {
  * the registry's short text badge is drawn instead, so a node never loses its icon slot.
  */
 export const drawIconTile = (ctx: CanvasRenderingContext2D, def: IconDef, cx: number, cy: number, size: number) => {
-  const tint = categoryTint(def.category);
+  const logo = def.style === "logo";
+  const tint = def.color ?? categoryTint(def.category);
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(cx - size / 2, cy - size / 2, size, size, Math.min(size * 0.25, size / 2));
-  ctx.fillStyle = tint;
-  ctx.globalAlpha = 0.14;
+  // A brand mark needs a neutral ground to keep its own colours; line icons sit on a faint tint of theirs.
+  ctx.fillStyle = logo ? "#ffffff" : tint;
+  ctx.globalAlpha = logo ? 1 : 0.14;
   ctx.fill();
   ctx.globalAlpha = 1;
+  if (logo) {
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.18)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 
   const sink = takesPathData(ctx);
   const path = sink ? null : pathFor(def);
@@ -51,12 +60,14 @@ export const drawIconTile = (ctx: CanvasRenderingContext2D, def: IconDef, cx: nu
     const scale = box / Math.max(def.viewBox.width, def.viewBox.height);
     ctx.translate(cx - (def.viewBox.width * scale) / 2, cy - (def.viewBox.height * scale) / 2);
     ctx.scale(scale, scale);
+    ctx.fillStyle = tint;
     ctx.strokeStyle = tint;
-    ctx.lineWidth = STROKE;
+    ctx.lineWidth = def.strokeWidth ?? STROKE;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     // One call per path string: a relative "m" in a later path starts at the origin, not where the last one ended.
-    if (sink) for (const d of def.paths) ctx.strokePathData(d);
+    if (sink) for (const d of def.paths) logo ? ctx.fillPathData(d, def.viewBox) : ctx.strokePathData(d, def.viewBox);
+    else if (logo) ctx.fill(path!);
     else ctx.stroke(path!);
   } else {
     ctx.fillStyle = tint;

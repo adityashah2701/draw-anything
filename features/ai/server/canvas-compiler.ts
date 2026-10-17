@@ -42,6 +42,9 @@ interface PositionedNode {
 
 const LAYER_ORDER = ["external", "edge", "application", "data", "observability"];
 
+/** The colours a node of this kind gets when its code names no `color:` (so a reader can tell the two apart). */
+export const kindColors = (kind: string | undefined) => (kind ? KIND_COLORS[kind] : undefined);
+
 const KIND_COLORS: Record<string, { fill: string; stroke: string }> = {
   service: { fill: "#dbeafe", stroke: "#1e3a8a" },
   api: { fill: "#e0f2fe", stroke: "#075985" },

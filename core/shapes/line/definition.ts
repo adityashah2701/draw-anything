@@ -27,7 +27,7 @@ export const lineDefinition = createShapeDefinition<LineShape>({
   getAnchors: (shape) => getLineAnchors(shape),
   onResize: resizeLine,
   containsPoint: (shape, point, options) =>
-    containsPointInLine(shape, point, options?.radius ?? 0),
+    containsPointInLine(shape, point, options?.radius ?? 0, options?.zoom),
   getResizeHandles: (shape) => getLineResizeHandles(shape),
   validate: (shape) => shape.points.length >= 2,
   toolbarConfig: {

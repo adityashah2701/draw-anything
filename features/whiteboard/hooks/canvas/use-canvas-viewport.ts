@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Point } from "@/features/whiteboard/types/whiteboard.types";
-import { clampZoom, fitView, stepZoom, wheelIntent, zoomAtPoint, type View } from "@/features/whiteboard/utils/viewport-math";
+import { clampZoom, fitView, pinchView, stepZoom, wheelIntent, zoomAtPoint, type Pair, type View } from "@/features/whiteboard/utils/viewport-math";
 
 /** World-space axis-aligned bounding box of the current viewport. */
 export interface ViewportBounds {
@@ -67,6 +67,9 @@ export const useCanvasViewport = () => {
         : { ...current, panOffset: { x: current.panOffset.x + intent.dx, y: current.panOffset.y + intent.dy } },
     );
   }, []);
+
+  /** Two-finger zoom and pan; see `pinchView`. */
+  const pinchTo = useCallback((from: Pair, to: Pair) => setView((v) => pinchView(v, from, to)), []);
 
   // Buttons and Ctrl +/-: zoom about the middle of the canvas, like the wheel zooms about the cursor.
   const handleZoomIn = useCallback(() => setView((v) => stepZoom(v, canvasSize, 1)), [canvasSize]);
@@ -159,6 +162,7 @@ export const useCanvasViewport = () => {
     fitToBounds,
     centerOn,
     handleNativeWheel,
+    pinchTo,
     startPanning,
     handlePan,
     stopPanning,

@@ -142,3 +142,28 @@ describe("graphFromElements", () => {
     expect(text.consumedIds).toEqual([]);
   });
 });
+
+describe("node colours survive the canvas", () => {
+  const roundTrip = (code: string) => {
+    const { elements } = compile(code);
+    return graphFromElements(elements).graph.nodes;
+  };
+
+  it("reads an explicit color back, so regenerating the code keeps it", () => {
+    const nodes = roundTrip("type flowchart\nReview [color: #ff0066]\nShip [color: green]\nReview > Ship");
+    expect(nodes.find((n) => n.label === "Review")?.color).toBe("#ff0066");
+    expect(nodes.find((n) => n.label === "Ship")?.color).toBe("#16a34a");
+    expect(serializeDiagramCode({ nodes, edges: [], groups: [] })).toContain("color: #ff0066");
+  });
+
+  it("does not invent a color for nodes that only have their kind's colours", () => {
+    const nodes = roundTrip("type architecture\nAPI [kind: api]\nDB [kind: database]\nAPI > DB");
+    expect(nodes.every((n) => n.color === undefined)).toBe(true);
+  });
+
+  it("keeps a custom colour on a diamond and a pill", () => {
+    const nodes = roundTrip("type flowchart\nOK? [shape: diamond, color: #7c3aed]\nStart [shape: pill, color: #0d9488]\nStart > OK?");
+    expect(nodes.find((n) => n.label === "OK?")?.color).toBe("#7c3aed");
+    expect(nodes.find((n) => n.label === "Start")?.color).toBe("#0d9488");
+  });
+});

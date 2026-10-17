@@ -1,6 +1,7 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
 import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { DiamondShape } from "@/core/shapes/diamond/types";
+import { DIAMOND_LABEL_FRACTION } from "@/core/text/label-region";
 
 export const renderDiamondToCanvas = (
   shape: DiamondShape,
@@ -39,8 +40,8 @@ export const renderDiamondToCanvas = (
       label: shape.label,
       centerX: cx,
       centerY: cy,
-      maxWidth: width * 0.66,
-      maxHeight: height * 0.66,
+      maxWidth: width * DIAMOND_LABEL_FRACTION,
+      maxHeight: height * DIAMOND_LABEL_FRACTION,
       zoom,
       clipPath: (canvasContext) => {
         canvasContext.beginPath();

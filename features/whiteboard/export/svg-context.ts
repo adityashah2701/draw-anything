@@ -91,6 +91,8 @@ const RUN_GAP_TOLERANCE = 0.75;
 
 type PathPoint = { x: number; y: number };
 
+const GLYPH_BOX = { width: 24, height: 24 };
+
 export class SvgContext implements PathDataSink {
   readonly isPathDataSink = true as const;
   readonly canvas: { width: number; height: number };
@@ -334,12 +336,20 @@ export class SvgContext implements PathDataSink {
     this.push(`<path d="${this.d.join(" ")}"${this.strokeAttrs()}${this.transformAttr()}/>`);
   }
   /** Used by icon glyphs: raw SVG path data in the current transform (see core/icons/draw.ts). */
-  strokePathData(data: string) {
-    if (!/^[MmLlHhVvCcSsQqTtAaZz0-9\s.,eE+-]*$/.test(data)) throw new Error("SvgContext: unsafe path data");
-    // Glyphs are 24-unit boxes; the extent is the unit box, which is a safe superset of the ink.
-    this.include(0, 0, (this.state.lineWidth * this.scaleFactor()) / 2);
-    this.include(24, 24, (this.state.lineWidth * this.scaleFactor()) / 2);
+  strokePathData(data: string, extent = GLYPH_BOX) {
+    this.includeGlyphBox(data, extent, (this.state.lineWidth * this.scaleFactor()) / 2);
     this.push(`<path d="${data}"${this.strokeAttrs()}${this.transformAttr()}/>`);
+  }
+  /** Filled glyph (brand marks and custom icons): same contract as strokePathData. */
+  fillPathData(data: string, extent = GLYPH_BOX) {
+    this.includeGlyphBox(data, extent, 0);
+    this.push(`<path d="${data}" fill="${escapeXml(this.state.fillStyle)}"${this.opacity("fill")}${this.transformAttr()}/>`);
+  }
+  private includeGlyphBox(data: string, extent: { width: number; height: number }, pad: number) {
+    if (!/^[MmLlHhVvCcSsQqTtAaZz0-9\s.,eE+-]*$/.test(data)) throw new Error("SvgContext: unsafe path data");
+    // The extent is the glyph's coordinate box, a safe superset of the ink.
+    this.include(0, 0, pad);
+    this.include(extent.width, extent.height, pad);
   }
   fillRect(x: number, y: number, w: number, h: number) {
     this.include(x, y, 0);

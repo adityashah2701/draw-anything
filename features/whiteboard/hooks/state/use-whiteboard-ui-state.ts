@@ -8,7 +8,7 @@ export interface ArrowSnapPreviewState {
 }
 
 export const useWhiteboardUiState = () => {
-  const [currentTool, setCurrentTool] = useState<Tool>("pen");
+  const [currentTool, setCurrentTool] = useState<Tool>("select");
   const [currentColor, setCurrentColor] = useState("#000000");
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [fillColor, setFillColor] = useState("#transparent");
@@ -18,6 +18,9 @@ export const useWhiteboardUiState = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  // Where the comment tool was clicked; the comment layer opens a composer there.
+  const [commentDraft, setCommentDraft] = useState<Point | null>(null);
   const [showOutlineColorPicker, setShowOutlineColorPicker] = useState(false);
   const [showFillColorPicker, setShowFillColorPicker] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -121,6 +124,10 @@ export const useWhiteboardUiState = () => {
     setShowCommandMenu,
     showExport,
     setShowExport,
+    showIconPicker,
+    setShowIconPicker,
+    commentDraft,
+    setCommentDraft,
     showOutlineColorPicker,
     setShowOutlineColorPicker,
     showFillColorPicker,

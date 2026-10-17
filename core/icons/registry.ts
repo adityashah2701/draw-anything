@@ -1,4 +1,6 @@
+import { validateCustomIcon } from "./custom-icon";
 import { GLYPHS } from "./glyphs";
+import { LOGOS } from "./logos";
 
 export type IconCategory =
   | "compute"
@@ -11,6 +13,7 @@ export type IconCategory =
   | "observability"
   | "hardware"
   | "flow"
+  | "logo"
   | "generic";
 
 export interface IconDef {
@@ -23,6 +26,17 @@ export interface IconDef {
   viewBox: { width: number; height: number };
   /** Short text shown when the icon cannot be drawn (no Path2D). */
   badge: string;
+  /** Human name for pickers and labels; defaults to the id. */
+  title?: string;
+  /**
+   * `stroke` (default): lucide-style line glyph tinted by category. `logo`: a filled glyph in its own
+   * `color` on a white tile (brand marks and user-supplied artwork).
+   */
+  style?: "stroke" | "logo";
+  /** Glyph colour for `logo` and for stroked custom icons. */
+  color?: string;
+  /** Stroke width in glyph units for stroked custom icons (default 2, lucide's). */
+  strokeWidth?: number;
 }
 
 const registry = new Map<string, IconDef>();
@@ -120,6 +134,21 @@ add("loop", "flow", "repeat", "LP", "repeat", "iterate");
 add("external", "flow", "external-link", "EXT", "third-party", "saas", "vendor", "stripe", "payment");
 add("package", "devops", "package", "PKG", "library", "module", "npm", "sdk");
 
+// Brand marks (Simple Icons, CC0 data; the marks stay their owners' trademarks, see logos.ts). Ids are
+// prefixed so a vendor word in an AI diagram keeps resolving to the neutral glyph above, not to a logo.
+for (const logo of LOGOS) {
+  registerIcon({
+    id: `logo-${logo.slug}`,
+    title: logo.title,
+    category: "logo",
+    paths: [logo.path],
+    viewBox: SQUARE,
+    badge: logo.title.slice(0, 3).toUpperCase(),
+    style: "logo",
+    color: logo.color,
+  });
+}
+
 export const GENERIC_ICON_ID = "generic";
 
 /** Registry id for any id, alias or vendor word; `undefined` when nothing matches. */
@@ -138,7 +167,9 @@ export const getIcon = (reference: unknown): IconDef => registry.get(resolveIcon
  * The icon for a node: its explicit reference when valid, else its kind (so every board stored
  * before icons existed gets one with no migration), else generic.
  */
-export const iconForNode = (ai: { icon?: string; semanticKind?: string } | undefined): IconDef =>
+export const iconForNode = (ai: { icon?: string; semanticKind?: string; customIcon?: unknown } | undefined): IconDef =>
+  // A custom icon travels inside the element and comes from whoever edited the board: re-validated on every read.
+  (ai?.customIcon !== undefined ? validateCustomIcon(ai.customIcon) : null) ??
   getIcon(resolveIconId(ai?.icon) ?? resolveIconId(ai?.semanticKind));
 
 export interface IconMatch {
@@ -190,8 +221,8 @@ export const listIcons = (): IconDef[] => [...registry.values()];
 /** Ids the model may use in `icon`, for prompts. Compact on purpose. */
 export const ICON_IDS_FOR_PROMPT = (): string =>
   listIcons()
+    .filter((i) => i.id !== GENERIC_ICON_ID && i.category !== "logo")
     .map((i) => i.id)
-    .filter((id) => id !== GENERIC_ICON_ID)
     .join(", ");
 
 const CATEGORY_TINT: Record<IconCategory, string> = {
@@ -205,6 +236,7 @@ const CATEGORY_TINT: Record<IconCategory, string> = {
   observability: "#16a34a",
   hardware: "#b45309",
   flow: "#4f46e5",
+  logo: "#475569",
   generic: "#64748b",
 };
 

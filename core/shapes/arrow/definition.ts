@@ -35,7 +35,7 @@ export const arrowDefinition = createShapeDefinition<ArrowShape>({
   getAnchors: (shape) => getArrowAnchors(shape),
   onResize: resizeArrow,
   containsPoint: (shape, point, options) =>
-    containsPointInArrow(shape, point, options?.radius ?? 0),
+    containsPointInArrow(shape, point, options?.radius ?? 0, options?.zoom),
   getResizeHandles: (shape) => getArrowResizeHandles(shape),
   validate: (shape) => shape.points.length >= 2,
   toolbarConfig: {

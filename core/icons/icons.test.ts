@@ -22,7 +22,8 @@ describe("icon registry", () => {
       expect(icon.paths.length, icon.id).toBeGreaterThan(0);
       for (const d of icon.paths) expect(d, icon.id).toMatch(/^[Mm]/);
       expect(icon.badge, icon.id).not.toBe("");
-      expect(Object.values(GLYPHS)).toContain(icon.paths);
+      // Line glyphs are vendored lucide; logos come from logos.ts (covered by custom-icon.test.ts).
+      if (icon.category !== "logo") expect(Object.values(GLYPHS)).toContain(icon.paths);
     }
   });
 

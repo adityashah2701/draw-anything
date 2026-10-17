@@ -36,7 +36,7 @@ export const bidirectionalArrowDefinition =
     getAnchors: (shape) => getBidirectionalArrowAnchors(shape),
     onResize: resizeBidirectionalArrow,
     containsPoint: (shape, point, options) =>
-      containsPointInArrow(shape, point, options?.radius ?? 0),
+      containsPointInArrow(shape, point, options?.radius ?? 0, options?.zoom),
     getResizeHandles: (shape) => getArrowResizeHandles(shape),
     validate: (shape) => shape.points.length >= 2,
     toolbarConfig: {

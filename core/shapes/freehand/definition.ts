@@ -27,7 +27,7 @@ export const freehandDefinition = createShapeDefinition<FreehandShape>({
   getAnchors: (shape) => getFreehandAnchors(shape),
   onResize: resizeFreehand,
   containsPoint: (shape, point, options) =>
-    containsPointInFreehand(shape, point, options?.radius ?? 0),
+    containsPointInFreehand(shape, point, options?.radius ?? 0, options?.zoom),
   getResizeHandles: (shape) => getFreehandResizeHandles(shape),
   validate: (shape) => shape.points.length >= 1,
   toolbarConfig: {

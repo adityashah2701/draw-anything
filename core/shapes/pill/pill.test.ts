@@ -8,10 +8,10 @@ const pill = (points = [{ x: 0, y: 0 }, { x: 200, y: 60 }]): PillShape => ({ id:
 const asEl = (s: PillShape) => s as DrawingElement;
 
 describe("pill shape", () => {
-  it("is registered, without a toolbar entry (it comes from diagram code and AI diagrams)", () => {
+  it("is registered, with a toolbar entry in the shapes group", () => {
     const def = getShapeDefinition("pill")!;
     expect(def.type).toBe("pill");
-    expect(def.toolbarConfig).toBeUndefined();
+    expect(def.toolbarConfig).toMatchObject({ label: "Terminator", group: "shapes" });
   });
 
   it("has the bounds of its two points, however they are ordered", () => {

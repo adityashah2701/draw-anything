@@ -34,6 +34,14 @@ export const useWhiteboardKeyboard = ({
         hasSelection,
       });
       if (!command) return;
+      // Enter on a focused button, link, menu item or dialog activates that control, not "edit the selection".
+      if (
+        command.type === "edit" &&
+        e.target instanceof Element &&
+        e.target.closest("button, a, [role=menuitem], [role=option], [role=dialog]")
+      ) {
+        return;
+      }
       // Browser defaults (page scroll on arrows/space, save dialog, bookmark...) are never wanted here.
       e.preventDefault();
       if (command.type === "tool") return setCurrentTool(command.tool);

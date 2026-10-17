@@ -1,3 +1,4 @@
+import { RectangleHorizontal } from "lucide-react";
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { resizable } from "@/core/shapes/capabilities/resizable";
@@ -8,7 +9,7 @@ import { getPillAnchors, getPillBounds } from "@/core/shapes/pill/geometry";
 import { containsPointInPill, getPillResizeHandles, resizePill } from "@/core/shapes/pill/interaction";
 import { renderPillToCanvas } from "@/core/shapes/pill/renderer";
 
-/** No toolbar entry: pills come from diagram code and AI diagrams (flowchart start/end). */
+/** Flowchart terminator (start/end): from the toolbar, diagram code and AI diagrams. */
 export const pillDefinition = createShapeDefinition<PillShape>({
   type: "pill",
   capabilities: [movable<PillShape>(), resizable<PillShape>(), connectable<PillShape>(getPillAnchors), labelable<PillShape>()],
@@ -32,6 +33,7 @@ export const pillDefinition = createShapeDefinition<PillShape>({
   containsPoint: (shape, point, options) => containsPointInPill(shape, point, options?.radius ?? 0),
   getResizeHandles: (shape, options) => getPillResizeHandles(shape, options?.bounds),
   validate: (shape) => shape.points.length >= 2,
+  toolbarConfig: { icon: RectangleHorizontal, label: "Terminator", group: "shapes", order: 3.5 },
   propertiesConfig: { supportsColor: true, supportsFill: true, supportsStrokeWidth: true, supportsFontSize: false },
   labelConfig: { anchor: "center", padding: 12, verticalAlign: "middle" },
 });

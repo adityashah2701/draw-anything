@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { runDiagramAgent } from "./agent-loop";
+import { compactHistory, runDiagramAgent } from "./agent-loop";
 import type { AgentMessage, ModelTurn, ToolTransport } from "./types";
 
 const GOOD = `type architecture\nClient [icon: browser] > API [icon: api] > DB [icon: postgres]`;
@@ -131,5 +131,54 @@ describe("runDiagramAgent", () => {
     const { transport } = scripted(say({ toolCalls: [{ name: "search_icons", arg: "db" }] }), finish(GOOD));
     await run(transport, { onProgress: (p: { type: string }) => seen.push(p.type) });
     expect(seen).toEqual(["model.turn", "tool", "model.turn", "tool"]);
+  });
+});
+
+describe("compactHistory", () => {
+  const sys: AgentMessage = { role: "system", content: "sys" };
+  const user: AgentMessage = { role: "user", content: "draw" };
+
+  it("leaves a short history alone", () => {
+    const h: AgentMessage[] = [sys, user, { role: "assistant", content: "draft 1" }];
+    expect(compactHistory(h)).toEqual(h);
+  });
+
+  it("keeps the request and the latest reply with what followed it, and drops older drafts and their tool results", () => {
+    const calls = [{ id: "a", name: "check_diagram" as const, arg: "old code" }];
+    const h: AgentMessage[] = [
+      sys,
+      user,
+      { role: "assistant", content: "old draft", toolCalls: calls },
+      { role: "tool", name: "check_diagram", content: "old review", callId: "a" },
+      { role: "assistant", content: "latest draft", toolCalls: [{ id: "b", name: "check_diagram", arg: "new code" }] },
+      { role: "tool", name: "check_diagram", content: "new review", callId: "b" },
+    ];
+    const out = compactHistory(h);
+    expect(out.map((m) => m.role)).toEqual(["system", "user", "assistant", "tool"]);
+    expect(out[1].content).toMatch(/omitted/);
+    expect(JSON.stringify(out)).not.toMatch(/old draft|old review|old code/);
+    expect(out[3]).toMatchObject({ callId: "b" }); // the kept tool result still has its call
+  });
+
+  it("does not mutate the history it is given", () => {
+    const h: AgentMessage[] = [sys, user, { role: "assistant", content: "a" }, { role: "user", content: "fix" }, { role: "assistant", content: "b" }];
+    compactHistory(h);
+    expect(h[1].content).toBe("draw");
+    expect(h).toHaveLength(5);
+  });
+
+  it("keeps what is sent to the model bounded across many turns", async () => {
+    const big = `type architecture\n${Array.from({ length: 60 }, (_, i) => `N${i} [icon: api] > N${i + 1}`).join("\n")}`;
+    const { transport, calls } = scripted(
+      say({ text: big, toolCalls: [{ name: "check_diagram", arg: big }] }),
+      say({ text: big, toolCalls: [{ name: "check_diagram", arg: big }] }),
+      say({ text: big, toolCalls: [{ name: "check_diagram", arg: big }] }),
+      finish(big),
+    );
+    await run(transport, { maxTurns: 4 });
+    const size = (m: readonly AgentMessage[]) => m.reduce((n, x) => n + x.content.length, 0);
+    const sizes = calls.map(size);
+    // Without compaction the 4th request would be about 4x the 1st reply; with it, it stays near one reply plus feedback.
+    expect(sizes[3]).toBeLessThan(sizes[1] * 1.6);
   });
 });

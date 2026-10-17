@@ -41,7 +41,31 @@ export const pillSizeForLabel = (box: { width: number; height: number }, min: { 
   return { width: Math.max(min.width, Math.ceil(box.width + height / 2)), height };
 };
 
+/** Share of a shape's bounds its label may use; the renderers and the editor both read these. */
+export const ELLIPSE_LABEL_FRACTION = 0.72;
+export const DIAMOND_LABEL_FRACTION = 0.66;
+const SHAPE_LABEL_FRACTION: Record<string, number> = {
+  circle: ELLIPSE_LABEL_FRACTION,
+  ellipse: ELLIPSE_LABEL_FRACTION,
+  diamond: DIAMOND_LABEL_FRACTION,
+};
+const FRACTION_MAX_LINES = 3;
+
 export const getShapeLabelRegion = (type: string, bounds: Bounds): LabelRegion => {
+  if (type === "pill") {
+    const box = pillLabelBox(bounds.width, bounds.height);
+    return { centerX: bounds.minX + bounds.width / 2, centerY: bounds.minY + bounds.height / 2, ...box };
+  }
+  const fraction = SHAPE_LABEL_FRACTION[type];
+  if (fraction) {
+    return {
+      centerX: bounds.minX + bounds.width / 2,
+      centerY: bounds.minY + bounds.height / 2,
+      width: bounds.width * fraction,
+      height: bounds.height * fraction,
+      maxLines: FRACTION_MAX_LINES,
+    };
+  }
   if (type === "semantic-node") {
     const icon = semanticIconSize(bounds.height);
     const left = bounds.minX + icon + ICON_LEFT_MARGIN + ICON_LABEL_GAP;

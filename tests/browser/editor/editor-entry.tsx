@@ -22,6 +22,8 @@ window.__editor = {
   },
   backend: {
     savedContent: backend.savedContent,
+    seedComment: backend.seedComment,
+    comments: backend.comments,
     saveCount: backend.saveCount,
     mutationLog: backend.mutationLog,
   },

@@ -1,6 +1,6 @@
 import { estimateLabelBox } from "./estimate";
 import { LABEL_PADDING } from "./label-layout";
-import { PILL_MAX_LINES, pillSizeForLabel, SEMANTIC_INSET_WIDTH, SEMANTIC_MAX_LINES } from "./label-region";
+import { DIAMOND_LABEL_FRACTION, PILL_MAX_LINES, pillSizeForLabel, SEMANTIC_INSET_WIDTH, SEMANTIC_MAX_LINES } from "./label-region";
 import { LINE_HEIGHT_RATIO } from "./typography";
 
 export interface NodeSize {
@@ -45,8 +45,6 @@ export const sizeSemanticNode = (input: NodeSizeInput): NodeSize => {
   return { width: input.maxWidth, height: heightFor(SEMANTIC_MAX_LINES), lineCount: SEMANTIC_MAX_LINES, fits: false };
 };
 
-/** Share of a diamond's width and height the label box may use (matches the diamond renderer). */
-const DIAMOND_LABEL_FRACTION = 0.66;
 /** A text block of w x h fits a W x H rhombus when w/W + h/H <= 1; keep a little air. */
 const DIAMOND_FIT = 0.95;
 const DIAMOND_MAX_LINES = 3;

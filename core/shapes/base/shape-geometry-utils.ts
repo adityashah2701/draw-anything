@@ -37,3 +37,6 @@ export const isPointNearPolyline = (
 
   return false;
 };
+
+/** A pick distance of `px` screen pixels in world units: the same finger-width at every zoom. */
+export const screenTolerance = (px: number, zoom = 1) => px / (Number.isFinite(zoom) && zoom > 0 ? zoom : 1);

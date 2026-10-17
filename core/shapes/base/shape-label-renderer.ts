@@ -96,6 +96,9 @@ const contrastRatio = (a: Rgb, b: Rgb) => {
   return (lighter + 0.05) / (darker + 0.05);
 };
 
+/** WCAG AA for body text: a label colour that fails this on its fill is replaced by near-black or near-white. */
+const MIN_TEXT_CONTRAST = 4.5;
+
 export const resolveTextColor = (preferredColor?: string, fillColor?: string) => {
   const isDark = isDarkRender();
   const adaptivePreferred = getAdaptiveColor(preferredColor, isDark);
@@ -106,7 +109,7 @@ export const resolveTextColor = (preferredColor?: string, fillColor?: string) =>
   }
 
   const preferredRgb = parseColorToRgb(adaptivePreferred);
-  if (preferredRgb && contrastRatio(preferredRgb, fillRgb) >= 3) {
+  if (preferredRgb && contrastRatio(preferredRgb, fillRgb) >= MIN_TEXT_CONTRAST) {
     return adaptivePreferred || fallbackColor;
   }
 

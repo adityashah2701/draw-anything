@@ -380,12 +380,13 @@ describe("flowchart terminators (pills)", () => {
     expect(elements.filter((e) => e.ai?.role === "node")).toHaveLength(5);
   });
 
-  it("reads back from the canvas with its kind, and writes code that says no more than the kind", () => {
+  it("reads back from the canvas with its kind and any colour the code chose, and says no more than that", () => {
     const { graph } = graphFromElements(elements);
     expect(graph.nodes.find((n) => n.label === "Start")).toMatchObject({ kind: "start", shape: "pill" });
     const text = serializeDiagramCode(graph);
     expect(text).toMatch(/^Start \[kind: start\]$/m);
-    expect(text).toMatch(/^Locked out \[shape: pill\]$/m);
+    expect(text).toMatch(/^Locked out \[shape: pill, color: #dc2626\]$/m); // an explicit colour survives
+    expect(text).not.toMatch(/Start .*color:/); // a kind's own colours are not written
     const again = elementsFromDiagramCode(text, { generationId: "g2", frameId: "f" }).elements;
     expect(again.filter((e) => e.type === "pill").map((e) => e.label).sort()).toEqual(["Dashboard", "Locked out", "Start"]);
     expect(again.find((e) => e.label === "Enter credentials")?.type).toBe("semantic-node");

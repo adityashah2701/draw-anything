@@ -1,4 +1,5 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
+import { CORNER_RADIUS, screenCornerRadius } from "@/core/shapes/base/geometry-tokens";
 import { getShapeLabelRegion, semanticIconSize, SEMANTIC_ICON_LEFT } from "@/core/text/label-region";
 import { drawIconTile } from "@/core/icons/draw";
 import { iconForNode } from "@/core/icons/registry";
@@ -19,7 +20,7 @@ export const renderSemanticNodeToCanvas = (
   const top = Math.min(startY, endY);
   const width = Math.abs(endX - startX);
   const height = Math.abs(endY - startY);
-  const radius = Math.min(8 * zoom, width / 2, height / 2);
+  const radius = screenCornerRadius(CORNER_RADIUS.semanticNode, zoom, width, height);
 
   ctx.beginPath();
   ctx.roundRect(left, top, width, height, radius);

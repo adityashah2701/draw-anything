@@ -20,6 +20,8 @@ export type ShortcutCommand =
   | { type: "toggle-grid" }
   | { type: "toggle-help" }
   | { type: "export" }
+  | { type: "icon-picker" }
+  | { type: "edit" }
   | { type: "tool"; tool: Tool }
   | { type: "hand-hold" };
 
@@ -51,13 +53,14 @@ const TOOL_KEYS: Record<string, { tool: Tool; edit: boolean }> = {
   v: { tool: "select", edit: false },
   p: { tool: "pen", edit: true },
   r: { tool: "rectangle", edit: true },
-  c: { tool: "circle", edit: true },
+  c: { tool: "ellipse", edit: true },
   d: { tool: "diamond", edit: true },
   l: { tool: "line", edit: true },
   a: { tool: "arrow", edit: true },
   b: { tool: "arrow-bidirectional", edit: true },
   t: { tool: "text", edit: true },
   e: { tool: "eraser", edit: true },
+  m: { tool: "comment", edit: true },
   h: { tool: "hand", edit: false },
 };
 
@@ -122,9 +125,11 @@ export const resolveShortcut = (e: ShortcutEvent, ctx: ShortcutContext): Shortcu
   }
   if (key === "Delete" || key === "Backspace") return edit && ctx.hasSelection ? { type: "delete" } : null;
   if (key === "Escape") return { type: "escape" };
+  if (key === "Enter") return edit && ctx.hasSelection ? { type: "edit" } : null;
   if (key === " ") return e.repeat ? null : { type: "hand-hold" };
   if (e.shiftKey && key === "!") return { type: "fit" };
   if (e.altKey) return null;
+  if (key === "i") return edit ? { type: "icon-picker" } : null;
   if (key === "g") return { type: "toggle-grid" };
   if (key === "f") return { type: "fit" };
   const tool = TOOL_KEYS[key];

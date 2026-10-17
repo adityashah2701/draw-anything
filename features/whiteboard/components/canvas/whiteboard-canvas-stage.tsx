@@ -1,18 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import useCanvasEngine from "@/features/whiteboard/hooks/canvas/use-canvas-engine";
 import { CanvasContextMenu } from "@/features/whiteboard/components/canvas/canvas-context-menu";
 import { CanvasEmptyState } from "@/features/whiteboard/components/canvas/canvas-empty-state";
 import { Minimap } from "@/features/whiteboard/components/canvas/minimap";
 import { Cursors } from "@/features/whiteboard/components/canvas/cursors";
+import { CommentLayer } from "@/features/whiteboard/components/canvas/comment-layer";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import {
-  DEFAULT_LABEL_FONT_SIZE,
-  defaultLabelWeight,
-} from "@/core/text/label-layout";
-import { shapeRegistry } from "@/core/shapes/shape-registry";
-import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
-import { normalizeRichTextInput } from "@/features/whiteboard/utils/rich-text-renderer";
+import { DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Pair } from "@/features/whiteboard/utils/viewport-math";
+
+const firstTwo = (pointers: Map<number, Point>): Pair | null => {
+  const [a, b] = [...pointers.values()];
+  return a && b ? [a, b] : null;
+};
 
 interface WhiteboardCanvasStageProps {
   controller: WhiteboardPageController;
@@ -46,11 +47,7 @@ export const WhiteboardCanvasStage = ({
     getElementBounds,
     updateArrowBendsAtPoint,
     setSelectedElements,
-    setEditingShapeLabelId,
-    setEditingShapeLabelDraft,
-    setEditingShapeLabelFontSize,
-    setEditingShapeLabelFontWeight,
-    setEditingShapeLabelFontStyle,
+    beginEditing,
     arrowSnapPreview,
     editingShapeLabelId,
   } = controller;
@@ -78,6 +75,10 @@ export const WhiteboardCanvasStage = ({
     magneticSnapPreview: arrowSnapPreview,
     editingShapeLabelId,
   });
+
+  // Fingers currently down (a mouse or pen is never tracked: a missed release must not turn a click into a pinch), canvas-relative; `pinch` is set while two or more are.
+  const touches = useRef(new Map<number, Point>());
+  const pinch = useRef<Pair | null>(null);
 
   const { handleNativeWheel } = canvasViewport;
   useEffect(() => {
@@ -140,6 +141,24 @@ export const WhiteboardCanvasStage = ({
             (typeof window !== "undefined" ? window.devicePixelRatio : 1)
           }
           onPointerDown={(e) => {
+            // Second finger: whatever the first one started is abandoned and the two fingers pan and zoom.
+            if (e.pointerType === "touch") {
+              const rect = e.currentTarget.getBoundingClientRect();
+              touches.current.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+            }
+            if (touches.current.size >= 2) {
+              if (!pinch.current) {
+                // A shape being drawn is dropped; a move or resize is already on the board, so it is just ended.
+                if (!whiteboardDrawing.cancelDrawing()) whiteboardDrawing.stopDrawing();
+                pinch.current = firstTwo(touches.current);
+              }
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch {
+                // best effort
+              }
+              return;
+            }
             // Left button / touch / pen only, and only the first finger: a second
             // finger or a right click must not start a second gesture.
             if (e.button !== 0 || !e.isPrimary) return;
@@ -153,6 +172,11 @@ export const WhiteboardCanvasStage = ({
               e.currentTarget.setPointerCapture(e.pointerId);
             } catch {
               // Capture is best effort; the gesture still works without it.
+            }
+            if (currentTool === "comment") {
+              if (whiteboardAccess.hasEditAccess) controller.setCommentDraft(canvasViewport.getMousePosition(e));
+              setCurrentTool("select");
+              return;
             }
             if (currentTool === "text" && whiteboardAccess.hasEditAccess) {
               const pos = canvasViewport.getMousePosition(e);
@@ -184,12 +208,6 @@ export const WhiteboardCanvasStage = ({
             const topEl = [...clickedElements].reverse()[0];
             if (!topEl) return;
 
-            if (topEl.type === "text") {
-              setEditingTextElement(topEl);
-              setCurrentTool("select");
-              return;
-            }
-
             if (isArrowElement(topEl)) {
               const handled = updateArrowBendsAtPoint(topEl, pos);
               if (handled) {
@@ -197,31 +215,30 @@ export const WhiteboardCanvasStage = ({
               }
             }
 
-            const shapeDef = shapeRegistry.get(
-              topEl.type as DrawingElement["type"],
-            );
-
-            if (shapeDef?.labelConfig?.anchor === "center") {
-              setEditingShapeLabelId(topEl.id);
-              setEditingShapeLabelDraft(
-                normalizeRichTextInput(topEl.label?.trim() || "TEXT"),
-              );
-              // Same fallbacks the canvas renderer uses, so opening the editor changes nothing.
-              const labelSize = topEl.fontSize || DEFAULT_LABEL_FONT_SIZE;
-              setEditingShapeLabelFontSize(labelSize);
-              setEditingShapeLabelFontWeight(
-                topEl.fontWeight || defaultLabelWeight(labelSize),
-              );
-              setEditingShapeLabelFontStyle(topEl.fontStyle || "normal");
-              setSelectedElements([topEl.id]);
-              setCurrentTool("select");
-            }
+            beginEditing(topEl);
           }}
           onPointerMove={(e) => {
+            if (touches.current.has(e.pointerId)) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              touches.current.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+            }
+            if (pinch.current) {
+              const next = firstTwo(touches.current);
+              if (next) {
+                canvasViewport.pinchTo(pinch.current, next);
+                pinch.current = next;
+              }
+              return;
+            }
             if (!e.isPrimary) return;
             whiteboardDrawing.draw(e);
           }}
           onPointerUp={(e) => {
+            touches.current.delete(e.pointerId);
+            if (pinch.current) {
+              if (touches.current.size < 2) pinch.current = null;
+              return;
+            }
             if (!e.isPrimary) return;
             if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
               e.currentTarget.releasePointerCapture(e.pointerId);
@@ -229,6 +246,11 @@ export const WhiteboardCanvasStage = ({
             whiteboardDrawing.stopDrawing();
           }}
           onPointerCancel={(e) => {
+            touches.current.delete(e.pointerId);
+            if (pinch.current) {
+              if (touches.current.size < 2) pinch.current = null;
+              return;
+            }
             if (!e.isPrimary) return;
             whiteboardDrawing.stopDrawing();
           }}
@@ -248,6 +270,16 @@ export const WhiteboardCanvasStage = ({
                       ? "crosshair"
                       : "not-allowed",
           }}
+        />
+
+        <CommentLayer
+          whiteboardId={whiteboardId}
+          zoom={canvasViewport.zoom}
+          panOffset={canvasViewport.panOffset}
+          stageSize={canvasViewport.canvasSize}
+          canEdit={whiteboardAccess.hasEditAccess}
+          draft={controller.commentDraft}
+          onDraftChange={controller.setCommentDraft}
         />
 
         {controller.isBoardReady &&

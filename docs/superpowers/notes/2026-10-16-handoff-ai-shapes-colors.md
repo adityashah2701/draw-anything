@@ -35,3 +35,10 @@ The system prompt was only about 1.8k estimated tokens, so shrinking it cannot b
 - Item 4 (a legend or neutral palette for unknown kinds) is still open.
 - A pill drawn by hand has no toolbar tool; only diagram code and AI diagrams create pills.
 - `color:` is not read back from the canvas into diagram code (pre-existing), so a custom pill colour is lost if the code is regenerated from the board.
+
+---
+# Update 2026-10-17
+- **Groq token limit**: the likely cause named above is addressed: `compactHistory` (agent-loop.ts) resends only the request, the latest reply and what followed it, and `MAX_CONVERSATION_CHARS` is 30,000 (was 60,000, now measured on what would be resent). Unit-tested for bounded growth; still not run against a real Groq key, so the error rate is unmeasured.
+- **Item 4 decided**: unknown kinds keep the neutral palette (white / light indigo by nesting depth, slate stroke); no legend, because colour carries no meaning beyond the kind and a legend would be wrong for diagrams with custom `color:`.
+- **Pill on the toolbar** ("Terminator"), and its editor now uses the same label box as its renderer.
+- **`color:` read-back** from the canvas into diagram code is done (`graphFromElements`).

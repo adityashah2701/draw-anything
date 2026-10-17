@@ -2,15 +2,16 @@ import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
 import {
   ShapeResizeHandle,
 } from "@/core/shapes/base/base-shape-definition";
-import { isPointNearPolyline } from "@/core/shapes/base/shape-geometry-utils";
+import { isPointNearPolyline, screenTolerance } from "@/core/shapes/base/shape-geometry-utils";
 import { LineShape } from "@/core/shapes/line/types";
 
 export const containsPointInLine = (
   shape: LineShape,
   point: Point,
   radius = 0,
+  zoom = 1,
 ): boolean => {
-  return isPointNearPolyline(point, shape.points, 10 + radius);
+  return isPointNearPolyline(point, shape.points, screenTolerance(10, zoom) + radius);
 };
 
 export const getLineResizeHandles = (

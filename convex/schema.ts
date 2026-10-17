@@ -27,6 +27,20 @@ export default defineSchema({
     .index("by_organizationId", ["orgId"])
     .index("by_createdBy_orgId", ["createdBy", "orgId"]),
 
+  // Pinned comment threads on a board. A thread is a root comment (x, y, resolved) plus replies (parentId).
+  comments: defineTable({
+    whiteboardId: v.id("whiteboards"),
+    parentId: v.optional(v.id("comments")),
+    x: v.number(),
+    y: v.number(),
+    text: v.string(),
+    authorId: v.id("users"),
+    resolved: v.optional(v.boolean()),
+    createdAt: v.number(),
+  })
+    .index("by_whiteboardId", ["whiteboardId"])
+    .index("by_parentId", ["parentId"]),
+
   aiFrames: defineTable({
     frameId: v.string(),
     whiteboardId: v.optional(v.string()),

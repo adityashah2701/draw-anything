@@ -116,6 +116,7 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
           onToolChange={controller.setCurrentTool}
           disabled={!whiteboardAccess.hasEditAccess}
           onOpenAIPanel={handleGenerateDiagram}
+          onOpenIconPicker={() => controller.setShowIconPicker(true)}
         />
       )}
     </>

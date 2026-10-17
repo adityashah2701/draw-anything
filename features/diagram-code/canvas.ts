@@ -1,11 +1,12 @@
 import { buildAIDiagramDocument } from "@/features/ai/server/validation";
-import { compileAIDiagramToCanvas } from "@/features/ai/server/canvas-compiler";
+import { compileAIDiagramToCanvas, kindColors } from "@/features/ai/server/canvas-compiler";
 import {
   normalizeModelGraphDraftDetailed,
   normalizeModelPlan,
 } from "@/features/ai/schemas";
 import type { AIDiagramType, AIModelProvider } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { tint } from "@/core/color/named-colors";
 import { parseDiagramCode } from "./parse";
 import type { SerializableGraph } from "./serialize";
 import type { NodePin } from "@/features/ai/server/layout/pins";
@@ -87,7 +88,7 @@ export const elementsFromDiagramCode = (
 
 // ── canvas -> code ──────────────────────────────────────────────────────────
 
-const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "diamond", "pill", "triangle"]);
+const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "ellipse", "diamond", "pill", "triangle"]);
 
 const boundsOf = (element: DrawingElement) => ({
   minX: Math.min(...element.points.map((p) => p.x)),
@@ -95,6 +96,18 @@ const boundsOf = (element: DrawingElement) => ({
   minY: Math.min(...element.points.map((p) => p.y)),
   maxY: Math.max(...element.points.map((p) => p.y)),
 });
+
+/**
+ * The explicit colour a node was given in code. The compiler draws `color:` as a stroke plus a fill that
+ * is exactly `tint(color, 0.88)`; kind and default colours use hand-picked fills, so that pair is the
+ * signature of a custom colour and nothing else needs to be remembered.
+ */
+const customColorOf = (el: DrawingElement): string | undefined => {
+  if (!el.fill || !el.color || !/^#[0-9a-f]{6}$/i.test(el.color) || el.fill !== tint(el.color, 0.88)) return undefined;
+  const byKind = kindColors(el.ai?.semanticKind);
+  // A kind's own colours are not a choice the user made, even when they happen to fit the signature.
+  return byKind && byKind.stroke.toLowerCase() === el.color.toLowerCase() ? undefined : el.color.toLowerCase();
+};
 
 export interface GraphFromElements {
   graph: SerializableGraph;
@@ -129,6 +142,7 @@ export const graphFromElements = (elements: DrawingElement[]): GraphFromElements
       kind: el.ai?.semanticKind ?? (el.type === "diamond" ? "decision" : undefined),
       icon: el.ai?.icon,
       shape: el.type === "diamond" || el.type === "pill" ? el.type : undefined,
+      color: customColorOf(el),
     };
   });
 

@@ -26,6 +26,8 @@ export interface EditorDebug {
     /** The `content` string the fake Convex currently stores (what autosave wrote). */
     savedContent(): string | null;
     saveCount(): number;
+    seedComment(comment: { x: number; y: number; text: string; resolved?: boolean; authorName?: string }): void;
+    comments(): Array<{ _id: string; text: string; parentId?: string; resolved: boolean; x: number; y: number }>;
     mutationLog(): string[];
   };
 }

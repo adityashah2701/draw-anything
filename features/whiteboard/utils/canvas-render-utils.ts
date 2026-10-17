@@ -7,6 +7,7 @@ import {
 import { ConnectionHandle } from "@/core/routing/connection-handles";
 import {
   getShapeAnchors,
+  getShapeResizeHandles,
   renderShapeToCanvas,
 } from "@/core/shapes/shape-runtime";
 
@@ -271,46 +272,20 @@ export const drawElement = (
           handles.push({ x, y });
         });
       } else {
-        const padding = (element.strokeWidth || 2) / 2;
-        const pMinX = minX - padding;
-        const pMinY = minY - padding;
-        const pMaxX = maxX + padding;
-        const pMaxY = maxY + padding;
-
-        // Full 8-point bounding box for other shapes
-        handles = [
-          { x: pMinX * zoom + panOffset.x, y: pMinY * zoom + panOffset.y }, // nw
-          {
-            x: ((pMinX + pMaxX) / 2) * zoom + panOffset.x,
-            y: pMinY * zoom + panOffset.y,
-          }, // n
-          { x: pMaxX * zoom + panOffset.x, y: pMinY * zoom + panOffset.y }, // ne
-          {
-            x: pMaxX * zoom + panOffset.x,
-            y: ((pMinY + pMaxY) / 2) * zoom + panOffset.y,
-          }, // e
-          { x: pMaxX * zoom + panOffset.x, y: pMaxY * zoom + panOffset.y }, // se
-          {
-            x: ((pMinX + pMaxX) / 2) * zoom + panOffset.x,
-            y: pMaxY * zoom + panOffset.y,
-          }, // s
-          { x: pMinX * zoom + panOffset.x, y: pMaxY * zoom + panOffset.y }, // sw
-          {
-            x: pMinX * zoom + panOffset.x,
-            y: ((pMinY + pMaxY) / 2) * zoom + panOffset.y,
-          }, // w
-        ];
+        // Drawn from the same list the pointer hit-tests, so a visible handle always works and a shape
+        // with none (freehand) shows none.
+        handles = getShapeResizeHandles(element, { bounds: { ...bounds, width: maxX - minX, height: maxY - minY }, zoom }).map((handle) => ({
+          x: handle.x * zoom + panOffset.x,
+          y: handle.y * zoom + panOffset.y,
+        }));
       }
 
-      // Text elements in Eraser don't have 8 resize handles — keep it clean
-      if (element.type !== "text") {
-        handles.forEach((h) => {
-          ctx.beginPath();
-          ctx.arc(h.x, h.y, handleSize / 1.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        });
-      }
+      handles.forEach((h) => {
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, handleSize / 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
     }
   }
 

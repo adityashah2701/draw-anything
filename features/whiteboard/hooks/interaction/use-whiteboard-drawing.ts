@@ -37,6 +37,13 @@ const TOOL_TO_SHAPE_TYPE: Partial<Record<Tool, DrawingElement["type"]>> = {
   // Other tools will fall back to their name if they exist in shapeRegistry
 };
 
+/** Connector snap distance in screen pixels (divided by zoom to get world units). */
+const CONNECTOR_SNAP_PX = 14;
+/** A drag shorter than this (world units, both axes) is a click, not a shape. */
+const MIN_DRAWN_SIZE = 4;
+const isConnectorTool = (tool: Tool) =>
+  tool === "arrow" || tool === "arrow-bidirectional";
+
 interface UseWhiteboardDrawingProps {
   currentTool: Tool;
   currentColor: string;
@@ -79,6 +86,7 @@ interface UseWhiteboardDrawingProps {
     dragVector?: Point;
     previous?: MagneticSnapMatch | null;
     excludeElementIds?: string[];
+    radius?: number;
   }) => MagneticSnapMatch | null;
   bindArrowEndpoint?: (
     arrow: DrawingElement,
@@ -90,6 +98,8 @@ interface UseWhiteboardDrawingProps {
   onArrowSnapPreviewChange?: (preview: ArrowSnapPreview | null) => void;
   /** Called to directly add a completed arrow element (used for connection drops) */
   addElementDirect?: (element: DrawingElement) => void;
+  /** A shape, line or connector was just drawn: the editor selects it and returns to the select tool. */
+  onElementCreated?: (id: string) => void;
   // Viewport
   startPanning: (point: Point) => void;
   handlePan: (point: Point) => void;
@@ -128,6 +138,7 @@ export const useWhiteboardDrawing = ({
   routeConnectedArrow,
   onArrowSnapPreviewChange,
   addElementDirect,
+  onElementCreated,
   startPanning,
   handlePan,
   stopPanning,
@@ -156,6 +167,12 @@ export const useWhiteboardDrawing = ({
   // A plain click on one member of a multi-selection: collapse to it on release unless the pointer moved.
   const collapseOnReleaseRef = useRef<{ id: string; origin: Point } | null>(null);
   const previousSnapRef = useRef<{
+    start: MagneticSnapMatch | null;
+    end: MagneticSnapMatch | null;
+  }>({ start: null, end: null });
+
+  // Shapes a new connector snapped to at each end while it is being drawn.
+  const arrowSnapRef = useRef<{
     start: MagneticSnapMatch | null;
     end: MagneticSnapMatch | null;
   }>({ start: null, end: null });
@@ -205,8 +222,17 @@ export const useWhiteboardDrawing = ({
       }
 
       if (currentTool === "select") {
+        // A selected arrow's end sits on its target's connection handle; grabbing it must move the
+        // arrow end, not start a second connector from the target.
+        const grabsArrowEnd = selectedElements.some((id) => {
+          const element = elements.find((el) => el.id === id);
+          if (!element || !isArrowElement(element)) return false;
+          const handle = getResizeHandle(point, element);
+          return handle === "start" || handle === "end";
+        });
+
         // ── Connection handle check (takes priority over resize/select) ──────
-        if (hasEditAccess && hoveredElementId) {
+        if (hasEditAccess && hoveredElementId && !grabsArrowEnd) {
           const hoveredEl = elements.find((el) => el.id === hoveredElementId);
           if (hoveredEl) {
             const handles = getElementConnectionHandles(hoveredEl);
@@ -316,9 +342,22 @@ export const useWhiteboardDrawing = ({
       const shapeDef = shapeRegistry.get(shapeType as DrawingElement["type"]);
       if (!shapeDef) return;
 
+      // A connector begins on the shape under the pointer, not at the raw pointer.
+      const startSnap = isConnectorTool(currentTool)
+        ? (findNearestAnchorSnap?.({
+            point,
+            radius: CONNECTOR_SNAP_PX / zoom,
+          }) ?? null)
+        : null;
+      arrowSnapRef.current = { start: startSnap, end: null };
+      onArrowSnapPreviewChange?.(null);
+
       const newElement = createShape(shapeType as DrawingElement["type"], {
         id: generateId(),
-        points: [point],
+        points: [startSnap ? { x: startSnap.anchor.x, y: startSnap.anchor.y } : point],
+        startConnection: startSnap
+          ? { elementId: startSnap.elementId, anchorId: startSnap.anchor.id }
+          : undefined,
         color: currentColor,
         strokeWidth,
         fill: fillColor !== "#transparent" ? fillColor : undefined,
@@ -331,12 +370,6 @@ export const useWhiteboardDrawing = ({
             ? "orthogonal"
             : undefined,
         isManuallyRouted: false,
-        label:
-          shapeType === "rectangle" ||
-          shapeType === "circle" ||
-          shapeType === "diamond"
-            ? "TEXT"
-            : undefined,
       });
 
       if (newElement) {
@@ -364,6 +397,9 @@ export const useWhiteboardDrawing = ({
       hoveredElementId,
       getElementConnectionHandles,
       beginGesture,
+      findNearestAnchorSnap,
+      onArrowSnapPreviewChange,
+      zoom,
     ],
   );
 
@@ -390,6 +426,7 @@ export const useWhiteboardDrawing = ({
             dragVector,
             previous: connectionDraft.snapMatch,
             excludeElementIds: [connectionDraft.fromElementId],
+            radius: CONNECTOR_SNAP_PX / zoom,
           });
           setConnectionDraft((prev) =>
             prev
@@ -417,6 +454,16 @@ export const useWhiteboardDrawing = ({
       } else {
         // Clear hover when not on select tool
         setHoveredElementId(null);
+        // Connector tool: show where the arrow would attach before the press.
+        if (isConnectorTool(currentTool) && !isDrawing && hasEditAccess) {
+          const hover = findNearestAnchorSnap?.({
+            point,
+            radius: CONNECTOR_SNAP_PX / zoom,
+          });
+          onArrowSnapPreviewChange?.(
+            hover ? { endpoint: "start", pointer: point, match: hover } : null,
+          );
+        }
       }
 
       if (currentTool === "select" && hasEditAccess) {
@@ -458,6 +505,7 @@ export const useWhiteboardDrawing = ({
                   point,
                   dragVector,
                   previous: previousSnapRef.current[endpoint],
+                  radius: CONNECTOR_SNAP_PX / zoom,
                 });
                 previousSnapRef.current[endpoint] = snapMatch;
 
@@ -575,9 +623,25 @@ export const useWhiteboardDrawing = ({
         // Full orthogonal routing runs only when the arrow is committed
         // (stopDrawing). Calling routeArrowPoints mid-drag can crash because
         // sourceId/targetId/connection handles are not yet resolved.
+        const endSnap =
+          findNearestAnchorSnap?.({
+            point,
+            previous: arrowSnapRef.current.end,
+            excludeElementIds: currentElement.startConnection
+              ? [currentElement.startConnection.elementId]
+              : undefined,
+            radius: CONNECTOR_SNAP_PX / zoom,
+          }) ?? null;
+        arrowSnapRef.current.end = endSnap;
+        onArrowSnapPreviewChange?.(
+          endSnap ? { endpoint: "end", pointer: point, match: endSnap } : null,
+        );
         setCurrentElement({
           ...currentElement,
-          points: [start, point],
+          points: [start, endSnap ? { x: endSnap.anchor.x, y: endSnap.anchor.y } : point],
+          endConnection: endSnap
+            ? { elementId: endSnap.elementId, anchorId: endSnap.anchor.id }
+            : undefined,
         });
       } else {
         setCurrentElement({
@@ -638,6 +702,7 @@ export const useWhiteboardDrawing = ({
     pendingArrowRerouteRef.current = null;
     lastPointRef.current = null;
     previousSnapRef.current = { start: null, end: null };
+    arrowSnapRef.current = { start: null, end: null };
     onArrowSnapPreviewChange?.(null);
     return true;
   }, [
@@ -658,6 +723,7 @@ export const useWhiteboardDrawing = ({
         findNearestAnchorSnap?.({
           point: connectionDraft.currentPoint,
           excludeElementIds: [connectionDraft.fromElementId],
+          radius: CONNECTOR_SNAP_PX / zoom,
         }) ??
         null;
 
@@ -763,8 +829,28 @@ export const useWhiteboardDrawing = ({
       currentTool !== "eraser" &&
       hasEditAccess
     ) {
-      completeCurrentElement();
+      const first = currentElement.points[0];
+      const last = currentElement.points[currentElement.points.length - 1];
+      const isClick =
+        currentElement.type !== "freehand" &&
+        Math.abs(first.x - last.x) < MIN_DRAWN_SIZE &&
+        Math.abs(first.y - last.y) < MIN_DRAWN_SIZE;
+      if (!isClick) {
+        if (
+          isArrowElement(currentElement) &&
+          currentElement.startConnection &&
+          currentElement.endConnection &&
+          routeConnectedArrow &&
+          addElementDirect
+        ) {
+          addElementDirect(routeConnectedArrow(currentElement));
+        } else {
+          completeCurrentElement();
+        }
+        if (currentElement.type !== "freehand") onElementCreated?.(currentElement.id);
+      }
     }
+    arrowSnapRef.current = { start: null, end: null };
 
     if (pendingArrowRerouteRef.current && routeConnectedArrow) {
       const rerouted = routeConnectedArrow(pendingArrowRerouteRef.current);
@@ -817,6 +903,7 @@ export const useWhiteboardDrawing = ({
     onArrowSnapPreviewChange,
     routeConnectedArrow,
     updateElement,
+    onElementCreated,
   ]);
 
   // Text handling

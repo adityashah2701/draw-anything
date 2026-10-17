@@ -1,5 +1,6 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
 import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
+import { CORNER_RADIUS, screenCornerRadius } from "@/core/shapes/base/geometry-tokens";
 import { RectangleShape } from "@/core/shapes/rectangle/types";
 
 export const renderRectangleToCanvas = (
@@ -15,11 +16,19 @@ export const renderRectangleToCanvas = (
   const width = endX - startX;
   const height = endY - startY;
 
+  ctx.beginPath();
+  ctx.roundRect(
+    Math.min(startX, endX),
+    Math.min(startY, endY),
+    Math.abs(width),
+    Math.abs(height),
+    screenCornerRadius(CORNER_RADIUS.rectangle, zoom, width, height),
+  );
   if (shape.fill) {
     ctx.fillStyle = shape.fill;
-    ctx.fillRect(startX, startY, width, height);
+    ctx.fill();
   }
-  ctx.strokeRect(startX, startY, width, height);
+  ctx.stroke();
 
   if (shape.label) {
     renderShapeLabel({

@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { shapeRegistry } from "@/core/shapes/shape-registry";
+import { DEFAULT_LABEL_FONT_SIZE, defaultLabelWeight } from "@/core/text/label-layout";
+import { normalizeRichTextInput } from "@/features/whiteboard/utils/rich-text-renderer";
+import type { IconDef } from "@/core/icons/registry";
+import { buildIconNode } from "@/features/whiteboard/utils/icon-picker";
 import { moveShape } from "@/core/shapes/shape-runtime";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
@@ -46,6 +51,17 @@ import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
 import { useAIGeneration } from "./use-ai-generation";
 
+/**
+ * LiveObject.update ignores keys whose value is undefined, so a cleared field (an arrow end
+ * disconnected from its shape) would silently keep its old value. Delete those keys instead.
+ */
+const writeElement = (live: LiveObject<DrawingElementJson>, element: DrawingElementJson) => {
+  const fields = element as unknown as Record<string, unknown>;
+  const cleared = Object.keys(fields).filter((key) => fields[key] === undefined);
+  live.update(element);
+  for (const key of cleared) live.delete(key as keyof DrawingElementJson);
+};
+
 export const useWhiteboardPageController = (whiteboardId: string) => {
   const whiteboard = useQuery(
     api.whiteboard.getById,
@@ -92,7 +108,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       const list = storage.get("elements");
       for (let i = 0; i < list.length; i += 1) {
         if (list.get(i)!.get("id") === updatedElement.id) {
-          list.get(i)!.update(updatedElement);
+          writeElement(list.get(i)!, updatedElement);
           break;
         }
       }
@@ -113,7 +129,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     for (let i = 0; i < list.length; i += 1) indexById.set(list.get(i)!.get("id") as string, i);
     for (const element of batch) {
       const index = indexById.get(element.id);
-      if (index !== undefined) list.get(index)!.update(element);
+      if (index !== undefined) writeElement(list.get(index)!, element);
     }
   }, []);
 
@@ -303,6 +319,10 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     },
     onArrowSnapPreviewChange: uiState.handleArrowSnapPreviewChange,
     addElementDirect: (el) => addElement(el as unknown as DrawingElementJson),
+    onElementCreated: (id) => {
+      setSelectedElements([id]);
+      uiState.setCurrentTool("select");
+    },
     startPanning: canvasViewport.startPanning,
     handlePan: canvasViewport.handlePan,
     stopPanning: canvasViewport.stopPanning,
@@ -381,6 +401,42 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       rerouteConnectedArrowsForChanges(moved) as unknown as DrawingElement[],
   });
 
+  // The icon lands in the middle of what the user is looking at, selected, ready to drag or label.
+  const insertIcon = useCallback(
+    (icon: IconDef) => {
+      const { minX, minY, maxX, maxY } = canvasViewport.viewportBounds;
+      const node = buildIconNode(icon, { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, generateId());
+      addElement(node as unknown as DrawingElementJson);
+      setSelectedElements([node.id]);
+      uiState.setCurrentTool("select");
+    },
+    [addElement, canvasViewport.viewportBounds, generateId, uiState],
+  );
+
+  /** Opens the right editor for `element` (standalone text or a shape's label); false when it has no text. */
+  const beginEditing = useCallback(
+    (element: DrawingElement): boolean => {
+      if (!whiteboardAccess.hasEditAccess) return false;
+      if (element.type === "text") {
+        uiState.setEditingTextElement(element);
+        uiState.setCurrentTool("select");
+        return true;
+      }
+      if (shapeRegistry.get(element.type)?.labelConfig?.anchor !== "center") return false;
+      uiState.setEditingShapeLabelId(element.id);
+      uiState.setEditingShapeLabelDraft(normalizeRichTextInput(element.label ?? ""));
+      // Same fallbacks the canvas renderer uses, so opening the editor changes nothing.
+      const labelSize = element.fontSize || DEFAULT_LABEL_FONT_SIZE;
+      uiState.setEditingShapeLabelFontSize(labelSize);
+      uiState.setEditingShapeLabelFontWeight(element.fontWeight || defaultLabelWeight(labelSize));
+      uiState.setEditingShapeLabelFontStyle(element.fontStyle || "normal");
+      setSelectedElements([element.id]);
+      uiState.setCurrentTool("select");
+      return true;
+    },
+    [uiState, whiteboardAccess.hasEditAccess],
+  );
+
   const runShortcut = useCallback(
     (command: ShortcutCommand) => {
       switch (command.type) {
@@ -409,6 +465,13 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "toggle-grid": return canvasViewport.toggleGrid();
         case "toggle-help": return uiState.setShowCommandMenu((prev) => !prev);
         case "export": return uiState.setShowExport(true);
+        case "icon-picker": return uiState.setShowIconPicker(true);
+        // Enter on a selected shape edits its text, like double-clicking it.
+        case "edit": {
+          const only = selectedElements.length === 1 ? elements.find((el) => el.id === selectedElements[0]) : undefined;
+          if (only) beginEditing(only);
+          return;
+        }
       }
     },
     [
@@ -796,6 +859,9 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "export":
           uiState.setShowExport(true);
           break;
+        case "insert-icon":
+          uiState.setShowIconPicker(true);
+          break;
         case "copy-image":
           void boardExport.copyImage(selectedElements.length > 0).then((message) => message && toast.error(message));
           break;
@@ -1104,6 +1170,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleRenameWhiteboard,
     handleGenerateDiagram,
     handleCommandAction,
+    beginEditing,
+    insertIcon,
     boardExport,
     deleteSelectedElements,
     elementCommands,
