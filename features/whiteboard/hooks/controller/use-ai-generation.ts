@@ -389,7 +389,7 @@ export const useAIGeneration = ({
   );
 
   const triggerAIGeneration = useCallback(
-    async (prompt: string, model: AIModelProvider = "gemini") => {
+    async (prompt: string, model: AIModelProvider = "gemini", edit = false) => {
       if (!prompt.trim() || isAIGenerating) return;
 
       setIsAIGenerating(true);
@@ -423,6 +423,7 @@ export const useAIGeneration = ({
             model,
             provider: model,
             whiteboardId,
+            ...(edit ? { edit: true } : {}),
             canvasContext: getCanvasContext?.(),
           } satisfies AIGenerateDiagramRequest),
         });

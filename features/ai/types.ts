@@ -6,6 +6,7 @@ export type AIModelProvider =
   | "openai"
   | "anthropic"
   | "openrouter"
+  | "nvidia"
   | "local";
 
 export type AIDiagramType =
@@ -430,6 +431,8 @@ export interface AIGenerateDiagramRequest {
   model?: AIModelProvider;
   provider?: AIModelProvider;
   whiteboardId?: string;
+  /** Change the diagram already on the board instead of drawing a new one (the builder pipeline). */
+  edit?: boolean;
   canvasContext?: {
     elements?: DrawingElement[];
     selectedElementIds?: string[];

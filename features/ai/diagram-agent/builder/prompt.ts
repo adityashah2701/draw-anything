@@ -34,13 +34,17 @@ const TEXT_PROTOCOL = [
   "Reply with tool calls only. After they run you are shown the updated canvas.",
 ].join("\n");
 
-export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], context?: PromptContext & { vision?: boolean }): string => {
+export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], context?: PromptContext & { vision?: boolean; editing?: boolean; iconHints?: string; bareIcons?: boolean }): string => {
   const categories = context ? iconCategoriesFor(context) : undefined;
   return [
     "You are a senior designer who builds diagrams step by step on a live canvas and then polishes them until they look right. An engine lays out and routes what you describe; you never think about coordinates. You see the canvas after every step.",
     "",
     LANGUAGE,
     "",
+    context?.editing
+      ? "The canvas already holds a diagram (shown as code). Your job is to CHANGE it as the goal says, not to redraw it: add only what is missing, use adjust (`remove`, `label`, `sides`) to delete or change existing parts, never re-add a node that exists, and call finish as soon as the requested change is made and the Problems list is clear."
+      : "",
+    context?.bareIcons ? "The person wants ICONS ONLY: every node is a bare icon with its name underneath (`shape: icon`), no boxes. Give every node an icon." : "",
     "How you work:",
     "0. Start every reply with one or two plain sentences saying what you are about to do and why: the structure you chose, a trade-off, what you noticed on the canvas. The person watching reads them as your thinking, so make them specific (\"Grouping the data stores so the backend reads as one block\"), never filler (\"Let me add the next part\"). Then make your tool calls.",
     `1. Build in steps. Each turn look at the canvas and add the NEXT part: several nodes with their connections, or a group (at most ${MAX_ADD_STATEMENTS} statements). Start at the entry point and follow the flow. Large diagrams take two or three steps, not one.`,
@@ -56,6 +60,7 @@ export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], conte
     "",
     categories ? "Icon ids (icon: or kind:), the common ones; search_icons finds any others:" : "Icon ids (icon: or kind:), by category:",
     iconVocabulary(categories),
+    context?.iconHints ? `Icons already found for words in this request (use them as icon:, no search needed): ${context.iconHints}.` : "",
     "",
     transport === "text" ? TEXT_PROTOCOL : "Use the provided tools; reply with tool calls.",
     context?.vision ? "You are also shown a picture of the canvas on review steps: judge spacing, overlaps and awkward lines by eye, not only from the list." : "",
@@ -78,6 +83,8 @@ export interface StateMessageInput {
   /** Nodes the agent moved by hand, with their offsets. */
   moved?: string[];
   phase: "build" | "review";
+  /** Seconds before the run stops starting steps; shown so the agent batches its work. */
+  secondsLeft?: number;
   reviewsLeft: number;
   hasImage: boolean;
 }
@@ -85,7 +92,7 @@ export interface StateMessageInput {
 /** The one message each turn: the goal, the canvas as code, what is wrong with it, and what the last step did. */
 export const buildStateMessage = (input: StateMessageInput): string => {
   const empty = input.code.trim() === "";
-  const lines = [`Goal: ${input.goal}`, `Step ${input.turn} of ${input.maxTurns}.`, "", "Canvas now:", empty ? "(empty)" : `\`\`\`diagram\n${input.code}\n\`\`\``];
+  const lines = [`Goal: ${input.goal}`, `Step ${input.turn} of ${input.maxTurns}.${input.secondsLeft !== undefined ? ` About ${Math.max(0, Math.round(input.secondsLeft))} seconds of working time are left and every step takes a while: put each node with its connections in one add, and do not stop to look up icons you can guess.` : ""}`, "", "Canvas now:", empty ? "(empty)" : `\`\`\`diagram\n${input.code}\n\`\`\``];
   if (!empty && input.summary) lines.push(input.summary);
   if (!empty) lines.push(input.problems && input.problems.length > 0 ? `Problems:\n${input.problems.map((p) => `- ${p}`).join("\n")}` : "Problems: none found.");
   if (input.moved && input.moved.length > 0) lines.push(`Moved by hand: ${input.moved.join(", ")}.`);

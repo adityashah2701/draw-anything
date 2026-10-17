@@ -106,3 +106,40 @@ describe("streamDiagramBuilderEvents when the quota runs out", () => {
     expect(events.some((e) => e.type === "element.batch")).toBe(true);
   });
 });
+
+describe("edit mode", () => {
+  const board = async () => {
+    const { buildCanvas } = await import("./builder/canvas");
+    const { addLines, createState } = await import("./builder/state");
+    return buildCanvas(addLines(createState(), "type flowchart\nStart [kind: start]\nStart > Check\nCheck > Done").state, "old", "old-frame")!.elements;
+  };
+
+  it("shows the model the diagram on the board, removes its elements just before redrawing, and keeps what the agent adds", async () => {
+    const elements = await board();
+    const m = scripted([turn(call("add", "Check > Retry: failed")), turn(call("finish"))]);
+    const events: AIStreamEvent[] = [];
+    for await (const e of streamDiagramBuilderEvents({ request: { prompt: "add a retry", provider: "groq", edit: true, canvasContext: { elements } }, transport: m.transport, revealMs: 0 })) events.push(e);
+
+    // The first thing the model sees is the existing diagram, not an empty canvas.
+    expect(m.shown[0]).toContain("Start > Check");
+    expect(m.shown[0]).not.toContain("(empty)");
+    expect(m.shown[0]).toContain("add a retry");
+
+    const types = events.map((e) => e.type);
+    const removal = events.find((e): e is Extract<AIStreamEvent, { type: "element.remove" }> => e.type === "element.remove")!;
+    expect(removal.elementIds.sort()).toEqual(elements.map((el) => el.id).sort());
+    expect(types.indexOf("element.remove")).toBeLessThan(types.indexOf("element.batch"));
+
+    const done = events.at(-1) as Extract<AIStreamEvent, { type: "frame.done" }>;
+    expect(done.graph?.nodes.map((n) => n.label ?? n.id)).toEqual(expect.arrayContaining(["Start", "Check", "Done", "Retry"]));
+  });
+
+  it("leaves the board alone and starts empty when edit is not asked for", async () => {
+    const elements = await board();
+    const m = scripted([turn(call("add", "A > B")), turn(call("finish"))]);
+    const events: AIStreamEvent[] = [];
+    for await (const e of streamDiagramBuilderEvents({ request: { prompt: "new", provider: "groq", canvasContext: { elements } }, transport: m.transport, revealMs: 0 })) events.push(e);
+    expect(m.shown[0]).toContain("(empty)");
+    expect(events.some((e) => e.type === "element.remove")).toBe(false);
+  });
+});

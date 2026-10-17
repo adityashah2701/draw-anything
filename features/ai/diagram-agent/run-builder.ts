@@ -2,6 +2,9 @@ import { phaseCompleted, phaseStarted } from "@/features/ai/server/agents/types"
 import { createInitialAIFrame } from "@/features/ai/server/workflow";
 import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { graphFromElements } from "@/features/diagram-code/canvas";
+import { serializeDiagramCode } from "@/features/diagram-code/serialize";
+import { iconHints, wantsBareIcons } from "./builder/icon-hints";
 import { runDiagramBuilder } from "./builder/loop";
 import { noteFor, summaryNote } from "./builder/notes";
 import { BUILDER_TOOL_SPECS, buildBuilderSystemPrompt } from "./builder/prompt";
@@ -85,6 +88,13 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
     const renderImage =
       options.renderImage ?? (vision ? async (elements: DrawingElement[]) => (await import("./builder/render-png")).renderCanvasPng(elements) : undefined);
 
+    // Edit mode: the diagram on the board becomes the starting point, and its elements are replaced by the edited drawing.
+    const existing = request.edit ? graphFromElements(request.canvasContext?.elements ?? []) : undefined;
+    const editing = existing !== undefined && existing.graph.nodes.length > 0;
+    let pendingRemoval: string[] | undefined = editing ? existing.consumedIds : undefined;
+
+    const hints = await iconHints(request.prompt);
+    const bareIcons = wantsBareIcons(request.prompt);
     const revealMs = options.revealMs ?? (Number(process.env.AI_REVEAL_MS ?? DEFAULT_REVEAL_MS) || 0);
     let drawnAnything = false;
     const result = yield* withLiveEvents(async (emit) =>
@@ -94,22 +104,35 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
           diagramType: inferDiagramType(request.prompt),
           prompt: request.prompt,
           vision: Boolean(renderImage),
+          editing,
+          iconHints: hints,
+          bareIcons,
         }),
-        goal: request.prompt,
+        goal: editing ? `Change the diagram that is already on the canvas: ${request.prompt}` : request.prompt,
+        bareIcons,
+        initialCode: editing ? serializeDiagramCode(existing.graph) : undefined,
         generationId,
         frameId,
         guardAdjustments: options.guardAdjustments,
         maxTurns: options.maxTurns ?? (Number(process.env.AI_BUILDER_MAX_TURNS) || undefined),
+        maxMs: Number(process.env.AI_BUILDER_MAX_MS) || undefined,
         renderImage,
         signal: controller.signal,
         onCanvas: async ({ added, updated, removedIds }) => {
+          // Just before the first drawing, so a failure earlier leaves the person's diagram alone.
+          if (pendingRemoval) {
+            if (pendingRemoval.length > 0) emit({ type: "element.remove", frameId, elementIds: pendingRemoval });
+            pendingRemoval = undefined;
+          }
           if (removedIds.length > 0) emit({ type: "element.remove", frameId, elementIds: removedIds });
           if (updated.length > 0) emit({ type: "element.update", frameId, elements: updated });
           const chunks = revealChunks(added, !drawnAnything);
+          // Redrawing what was already there is not shown shape by shape.
+          const pace = editing && !drawnAnything ? 0 : revealMs;
           if (added.length > 0) drawnAnything = true;
           for (let i = 0; i < chunks.length; i += 1) {
             emit({ type: "element.batch", frameId, elements: chunks[i] });
-            if (revealMs > 0 && i < chunks.length - 1) await sleep(revealMs);
+            if (pace > 0 && i < chunks.length - 1) await sleep(pace);
           }
         },
         onNote: (note) => emit({ type: "agent.note", frameId, note: noteFor(note) }),

@@ -1,16 +1,19 @@
 import { QuotaExceededError, RateLimitError, UnparseableModelOutputError } from "@/features/ai/server/errors";
 import { categorizeError, withRetry, type RetryOptions } from "@/features/ai/server/retry";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { loadIconLibrary } from "@/core/icons/registry";
 import { runTool } from "../tools/index";
 import type { AgentMessage, ModelTurn, ToolCall, ToolTransport } from "../types";
 import { buildCanvas, diffElements, type BuiltCanvas, type CanvasDiff } from "./canvas";
 import { buildStateMessage } from "./prompt";
 import { reportCanvas, type CanvasReport } from "./report";
-import { addLines, adjust, createState, describeFlow, describeMoved, type BuilderState } from "./state";
+import { addLines, adjust, createState, describeFlow, describeMoved, withBareIcons, type BuilderState } from "./state";
 
 /** Each turn is a model call, and free tiers allow few calls a minute: keep the default small. */
 const DEFAULT_MAX_TURNS = 12;
 const DEFAULT_MAX_REVIEWS = 2;
+/** Wall-clock limit for the whole run: slow reasoning models can spend minutes per step, so steps alone do not bound it. */
+const DEFAULT_MAX_MS = 240_000;
 /** Turns spent only looking up icons do not use the budget, up to this many. */
 const MAX_LOOKUP_TURNS = 3;
 /** Replies with neither a tool call nor code, in a row, before the run settles for what is on the canvas. */
@@ -37,10 +40,16 @@ export interface BuilderInput {
   transport: ToolTransport;
   system: string;
   goal: string;
+  /** Diagram code already on the board: the run edits it instead of starting empty. */
+  initialCode?: string;
+  /** Draw every node that has an icon as a bare icon (the person asked for icons only). */
+  bareIcons?: boolean;
   generationId: string;
   frameId: string;
   maxTurns?: number;
   maxReviews?: number;
+  /** Stop starting new steps after this many ms once something is drawn (default 240 s). */
+  maxMs?: number;
   /** Undo an adjustment that made the picture worse (default on). */
   guardAdjustments?: boolean;
   /** Renders the canvas to an image for a vision model; its absence means the agent works from text alone. */
@@ -61,6 +70,8 @@ export interface BuilderResult {
   reviews: number;
   /** The provider's quota or rate limit ended the run; what was built so far is kept. */
   stoppedByQuota: boolean;
+  /** The time limit ended the run; what was built stays. */
+  timedOut: boolean;
   /** Problems the report listed when the agent first asked to finish, and those still listed at the end. */
   firstReviewProblems: number;
   remainingProblems: string[];
@@ -85,7 +96,8 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
   let maxTurns = baseTurns;
   let lookupTurns = 0;
 
-  let state = createState();
+  const bare = (s: BuilderState) => (input.bareIcons ? withBareIcons(s) : s);
+  let state = bare(createState(input.initialCode ?? ""));
   // Set by `redraw`, so kept in one object that type narrowing cannot freeze at its initial value.
   const live: { built: BuiltCanvas | null; report: CanvasReport | undefined } = { built: null, report: undefined };
   let drawn = new Map<string, string>();
@@ -96,10 +108,15 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
   let reviews = 0;
   let lastFinishKey: string | undefined;
   let emptyTurns = 0;
+  const searched = new Set<string>();
   const toolTrail: string[] = [];
   let turn = 0;
   let finished = false;
   let stoppedByQuota = false;
+  let timedOut = false;
+  const startedAt = Date.now();
+  // The on-demand icon library, so search_icons finds brands (Stripe, SendGrid) instead of sending the agent round again.
+  await loadIconLibrary().catch(() => undefined);
   let firstReviewProblems = 0;
 
   const redraw = async () => {
@@ -113,8 +130,14 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
     }
   };
 
+  if (state.parsed.nodes.length > 0) await redraw();
+
   for (turn = 1; turn <= maxTurns; turn += 1) {
     if (signal?.aborted) throw abortError();
+    if (live.built && Date.now() - startedAt > (input.maxMs ?? DEFAULT_MAX_MS)) {
+      timedOut = true;
+      break;
+    }
 
     const image = wantImage && live.built && input.renderImage ? await input.renderImage(live.built.elements).catch(() => undefined) : undefined;
     const message: AgentMessage = {
@@ -130,6 +153,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
         notes,
         moved: describeMoved(state),
         phase,
+        secondsLeft: ((input.maxMs ?? DEFAULT_MAX_MS) - (Date.now() - startedAt)) / 1000,
         reviewsLeft: maxReviews - reviews,
         hasImage: Boolean(image),
       }),
@@ -175,6 +199,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
     const scoreBefore = live.report?.score;
     let finishRequested = false;
     let lookupOnly = true;
+    let newLookup = false;
     let addedNow: string[] = [];
     let skippedNow = 0;
     let appliedNow: string[] = [];
@@ -184,6 +209,9 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
       if (call.name !== "search_icons") lookupOnly = false;
       switch (call.name) {
         case "search_icons": {
+          const terms = call.arg.toLowerCase().split(/[,;\n]/).map((t) => t.trim()).filter(Boolean);
+          if (terms.some((t) => !searched.has(t))) newLookup = true;
+          terms.forEach((t) => searched.add(t));
           const found = runTool(call).content;
           notes.push(found);
           input.onNote?.({ kind: "icons", turn, terms: call.arg.trim().slice(0, 160) });
@@ -194,7 +222,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
           if (result.errors.length > 0) {
             notes.push(`add failed, nothing was added: ${result.errors.slice(0, 4).join("; ")}`);
           } else {
-            state = result.state;
+            state = bare(result.state);
             notes.push(result.added.length > 0 ? `Added ${result.added.join(", ")}.` : "That was already on the canvas.");
             if (result.skipped > 0) notes.push(`Only the first statements were used; ${result.skipped} more were left out. Add them next.`);
             addedNow = [...addedNow, ...result.added];
@@ -274,12 +302,13 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
       notes.push("The problems list is empty now.");
     }
 
-    if (lookupOnly && lookupTurns < MAX_LOOKUP_TURNS) {
+    // Looking up icons does not use the step budget, but asking for the same ones again does.
+    if (lookupOnly && newLookup && lookupTurns < MAX_LOOKUP_TURNS) {
       lookupTurns += 1;
       maxTurns += 1;
     }
   }
 
   if (!live.built) throw new UnparseableModelOutputError("empty", "");
-  return { state, built: live.built, finished, turns: Math.min(turn, maxTurns), reviews, stoppedByQuota, toolTrail, transport: transport.kind, firstReviewProblems, remainingProblems: live.report?.problems ?? [] };
+  return { state, built: live.built, finished, turns: Math.min(turn, maxTurns), reviews, stoppedByQuota, timedOut, toolTrail, transport: transport.kind, firstReviewProblems, remainingProblems: live.report?.problems ?? [] };
 };

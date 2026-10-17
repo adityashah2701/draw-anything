@@ -635,7 +635,7 @@ export const aiDiagramDocumentV1Schema = z.object({
   metadata: z.object({
     generationId: z.string(),
     createdAt: z.string(),
-    provider: z.enum(["gemini", "groq", "openai", "anthropic", "openrouter", "local"]),
+    provider: z.enum(["gemini", "groq", "openai", "anthropic", "openrouter", "nvidia", "local"]),
     model: z.string(),
     improvementPasses: z.number(),
   }),

@@ -10,7 +10,9 @@ import { AITimeline } from "@/features/whiteboard/components/overlays/ai-timelin
 interface AIPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  triggerAIGeneration: (prompt: string, model: AIModelProvider) => void;
+  triggerAIGeneration: (prompt: string, model: AIModelProvider, edit?: boolean) => void;
+  /** The board holds a diagram the agent could change. */
+  canEdit?: boolean;
   isGenerating: boolean;
   messages: AIChatMessage[];
   /** What the agent is doing right now (the latest step's title). */
@@ -28,6 +30,7 @@ const PROVIDER_OPTIONS: Array<{ value: AIModelProvider; label: string }> = [
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
   { value: "openrouter", label: "OpenRouter" },
+  { value: "nvidia", label: "NVIDIA · Nemotron" },
   { value: "local", label: "Local model" },
 ];
 
@@ -84,6 +87,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   isOpen,
   onClose,
   triggerAIGeneration,
+  canEdit = false,
   isGenerating,
   messages,
   workingLabel,
@@ -96,6 +100,8 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   // Providers the server has credentials for; null until known (then show all).
   const [available, setAvailable] = React.useState<AIModelProvider[] | null>(null);
   const [input, setInput] = React.useState("");
+  // On by default when there is a diagram to change; switch it off to draw a separate new one.
+  const [editCurrent, setEditCurrent] = React.useState(true);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const stickToBottom = React.useRef(true);
@@ -139,7 +145,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
     const value = text.trim();
     if (!value || disabled || isGenerating) return;
     stickToBottom.current = true;
-    triggerAIGeneration(value, model);
+    triggerAIGeneration(value, model, canEdit && editCurrent);
     setInput("");
   };
 
@@ -266,14 +272,21 @@ export const AIPanel: React.FC<AIPanelProps> = ({
               }
             }}
             aria-label="Describe your diagram"
-            placeholder={isGenerating ? "The agent is working…" : hasRun ? "Describe another diagram…" : "Describe your diagram…"}
+            placeholder={isGenerating ? "The agent is working…" : canEdit && editCurrent ? "Describe a change to the diagram…" : hasRun ? "Describe another diagram…" : "Describe your diagram…"}
             rows={2}
             disabled={disabled || isGenerating}
             className="block max-h-40 min-h-[52px] w-full resize-none bg-transparent px-3 pt-2.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
           <div className="flex items-center justify-between px-2 pb-2 pl-3">
-            <span className="font-mono text-[10px] text-muted-foreground">Enter to send · Shift+Enter for a new line</span>
+            {canEdit ? (
+              <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                <input type="checkbox" checked={editCurrent} onChange={(e) => setEditCurrent(e.target.checked)} disabled={isGenerating} />
+                Edit current diagram
+              </label>
+            ) : (
+              <span className="font-mono text-[10px] text-muted-foreground">Enter to send · Shift+Enter for a new line</span>
+            )}
             <button
               type="submit"
               aria-label="Send"

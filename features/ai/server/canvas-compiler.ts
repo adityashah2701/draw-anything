@@ -166,7 +166,50 @@ export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize 
  * "application": one wide row of connected nodes with long, tangled connectors. Which of the two is
  * better is measured, not guessed (see `compileAIDiagramDetailed`).
  */
-export type DepthMode = "layers" | "flow";
+export type DepthMode = "layers" | "flow" | "stacked";
+
+/**
+ * Two groups that share a row get frames that partly overlap, and the compiler then drops one. So
+ * when connections run from group A to group B (more than the other way) and B starts on a row A
+ * still uses, B and everything below it move down past A. Moving a node down never breaks the
+ * downward direction of its connections; nested and unrelated groups are left alone.
+ */
+const separateGroupRows = (
+  document: AIDiagramDocumentV1,
+  edges: Array<{ from: string; to: string }>,
+  depth: Map<string, number>,
+) => {
+  const groups = document.groups.map((g) => ({ ids: new Set(g.nodeIds.filter((id) => depth.has(id))) })).filter((g) => g.ids.size >= 2);
+  const nested = (a: Set<string>, b: Set<string>) => [...a].every((id) => b.has(id)) || [...b].every((id) => a.has(id));
+  const rows = (g: Set<string>) => [...g].map((id) => depth.get(id)!);
+  const between = (a: Set<string>, b: Set<string>) => edges.filter((e) => a.has(e.from) && b.has(e.to)).length;
+
+  for (let round = 0; round < 12; round += 1) {
+    let moved = false;
+    for (const a of groups) {
+      for (const b of groups) {
+        if (a === b || [...a.ids].some((id) => b.ids.has(id)) || nested(a.ids, b.ids)) continue;
+        if (between(a.ids, b.ids) <= between(b.ids, a.ids) || between(a.ids, b.ids) === 0) continue;
+        const shift = Math.max(...rows(a.ids)) + 1 - Math.min(...rows(b.ids));
+        if (shift <= 0) continue;
+        // B, plus whatever hangs below it through downward connections (never A itself).
+        const move = new Set(b.ids);
+        for (let grew = true; grew; ) {
+          grew = false;
+          for (const e of edges) {
+            if (move.has(e.from) && !move.has(e.to) && !a.ids.has(e.to) && depth.get(e.to)! > depth.get(e.from)!) {
+              move.add(e.to);
+              grew = true;
+            }
+          }
+        }
+        move.forEach((id) => depth.set(id, depth.get(id)! + shift));
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+};
 
 const getDepths = (document: AIDiagramDocumentV1, mode: DepthMode = "layers") => {
   if (document.diagramType === "architecture" && mode === "layers") {
@@ -222,6 +265,16 @@ const getDepths = (document: AIDiagramDocumentV1, mode: DepthMode = "layers") =>
       if (remaining.get(to) === 0) queue.push(to);
     }
   }
+  // A member with no connection (yet) would sit on the top row and stretch its group's frame over
+  // every row in between: put it level with the group's first connected member instead.
+  const connected = new Set(edges.flatMap((e) => [e.from, e.to]));
+  document.groups.forEach((group) => {
+    const mates = group.nodeIds.filter((id) => connected.has(id) && depth.has(id));
+    if (mates.length === 0) return;
+    const row = Math.min(...mates.map((id) => depth.get(id)!));
+    group.nodeIds.forEach((id) => depth.has(id) && !connected.has(id) && depth.set(id, row));
+  });
+  if (mode === "stacked") separateGroupRows(document, edges, depth);
   return depth;
 };
 
@@ -804,11 +857,22 @@ export const compileAIDiagramDetailed = (
   frameId: string,
   options: CompileOptions = {},
 ): CompileResult => {
-  const layers = compileWith(document, frameId, "layers", options);
-  // An architecture can also be laid out by its flow; keep whichever the measurements prefer. Ties keep the tiers.
-  if (document.diagramType !== "architecture" || document.nodes.length < 2) return layers;
-  const flow = compileWith(document, frameId, "flow", options);
-  return cheaper(layoutCost(flow, document), layoutCost(layers, document)) ? flow : layers;
+  // An architecture can also be laid out by its flow, and a diagram with several groups with each group
+  // on its own rows ("stacked"); keep whichever the measurements prefer. Ties keep the earlier one.
+  const modes: DepthMode[] = ["layers"];
+  if (document.diagramType === "architecture" && document.nodes.length >= 2) modes.push("flow");
+  if (document.groups.length >= 2) modes.push("stacked");
+  let best = compileWith(document, frameId, modes[0], options);
+  if (modes.length === 1) return best;
+  let bestCost = layoutCost(best, document);
+  for (const mode of modes.slice(1)) {
+    const candidate = compileWith(document, frameId, mode, options);
+    const cost = layoutCost(candidate, document);
+    // Stacked rows are a repair for what is broken (a dropped frame); on soft measures alone they are not preferred.
+    const better = mode === "stacked" ? cost[0] < bestCost[0] : cheaper(cost, bestCost);
+    if (better) [best, bestCost] = [candidate, cost];
+  }
+  return best;
 };
 
 export const compileAIDiagramToCanvas = (

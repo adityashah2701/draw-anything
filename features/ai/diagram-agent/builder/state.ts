@@ -43,6 +43,20 @@ const stateFromParsed = (
   return { code, parsed: parseDiagramCode(code), offsets, edgeSides };
 };
 
+/** Kinds drawn as their own shapes (diamond, pill): a bare icon would replace them. */
+const OWN_SHAPE_KINDS = new Set(["decision", "start", "end"]);
+
+/** Every node that has an icon (or a kind with one) becomes a bare icon: `shape: icon`. For "icons only" requests. */
+export const withBareIcons = (state: BuilderState): BuilderState => {
+  let changed = false;
+  const nodes = state.parsed.nodes.map((n) => {
+    if (n.shape || OWN_SHAPE_KINDS.has((n.kind ?? "").toLowerCase()) || !(n.icon || n.kind)) return n;
+    changed = true;
+    return { ...n, shape: "icon" as const };
+  });
+  return changed ? stateFromParsed({ ...state.parsed, nodes }, state.offsets, state.edgeSides) : state;
+};
+
 export const createState = (existingCode = ""): BuilderState => stateFromParsed(parseDiagramCode(existingCode));
 
 const isStatement = (line: string) => {
@@ -183,7 +197,8 @@ export const adjust = (state: BuilderState, text: string, centres: Centres): Adj
   };
   const limitNote = (r: { limited: boolean }) => (r.limited ? ` (limit reached: a node stays within ${MAX_OFFSET} of its automatic place; use reset)` : "");
 
-  for (const raw of text.replace(/\r/g, "").split("\n")) {
+  // Some models put several commands on one line, separated by `;`: split there too, but only before a command word.
+  for (const raw of text.replace(/\r/g, "").split("\n").flatMap((l) => l.split(/;\s*(?=(?:move|align|sides|label|remove|reset)\b)/i))) {
     const line = raw.trim();
     if (!line || line.startsWith("//")) continue;
     const verb = line.match(/^(move|align|sides|label|remove|reset)\b\s*(.*)$/i);

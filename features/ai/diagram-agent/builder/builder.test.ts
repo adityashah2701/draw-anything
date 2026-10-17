@@ -60,6 +60,14 @@ describe("addLines", () => {
 describe("adjust", () => {
   const chain = () => build("A > B > C");
 
+  it("accepts several commands on one line separated by semicolons, and keeps a semicolon inside a label", () => {
+    const s = chain();
+    const r = adjust(s, "move B: right 100; align C with A: x; label A > B: a; b", canvasOf(s).centres);
+    expect(r.errors).toEqual([]);
+    expect(r.applied).toHaveLength(3);
+    expect(r.state.parsed.edges.find((e) => e.label)?.label).toBe("a; b");
+  });
+
   it("moves a node relative to where the layout puts it, and keeps that as the diagram grows", () => {
     const s = chain();
     const before = centre(s, "B");
@@ -195,5 +203,94 @@ Create Session > Dashboard`;
     const { detail } = reportCanvas(canvasOf(s), s);
     expect(detail).toContain("A (");
     expect(detail).toMatch(/A > B: bottom -> top/);
+  });
+});
+
+describe("a group member with no connection yet", () => {
+  it("sits level with its group's connected members instead of stretching the frame to the top row", async () => {
+    const { buildCanvas } = await import("./canvas");
+    const state = addLines(createState(), `type architecture
+A > B > C > D
+Data {
+  Cache
+  Warehouse
+}
+D > Cache`).state;
+    const built = buildCanvas(state, "g", "f")!;
+    const top = (id: string) => built.elements.find((e) => e.ai?.semanticId === id)!.points[0].y;
+    expect(top("warehouse")).toBe(top("cache"));
+  });
+});
+
+describe("groups that share rows", () => {
+  it("keeps every group frame when one group feeds another and they would start on the same row", () => {
+    const nodes = `type architecture
+Start [kind: start]
+Mobile app [icon: mobile]
+Web app [icon: monitor]
+Edge {
+  CDN [icon: cdn]
+  API Gateway [icon: gateway]
+}
+Backend services {
+  Auth service [icon: authentication]
+  Catalog service [icon: service]
+  Order service [icon: service]
+}
+Data {
+  Redis cache [icon: redis]
+  Postgres [icon: postgres]
+  Kafka [icon: kafka]
+  Data warehouse [icon: database]
+}
+Email worker [icon: worker]
+Analytics worker [icon: worker]
+Stripe payment [icon: external]`;
+    const edges = [
+      `Start > Mobile app
+Start > Web app
+Mobile app > CDN: HTTPS
+Web app > CDN: HTTPS
+CDN > API Gateway
+API Gateway > Auth service: sign in
+Auth service > Catalog service: token
+Catalog service > Order service: checkout`,
+      `Catalog service > Redis cache: read
+Redis cache > Catalog service: hit
+Catalog service > Postgres: fallback
+Order service > Stripe payment: charge
+Order service > Postgres: save order
+Order service > Kafka: order placed
+Kafka > Email worker
+Kafka > Analytics worker
+Analytics worker > Data warehouse`,
+    ];
+    let state = addLines(createState(), nodes).state;
+    for (const chunk of edges) state = addLines(state, chunk).state;
+    const built = buildCanvas(state, "g", "f")!;
+    expect(built.diagnostics.droppedGroups).toEqual([]);
+    expect(built.elements.filter((e) => e.ai?.role === "group")).toHaveLength(3);
+  });
+});
+
+describe("icons only", () => {
+  it("draws every node with an icon as a bare icon, but keeps decisions and start/end as their own shapes", async () => {
+    const { withBareIcons } = await import("./state");
+    const state = withBareIcons(addLines(createState(), `type flowchart
+Start [kind: start]
+Gateway [icon: gateway]
+Database [kind: database]
+Ok? [kind: decision]
+Plain
+Start > Gateway > Database > Ok?
+Ok? > Plain`).state);
+    const built = buildCanvas(state, "g", "f")!;
+    const typeOf = (id: string) => built.elements.find((e) => e.ai?.semanticId === id)!.type;
+    expect(typeOf("gateway")).toBe("icon");
+    expect(typeOf("database")).toBe("icon");
+    expect(typeOf("start")).toBe("pill");
+    expect(typeOf("ok")).toBe("diamond");
+    expect(typeOf("plain")).not.toBe("icon");
+    expect(state.code).toContain("shape: icon");
   });
 });

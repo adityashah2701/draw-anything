@@ -14,6 +14,7 @@ const ALL_PROVIDERS: readonly AIModelProvider[] = [
   "openai",
   "anthropic",
   "openrouter",
+  "nvidia",
   "local",
 ];
 
@@ -23,6 +24,7 @@ const PROVIDER_ENV: Record<AIModelProvider, string> = {
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
+  nvidia: "NVIDIA_API_KEY",
   // The local provider needs no key; it is enabled by pointing it at a server.
   local: "LOCAL_AI_BASE_URL",
 };
@@ -158,6 +160,7 @@ export const parseGenerateRequest = (
       provider,
       model: provider,
       whiteboardId,
+      ...(body.edit === true ? { edit: true } : {}),
       canvasContext: sanitizeCanvasContext(body.canvasContext),
     },
   };

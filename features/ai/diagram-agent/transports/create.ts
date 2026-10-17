@@ -12,7 +12,7 @@ export type TransportPreference = "native" | "text" | "auto";
  * always uses the text protocol. Which is better per provider is an eval question: override with
  * AI_AGENT_TRANSPORT=native|text (default auto: native where available, text as fallback).
  */
-const NATIVE_CAPABLE = new Set<AIModelProvider>(["groq", "openai", "anthropic", "openrouter", "local"]);
+const NATIVE_CAPABLE = new Set<AIModelProvider>(["groq", "openai", "anthropic", "openrouter", "nvidia", "local"]);
 
 export const resolveTransportPreference = (provider: AIModelProvider, env: Record<string, string | undefined> = process.env): TransportPreference => {
   const forced = env.AI_AGENT_TRANSPORT;

@@ -188,3 +188,51 @@ describe("when the provider runs out of quota", () => {
     await expect(run(limited(0))).rejects.toThrow(/429|rate limit/i);
   });
 });
+
+describe("when the model is slow", () => {
+  it("stops starting steps after the time limit and keeps the canvas", async () => {
+    const m = scripted([turn(call("add", "A > B")), turn(call("add", "B > C")), turn(call("add", "C > D")), turn(call("finish"))]);
+    const slow: ToolTransport = {
+      kind: "native",
+      async complete(messages, options) {
+        await new Promise((r) => setTimeout(r, 30));
+        return m.transport.complete(messages, options);
+      },
+    };
+    const result = await run(slow, { maxMs: 50 });
+    expect(result.timedOut).toBe(true);
+    expect(result.finished).toBe(false);
+    expect(result.state.parsed.nodes.length).toBeGreaterThanOrEqual(2);
+    expect(result.state.parsed.nodes.length).toBeLessThan(4);
+  });
+
+  it("never times out before anything is drawn", async () => {
+    const m = scripted([turn(call("add", "A > B")), turn(call("finish"))]);
+    const result = await run(m.transport, { maxMs: -1 });
+    expect(result.built.elements.length).toBeGreaterThan(0);
+  });
+});
+
+describe("icon lookups and time", () => {
+  it("does not give free turns for asking the same icons again", async () => {
+    // Repeated lookups of the same terms: only the first is free, so a budget of 2 steps runs out.
+    const m = scripted([turn(call("search_icons", "kafka")), turn(call("search_icons", "Kafka")), turn(call("search_icons", "kafka")), turn(call("add", "A > B"))]);
+    await expect(run(m.transport, { maxTurns: 2 })).rejects.toThrow();
+    expect(m.turns()).toBe(3);
+  });
+
+  it("tells the model how much working time is left", async () => {
+    const m = scripted([turn(call("add", "A > B")), turn(call("finish"))]);
+    await run(m.transport, { maxMs: 90_000 });
+    expect(m.shown[0]).toMatch(/About \d+ seconds of working time are left/);
+  });
+});
+
+describe("icons only requests", () => {
+  it("turns every added node with an icon into a bare icon, however the model wrote it", async () => {
+    const m = scripted([turn(call("add", "Web [icon: browser]\nAPI [icon: gateway]\nWeb > API")), turn(call("finish"))]);
+    const result = await run(m.transport, { bareIcons: true });
+    expect(result.state.parsed.nodes.map((n) => n.shape)).toEqual(["icon", "icon"]);
+    expect(result.built.elements.filter((e) => e.ai?.role === "node").every((e) => e.type === "icon")).toBe(true);
+  });
+});

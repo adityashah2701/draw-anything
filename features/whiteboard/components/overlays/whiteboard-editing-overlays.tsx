@@ -345,6 +345,7 @@ export const WhiteboardEditingOverlays = ({
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
         triggerAIGeneration={controller.triggerAIGeneration}
+        canEdit={controller.elements.some((e) => e.ai?.role === "node")}
         isGenerating={controller.isAIGenerating}
         messages={controller.aiMessages}
         workingLabel={controller.aiThoughtPhase}

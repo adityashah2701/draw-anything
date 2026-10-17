@@ -63,7 +63,7 @@ export const summaryNote = (result: BuilderResult): AgentNote => {
   }
   return {
     kind: "summary",
-    title: `${result.finished ? "Done" : "Stopped at the step limit"}: ${plural(nodes, "component")} and ${plural(edges, "connection")}`,
+    title: `${result.finished ? "Done" : result.timedOut ? "Stopped at the time limit" : "Stopped at the step limit"}: ${plural(nodes, "component")} and ${plural(edges, "connection")}`,
     items,
     text: result.remainingProblems.length > 0 ? `Left as it is: ${result.remainingProblems.slice(0, 3).join("; ")}.` : undefined,
   };

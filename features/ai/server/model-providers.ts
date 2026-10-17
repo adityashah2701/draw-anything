@@ -290,6 +290,55 @@ export const createPromptedStructuredModel = (
 /** Groq's default model cannot read images; this one can (override with GROQ_VISION_MODEL). */
 const GROQ_VISION_DEFAULT = "meta-llama/llama-4-scout-17b-16e-instruct";
 
+/**
+ * NVIDIA's hosted API (OpenAI-compatible). Both models below take images, call tools and reason
+ * (checked against the live /v1/models list); the newer one is the default, the smaller one answers
+ * when it is rate limited or unavailable. Override with NVIDIA_MODEL / NVIDIA_FALLBACK_MODEL.
+ */
+const NVIDIA_DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b";
+const NVIDIA_FALLBACK_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
+
+/** A reply that another model might still give: rate limit, overload, outage, or this model not served to this key. */
+export const isNvidiaRetryable = (e: unknown): boolean =>
+  /\b(429|404|50[0-4])\b|rate.?limit|too many requests|overloaded|unavailable|not found|timed? ?out|ECONN|fetch failed/i.test(
+    e instanceof Error ? e.message : String(e),
+  );
+
+/** Reasoning on, but capped: unbounded thinking on a big prompt took 60-170 s per step in the builder. */
+const nvidiaThinking = () =>
+  process.env.NVIDIA_ENABLE_THINKING === "0"
+    ? { enable_thinking: false }
+    : { enable_thinking: true, reasoning_budget: Number(process.env.NVIDIA_REASONING_BUDGET) || 2048 };
+
+const createNvidiaModel = (model: string): BaseChatModel =>
+  new ChatOpenAI({
+    model,
+    temperature: 0.6, // NVIDIA's recommendation for the reasoning mode; greedy decoding can loop
+    topP: 0.95,
+    maxTokens: 16384,
+    apiKey: requireEnv("nvidia", "NVIDIA_API_KEY"),
+    configuration: { baseURL: process.env.NVIDIA_BASE_URL ?? "https://integrate.api.nvidia.com/v1" },
+    timeout: 90_000, // a hung call becomes a retryable error (and then the fallback model) instead of a stuck run
+    modelKwargs: { chat_template_kwargs: nvidiaThinking() },
+  });
+
+type Runner = Pick<BaseChatModel, "invoke"> & { bindTools?: (tools: never[]) => Runner };
+
+/** `primary`, and `secondary` for any call that fails in a way another model could answer. Also after `bindTools`. */
+export const withNvidiaFallback = (primary: Runner, secondary: Runner): BaseChatModel =>
+  ({
+    invoke: async (input: never, options?: never) => {
+      try {
+        return await primary.invoke(input, options);
+      } catch (e) {
+        if (!isNvidiaRetryable(e)) throw e;
+        console.warn("[nvidia] primary model failed, using the fallback model:", e instanceof Error ? e.message.slice(0, 120) : e);
+        return secondary.invoke(input, options);
+      }
+    },
+    bindTools: (tools: never[]) => withNvidiaFallback(primary.bindTools!(tools), secondary.bindTools!(tools)),
+  }) as unknown as BaseChatModel;
+
 export interface ModelOptions {
   /** A model that accepts images: `<PROVIDER>_VISION_MODEL` when set, else the provider's usual model (Groq: a Llama 4 vision model). */
   vision?: boolean;
@@ -339,6 +388,12 @@ const baseProviderConfig = (providerInput?: AIModelProvider): AIModelProviderCon
         modelName:
           process.env.OPENROUTER_MODEL ?? "openai/gpt-4.1-mini",
         displayName: "OpenRouter",
+      };
+    case "nvidia":
+      return {
+        provider,
+        modelName: process.env.NVIDIA_MODEL ?? NVIDIA_DEFAULT_MODEL,
+        displayName: "NVIDIA Nemotron",
       };
     case "local":
       return {
@@ -394,6 +449,12 @@ export const createBaseChatModel = (
           baseURL: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
         },
       });
+    case "nvidia": {
+      const primary = createNvidiaModel(config.modelName);
+      // An override that is already the fallback model has nothing to fall back to.
+      const fallback = process.env.NVIDIA_FALLBACK_MODEL ?? NVIDIA_FALLBACK_MODEL;
+      return fallback === config.modelName ? primary : withNvidiaFallback(primary, createNvidiaModel(fallback));
+    }
     case "local":
       return new ChatOpenAI({
         model: config.modelName,
