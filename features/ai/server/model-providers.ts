@@ -38,7 +38,32 @@ const requireEnv = (provider: AIModelProvider, envName: string) => {
 // Gemini adapter using @google/genai (supports Gemini 3.x models)
 // ---------------------------------------------------------------------------
 
-type GenAIPart = { text: string } | { functionResponse: { name: string; response: Record<string, unknown> } };
+type GenAIPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } }
+  | { functionResponse: { name: string; response: Record<string, unknown> } };
+
+/** `data:image/png;base64,...` as Gemini's inline image part; null for anything else (remote URLs are not fetched). */
+const imagePartFromUrl = (url: unknown): GenAIPart | null => {
+  const m = typeof url === "string" ? /^data:(image\/[\w.+-]+);base64,([\s\S]+)$/.exec(url) : null;
+  return m ? { inlineData: { mimeType: m[1], data: m[2] } } : null;
+};
+
+/** The parts of one LangChain message: its text, and its images when the content is a list of blocks. */
+const partsOf = (content: unknown): GenAIPart[] => {
+  if (typeof content === "string") return [{ text: content }];
+  if (!Array.isArray(content)) return [{ text: "" }];
+  const parts: GenAIPart[] = [];
+  let text = "";
+  for (const block of content as Array<{ type?: string; text?: string; image_url?: { url?: string } | string }>) {
+    if (block?.type === "text" && typeof block.text === "string") text += block.text;
+    else if (block?.type === "image_url") {
+      const image = imagePartFromUrl(typeof block.image_url === "string" ? block.image_url : block.image_url?.url);
+      if (image) parts.push(image);
+    }
+  }
+  return [{ text }, ...parts];
+};
 
 interface GenAIMessage {
   role: string;
@@ -46,7 +71,7 @@ interface GenAIMessage {
 }
 
 /** Convert LangChain message format to Google GenAI Content format. */
-function toGenAIMessages(
+export function toGenAIMessages(
   messages: unknown[],
 ): { systemInstruction?: string; contents: GenAIMessage[] } {
   const contents: GenAIMessage[] = [];
@@ -57,16 +82,11 @@ function toGenAIMessages(
     if (msg && typeof msg === "object" && "getType" in msg) {
       const m = msg as { getType(): string; content: unknown; name?: string };
       const role = m.getType();
-      const text = typeof m.content === "string"
-        ? m.content
-        : Array.isArray(m.content)
-          ? m.content.map((b: { type?: string; text?: string }) => (b?.type === "text" ? b.text : "")).join("")
-          : "";
-
+      const parts = partsOf(m.content);
       if (role === "system") {
-        systemInstruction = text;
+        systemInstruction = parts.map((p) => ("text" in p ? p.text : "")).join("");
       } else {
-        contents.push({ role: role === "ai" || role === "assistant" ? "model" : "user", parts: [{ text }] });
+        contents.push({ role: role === "ai" || role === "assistant" ? "model" : "user", parts });
       }
     }
     // Handle [role, content] tuples

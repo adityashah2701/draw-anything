@@ -27,8 +27,8 @@ export interface ToolTransportOptions {
   vision?: boolean;
 }
 
-/** Providers whose models here can look at an image. Gemini goes through an adapter that sends text only. */
-export const supportsVision = (provider: AIModelProvider) => provider !== "gemini" && provider !== "local";
+/** Providers whose models here can look at an image. A local model is whatever the user runs, so it is not assumed to. */
+export const supportsVision = (provider: AIModelProvider) => provider !== "local";
 
 export const createToolTransport = (
   provider: AIModelProvider,
