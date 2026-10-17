@@ -1,15 +1,16 @@
-import { UnparseableModelOutputError } from "@/features/ai/server/errors";
-import { withRetry, type RetryOptions } from "@/features/ai/server/retry";
+import { QuotaExceededError, RateLimitError, UnparseableModelOutputError } from "@/features/ai/server/errors";
+import { categorizeError, withRetry, type RetryOptions } from "@/features/ai/server/retry";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { runTool } from "../tools/index";
 import type { AgentMessage, ModelTurn, ToolCall, ToolTransport } from "../types";
 import { buildCanvas, diffElements, type BuiltCanvas, type CanvasDiff } from "./canvas";
 import { buildStateMessage } from "./prompt";
 import { reportCanvas, type CanvasReport } from "./report";
-import { addLines, adjust, createState, type BuilderState } from "./state";
+import { addLines, adjust, createState, describeMoved, type BuilderState } from "./state";
 
-const DEFAULT_MAX_TURNS = 24;
-const DEFAULT_MAX_REVIEWS = 3;
+/** Each turn is a model call, and free tiers allow few calls a minute: keep the default small. */
+const DEFAULT_MAX_TURNS = 12;
+const DEFAULT_MAX_REVIEWS = 2;
 /** Turns spent only looking up icons do not use the budget, up to this many. */
 const MAX_LOOKUP_TURNS = 3;
 /** Replies with neither a tool call nor code, in a row, before the run settles for what is on the canvas. */
@@ -36,12 +37,14 @@ export interface BuilderInput {
   frameId: string;
   maxTurns?: number;
   maxReviews?: number;
+  /** Undo an adjustment that made the picture worse (default on). */
+  guardAdjustments?: boolean;
   /** Renders the canvas to an image for a vision model; its absence means the agent works from text alone. */
   renderImage?: (elements: DrawingElement[]) => Promise<string | undefined>;
   signal?: AbortSignal;
   retry?: Partial<RetryOptions>;
   /** Called as soon as a step changed the canvas, so the client can draw it before the next model call. */
-  onCanvas?: (update: CanvasUpdate) => void;
+  onCanvas?: (update: CanvasUpdate) => void | Promise<void>;
   onStep?: (step: BuilderStep) => void;
 }
 
@@ -52,6 +55,8 @@ export interface BuilderResult {
   finished: boolean;
   turns: number;
   reviews: number;
+  /** The provider's quota or rate limit ended the run; what was built so far is kept. */
+  stoppedByQuota: boolean;
   toolTrail: string[];
   transport: ToolTransport["kind"];
 }
@@ -87,15 +92,16 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
   const toolTrail: string[] = [];
   let turn = 0;
   let finished = false;
+  let stoppedByQuota = false;
 
-  const redraw = () => {
+  const redraw = async () => {
     live.built = buildCanvas(state, input.generationId, input.frameId);
     if (!live.built) return;
     live.report = reportCanvas(live.built, state);
     const diff = diffElements(drawn, live.built.elements);
     drawn = diff.signatures;
     if (diff.added.length + diff.updated.length + diff.removedIds.length > 0) {
-      input.onCanvas?.({ added: diff.added, updated: diff.updated, removedIds: diff.removedIds, elements: live.built.elements });
+      await input.onCanvas?.({ added: diff.added, updated: diff.updated, removedIds: diff.removedIds, elements: live.built.elements });
     }
   };
 
@@ -114,6 +120,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
         problems: live.report?.problems,
         detail: wantDetail ? live.report?.detail : undefined,
         notes,
+        moved: describeMoved(state),
         phase,
         reviewsLeft: maxReviews - reviews,
         hasImage: Boolean(image),
@@ -124,11 +131,22 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
     wantDetail = false;
     wantImage = phase === "review" && Boolean(input.renderImage);
 
-    const reply: ModelTurn = await withRetry(
-      () => transport.complete([{ role: "system", content: input.system }, message], { signal }),
-      // Many calls in a row: on a tokens-per-minute limit the wait for the next window is the normal case, not a failure.
-      { ...PATIENT_RETRY, ...input.retry },
-    );
+    let reply: ModelTurn;
+    try {
+      reply = await withRetry(
+        () => transport.complete([{ role: "system", content: input.system }, message], { signal }),
+        // Many calls in a row: on a tokens-per-minute limit the wait for the next window is the normal case, not a failure.
+        { ...PATIENT_RETRY, ...input.retry },
+      );
+    } catch (error) {
+      // Out of quota with a picture already on the canvas: keep it. Without one there is nothing to keep.
+      const typed = categorizeError(error);
+      if (live.built && (typed instanceof RateLimitError || typed instanceof QuotaExceededError)) {
+        stoppedByQuota = true;
+        break;
+      }
+      throw error;
+    }
     if (signal?.aborted) throw abortError();
 
     // A model that answers with a diagram in a fence instead of calling a tool is still adding to the canvas.
@@ -142,6 +160,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
     emptyTurns = 0;
 
     const before = state;
+    const scoreBefore = live.report?.score;
     let finishRequested = false;
     let lookupOnly = true;
     for (const call of calls) {
@@ -186,7 +205,21 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
       }
     }
 
-    if (state !== before) redraw();
+    if (state !== before) await redraw();
+
+    // A tidy-up that made things worse is taken back, so a run of well-meant nudges cannot drift into a mess.
+    const adjustedOnly = calls.some((c) => c.name === "adjust") && !calls.some((c) => c.name === "add");
+    if ((input.guardAdjustments ?? true) && adjustedOnly && state !== before && state.code === before.code && scoreBefore && live.report) {
+      const after = live.report.score;
+      const worse = after.problems > scoreBefore.problems || (after.problems === scoreBefore.problems && after.connectorLength > scoreBefore.connectorLength * 1.25 + 120);
+      if (worse) {
+        state = before;
+        await redraw();
+        notes.push(
+          `Undid that adjustment: it made the picture worse (problems ${scoreBefore.problems} -> ${after.problems}, connector length ${Math.round(scoreBefore.connectorLength)} -> ${Math.round(after.connectorLength)}px). Try something smaller, or a different fix.`,
+        );
+      }
+    }
 
     if (finishRequested) {
       const { built, report } = live;
@@ -217,5 +250,5 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
   }
 
   if (!live.built) throw new UnparseableModelOutputError("empty", "");
-  return { state, built: live.built, finished, turns: Math.min(turn, maxTurns), reviews, toolTrail, transport: transport.kind };
+  return { state, built: live.built, finished, turns: Math.min(turn, maxTurns), reviews, stoppedByQuota, toolTrail, transport: transport.kind };
 };

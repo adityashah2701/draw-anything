@@ -4,6 +4,7 @@ import { bundleFans } from "@/features/ai/server/layout/bus";
 import { FRAME_NEST_STEP, FRAME_PADDING, FRAME_TITLE_HEIGHT, frameTopBand } from "@/features/ai/server/layout/frame-constants";
 import { placeGrid } from "@/features/ai/server/layout/grid-placement";
 import { placeLayered } from "@/features/ai/server/layout/layered-placement";
+import { measureLayout } from "@/features/ai/server/layout/metrics";
 import { withOffsets, withPins, type NodeOffset, type NodePin } from "@/features/ai/server/layout/pins";
 import type {
   Placement,
@@ -145,8 +146,17 @@ export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize 
   return size;
 };
 
-const getDepths = (document: AIDiagramDocumentV1) => {
-  if (document.diagramType === "architecture") {
+/**
+ * How nodes are put in rows. `layers`: an architecture's own tiers (edge, application, data...), which
+ * is right when they are meaningful. `flow`: the longest path through the connections, as for every
+ * other diagram type. A diagram written as code names no tiers, so nearly everything falls in
+ * "application": one wide row of connected nodes with long, tangled connectors. Which of the two is
+ * better is measured, not guessed (see `compileAIDiagramDetailed`).
+ */
+export type DepthMode = "layers" | "flow";
+
+const getDepths = (document: AIDiagramDocumentV1, mode: DepthMode = "layers") => {
+  if (document.diagramType === "architecture" && mode === "layers") {
     return new Map(
       document.nodes.map((node) => [
         node.id,
@@ -377,8 +387,8 @@ export interface CompileResult {
 }
 
 /** Sizes, graph and gaps for a layout engine; everything an engine may use, nothing it must not. */
-export const prepareDiagram = (document: AIDiagramDocumentV1) => {
-  const depthByNodeId = getDepths(document);
+export const prepareDiagram = (document: AIDiagramDocumentV1, mode: DepthMode = "layers") => {
+  const depthByNodeId = getDepths(document, mode);
   const density = document.styleHints.density;
   const groups = usableGroups(
     document,
@@ -698,12 +708,13 @@ export interface CompileOptions {
   pins?: Map<string, NodePin>;
 }
 
-export const compileAIDiagramDetailed = (
+const compileWith = (
   document: AIDiagramDocumentV1,
   frameId: string,
-  { engine = placeLayered, pins, offsets, edgeSides }: CompileOptions = {},
+  mode: DepthMode,
+  { engine = placeLayered, pins, offsets, edgeSides }: CompileOptions,
 ): CompileResult => {
-  const prepared = prepareDiagram(document);
+  const prepared = prepareDiagram(document, mode);
   const offsetEngine = offsets && offsets.size > 0 ? withOffsets(engine, offsets) : engine;
   const place = pins && pins.size > 0 ? withPins(offsetEngine, pins) : offsetEngine;
   let placement: Placement;
@@ -717,6 +728,31 @@ export const compileAIDiagramDetailed = (
   }
   const result = buildCanvas(document, frameId, prepared, placement, edgeSides);
   return layoutFallback ? { ...result, diagnostics: { ...result.diagnostics, layoutFallback } } : result;
+};
+
+/**
+ * Lower is better, compared in this order: what is plainly broken (overlapping nodes, a group frame that
+ * is wrong, a label on top of something, a connector through a node), then shared lines, crossings and
+ * connector length.
+ */
+const layoutCost = (result: CompileResult, document: AIDiagramDocumentV1): [number, number] => {
+  const m = measureLayout(result.elements, document.groups);
+  const broken = m.nodeOverlaps + m.groupViolations + m.groupsDropped + m.labelsColliding + m.edgeThroughNodes;
+  return [broken, m.edgeOverlaps * 20_000 + m.edgeCrossings * 2_000 + m.totalEdgeLength];
+};
+
+const cheaper = (a: [number, number], b: [number, number]) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+
+export const compileAIDiagramDetailed = (
+  document: AIDiagramDocumentV1,
+  frameId: string,
+  options: CompileOptions = {},
+): CompileResult => {
+  const layers = compileWith(document, frameId, "layers", options);
+  // An architecture can also be laid out by its flow; keep whichever the measurements prefer. Ties keep the tiers.
+  if (document.diagramType !== "architecture" || document.nodes.length < 2) return layers;
+  const flow = compileWith(document, frameId, "flow", options);
+  return cheaper(layoutCost(flow, document), layoutCost(layers, document)) ? flow : layers;
 };
 
 export const compileAIDiagramToCanvas = (

@@ -42,13 +42,14 @@ export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], conte
     LANGUAGE,
     "",
     "How you work:",
-    `1. Build in small steps. Each turn look at the canvas and add the NEXT part: a node and its connections, or a small group (at most ${MAX_ADD_STATEMENTS} statements). Start at the entry point and follow the flow. Never write the whole diagram at once.`,
+    `1. Build in steps. Each turn look at the canvas and add the NEXT part: several nodes with their connections, or a group (at most ${MAX_ADD_STATEMENTS} statements). Start at the entry point and follow the flow. Large diagrams take two or three steps, not one.`,
     "2. Give nodes icons that say what they are (call search_icons once for all you need). For architecture, network and IoT pictures use bare icons (shape: icon); use boxes for steps, decisions and long names.",
     "3. When the structure is complete, polish. Read the Problems list: each names the connections or nodes involved. Fix them with adjust, for example:",
     "   - a connection runs along another one or has many bends: `sides A > B: right, right` loops it around the right side, `sides A > B: bottom, top` makes it direct;",
-    "   - a node is in an awkward place: `move B: right 120`, or `align B with C: x` to line them up;",
+    "   - a node is slightly off: a small `move B: right 40`, or `align B with C: x` to line them up (moves are nudges, at most 200 at a time);",
     "   - a connection crosses others or passes through a node: change its sides or move a node; remove a connection that adds nothing.",
-    "4. Use view when you need exact positions. Call finish only when the Problems list is empty or you cannot improve it further.",
+    "   Keep the diagram COMPACT. The engine already spaces nodes and routes lines; never use move to spread things apart or to chase a layout you imagine. Prefer `sides` to fix a line. If you see nodes under \"Moved by hand\" and the picture got worse, `reset` them. An adjustment that makes the picture worse is undone for you.",
+    "4. Use view only when you need exact positions. Call finish when the Problems list is empty or you cannot improve it further; you may send finish in the same reply as your last add or adjust. Every step costs a model call, so make each one count: a node and all its connections together, not one line at a time.",
     "",
     "Design rules: short names (1-4 words); every node connects to something; label a connection only when it adds information; group tightly coupled nodes; dashed (-->) for optional, async or feedback paths. y grows downward in positions.",
     "",
@@ -73,6 +74,8 @@ export interface StateMessageInput {
   detail?: string;
   /** What the previous step did, one line each (including errors and icon results). */
   notes: string[];
+  /** Nodes the agent moved by hand, with their offsets. */
+  moved?: string[];
   phase: "build" | "review";
   reviewsLeft: number;
   hasImage: boolean;
@@ -84,6 +87,7 @@ export const buildStateMessage = (input: StateMessageInput): string => {
   const lines = [`Goal: ${input.goal}`, `Step ${input.turn} of ${input.maxTurns}.`, "", "Canvas now:", empty ? "(empty)" : `\`\`\`diagram\n${input.code}\n\`\`\``];
   if (!empty && input.summary) lines.push(input.summary);
   if (!empty) lines.push(input.problems && input.problems.length > 0 ? `Problems:\n${input.problems.map((p) => `- ${p}`).join("\n")}` : "Problems: none found.");
+  if (input.moved && input.moved.length > 0) lines.push(`Moved by hand: ${input.moved.join(", ")}.`);
   if (input.detail) lines.push("", input.detail);
   if (input.hasImage) lines.push("", "A picture of the canvas is attached.");
   if (input.notes.length > 0) lines.push("", "Last step:", ...input.notes.map((n) => `- ${n}`));

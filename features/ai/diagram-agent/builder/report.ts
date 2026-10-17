@@ -12,11 +12,15 @@ export interface CanvasReport {
   summary: string;
   /** Where every node is and which sides every connection uses (for the `view` tool). */
   detail: string;
+  /** For comparing two versions of the picture: fewer problems first, then shorter connectors. */
+  score: { problems: number; connectorLength: number };
 }
 
 const MAX_PROBLEMS = 8;
 const MAX_DETAIL_CHARS = 2_200;
 const MAX_BENDS = 3;
+/** A connector longer than this (px) reads as the diagram being spread out. */
+const LONG_CONNECTOR = 600;
 
 const isArrow = (e: DrawingElement) => e.type === "arrow" || e.type === "arrow-bidirectional";
 
@@ -51,6 +55,7 @@ export const reportCanvas = (built: BuiltCanvas, state: BuilderState): CanvasRep
   const through: string[] = [];
   const bendy: string[] = [];
   const detours: string[] = [];
+  const longEdges: string[] = [];
   for (const arrow of list) {
     const ends = new Set([arrow.startConnection?.elementId, arrow.endConnection?.elementId]);
     const segments = arrow.points.slice(0, -1).map((p, i) => [p, arrow.points[i + 1]] as const);
@@ -64,6 +69,7 @@ export const reportCanvas = (built: BuiltCanvas, state: BuilderState): CanvasRep
     const last = arrow.points[arrow.points.length - 1];
     const manhattan = Math.abs(first.x - last.x) + Math.abs(first.y - last.y);
     const length = pathLength(arrow.points);
+    if (length > LONG_CONNECTOR) longEdges.push(`${arrowName(arrow)} is very long (${Math.round(length)}px): bring the two closer, or reset moves that pulled them apart`);
     if (manhattan > 0 && length > 3 * manhattan) detours.push(`${arrowName(arrow)} takes a long detour (${Math.round(length)}px for ${Math.round(manhattan)}px apart)`);
   }
 
@@ -96,6 +102,7 @@ export const reportCanvas = (built: BuiltCanvas, state: BuilderState): CanvasRep
     ...shared,
     ...crossings,
     ...detours,
+    ...longEdges,
     ...bendy,
     ...(metrics.labelsColliding > 0 ? [`${metrics.labelsColliding} connection label(s) overlap a node, a line or another label`] : []),
     ...(metrics.groupViolations > 0 || metrics.groupsDropped > 0 ? [`${metrics.groupViolations + metrics.groupsDropped} group frame problem(s): a frame is missing, or covers a node that is not in it`] : []),
@@ -121,5 +128,6 @@ export const reportCanvas = (built: BuiltCanvas, state: BuilderState): CanvasRep
     problems: problems.slice(0, MAX_PROBLEMS),
     summary: `${nodes.length} nodes, ${list.length} connections, ${metrics.edgeCrossings} crossings, longest connector ${Math.round(metrics.longestEdge)}px`,
     detail,
+    score: { problems: problems.length, connectorLength: metrics.totalEdgeLength },
   };
 };

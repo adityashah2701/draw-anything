@@ -11,6 +11,10 @@ const RATE_LIMIT_SIGNALS = [
 
 const QUOTA_SIGNALS = ["quota", "quota exceeded", "billing"];
 
+/** Limits that reset hours from now, not seconds: waiting and retrying cannot help (Groq: "tokens per day (TPD)"). */
+const DAILY_SIGNALS = ["per day", "(tpd)", "(rpd)", "daily", "exceeded your current quota"];
+const isDailyLimit = (msg: string): boolean => DAILY_SIGNALS.some((s) => msg.includes(s));
+
 const NETWORK_SIGNALS = [
   "econnrefused",
   "econnreset",
@@ -75,6 +79,7 @@ export const categorizeError = (error: unknown): AIServiceError => {
 
   const msg = error instanceof Error ? error.message : String(error);
 
+  if (isDailyLimit(msg.toLowerCase())) return new QuotaExceededError(msg, error);
   if (isRateLimit(msg)) return new RateLimitError(msg, error);
   if (isQuota(msg)) return new QuotaExceededError(msg, error);
   if (isNetwork(msg)) return new NetworkError(msg, error);

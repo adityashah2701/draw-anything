@@ -9,9 +9,10 @@ const suite = hasChrome() ? describe : describe.skip;
 
 /** The bytes the real route sends for a run of the builder: each event, then its v1 compatibility events. */
 const sseFor = async (script: Parameters<typeof scripted>[0]) => {
+  // These tests are about the client applying updates, so the agent's big moves must not be undone by the guard.
   const events: AIStreamEvent[] = [];
   let body = "";
-  for await (const event of streamDiagramBuilderEvents({ request: { prompt: "chain", provider: "groq" }, transport: scripted(script).transport })) {
+  for await (const event of streamDiagramBuilderEvents({ request: { prompt: "chain", provider: "groq" }, transport: scripted(script).transport, guardAdjustments: false, revealMs: 0 })) {
     events.push(event);
     body += encodeSse(event) + toV1CompatibilityEvents(event).map(encodeSse).join("");
   }

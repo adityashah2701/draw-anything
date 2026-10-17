@@ -238,3 +238,32 @@ API > Orders DB
     expect(graphFromElements([manual]).graph.nodes).toHaveLength(0);
   });
 });
+
+describe("architecture diagrams written as code follow their flow", () => {
+  const FLOW = `type architecture
+Start [kind: start]
+Customer [icon: user, shape: icon]
+Web Shop [icon: browser, shape: icon]
+Validate Order [kind: workflow]
+In Stock? [kind: decision]
+Reserve Stock [kind: workflow]
+Backorder [kind: alerting]
+Payment [icon: stripe, shape: icon]
+Notify Customer [kind: workflow]
+Done [kind: end]
+Start > Customer > Web Shop > Validate Order > In Stock?
+In Stock? > Reserve Stock: yes
+In Stock? > Backorder: no
+Reserve Stock > Payment > Notify Customer > Done`;
+
+  it("does not pile connected nodes into one wide row just because they share a tier", () => {
+    const { elements } = compile(FLOW);
+    const rows = new Map<number, number>();
+    for (const e of elements.filter((el) => el.ai?.role === "node")) {
+      const y = Math.round(e.points[0].y / 20);
+      rows.set(y, (rows.get(y) ?? 0) + 1);
+    }
+    expect(Math.max(...rows.values())).toBeLessThanOrEqual(3);
+    expect(rows.size).toBeGreaterThanOrEqual(7);
+  });
+});

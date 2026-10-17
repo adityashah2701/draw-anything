@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCanvas, diffElements } from "./canvas";
 import { reportCanvas } from "./report";
-import { addLines, adjust, createState, MAX_ADD_STATEMENTS } from "./state";
+import { addLines, adjust, createState, describeMoved, MAX_ADD_STATEMENTS, MAX_OFFSET } from "./state";
 
 const build = (code: string) => addLines(createState(), code).state;
 const canvasOf = (state: ReturnType<typeof createState>) => buildCanvas(state, "g", "f")!;
@@ -101,7 +101,22 @@ describe("adjust", () => {
     const result = adjust(s, "move Nope: left\nmove B: down\nfly B", canvasOf(s).centres);
     expect(result.errors).toHaveLength(2);
     expect(result.errors[0]).toMatch(/no node named "Nope"/);
-    expect(result.applied).toEqual(["moved B by 0, 80"]);
+    expect(result.applied).toEqual(["moved B by 0, 60"]);
+  });
+
+  it("keeps a node within a limit of its automatic place, however many times it is moved", () => {
+    let s = chain();
+    for (let i = 0; i < 6; i += 1) s = adjust(s, "move B: right 200", canvasOf(s).centres).state;
+    expect(s.offsets.get(s.parsed.nodes.find((n) => n.name === "B")!.id)?.dx).toBe(MAX_OFFSET);
+    const again = adjust(s, "move B: right 50", canvasOf(s).centres);
+    expect(again.applied[0]).toMatch(/limit reached/);
+  });
+
+  it("lists what was moved by hand, and nothing once it is reset", () => {
+    const s = chain();
+    const moved = adjust(s, "move B: right 100", canvasOf(s).centres).state;
+    expect(describeMoved(moved)).toEqual(["B (+100, +0)"]);
+    expect(describeMoved(adjust(moved, "reset B", canvasOf(moved).centres).state)).toEqual([]);
   });
 
   it("suggests a close name", () => {
@@ -163,6 +178,16 @@ Create Session > Dashboard`;
     const problems = reportCanvas(canvasOf(state), state).problems.join("\n");
     expect(problems).toMatch(/Show Error > Enter Credentials/);
     expect(problems).toMatch(/same line/);
+  });
+
+  it("flags a very long connector and counts problems for comparing versions", () => {
+    const s = build("A > B");
+    const spread = adjust(s, "move B: 200, 200", canvasOf(s).centres).state;
+    const far = adjust(spread, "move B: 200, 200", canvasOf(spread).centres).state;
+    const a = reportCanvas(canvasOf(s), s);
+    const b = reportCanvas(canvasOf(far), far);
+    expect(b.score.connectorLength).toBeGreaterThan(a.score.connectorLength);
+    expect(a.score.problems).toBe(a.problems.length);
   });
 
   it("describes where nodes are and which sides connections use", () => {

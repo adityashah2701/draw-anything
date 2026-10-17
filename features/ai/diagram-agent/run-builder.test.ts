@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AIStreamEvent } from "@/features/ai/types";
 import { call, scripted, turn } from "./builder/testing";
-import { streamDiagramBuilderEvents } from "./run-builder";
+import { revealChunks, streamDiagramBuilderEvents } from "./run-builder";
 
 const collect = async (script: Parameters<typeof scripted>[0]) => {
   const events: AIStreamEvent[] = [];
-  for await (const event of streamDiagramBuilderEvents({ request: { prompt: "login flow", provider: "groq" }, transport: scripted(script).transport })) {
+  for await (const event of streamDiagramBuilderEvents({ request: { prompt: "login flow", provider: "groq" }, transport: scripted(script).transport, revealMs: 0 })) {
     events.push(event);
   }
   return events;
@@ -25,8 +25,9 @@ describe("streamDiagramBuilderEvents", () => {
     expect(types.at(-1)).toBe("frame.done");
 
     const batches = events.filter((e): e is Extract<AIStreamEvent, { type: "element.batch" }> => e.type === "element.batch");
-    expect(batches).toHaveLength(2);
-    expect(batches[1].elements.length).toBeGreaterThan(0);
+    // Each shape and connector arrives as its own piece, so a step still appears one by one.
+    expect(batches.length).toBeGreaterThanOrEqual(4);
+    expect(Math.max(...batches.map((b) => b.elements.length))).toBeLessThanOrEqual(3);
 
     const update = events.find((e) => e.type === "element.update");
     expect(update && "elements" in update ? update.elements.length : 0).toBeGreaterThan(0);
@@ -57,5 +58,42 @@ describe("streamDiagramBuilderEvents", () => {
 
   it("fails like the other pipelines when nothing was ever drawn", async () => {
     await expect(collect([turn()])).rejects.toThrow();
+  });
+});
+
+describe("revealChunks", () => {
+  const node = (id: string, x: number, y: number) => ({ id, type: "semantic-node", points: [{ x, y }, { x: x + 100, y: y + 50 }], color: "#000", strokeWidth: 2, ai: { role: "node" } }) as never;
+  const label = (id: string) => ({ id, type: "text", points: [{ x: 5, y: 5 }], color: "#000", strokeWidth: 1, ai: { role: "edge-label" } }) as never;
+
+  it("shows shapes one by one and keeps a label with its connector", () => {
+    const chunks = revealChunks([node("a", 0, 0), node("b", 0, 100), label("l")], false);
+    expect(chunks.map((c) => c.map((e: { id: string }) => e.id))).toEqual([["a"], ["b", "l"]]);
+  });
+
+  it("puts the elements at the top-left edge in the first piece, so the client anchors on the right corner", () => {
+    const chunks = revealChunks([node("mid", 100, 100), node("left", 0, 150), node("top", 150, 0), node("far", 300, 300)], true);
+    const first = chunks[0].map((e: { id: string }) => e.id).sort();
+    expect(first).toEqual(["left", "top"]);
+    expect(chunks.flat()).toHaveLength(4);
+  });
+});
+
+describe("streamDiagramBuilderEvents when the quota runs out", () => {
+  it("finishes with a message that says so and keeps the shapes already drawn", async () => {
+    let calls = 0;
+    const base = scripted([turn(call("add", "A > B")), turn(call("finish"))]).transport;
+    const transport = {
+      kind: "native" as const,
+      async complete(messages: Parameters<typeof base.complete>[0], options?: Parameters<typeof base.complete>[1]) {
+        calls += 1;
+        if (calls > 1) throw new Error("429 quota exceeded: tokens per day (TPD)");
+        return base.complete(messages, options);
+      },
+    };
+    const events: AIStreamEvent[] = [];
+    for await (const e of streamDiagramBuilderEvents({ request: { prompt: "x", provider: "groq" }, transport, revealMs: 0 })) events.push(e);
+    expect(events.at(-1)?.type).toBe("frame.done");
+    expect(events.some((e) => e.type === "phase.completed" && /quota or rate limit/.test(e.message))).toBe(true);
+    expect(events.some((e) => e.type === "element.batch")).toBe(true);
   });
 });

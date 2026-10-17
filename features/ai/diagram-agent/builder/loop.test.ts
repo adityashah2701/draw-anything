@@ -31,7 +31,7 @@ describe("runDiagramBuilder", () => {
       turn(call("add", "Enter Credentials > Valid?")),
       turn(call("finish")),
     ]);
-    const result = await run(m.transport, { onCanvas: (u) => updates.push(u) });
+    const result = await run(m.transport, { onCanvas: (u) => void updates.push(u) });
 
     expect(result.finished).toBe(true);
     expect(updates).toHaveLength(2);
@@ -48,9 +48,36 @@ describe("runDiagramBuilder", () => {
   it("streams updates to elements that already exist, not only new ones", async () => {
     const updates: CanvasUpdate[] = [];
     const m = scripted([turn(call("add", "A > B\nB > C")), turn(call("adjust", "move B: right 100")), turn(call("finish"))]);
-    await run(m.transport, { onCanvas: (u) => updates.push(u) });
+    await run(m.transport, { guardAdjustments: false, onCanvas: (u) => void updates.push(u) });
     expect(updates[1].updated.length).toBeGreaterThan(0);
     expect(updates[1].added).toEqual([]);
+  });
+
+  it("takes back an adjustment that made the picture worse, and tells the model why", async () => {
+    const updates: CanvasUpdate[] = [];
+    const m = scripted([turn(call("add", "A > B > C")), turn(call("adjust", "move B: right 200\nmove C: left 200")), turn(call("finish"))]);
+    const result = await run(m.transport, { onCanvas: (u) => void updates.push(u) });
+    expect(m.shown[2]).toMatch(/Undid that adjustment: it made the picture worse/);
+    expect(result.state.offsets.size).toBe(0);
+    // The client is told to put the elements back as well.
+    expect(updates).toHaveLength(3);
+  });
+
+  it("keeps the adjustment when the guard is off, and shows the model what it moved", async () => {
+    const m = scripted([turn(call("add", "A > B > C")), turn(call("adjust", "move B: right 200")), turn(call("finish")), turn(call("finish"))]);
+    const result = await run(m.transport, { guardAdjustments: false });
+    expect(result.state.offsets.size).toBe(1);
+    expect(m.shown[2]).toContain("Moved by hand: B (+200, +0)");
+    expect(m.shown[2]).not.toMatch(/Undid/);
+  });
+
+  it("keeps an adjustment that fixes problems even if connectors get longer", async () => {
+    const code = ["type flowchart", "Start [kind: start]", "Enter Credentials [kind: workflow]", "Valid? [kind: decision]", "MFA Required? [kind: decision]", "Create Session [kind: workflow]", "Show Error [kind: alerting]"];
+    const edges = ["Start > Enter Credentials > Valid?", "Valid? > MFA Required?: yes", "Valid? > Show Error: no", "Show Error > Enter Credentials: retry", "MFA Required? > Create Session: no"];
+    const m = scripted([turn(call("add", code.join("\n"))), turn(call("add", edges.join("\n"))), turn(call("adjust", "sides Show Error > Enter Credentials: right, right")), turn(call("finish"))]);
+    const result = await run(m.transport);
+    expect(m.shown[3]).not.toMatch(/Undid/);
+    expect(result.state.edgeSides.size).toBe(1);
   });
 
   it("tells the model when an add failed and leaves the canvas as it was", async () => {
@@ -133,5 +160,31 @@ describe("runDiagramBuilder", () => {
     const m = scripted([turn(call("add", "A > B"))]);
     controller.abort();
     await expect(run(m.transport, { signal: controller.signal })).rejects.toThrow(/cancelled/);
+  });
+});
+
+describe("when the provider runs out of quota", () => {
+  const limited = (after: number): ToolTransport => {
+    const m = scripted([turn(call("add", "A > B")), turn(call("add", "B > C")), turn(call("finish"))]);
+    let calls = 0;
+    return {
+      kind: "native",
+      async complete(messages, options) {
+        calls += 1;
+        if (calls > after) throw new Error('429 {"error":{"message":"Rate limit reached for tokens per day (TPD)"}}');
+        return m.transport.complete(messages, options);
+      },
+    };
+  };
+
+  it("keeps what is already on the canvas instead of failing the whole run", async () => {
+    const result = await run(limited(1));
+    expect(result.stoppedByQuota).toBe(true);
+    expect(result.finished).toBe(false);
+    expect(result.state.parsed.nodes.map((n) => n.name)).toEqual(["A", "B"]);
+  });
+
+  it("still fails when there is nothing to keep", async () => {
+    await expect(run(limited(0))).rejects.toThrow(/429|rate limit/i);
   });
 });

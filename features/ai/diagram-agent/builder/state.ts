@@ -16,10 +16,16 @@ export interface BuilderState {
   edgeSides: EdgeSides;
 }
 
-/** Statements the agent may add in one call: small steps keep the diagram growing visibly and each step in view. */
-export const MAX_ADD_STATEMENTS = 6;
-const MAX_MOVE = 600;
-const DEFAULT_MOVE = 80;
+/**
+ * Statements the agent may add in one call. Every step is a model call, and free tiers allow only a few
+ * calls a minute, so steps are as big as still keeps a diagram growing in parts (the server shows each
+ * step's shapes one by one). `AI_BUILDER_STEP_STATEMENTS` changes it.
+ */
+export const MAX_ADD_STATEMENTS = Number(process.env.AI_BUILDER_STEP_STATEMENTS) || 12;
+/** One move command, and how far a node may end up from its automatic place in total: the layout already spaces things, so moves are nudges. */
+const MAX_MOVE = 200;
+const DEFAULT_MOVE = 60;
+export const MAX_OFFSET = 240;
 
 const HEADER = /^\s*(type|title|direction)\b/i;
 const SIDES = new Set<ConnectionHandle>(["top", "right", "bottom", "left"]);
@@ -167,10 +173,15 @@ export const adjust = (state: BuilderState, text: string, centres: Centres): Adj
     const b = nodeOrFail(line, pair[1]);
     return a && b ? { a, b } : undefined;
   };
+  const clamp = (v: number) => Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, v));
+  /** Returns what was applied, which is less than asked when the node reached its limit. */
   const shift = (id: string, dx: number, dy: number) => {
     const prev = offsets.get(id) ?? { dx: 0, dy: 0 };
-    offsets.set(id, { dx: prev.dx + dx, dy: prev.dy + dy });
+    const next = { dx: clamp(prev.dx + dx), dy: clamp(prev.dy + dy) };
+    offsets.set(id, next);
+    return { dx: next.dx - prev.dx, dy: next.dy - prev.dy, limited: next.dx - prev.dx !== dx || next.dy - prev.dy !== dy };
   };
+  const limitNote = (r: { limited: boolean }) => (r.limited ? ` (limit reached: a node stays within ${MAX_OFFSET} of its automatic place; use reset)` : "");
 
   for (const raw of text.replace(/\r/g, "").split("\n")) {
     const line = raw.trim();
@@ -203,8 +214,8 @@ export const adjust = (state: BuilderState, text: string, centres: Centres): Adj
       } else { fail(line, "expected left, right, up, down (with an optional distance) or `dx, dy`"); continue; }
       dx = Math.max(-MAX_MOVE, Math.min(MAX_MOVE, dx));
       dy = Math.max(-MAX_MOVE, Math.min(MAX_MOVE, dy));
-      shift(node.id, dx, dy);
-      applied.push(`moved ${node.name} by ${Math.round(dx)}, ${Math.round(dy)}`);
+      const moved = shift(node.id, dx, dy);
+      applied.push(`moved ${node.name} by ${Math.round(moved.dx)}, ${Math.round(moved.dy)}${limitNote(moved)}`);
     } else if (command === "align") {
       const m = rest.match(/^(.+?)\s+with\s+(.+?):\s*(x|y)$/i);
       if (!m) { fail(line, "expected `align <Node> with <Other>: x|y`"); continue; }
@@ -215,8 +226,8 @@ export const adjust = (state: BuilderState, text: string, centres: Centres): Adj
       const cb = centres.get(b.id);
       if (!ca || !cb) { fail(line, "the canvas has not placed both nodes yet"); continue; }
       const axis = m[3].toLowerCase();
-      shift(a.id, axis === "x" ? cb.x - ca.x : 0, axis === "y" ? cb.y - ca.y : 0);
-      applied.push(`aligned ${a.name} with ${b.name} on ${axis}`);
+      const moved = shift(a.id, axis === "x" ? cb.x - ca.x : 0, axis === "y" ? cb.y - ca.y : 0);
+      applied.push(`aligned ${a.name} with ${b.name} on ${axis}${limitNote(moved)}`);
     } else if (command === "sides") {
       const m = rest.match(/^(.+?):\s*(\w+)\s*[, ]\s*(\w+)$/);
       if (!m) { fail(line, "expected `sides <A> > <B>: <from side>, <to side>`"); continue; }
@@ -280,4 +291,12 @@ export const adjust = (state: BuilderState, text: string, centres: Centres): Adj
   }
   // Removing or relabelling rewrites the code; moves and sides only change how it is drawn.
   return { state: structural ? stateFromParsed(parsed, offsets, edgeSides) : { ...state, offsets, edgeSides }, applied, errors };
+};
+
+/** The nodes the agent has moved by hand and by how much, so it can see (and undo) its own displacement. */
+export const describeMoved = (state: BuilderState): string[] => {
+  const name = new Map(state.parsed.nodes.map((n) => [n.id, n.name]));
+  return [...state.offsets]
+    .filter(([id, o]) => name.has(id) && (Math.abs(o.dx) >= 1 || Math.abs(o.dy) >= 1))
+    .map(([id, o]) => `${name.get(id)} (${o.dx >= 0 ? "+" : ""}${Math.round(o.dx)}, ${o.dy >= 0 ? "+" : ""}${Math.round(o.dy)})`);
 };
