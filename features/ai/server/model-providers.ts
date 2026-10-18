@@ -304,21 +304,31 @@ export const isNvidiaRetryable = (e: unknown): boolean =>
     e instanceof Error ? e.message : String(e),
   );
 
-/** Reasoning on, but capped: unbounded thinking on a big prompt took 60-170 s per step in the builder. */
-const nvidiaThinking = () =>
-  process.env.NVIDIA_ENABLE_THINKING === "0"
-    ? { enable_thinking: false }
-    : { enable_thinking: true, reasoning_budget: Number(process.env.NVIDIA_REASONING_BUDGET) || 2048 };
+/**
+ * Reasoning config: full thinking capacity by default (unbounded), or capped when NVIDIA_REASONING_BUDGET is set.
+ * Set NVIDIA_ENABLE_THINKING=0 to disable reasoning.
+ */
+export const nvidiaThinking = () => {
+  if (process.env.NVIDIA_ENABLE_THINKING === "0") {
+    return { enable_thinking: false };
+  }
+  const budget = process.env.NVIDIA_REASONING_BUDGET ? Number(process.env.NVIDIA_REASONING_BUDGET) : undefined;
+  return budget && budget > 0
+    ? { enable_thinking: true, reasoning_budget: budget }
+    : { enable_thinking: true };
+};
 
-const createNvidiaModel = (model: string): BaseChatModel =>
+export const createNvidiaModel = (model: string): BaseChatModel =>
   new ChatOpenAI({
     model,
     temperature: 0.6, // NVIDIA's recommendation for the reasoning mode; greedy decoding can loop
     topP: 0.95,
-    maxTokens: 16384,
+    maxTokens: Number(process.env.NVIDIA_MAX_TOKENS) || 16384,
     apiKey: requireEnv("nvidia", "NVIDIA_API_KEY"),
     configuration: { baseURL: process.env.NVIDIA_BASE_URL ?? "https://integrate.api.nvidia.com/v1" },
-    timeout: 90_000, // a hung call becomes a retryable error (and then the fallback model) instead of a stuck run
+    // No timing constraint: timeout is undefined by default so deep reasoning is never aborted mid-thought.
+    // Override with NVIDIA_TIMEOUT_MS if a specific timeout limit is desired.
+    timeout: process.env.NVIDIA_TIMEOUT_MS ? Number(process.env.NVIDIA_TIMEOUT_MS) || undefined : undefined,
     modelKwargs: { chat_template_kwargs: nvidiaThinking() },
   });
 
@@ -451,6 +461,9 @@ export const createBaseChatModel = (
       });
     case "nvidia": {
       const primary = createNvidiaModel(config.modelName);
+      if (process.env.NVIDIA_DISABLE_FALLBACK === "1" || process.env.NVIDIA_FALLBACK_MODEL === "none") {
+        return primary;
+      }
       // An override that is already the fallback model has nothing to fall back to.
       const fallback = process.env.NVIDIA_FALLBACK_MODEL ?? NVIDIA_FALLBACK_MODEL;
       return fallback === config.modelName ? primary : withNvidiaFallback(primary, createNvidiaModel(fallback));

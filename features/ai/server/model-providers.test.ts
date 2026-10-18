@@ -72,4 +72,32 @@ describe("NVIDIA Nemotron provider", () => {
     const denied = make(new Error("401 Unauthorized"));
     await expect(withNvidiaFallback(denied as never, backup as never).invoke("hi" as never)).rejects.toThrow("401");
   });
+
+  it("configures unbounded thinking by default and respects explicit overrides", async () => {
+    const { nvidiaThinking } = await import("./model-providers");
+    vi.stubEnv("NVIDIA_ENABLE_THINKING", "");
+    vi.stubEnv("NVIDIA_REASONING_BUDGET", "");
+    expect(nvidiaThinking()).toEqual({ enable_thinking: true });
+
+    vi.stubEnv("NVIDIA_ENABLE_THINKING", "0");
+    expect(nvidiaThinking()).toEqual({ enable_thinking: false });
+
+    vi.stubEnv("NVIDIA_ENABLE_THINKING", "1");
+    vi.stubEnv("NVIDIA_REASONING_BUDGET", "4096");
+    expect(nvidiaThinking()).toEqual({ enable_thinking: true, reasoning_budget: 4096 });
+    vi.unstubAllEnvs();
+  });
+
+  it("removes timeout timing constraint by default for NVIDIA model", async () => {
+    const { createNvidiaModel } = await import("./model-providers");
+    vi.stubEnv("NVIDIA_API_KEY", "nvapi-test");
+    vi.stubEnv("NVIDIA_TIMEOUT_MS", "");
+    const unconstrained = createNvidiaModel("nvidia/nemotron-3.5-super-vl-120b-a12b") as unknown as { timeout?: number };
+    expect(unconstrained.timeout).toBeUndefined();
+
+    vi.stubEnv("NVIDIA_TIMEOUT_MS", "120000");
+    const customTimeout = createNvidiaModel("nvidia/nemotron-3.5-super-vl-120b-a12b") as unknown as { timeout?: number };
+    expect(customTimeout.timeout).toBe(120000);
+    vi.unstubAllEnvs();
+  });
 });

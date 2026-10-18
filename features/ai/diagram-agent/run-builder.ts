@@ -114,8 +114,12 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
         generationId,
         frameId,
         guardAdjustments: options.guardAdjustments,
-        maxTurns: options.maxTurns ?? (Number(process.env.AI_BUILDER_MAX_TURNS) || undefined),
-        maxMs: Number(process.env.AI_BUILDER_MAX_MS) || undefined,
+        maxMs:
+          process.env.AI_BUILDER_MAX_MS !== undefined
+            ? (Number(process.env.AI_BUILDER_MAX_MS) === 0 || /^(none|unlimited|infinity)$/i.test(process.env.AI_BUILDER_MAX_MS.trim())
+                ? Infinity
+                : Number(process.env.AI_BUILDER_MAX_MS) || undefined)
+            : (provider === "nvidia" ? Infinity : undefined),
         renderImage,
         signal: controller.signal,
         onCanvas: async ({ added, updated, removedIds }) => {

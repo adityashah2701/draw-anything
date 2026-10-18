@@ -134,12 +134,18 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
 
   for (turn = 1; turn <= maxTurns; turn += 1) {
     if (signal?.aborted) throw abortError();
-    if (live.built && Date.now() - startedAt > (input.maxMs ?? DEFAULT_MAX_MS)) {
+    const effectiveMaxMs = input.maxMs ?? DEFAULT_MAX_MS;
+    if (Number.isFinite(effectiveMaxMs) && live.built && Date.now() - startedAt > effectiveMaxMs) {
       timedOut = true;
       break;
     }
 
     const image = wantImage && live.built && input.renderImage ? await input.renderImage(live.built.elements).catch(() => undefined) : undefined;
+    const secondsLeft =
+      Number.isFinite(effectiveMaxMs) && effectiveMaxMs > 0
+        ? (effectiveMaxMs - (Date.now() - startedAt)) / 1000
+        : undefined;
+
     const message: AgentMessage = {
       role: "user",
       content: buildStateMessage({
@@ -153,7 +159,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
         notes,
         moved: describeMoved(state),
         phase,
-        secondsLeft: ((input.maxMs ?? DEFAULT_MAX_MS) - (Date.now() - startedAt)) / 1000,
+        secondsLeft,
         reviewsLeft: maxReviews - reviews,
         hasImage: Boolean(image),
       }),

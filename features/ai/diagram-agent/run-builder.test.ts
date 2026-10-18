@@ -142,4 +142,13 @@ describe("edit mode", () => {
     expect(m.shown[0]).toContain("(empty)");
     expect(events.some((e) => e.type === "element.remove")).toBe(false);
   });
+
+  it("runs NVIDIA with unconstrained timing and no secondsLeft time pressure in prompts", async () => {
+    const m = scripted([turn(call("add", "A > B")), turn(call("finish"))]);
+    const events: AIStreamEvent[] = [];
+    for await (const e of streamDiagramBuilderEvents({ request: { prompt: "new", provider: "nvidia" }, transport: m.transport, revealMs: 0 })) events.push(e);
+    // When maxMs is Infinity, secondsLeft is undefined so the model is never rushed with seconds-left warnings
+    expect(m.shown[0]).not.toMatch(/seconds of working time are left/);
+  });
 });
+
