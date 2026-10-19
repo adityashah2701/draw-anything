@@ -13,7 +13,7 @@ import type { WhiteboardPageController } from "@/features/whiteboard/hooks/contr
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { createTurnClient } from "../agent/client";
 import { unifiedAgentClientEnabled } from "../agent/flags";
-import { parseHistory, trimHistory } from "../agent/history";
+import { compactHistory, parseHistory } from "../agent/history";
 import { describeRun, runCanvasAgent, type AgentEvent } from "../agent/run-agent";
 import type { CanvasMessage } from "../agent/types";
 import { revisionOf } from "../revision";
@@ -33,6 +33,11 @@ export interface PendingConfirmation {
   tool: string;
   message: string;
 }
+
+/** How often a working run renews its lease (the lease itself is 90 s). */
+const LEASE_RENEW_MS = 30_000;
+
+const newRunId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 
 const nextTick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -71,6 +76,9 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   const importedFor = useRef<string | null>(null);
   const confirmRef = useRef<((approved: boolean) => void) | null>(null);
   const historyRef = useRef<CanvasMessage[]>([]);
+  const summaryRef = useRef<string | null>(null);
+  const runIdRef = useRef<string | null>(null);
+  const [, forceTick] = useState(0);
   const counter = useRef(0);
   const nextId = () => `agent-${(counter.current += 1)}`;
 
@@ -88,6 +96,22 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   useEffect(() => {
     if (unified && !running) historyRef.current = parseHistory(storedHistory);
   }, [unified, running, storedHistory]);
+  const storedSummary = stored?.summary ?? null;
+  useEffect(() => {
+    if (unified && !running) summaryRef.current = storedSummary;
+  }, [unified, running, storedSummary]);
+
+  // Someone else's run holds the board's assistant: the panel waits instead of letting two runs interleave. A lease
+  // that is not renewed ends by itself, so re-check when it would run out.
+  const lease = stored?.running ?? null;
+  const lockedBy = lease && lease.runId !== runIdRef.current && lease.until > Date.now() ? { name: lease.byName, mine: lease.mine } : null;
+  useEffect(() => {
+    if (!lease) return;
+    const wait = lease.until - Date.now() + 250;
+    if (wait <= 0) return;
+    const timer = setTimeout(() => forceTick((n) => n + 1), wait);
+    return () => clearTimeout(timer);
+  }, [lease]);
 
   // Bring the board's legacy generation history into the conversation once. It only copies; `aiFrames` is untouched.
   const loaded = stored !== undefined && stored !== null;
@@ -212,7 +236,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         const history = JSON.stringify(historyRef.current);
         for (let i = 0; i < rows.length; i += 40) {
           const last = i + 40 >= rows.length;
-          await convex.mutation(api.aiConversation.append, { whiteboardId, messages: rows.slice(i, i + 40), ...(last ? { history } : {}) });
+          await convex.mutation(api.aiConversation.append, { whiteboardId, messages: rows.slice(i, i + 40), ...(last ? { history, ...(summaryRef.current !== null ? { summary: summaryRef.current } : {}) } : {}) });
         }
         setMessages([]);
       } catch (error) {
@@ -236,12 +260,45 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
       const whiteboardId = String(c.whiteboard?._id ?? "");
       if (!whiteboardId) return;
 
+      // One run at a time per board: take the lease first, so a collaborator's run is never interleaved with this one.
+      let runId: string | null = null;
+      if (unified) {
+        runId = newRunId();
+        let taken: { ok: boolean; byName?: string; mine?: boolean };
+        try {
+          taken = await convex.mutation(api.aiConversation.acquireRun, { whiteboardId, runId });
+        } catch {
+          toast.error("The assistant could not be reached. Try again in a moment.");
+          return;
+        }
+        if (!taken.ok) {
+          const who = taken.mine ? "another tab of yours" : (taken.byName ?? "Someone");
+          toast.error(`${who === "another tab of yours" ? "The assistant is working for you in another tab" : `${who} is using the assistant on this board`}. Try again in a moment.`);
+          return;
+        }
+        runIdRef.current = runId;
+      }
+
       setMessages((prev) => [...prev, { id: nextId(), kind: "user", text }]);
       providerRef.current = provider;
       setRunning(true);
       setLastRun(null);
       const abort = new AbortController();
       abortRef.current = abort;
+      const renew =
+        unified && runId
+          ? setInterval(() => {
+              convex
+                .mutation(api.aiConversation.renewRun, { whiteboardId, runId: runId! })
+                .then((kept) => {
+                  if (kept) return;
+                  // The lease was lost (this tab was frozen or offline long enough): stop rather than run beside someone else's run.
+                  toast.error("The assistant was stopped because another run took over this board.");
+                  abort.abort();
+                })
+                .catch(() => undefined);
+            }, LEASE_RENEW_MS)
+          : null;
       await nextTick();
 
       const executor = createCanvasTools({
@@ -259,7 +316,9 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
           signal: abort.signal,
           onEvent: record,
         });
-        historyRef.current = trimHistory(run.messages);
+        const compact = compactHistory(run.messages, summaryRef.current);
+        historyRef.current = compact.history;
+        summaryRef.current = compact.summary;
         const tone = run.status === "done" && run.totals.failed === 0 ? "ok" : run.status === "done" ? "warn" : run.status === "aborted" ? "warn" : "error";
         const lead = run.status === "done" ? "" : run.status === "aborted" ? "Stopped. " : `${run.error ?? "The run did not finish."} `;
         setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone, text: `${lead}${describeRun(run)}` }]);
@@ -269,7 +328,13 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
       } finally {
         abortRef.current = null;
         setActivity(null);
+        if (renew) clearInterval(renew);
         if (unified) await persistRun(whiteboardId);
+        if (unified && runId) {
+          // After the transcript is saved, so the next person starts from the finished conversation.
+          await convex.mutation(api.aiConversation.releaseRun, { whiteboardId, runId }).catch(() => undefined);
+          runIdRef.current = null;
+        }
         setRunning(false);
       }
     },
@@ -285,6 +350,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     if (running) return;
     setMessages([]);
     historyRef.current = [];
+    summaryRef.current = null;
     setLastRun(null);
     if (unified && boardId) convex.mutation(api.aiConversation.clear, { whiteboardId: boardId }).catch((error) => console.warn("[canvas-agent] could not clear the conversation:", error));
   }, [running, unified, boardId, convex]);
@@ -302,6 +368,6 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone: "ok", text: `Undid ${lastRun.steps} change${lastRun.steps === 1 ? "" : "s"}.` }]);
   }, [host, lastRun]);
 
-  return { messages: unified ? [...savedMessages, ...messages] : messages, shared: unified, activity, running, send, stop, clear, undoRun, canUndoRun: lastRun !== null && !running, confirmation, resolveConfirmation };
+  return { messages: unified ? [...savedMessages, ...messages] : messages, shared: unified, lockedBy, activity, running, send, stop, clear, undoRun, canUndoRun: lastRun !== null && !running, confirmation, resolveConfirmation };
 };
 

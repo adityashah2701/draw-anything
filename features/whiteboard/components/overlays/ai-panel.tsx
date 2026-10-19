@@ -161,7 +161,9 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   const hasRun = board ? (canvasAgent?.messages.length ?? 0) > 0 : messages.length > 0;
   const prompt = messages.find((m) => m.kind === "prompt")?.content;
   const finished = !isGenerating && messages.some((m) => m.kind === "success" || m.noteKind === "summary" || m.noteKind === "stopped");
-  const busy = board ? Boolean(canvasAgent?.running) : isGenerating;
+  const lockedBy = board ? (canvasAgent?.lockedBy ?? null) : null;
+  const lockedText = lockedBy ? (lockedBy.mine ? "The assistant is working for you in another tab…" : `${lockedBy.name} is using the assistant…`) : null;
+  const busy = board ? Boolean(canvasAgent?.running) || lockedBy !== null : isGenerating;
 
   const send = (text: string) => {
     const value = text.trim();
@@ -335,7 +337,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
               }
             }}
             aria-label={unified ? "Describe a diagram or a change to the board" : board ? "Describe a change to the board" : "Describe your diagram"}
-            placeholder={busy ? "The agent is working…" : unified ? "Describe a diagram or a change…" : board ? "Describe a change to the board…" : canEdit && editCurrent ? "Describe a change to the diagram…" : hasRun ? "Describe another diagram…" : "Describe your diagram…"}
+            placeholder={lockedText ?? (busy ? "The agent is working…" : unified ? "Describe a diagram or a change…" : board ? "Describe a change to the board…" : canEdit && editCurrent ? "Describe a change to the diagram…" : hasRun ? "Describe another diagram…" : "Describe your diagram…")}
             rows={2}
             disabled={disabled || busy}
             className="block max-h-40 min-h-[52px] w-full resize-none bg-transparent px-3 pt-2.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"

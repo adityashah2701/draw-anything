@@ -54,6 +54,13 @@ const handler = createCanvasAgentHandler({
     const notes = await convex.query(api.aiMemory.listForBoard, { whiteboardId });
     return notes.map((note) => ({ kind: note.kind, text: note.text }));
   },
+  loadSummary: async ({ whiteboardId }) => {
+    const token = await (await auth()).getToken({ template: "convex" });
+    if (!token) return null;
+    const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+    convex.setAuth(token);
+    return await convex.query(api.aiConversation.summary, { whiteboardId });
+  },
   limiter,
   createTransport: (provider, specs, model) => createCanvasTransport(provider, specs, (reason) => console.warn("[canvas-agent] tool calling unavailable, using the text protocol:", reason), process.env, model),
   log: (event) => console.info(JSON.stringify(event)),

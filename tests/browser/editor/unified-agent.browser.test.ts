@@ -167,4 +167,41 @@ suite("the unified agent (flag on) in the real editor", () => {
     expect(((await s.elements()) as El[]).map((e) => e.id)).toEqual(["old"]);
     noPageErrors();
   });
+
+  it("waits while a collaborator's run holds the board, then takes its own turn with a lease it releases", async () => {
+    const { scripted } = await serve(s.page, [reply("Hi there.")]);
+    const panel = await openAgent(s);
+    await s.page.evaluate(() => window.__editor.backend.seedLease("Sam Rivera"));
+    const input = panel.getByLabel("Describe a diagram or a change to the board");
+    await input.waitFor();
+    await s.page.waitForFunction(() => document.querySelector("textarea")?.getAttribute("placeholder")?.includes("Sam Rivera is using the assistant"));
+    expect(await input.isDisabled()).toBe(true);
+    expect(await panel.getByRole("button", { name: "Send" }).isDisabled()).toBe(true);
+
+    await s.page.evaluate(() => window.__editor.backend.clearLease());
+    await s.page.waitForFunction(() => !document.querySelector("textarea")?.hasAttribute("disabled"));
+    await ask(panel, "Say hi");
+    await finished(panel);
+    expect(scripted.turns).toHaveLength(1);
+    const log = (await backend(s)).log;
+    expect(log.indexOf("aiConversation:acquireRun")).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("aiConversation:releaseRun")).toBeGreaterThan(log.indexOf("aiConversation:append")); // released after the transcript is saved
+    expect((await backend(s)).conversation.running).toBeNull();
+    noPageErrors();
+  });
+
+  it("keeps a summary of the turns that leave the history window", async () => {
+    const script: ScriptStep[] = Array.from({ length: 18 }, (_, i) => reply(`Answer ${i}.`));
+    await serve(s.page, script);
+    const panel = await openAgent(s);
+    for (let i = 0; i < 18; i += 1) {
+      await ask(panel, `Question ${i}`);
+      await panel.getByTestId("agent-status").nth(i).waitFor({ timeout: 20_000 });
+    }
+    const { conversation } = await backend(s);
+    expect(JSON.parse(conversation.history!)).toHaveLength(30);
+    expect(conversation.summary).toContain('- Asked: "Question 0" → no board changes; said: "Answer 0."');
+    expect(conversation.summary).not.toContain("Question 17");
+    noPageErrors();
+  });
 });

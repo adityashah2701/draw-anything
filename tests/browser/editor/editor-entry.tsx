@@ -30,6 +30,8 @@ window.__editor = {
     seedLegacyFrame: backend.seedLegacyFrame,
     conversation: backend.conversation,
     memories: backend.memories,
+    seedLease: backend.seedLease,
+    clearLease: backend.clearLease,
   },
 };
 

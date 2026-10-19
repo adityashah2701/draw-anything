@@ -123,6 +123,12 @@ export default defineSchema({
     whiteboardId: v.id("whiteboards"),
     // The model-facing history (CanvasMessage[] as JSON, last turns only) so every collaborator continues the same thread.
     history: v.optional(v.string()),
+    // What the older turns, no longer in `history`, were about (built by the client, shown to the model as data).
+    summary: v.optional(v.string()),
+    // One assistant run at a time per board: who holds it, which run, until when (renewed while it works).
+    runningBy: v.optional(v.id("users")),
+    runId: v.optional(v.string()),
+    leaseUntil: v.optional(v.number()),
     messageCount: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),

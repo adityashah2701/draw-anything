@@ -31,6 +31,7 @@ export const createScriptedHandler = (options: {
   fail?: () => Error | null;
   unified?: boolean;
   memories?: Array<{ kind: string; text: string }>;
+  summary?: string | null;
 }) => {
   const turns: Array<{ system: string; messages: readonly CanvasMessage[]; specs: string[] }> = [];
   let step = 0;
@@ -41,6 +42,7 @@ export const createScriptedHandler = (options: {
     limiter: createSlidingWindowLimiter({ windowMs: 60_000, max: 1_000 }),
     unifiedAgent: () => options.unified === true,
     loadMemories: async () => options.memories ?? [],
+    loadSummary: async () => options.summary ?? null,
     createTransport: (_provider, specs) => ({
       kind: "native",
       complete: async (system: SystemFor, messages) => {

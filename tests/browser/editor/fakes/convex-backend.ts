@@ -114,7 +114,13 @@ interface FakeConversationRow {
   content: string;
   ui?: unknown;
 }
-let conversation: { conversationId: string | null; history: string | null; messages: FakeConversationRow[] } = { conversationId: null, history: null, messages: [] };
+interface FakeLease {
+  runId: string;
+  byName: string;
+  mine: boolean;
+  until: number;
+}
+let conversation: { conversationId: string | null; history: string | null; summary: string | null; running: FakeLease | null; messages: FakeConversationRow[] } = { conversationId: null, history: null, summary: null, running: null, messages: [] };
 let legacyFrames: Array<{ frameId: string; prompt: string }> = [];
 let memories: Array<{ id: string; kind: string; text: string }> = [];
 const convKey = () => (board ? `${storageKey(board._id)}:conversation` : "fake-conversation");
@@ -128,17 +134,34 @@ const persistConversation = () => {
 const mutateConversation = (name: string, args: Record<string, unknown>): unknown => {
   if (name === "aiConversation:append") {
     const rows = (args.messages as Array<{ role: string; content: string; ui?: unknown }>).map((m, i) => ({ id: `m${conversation.messages.length + i + 1}`, seq: conversation.messages.length + i + 1, ...m }));
-    conversation = { conversationId: "conv1", history: typeof args.history === "string" ? args.history : conversation.history, messages: [...conversation.messages, ...rows] };
+    conversation = { ...conversation, conversationId: "conv1", history: typeof args.history === "string" ? args.history : conversation.history, summary: typeof args.summary === "string" ? args.summary : conversation.summary, messages: [...conversation.messages, ...rows] };
   } else if (name === "aiConversation:clear") {
-    conversation = { conversationId: "conv1", history: null, messages: [] };
+    conversation = { ...conversation, conversationId: "conv1", history: null, summary: null, messages: [] };
   } else if (name === "aiConversation:importLegacyFrames") {
     const done = new Set(conversation.messages.map((m) => (m as { sourceFrameId?: string }).sourceFrameId));
     const fresh = legacyFrames.filter((f) => !done.has(f.frameId));
     const rows = fresh.flatMap((f, i) => [{ id: `legacy${i}`, seq: -i, role: "user", content: f.prompt, sourceFrameId: f.frameId }]);
-    conversation = { conversationId: "conv1", history: conversation.history, messages: [...rows, ...conversation.messages] };
+    conversation = { ...conversation, conversationId: "conv1", messages: [...rows, ...conversation.messages] };
     persistConversation();
     notify();
     return { imported: fresh.length };
+  } else if (name === "aiConversation:acquireRun") {
+    const lease = conversation.running;
+    if (lease && lease.until > Date.now() && lease.runId !== args.runId) return { ok: false, byName: lease.byName, mine: lease.mine };
+    conversation = { ...conversation, conversationId: "conv1", running: { runId: String(args.runId), byName: "Test User", mine: true, until: Date.now() + 90_000 } };
+    persistConversation();
+    notify();
+    return { ok: true };
+  } else if (name === "aiConversation:renewRun") {
+    const kept = conversation.running?.runId === args.runId && conversation.running?.mine === true;
+    if (kept) conversation = { ...conversation, running: { ...conversation.running!, until: Date.now() + 90_000 } };
+    return kept;
+  } else if (name === "aiConversation:releaseRun") {
+    const mine = conversation.running?.runId === args.runId && conversation.running?.mine === true;
+    if (mine) conversation = { ...conversation, running: null };
+    persistConversation();
+    notify();
+    return mine;
   } else if (name === "aiMemory:remember") {
     const text = String(args.text);
     const dup = memories.find((m) => m.text.toLowerCase() === text.toLowerCase());
@@ -228,6 +251,16 @@ export const backend = {
       { _id: `c${commentSeq}`, resolved: false, createdAt: Date.now(), authorId: "other", authorName: "Sam Rivera", authorImageUrl: "", mine: false, mentions: [], mentionsMe: false, ...comment },
     ];
     persistComments();
+    notify();
+  },
+  /** Test hook: another collaborator starts a run (holds the board's assistant) for `ms`. */
+  seedLease(byName: string, ms = 60_000) {
+    conversation = { ...conversation, conversationId: "conv1", running: { runId: "other-run-id", byName, mine: false, until: Date.now() + ms } };
+    notify();
+  },
+  /** Test hook: the other collaborator's run ended. */
+  clearLease() {
+    conversation = { ...conversation, running: null };
     notify();
   },
   /** Test hook: a generation from before the unified agent, for the import into the conversation. */
