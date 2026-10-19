@@ -15,14 +15,13 @@ import { createShape } from "@/core/shapes/shape-runtime";
 import { buildConnectorArrow, handleUnderPoint, resolveConnectionDrop } from "@/features/whiteboard/hooks/interaction/connector-arrow";
 import type { ClickOutcome } from "@/features/whiteboard/hooks/interaction/group-selection";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
-import { computeDrag, startDragSession, type Guide } from "@/features/whiteboard/hooks/interaction/drag-session";
+import { computeSmartDrag, startDragSession, type Guide, type Span } from "@/features/whiteboard/hooks/interaction/drag-session";
+import type { GroupIndex } from "@/core/groups/group-index";
+import { isSnapSuppressed, snapThreshold, type SnapSettings } from "@/features/whiteboard/utils/snap-settings";
 import { isActive, isDrawingGesture, type Gesture } from "@/features/whiteboard/hooks/interaction/gesture-state";
 import { minimumScale } from "@/core/groups/transform";
 import { frameHandleAt } from "@/features/whiteboard/utils/selection-overlay";
 import { resizeFrame } from "@/features/whiteboard/utils/frame-resize";
-
-/** Pixels (on screen) within which a dragged shape snaps to another shape's edge or centre. */
-const SNAP_SCREEN_PX = 6;
 
 interface ConnectionDraft {
   fromElementId: string;
@@ -58,6 +57,9 @@ export interface GroupSelectionPort {
   setContext: (groupId: string | null) => void;
   /** The frame (and the shapes behind it) of a group or multi-selection that can be resized; null otherwise. */
   frame: () => { bounds: Bounds; elements: DrawingElement[] } | null;
+  /** How the board nests, and the group being edited: distances are measured between whole groups. */
+  index: GroupIndex;
+  context: string | null;
 }
 
 /** Connector snap distance in screen pixels (divided by zoom to get world units). */
@@ -83,6 +85,10 @@ interface UseWhiteboardDrawingProps {
   moveElements: (origin: DrawingElement[], deltaX: number, deltaY: number) => void;
   zoom: number;
   selection: GroupSelectionPort;
+  /** How dragging snaps (tolerance in screen pixels, spacing, distances). Alt always suspends it. */
+  snapSettings: SnapSettings;
+  /** Absolute y of a text element's first baseline, for baseline guides. */
+  baselineOf?: (element: DrawingElement) => number | null;
   /** Writes `origin` (the shapes as they were when the resize began) scaled from the box `from` onto `to`. */
   resizeFrameElements: (origin: DrawingElement[], from: Bounds, to: Bounds) => void;
   resizeElement: (
@@ -148,6 +154,8 @@ export const useWhiteboardDrawing = ({
   moveElements,
   zoom,
   selection,
+  snapSettings,
+  baselineOf,
   resizeFrameElements,
   resizeElement,
   updateElement,
@@ -184,6 +192,7 @@ export const useWhiteboardDrawing = ({
   const isResizing = gesture === "resizing";
   const isSelectingArea = gesture === "marquee";
   const [alignmentGuides, setAlignmentGuides] = useState<Guide[]>([]);
+  const [alignmentSpans, setAlignmentSpans] = useState<Span[]>([]);
   const scratchRef = useRef(createScratch());
   const resetScratch = useCallback(() => {
     scratchRef.current = createScratch();
@@ -223,6 +232,7 @@ export const useWhiteboardDrawing = ({
     setResizeHandle(null);
     setDragStart(null);
     setAlignmentGuides([]);
+    setAlignmentSpans([]);
     resetScratch();
     stopPanning();
     endGesture?.();
@@ -342,7 +352,11 @@ export const useWhiteboardDrawing = ({
         const movable = outcome.selected.filter((id) => !selection.isLocked(id));
         if (outcome.startDrag && hasEditAccess && movable.length > 0) {
           beginGesture?.();
-          scratchRef.current.dragSession = startDragSession(movable, elements, point, getElementBounds);
+          scratchRef.current.dragSession = startDragSession(movable, elements, point, getElementBounds, {
+            index: selection.index,
+            context: selection.context,
+            baselineOf,
+          });
           setGesture("dragging");
           setDragStart(point);
         } else if (!hit && hasEditAccess) {
@@ -619,16 +633,16 @@ export const useWhiteboardDrawing = ({
             }
             const session = scratchRef.current.dragSession;
             if (session) {
-              const { dx, dy, guides } = computeDrag({
-                start: session.start,
+              const { dx, dy, guides, spans } = computeSmartDrag({
+                session,
                 point,
-                selection: session.selection,
-                targets: session.targets,
-                threshold: SNAP_SCREEN_PX / zoom,
-                snap: !e.altKey,
+                threshold: snapThreshold(snapSettings, zoom),
+                snap: snapSettings.enabled && !isSnapSuppressed(e),
+                options: { spacing: snapSettings.spacing, measures: snapSettings.distances },
               });
               moveElements(session.origin, dx, dy);
               setAlignmentGuides(guides);
+              setAlignmentSpans(spans);
             }
           }
         }
@@ -692,6 +706,7 @@ export const useWhiteboardDrawing = ({
       updateElement,
       moveElements,
       resizeFrameElements,
+      snapSettings,
       zoom,
       hasEditAccess,
       deleteElements,
@@ -823,6 +838,7 @@ export const useWhiteboardDrawing = ({
     setResizeHandle(null);
     setDragStart(null);
     setAlignmentGuides([]);
+    setAlignmentSpans([]);
     onArrowSnapPreviewChange?.(null);
   }, [
     isDrawing,
@@ -904,6 +920,7 @@ export const useWhiteboardDrawing = ({
     isSelectingArea,
     selectionBox,
     alignmentGuides,
+    alignmentSpans,
     textPosition,
 
     // Connection state

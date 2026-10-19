@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Anchor, DrawingElement, Point, Tool } from "@/features/whiteboard/types/whiteboard.types";
+import {
+  DEFAULT_SNAP_SETTINGS,
+  loadSnapSettings,
+  normalizeSnapSettings,
+  saveSnapSettings,
+  type SnapSettings,
+} from "@/features/whiteboard/utils/snap-settings";
 
 export interface ArrowSnapPreviewState {
   endpoint: "start" | "end";
@@ -14,6 +21,17 @@ export const useWhiteboardUiState = () => {
   const [fillColor, setFillColor] = useState("#transparent");
   const [fontSize, setFontSize] = useState(20);
   const eraserSize = 20;
+
+  // How dragging snaps. A per-viewer preference, read after mount so the first render matches the server.
+  const [snapSettings, setSnapSettingsState] = useState<SnapSettings>(DEFAULT_SNAP_SETTINGS);
+  useEffect(() => setSnapSettingsState(loadSnapSettings()), []);
+  const setSnapSettings = useCallback((next: Partial<SnapSettings>) => {
+    setSnapSettingsState((current) => {
+      const merged = normalizeSnapSettings({ ...current, ...next });
+      saveSnapSettings(merged);
+      return merged;
+    });
+  }, []);
 
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
@@ -122,6 +140,8 @@ export const useWhiteboardUiState = () => {
     fontSize,
     setFontSize,
     eraserSize,
+    snapSettings,
+    setSnapSettings,
     showShortcuts,
     setShowShortcuts,
     showCommandMenu,

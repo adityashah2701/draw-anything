@@ -83,6 +83,8 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
             onLoad={loadWhiteboard}
             onRename={handleRenameWhiteboard}
             onGenerateDiagram={handleGenerateDiagram}
+            snapSettings={controller.snapSettings}
+            onSnapSettingsChange={controller.setSnapSettings}
             disabled={!whiteboardAccess.hasEditAccess}
           />
         </div>

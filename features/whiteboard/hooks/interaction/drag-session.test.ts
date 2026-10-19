@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Bounds } from "@/features/whiteboard/types/whiteboard.types";
-import { computeDrag, startDragSession, unionBounds } from "./drag-session";
+import { buildGroupIndex } from "@/core/groups/group-index";
+import { boundsOf, group, rect } from "@/core/groups/test-helpers";
+import { computeDrag, computeSmartDrag, startDragSession, unionBounds } from "./drag-session";
 
 const b = (x: number, y: number, w: number, h: number): Bounds => ({ minX: x, minY: y, maxX: x + w, maxY: y + h, width: w, height: h });
 const base = { start: { x: 0, y: 0 }, threshold: 6, snap: true };
@@ -87,5 +89,77 @@ describe("startDragSession", () => {
 
   it("is null when nothing moving has bounds", () => {
     expect(startDragSession(["missing"], [box("a", 0)], { x: 0, y: 0 }, bounds)).toBeNull();
+  });
+});
+
+
+describe("startDragSession with groups and text", () => {
+  const stored = [
+    rect("a", 0, 0, 100, 50),
+    rect("b", 120, 0, 100, 50, { groupId: "G" }),
+    rect("c", 240, 0, 100, 50, { groupId: "G" }),
+    rect("far", 600, 0, 100, 50),
+    { id: "t", type: "text", text: "hi", fontSize: 20, color: "#000", strokeWidth: 1, points: [{ x: 0, y: 200 }] },
+    group("G"),
+  ] as never[];
+  const index = buildGroupIndex(stored);
+  const shapes = [...index.shapes.values()];
+  const getBounds = (el: (typeof shapes)[number]) => (el.type === "text" ? { minX: 0, minY: 200, maxX: 40, maxY: 224, width: 40, height: 24 } : boundsOf(el));
+  const start = (moving: string[], extra = {}) => startDragSession(moving, shapes, { x: 0, y: 0 }, getBounds, { index, ...extra })!;
+
+  it("measures a group as one neighbour, not as its shapes", () => {
+    const session = start(["a"]);
+    expect(session.spaceTargets).toContainEqual({ minX: 120, minY: 0, maxX: 340, maxY: 50, width: 220, height: 50 });
+    expect(session.spaceTargets).toHaveLength(3); // G, far, t
+    expect(session.targets).toHaveLength(4); // but edges and centres of every shape can still be aligned with
+  });
+
+  it("without a group index every shape is its own neighbour", () => {
+    expect(startDragSession(["a"], shapes, { x: 0, y: 0 }, getBounds)!.spaceTargets).toHaveLength(4);
+  });
+
+  it("collects text baselines of what is moving and of what it may align with", () => {
+    const baselineOf = (el: (typeof shapes)[number]) => (el.type === "text" ? el.points[0].y + 18 : null);
+    const moving = start(["t"], { baselineOf });
+    expect(moving.baselines).toEqual([218]);
+    const other = start(["a"], { baselineOf });
+    expect(other.alignTargets.find((t) => t.baselines)?.baselines).toEqual([218]);
+  });
+
+  it("measures siblings inside the group being edited and still reaches outside it", () => {
+    const session = start(["b"], { context: "G" });
+    expect(session.spaceTargets).toContainEqual(expect.objectContaining({ minX: 240, maxX: 340 })); // sibling c on its own
+    expect(session.spaceTargets).toContainEqual(expect.objectContaining({ minX: 0, maxX: 100 })); // a, outside
+  });
+});
+
+describe("computeSmartDrag", () => {
+  const stored = [rect("a", 0, 0, 100, 50), rect("c", 400, 0, 100, 50), rect("m", 195, 300, 100, 50)] as never[];
+  const shapes = [...buildGroupIndex(stored).shapes.values()];
+  const session = startDragSession(["m"], shapes, { x: 0, y: 0 }, (el) => boundsOf(el))!;
+  const input = { session, threshold: 6, options: { spacing: true, measures: true } };
+
+  it("is the raw pointer travel when snapping is off", () => {
+    expect(computeSmartDrag({ ...input, point: { x: 5, y: -300 }, snap: false })).toEqual({ dx: 5, dy: -300, guides: [], spans: [] });
+  });
+
+  it("snaps to equal spacing and reports the gaps, in the same call as the alignment guides", () => {
+    const r = computeSmartDrag({ ...input, point: { x: 0, y: -300 }, snap: true }); // m at (195, 0): between a and c
+    expect(r.dx).toBe(5);
+    expect(r.dy).toBe(-300); // top edges already line up
+    expect(r.spans.filter((s) => s.kind === "gap")).toHaveLength(2);
+    expect(r.guides.some((g) => g.axis === "y")).toBe(true);
+  });
+
+  it("uses the pointer travel, not any earlier position", () => {
+    const first = computeSmartDrag({ ...input, point: { x: 1, y: -300 }, snap: true });
+    computeSmartDrag({ ...input, point: { x: 900, y: 900 }, snap: true });
+    expect(computeSmartDrag({ ...input, point: { x: 1, y: -300 }, snap: true })).toEqual(first);
+  });
+
+  it("leaves spacing out when it is switched off", () => {
+    const r = computeSmartDrag({ ...input, options: { spacing: false, measures: false }, point: { x: 0, y: -300 }, snap: true });
+    expect(r.dx).toBe(0);
+    expect(r.spans).toEqual([]);
   });
 });

@@ -29,6 +29,7 @@ import { buildGroupIndex, expandUnits, isEffectivelyLocked, splitStored } from "
 import { groupsEmptiedBy, planDelete } from "@/core/groups/group-commands";
 import type { DocPatch } from "@/core/groups/patch";
 import { storedOrderFromShapes } from "@/core/groups/order";
+import { createBaselineResolver } from "@/features/whiteboard/utils/text-baseline";
 import { planFrameScale, planShapeMoves, uniformOffsets } from "@/features/whiteboard/utils/move-plan";
 import { buildSelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
 import { useSelectionInspector } from "./use-selection-inspector";
@@ -285,9 +286,13 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [enteredGroupId, getElementBounds, groupIndex, selectedElements],
   );
 
+  const baselineOf = useMemo(() => createBaselineResolver(), []);
+
   // What the pointer code needs to know about groups, without knowing how they are stored.
   const groupSelection = useMemo(
     () => ({
+      index: groupIndex,
+      context: effectiveContext(groupIndex, enteredGroupId),
       resolveClick: (input: { selected: string[]; hitId: string | null; additive: boolean }) =>
         resolveGroupClick(groupIndex, { ...input, entered: enteredGroupId }),
       resolveMarquee: (hitIds: string[]) => resolveMarquee(groupIndex, hitIds, enteredGroupId),
@@ -329,6 +334,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       updateElements(changed as unknown as DrawingElementJson[]);
     },
     selection: groupSelection,
+    snapSettings: uiState.snapSettings,
+    baselineOf,
     resizeFrameElements: (origin, from, to) => {
       const changed = planFrameScale(origin, from, to, (scaled) => rerouteConnectedArrowsForChanges(scaled) as unknown as DrawingElement[]);
       updateElements(changed as unknown as DrawingElementJson[]);
@@ -479,6 +486,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   const beginEditing = useCallback(
     (element: DrawingElement): boolean => {
       if (!whiteboardAccess.hasEditAccess) return false;
+      // Locked shapes can be selected but not changed, and typing into one is a change.
+      if (isEffectivelyLocked(groupIndex, element.id)) return false;
       if (element.type === "text") {
         uiState.setEditingTextElement(element);
         uiState.setCurrentTool("select");
@@ -496,7 +505,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       uiState.setCurrentTool("select");
       return true;
     },
-    [uiState, whiteboardAccess.hasEditAccess],
+    [groupIndex, uiState, whiteboardAccess.hasEditAccess],
   );
 
   const deleteSelectedElements = useCallback(() => {
@@ -648,7 +657,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleArrowHeadEndChange,
   } = useSelectedArrow({
     selectedElement,
-    hasEditAccess: whiteboardAccess.hasEditAccess,
+    // A locked arrow keeps its style, routing and heads.
+    hasEditAccess: whiteboardAccess.hasEditAccess && !(selectedElement && isEffectivelyLocked(groupIndex, selectedElement.id)),
     zoom: canvasViewport.zoom,
     routeArrowByConnections,
     updateElement,
@@ -941,6 +951,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     groupSelection,
     selectionOverlay,
     inspector,
+    baselineOf,
     enteredGroupId: effectiveContext(groupIndex, enteredGroupId),
     handleShapeDoubleClick,
     currentElement,

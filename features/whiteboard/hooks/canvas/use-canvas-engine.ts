@@ -10,8 +10,8 @@ import {
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
-import { drawGuides } from "@/features/whiteboard/utils/draw-guides";
-import type { Guide } from "@/features/whiteboard/hooks/interaction/drag-session";
+import { drawGuides, drawSpans } from "@/features/whiteboard/utils/draw-guides";
+import type { Guide, Span } from "@/core/snap/alignment";
 import type { SelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
 import { drawSelectionOverlay } from "@/features/whiteboard/utils/draw-selection-overlay";
 
@@ -57,6 +57,8 @@ interface CanvasEngineProps {
   editingShapeLabelId?: string | null;
   /** Alignment lines shown while dragging */
   alignmentGuides?: Guide[];
+  /** Equal-spacing marks and live distances shown while dragging */
+  alignmentSpans?: Span[];
   /** Chrome for groups and multi-selections (unit boxes, frame, handles, name tags, entered group). */
   selectionOverlay?: SelectionOverlay | null;
   /** Changes when more icons finish loading, so icons drawn as placeholders are redrawn. */
@@ -74,6 +76,7 @@ const useCanvasEngine = ({
   selectedElements,
   selectionBox,
   alignmentGuides,
+  alignmentSpans,
   selectionOverlay,
   editingTextId,
   otherUsersDrafts = [],
@@ -220,6 +223,7 @@ const useCanvasEngine = ({
     if (selectionOverlay) drawSelectionOverlay(ctx, selectionOverlay, zoom, panOffset);
 
     if (alignmentGuides) drawGuides(ctx, alignmentGuides, zoom, panOffset);
+    if (alignmentSpans) drawSpans(ctx, alignmentSpans, zoom, panOffset);
 
     // ── Connection draft preview ─────────────────────────────────────────
     if (connectionDraft) {
@@ -323,6 +327,7 @@ const useCanvasEngine = ({
     otherUsersDrafts,
     selectionBox,
     alignmentGuides,
+    alignmentSpans,
     selectionOverlay,
     zoom,
     panOffset,

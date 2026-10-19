@@ -72,6 +72,7 @@ export const WhiteboardCanvasStage = ({
     selectedElements,
     selectionBox: whiteboardDrawing.selectionBox,
     alignmentGuides: whiteboardDrawing.alignmentGuides,
+    alignmentSpans: whiteboardDrawing.alignmentSpans,
     selectionOverlay: controller.selectionOverlay,
     editingTextId: editingTextElement?.id || null,
     getElementBounds,
