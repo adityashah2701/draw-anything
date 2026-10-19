@@ -79,6 +79,28 @@ describe("copy and clone", () => {
     expect(all[0].points[0]).toEqual({ x: 0, y: 0 }); // original untouched
   });
 
+  it("copies a semantic node's icon, style and custom icon deeply, so editing the copy never touches the original", () => {
+    const styled = {
+      id: "s",
+      type: "semantic-node",
+      points: [{ x: 0, y: 0 }, { x: 168, y: 78 }],
+      color: "#000",
+      strokeWidth: 2,
+      label: "Orders",
+      ai: { semanticId: "s1", icon: "database", customIcon: { id: "custom-x", title: "X", paths: ["M0 0h4v4Z"], viewBox: { width: 24, height: 24 } } },
+      nodeStyle: { iconSize: 40, iconPlacement: "top", iconColor: "#dc2626", cornerRadius: 4, originalIcon: null },
+    } as unknown as DrawingElement & { nodeStyle: Record<string, unknown> };
+    const [copy] = cloneElements([styled], { dx: 10, dy: 10 }, () => "copy") as (DrawingElement & { nodeStyle: Record<string, unknown> })[];
+    expect(copy.nodeStyle).toEqual(styled.nodeStyle);
+    expect(copy.nodeStyle).not.toBe(styled.nodeStyle);
+    expect(copy.ai?.icon).toBe("database");
+    expect(copy.ai?.customIcon).toEqual(styled.ai?.customIcon);
+    expect(copy.ai?.customIcon).not.toBe(styled.ai?.customIcon);
+    expect(copy.ai?.semanticId).toBeUndefined();
+    copy.nodeStyle.iconSize = 12;
+    expect(styled.nodeStyle.iconSize).toBe(40);
+  });
+
   it("drops a connection to something that was not copied", () => {
     const copies = cloneElements([arrow("e2", "b", "c")], { dx: 0, dy: 0 }, () => "n");
     expect((copies[0] as unknown as { startConnection?: unknown }).startConnection).toBeUndefined();

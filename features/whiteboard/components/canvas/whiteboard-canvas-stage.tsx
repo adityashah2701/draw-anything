@@ -229,7 +229,7 @@ export const WhiteboardCanvasStage = ({
               }
             }
 
-            controller.handleShapeDoubleClick(topEl);
+            controller.handleShapeDoubleClick(topEl, pos);
           }}
           onPointerMove={(e) => {
             if (touches.current.has(e.pointerId)) {

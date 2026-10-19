@@ -1,10 +1,10 @@
 import { isDarkRender } from "@/core/theme/render-theme";
-import { getAdaptiveColor } from "@/core/color/adaptive-color";
+import { getAdaptiveColor, readableOnDark } from "@/core/color/adaptive-color";
 import {
   measureRichTextLineWidth,
   RichTextSpan,
 } from "@/features/whiteboard/utils/rich-text-renderer";
-import { layoutShapeLabel } from "@/core/text/label-layout";
+import { LABEL_PADDING, layoutShapeLabel } from "@/core/text/label-layout";
 import { FONT_FAMILY, makeFontString } from "@/core/text/typography";
 
 export { FONT_FAMILY };
@@ -23,6 +23,11 @@ export interface ShapeLabelRenderOptions {
   preferredFontWeight?: string | number;
   preferredFontStyle?: string;
   maxLines?: number;
+  /**
+   * "center" (the default) centres each line on `centerX`. "left" starts every line at the left padding
+   * edge of the box (`centerX - maxWidth / 2` plus the label padding), where the DOM editor's text starts.
+   */
+  align?: "left" | "center";
 }
 
 interface Rgb {
@@ -105,7 +110,9 @@ export const resolveTextColor = (preferredColor?: string, fillColor?: string) =>
   const fallbackColor = isDark ? "#f8fafc" : "#1f2937";
   const fillRgb = parseColorToRgb(fillColor);
   if (!fillRgb) {
-    return adaptivePreferred || fallbackColor;
+    // Nothing behind the text but the canvas: on the dark one a dark colour (the default #1f2937) must be lightened to read.
+    const preferred = adaptivePreferred || fallbackColor;
+    return isDark ? readableOnDark(preferred) : preferred;
   }
 
   const preferredRgb = parseColorToRgb(adaptivePreferred);
@@ -145,7 +152,7 @@ export const measureShapeLabel = ({
   preferredFontWeight,
   preferredFontStyle,
   maxLines,
-}: Omit<ShapeLabelRenderOptions, "centerX" | "centerY" | "clipPath" | "preferredColor" | "fillColor">): ShapeLabelMetrics | null => {
+}: Omit<ShapeLabelRenderOptions, "centerX" | "centerY" | "clipPath" | "preferredColor" | "fillColor" | "align">): ShapeLabelMetrics | null => {
   const layout = layoutShapeLabel(ctx, {
     label,
     boxWidth: maxWidth / zoom,
@@ -172,7 +179,8 @@ export const renderShapeLabel = (options: ShapeLabelRenderOptions) => {
   if (!metrics) return;
 
   const { finalFontSize, finalLineHeight, fontWeight, lines, height: blockHeight } = metrics;
-  const { ctx, centerX, centerY, clipPath, preferredColor, fillColor, preferredFontStyle } = options;
+  const { ctx, centerX, centerY, clipPath, preferredColor, fillColor, preferredFontStyle, align = "center", maxWidth, zoom } = options;
+  const textLeft = centerX - maxWidth / 2 + LABEL_PADDING * zoom;
 
   const textColor = resolveTextColor(preferredColor, fillColor);
   const baseStyle = preferredFontStyle || "normal";
@@ -188,7 +196,7 @@ export const renderShapeLabel = (options: ShapeLabelRenderOptions) => {
 
   for (const line of lines) {
     const lineWidth = measureRichTextLineWidth(ctx, line, finalFontSize, fontWeight, baseStyle);
-    let drawX = centerX - lineWidth / 2;
+    let drawX = align === "left" ? textLeft : centerX - lineWidth / 2;
     for (const span of line) {
       const weight = span.bold
         ? String(Math.max(Number.parseInt(fontWeight, 10) || 400, 700))

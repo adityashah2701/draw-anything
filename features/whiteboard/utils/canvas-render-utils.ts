@@ -10,6 +10,7 @@ import {
   getShapeAnchors,
   getShapeLocalBounds,
   getShapeResizeHandles,
+  renderShapeSelection,
   getShapeRotation,
   renderShapeToCanvas,
 } from "@/core/shapes/shape-runtime";
@@ -133,8 +134,16 @@ export const drawElement = (
     editingTextId,
   });
 
-  // Draw selection box and resize handles
+  // A shape with its own selection chrome (semantic nodes) draws it here and skips the generic box and dots.
+  let ownChrome = false;
   if (isSelected) {
+    ctx.save();
+    ownChrome = renderShapeSelection(element, { ctx, zoom, panOffset, getElementBounds, editingTextId });
+    ctx.restore();
+  }
+
+  // Draw selection box and resize handles
+  if (isSelected && !ownChrome) {
     const bounds = getElementBounds(element);
     if (bounds) {
       const { minX, minY, maxX, maxY } = bounds;
@@ -278,10 +287,12 @@ export const drawElement = (
       } else {
         // Drawn from the same list the pointer hit-tests, so a visible handle always works and a shape
         // with none (freehand) shows none.
-        handles = getShapeResizeHandles(element, { bounds: { ...bounds, width: maxX - minX, height: maxY - minY }, zoom }).map((handle) => ({
-          x: handle.x * zoom + panOffset.x,
-          y: handle.y * zoom + panOffset.y,
-        }));
+        handles = getShapeResizeHandles(element, { bounds: { ...bounds, width: maxX - minX, height: maxY - minY }, zoom })
+          .filter((handle) => handle.visible !== false)
+          .map((handle) => ({
+            x: handle.x * zoom + panOffset.x,
+            y: handle.y * zoom + panOffset.y,
+          }));
       }
 
       handles.forEach((h) => {

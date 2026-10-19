@@ -17,12 +17,24 @@ for (const entries of Object.values(catalog)) for (const entry of entries) if (!
 NAMES.push(...EXTRA);
 
 const attr = (a, k, d = 0) => Number(a[k] ?? d);
+// lucide writes `points` either as "x,y x,y" or as a flat "x y x y"; the flat form must be paired up first
+// (joining every number with "L" made "M3.29L7L12..." which no browser can draw).
+const pointsToPath = (points, close) => {
+  const text = points.trim();
+  let pairs = text.split(/\s+/);
+  if (!text.includes(",")) {
+    const numbers = text.split(/\s+/);
+    pairs = [];
+    for (let i = 0; i + 1 < numbers.length; i += 2) pairs.push(`${numbers[i]} ${numbers[i + 1]}`);
+  }
+  return `M${pairs.join("L")}${close ? "Z" : ""}`;
+};
 const toPath = (tag, a) => {
   switch (tag) {
     case "path": return a.d;
     case "line": return `M${a.x1} ${a.y1}L${a.x2} ${a.y2}`;
-    case "polyline": return `M${a.points.trim().split(/\s+/).join("L")}`;
-    case "polygon": return `M${a.points.trim().split(/\s+/).join("L")}Z`;
+    case "polyline": return pointsToPath(a.points, false);
+    case "polygon": return pointsToPath(a.points, true);
     case "circle": { const [cx, cy, r] = [attr(a, "cx"), attr(a, "cy"), attr(a, "r")]; return `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`; }
     case "ellipse": { const [cx, cy, rx, ry] = [attr(a, "cx"), attr(a, "cy"), attr(a, "rx"), attr(a, "ry")]; return `M${cx - rx} ${cy}a${rx} ${ry} 0 1 0 ${2 * rx} 0a${rx} ${ry} 0 1 0 ${-2 * rx} 0`; }
     case "rect": {

@@ -105,9 +105,27 @@ export const DEFAULT_ICON_SIZE = 64;
  * user picked is all that lands on the board. Line icons start in their category colour (changeable with
  * the colour picker); brand marks keep their own.
  */
+/** The `ai.customIcon` form of an imported icon: only the fields it has (storage JSON has no undefined). */
+export const storedCustomIcon = (icon: IconDef) => ({
+  id: icon.id,
+  title: iconTitle(icon),
+  paths: icon.paths,
+  viewBox: icon.viewBox,
+  ...(icon.style ? { style: icon.style } : {}),
+  ...(icon.color ? { color: icon.color } : {}),
+  ...(icon.strokeWidth ? { strokeWidth: icon.strokeWidth } : {}),
+});
+
+/** Whether `icon` is one the user imported (it travels inside the element) rather than a registry icon. */
+export const isCustomIcon = (icon: IconDef) => icon.id.startsWith("custom-");
+
+/**
+ * A standalone `icon` element centred on `center`: just the glyph, no node box and no label, so what the
+ * user picked is all that lands on the board. Line icons start in their category colour (changeable with
+ * the colour picker); brand marks keep their own.
+ */
 export const buildIconElement = (icon: IconDef, center: Point, id: string): DrawingElement => {
   const half = DEFAULT_ICON_SIZE / 2;
-  const custom = icon.id.startsWith("custom-");
   return {
     id,
     type: "icon",
@@ -117,19 +135,38 @@ export const buildIconElement = (icon: IconDef, center: Point, id: string): Draw
     ],
     color: icon.color ?? categoryTint(icon.category),
     strokeWidth: icon.strokeWidth ?? 2,
-    ai: custom
-      ? {
-          customIcon: {
-            id: icon.id,
-            title: iconTitle(icon),
-            paths: icon.paths,
-            viewBox: icon.viewBox,
-            // Optional fields are left out, not set to undefined: storage JSON has no undefined.
-            ...(icon.style ? { style: icon.style } : {}),
-            ...(icon.color ? { color: icon.color } : {}),
-            ...(icon.strokeWidth ? { strokeWidth: icon.strokeWidth } : {}),
-          },
-        }
-      : { icon: icon.id },
+    ai: isCustomIcon(icon) ? { customIcon: storedCustomIcon(icon) } : { icon: icon.id },
   } as DrawingElement;
+};
+
+const RECENT_KEY = "draw-anything:recent-icons";
+export const MAX_RECENT_ICONS = 10;
+
+/** Ids of the icons the user picked most recently, newest first. Unreadable storage gives none. */
+export const loadRecentIconIds = (): string[] => {
+  try {
+    const raw: unknown = JSON.parse(window.localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string").slice(0, MAX_RECENT_ICONS) : [];
+  } catch {
+    return [];
+  }
+};
+
+/** `id` moved to the front of `existing`, once, capped. Pure: callers persist it with `saveRecentIconIds`. */
+export const withRecentIcon = (existing: readonly string[], id: string): string[] =>
+  [id, ...existing.filter((entry) => entry !== id)].slice(0, MAX_RECENT_ICONS);
+
+export const saveRecentIconIds = (ids: readonly string[]) => {
+  try {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(ids));
+  } catch {
+    // Private mode or a full quota: recents just do not persist.
+  }
+};
+
+/** The recent ids that still resolve to an icon (a registry icon, or one of the user's imports), in order. */
+export const recentIcons = (ids: readonly string[], custom: readonly IconDef[]): IconDef[] => {
+  const all = new Map(listIcons().map((icon) => [icon.id, icon]));
+  const mine = new Map(custom.map((icon) => [icon.id, icon]));
+  return ids.flatMap((id) => all.get(id) ?? mine.get(id) ?? []);
 };

@@ -185,7 +185,21 @@ export const getShapeResizeHandles = (
   const center = centerOf(local);
   return definition
     .getResizeHandles(shape, { ...options, bounds: local })
-    .map((handle) => ({ ...handle, ...rotatePoint(handle, center, rotation) }));
+    .map((handle) => ({ ...handle, ...rotatePoint(handle, center, rotation), angle: rotation }));
+};
+
+/**
+ * Draws the shape's own selection chrome when its definition has one (semantic nodes). Returns false
+ * for every other shape, which the editor then outlines and handles generically.
+ */
+export const renderShapeSelection = (
+  shape: DrawingElement,
+  context: ShapeRenderCanvasContext,
+): boolean => {
+  const definition = getShapeDefinition(shape.type);
+  if (!definition?.renderSelection) return false;
+  definition.renderSelection(shape, context);
+  return true;
 };
 
 export const renderShapeToCanvas = (

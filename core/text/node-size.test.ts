@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEstimateContext, estimateTextWidth } from "./estimate";
 import { layoutShapeLabel } from "./label-layout";
-import { getShapeLabelRegion, pillLabelBox, pillSizeForLabel } from "./label-region";
+import { getShapeLabelRegion, pillLabelBox, pillSizeForLabel, SEMANTIC_INSET_WIDTH } from "./label-region";
 import { sizePillNode, sizeSemanticNode } from "./node-size";
 
 const input = { fontSize: 17, fontWeight: "600", minWidth: 168, maxWidth: 280, minHeight: 78 };
@@ -61,7 +61,7 @@ describe("a word is never split to make a label fit", () => {
   it("sizes the box to at least the longest word", () => {
     const size = sizeSemanticNode({ ...input, label: "Authentication Service" });
     const word = estimateTextWidth("Authentication", 17, "600");
-    expect(size.width).toBeGreaterThanOrEqual(word + 66 + 24);
+    expect(size.width).toBeGreaterThanOrEqual(word + SEMANTIC_INSET_WIDTH + 24);
   });
 
   it.each(["Authentication Service", "Internationalization", "Pneumonoultramicroscopic issues"])(

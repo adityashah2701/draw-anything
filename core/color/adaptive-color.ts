@@ -38,3 +38,10 @@ export const readableOnDark = (color: string): string => {
   }
   return tint(color, 0.9);
 };
+
+/** Luminance below which a fill is a dark surface: a glyph on it needs `readableOnDark` like one on the dark canvas. */
+const DARK_SURFACE_LUMINANCE = 0.18;
+
+/** True when `color` is a `#rrggbb` dark enough that dark glyphs would not read on it. Anything else is not "dark". */
+export const isDarkSurface = (color: string | undefined): boolean =>
+  !!color && /^#[0-9a-f]{6}$/i.test(color) && luminance(color) < DARK_SURFACE_LUMINANCE;

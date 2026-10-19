@@ -9,8 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { importSvgIcon } from "@/core/icons/custom-icon";
+import { IconGlyph } from "@/features/whiteboard/components/properties/icon-glyph";
 import {
-  categoryTint,
   iconLibraryVersion,
   loadIconLibrary,
   subscribeIconLibrary,
@@ -21,9 +21,13 @@ import {
   iconCategories,
   iconTitle,
   loadCustomIcons,
+  loadRecentIconIds,
   moveGridIndex,
   pickerIcons,
+  recentIcons,
   rememberCustomIcon,
+  saveRecentIconIds,
+  withRecentIcon,
   type GridKey,
   type PickerCategory,
 } from "@/features/whiteboard/utils/icon-picker";
@@ -38,43 +42,27 @@ const GRID_KEYS = new Set<string>([
   "End",
 ]);
 
-const Glyph = ({ icon }: { icon: IconDef }) => {
-  const logo = icon.style === "logo";
-  const color = icon.color ?? categoryTint(icon.category);
-  const svg = (
-    <svg
-      viewBox={`0 0 ${icon.viewBox.width} ${icon.viewBox.height}`}
-      width={logo ? 22 : 28}
-      height={logo ? 22 : 28}
-      fill={logo ? color : "none"}
-      stroke={logo ? "none" : color}
-      strokeWidth={icon.strokeWidth ?? 2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      {icon.paths.map((d, i) => (
-        <path key={i} d={d} />
-      ))}
-    </svg>
-  );
-  // Brand marks keep their own colours, so they sit on the same white tile the canvas draws them on.
-  return logo ? <span className="rounded-md bg-white p-1">{svg}</span> : svg;
-};
-
 interface IconPickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onInsert: (icon: IconDef) => void;
+  /** "insert" adds the picked icon to the board; "replace" changes the icon of the selected nodes. */
+  mode?: "insert" | "replace";
+  onPick: (icon: IconDef) => void;
+  /** Replace mode only: the extra ways out besides picking another icon. */
+  replace?: { onRemove: () => void; onRestore: () => void; canRestore: boolean; hidden: boolean };
 }
 
-/** Search + category chips + grid. Focus stays in the search box; arrows move the highlight, Enter inserts. */
-export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
+/**
+ * Search + category chips + recents + grid. Focus stays in the search box; arrows move the highlight,
+ * Enter picks. One dialog serves both adding an icon and changing a node's icon.
+ */
+export function IconPicker({ open, onOpenChange, mode = "insert", onPick, replace }: IconPickerProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<PickerCategory | null>(null);
   const [active, setActive] = useState(0);
   const [custom, setCustom] = useState<IconDef[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -107,6 +95,7 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
     setActive(0);
     setImportError(null);
     setCustom(loadCustomIcons());
+    setRecentIds(loadRecentIconIds());
   }, [open]);
 
   useEffect(() => {
@@ -128,10 +117,22 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
     setActive(0);
   };
 
+  const recent = useMemo(
+    () => recentIcons(recentIds, custom),
+    // libraryVersion: a recent library icon only resolves once the library has loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [recentIds, custom, libraryVersion],
+  );
+
   const insert = (icon: IconDef) => {
-    onInsert(icon);
+    const ids = withRecentIcon(recentIds, icon.id);
+    setRecentIds(ids);
+    saveRecentIconIds(ids);
+    onPick(icon);
     onOpenChange(false);
   };
+
+  const replacing = mode === "replace";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -139,10 +140,13 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
         className="gap-3 p-4 sm:max-w-[520px]"
         showCloseButton={false}
       >
-        <DialogTitle className="sr-only">Insert icon</DialogTitle>
+        <DialogTitle className={replacing ? "text-sm font-semibold" : "sr-only"}>
+          {replacing ? "Change icon" : "Insert icon"}
+        </DialogTitle>
         <DialogDescription className="sr-only">
-          Search icons, move with the arrow keys, press Enter to add the
-          highlighted one to the board.
+          {replacing
+            ? "Search icons, move with the arrow keys, press Enter to use the highlighted one for the selected node."
+            : "Search icons, move with the arrow keys, press Enter to add the highlighted one to the board."}
         </DialogDescription>
         <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3">
           <Search size={16} className="text-muted-foreground" aria-hidden />
@@ -235,6 +239,24 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
             {importError}
           </p>
         )}
+        {!query && category === null && recent.length > 0 && (
+          <div role="group" aria-label="Recently used" className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground">Recent</span>
+            {recent.map((icon) => (
+              <button
+                key={icon.id}
+                type="button"
+                tabIndex={-1}
+                title={iconTitle(icon)}
+                aria-label={`Recent: ${iconTitle(icon)}`}
+                onClick={() => insert(icon)}
+                className="grid h-9 w-9 place-items-center rounded-md border border-transparent hover:bg-muted"
+              >
+                <IconGlyph icon={icon} />
+              </button>
+            ))}
+          </div>
+        )}
         <div
           ref={listRef}
           id="icon-picker-grid"
@@ -271,7 +293,7 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
                       : "border-transparent hover:bg-muted"
                   }`}
                 >
-                  <Glyph icon={icon} />
+                  <IconGlyph icon={icon} />
                   <span className="w-full truncate text-center text-muted-foreground">
                     {iconTitle(icon)}
                   </span>
@@ -280,6 +302,34 @@ export function IconPicker({ open, onOpenChange, onInsert }: IconPickerProps) {
             </div>
           )}
         </div>
+        {replacing && replace && (
+          <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+            <button
+              type="button"
+              tabIndex={-1}
+              disabled={!replace.canRestore}
+              onClick={() => {
+                replace.onRestore();
+                onOpenChange(false);
+              }}
+              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Restore default icon
+            </button>
+            <button
+              type="button"
+              tabIndex={-1}
+              disabled={replace.hidden}
+              onClick={() => {
+                replace.onRemove();
+                onOpenChange(false);
+              }}
+              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Remove icon
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

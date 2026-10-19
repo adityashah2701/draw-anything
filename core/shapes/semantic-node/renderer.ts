@@ -1,66 +1,84 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
-import { CORNER_RADIUS, screenCornerRadius } from "@/core/shapes/base/geometry-tokens";
-import { getShapeLabelRegion, semanticIconSize, SEMANTIC_ICON_LEFT } from "@/core/text/label-region";
+import { screenCornerRadius } from "@/core/shapes/base/geometry-tokens";
 import { drawIconTile } from "@/core/icons/draw";
 import { iconForNode } from "@/core/icons/registry";
 import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
+import { getSemanticNodeBounds } from "@/core/shapes/semantic-node/geometry";
+import { resolveIconTint } from "@/core/shapes/semantic-node/icon-tone";
+import { layoutSemanticNode } from "@/core/shapes/semantic-node/layout";
+import { normalizeNodeStyle } from "@/core/shapes/semantic-node/style";
 import { SemanticNodeShape } from "@/core/shapes/semantic-node/types";
+import { isDarkRender } from "@/core/theme/render-theme";
+import { readableOnDark } from "@/core/color/adaptive-color";
 
+/** A `#rrggbb` fill: the only kind whose brightness we can judge, so the only one that counts as a surface. */
+const hasReadableFill = (fill: string | undefined) => !!fill && /^#[0-9a-f]{6}$/i.test(fill);
+
+/**
+ * Draws the node from `layoutSemanticNode`: the box, then the icon tile and the label exactly where the
+ * layout put them. Nothing here decides a position, so the inline editor and the AI sizing (which read
+ * the same layout) always agree with what is on screen.
+ */
 export const renderSemanticNodeToCanvas = (
   shape: SemanticNodeShape,
   context: ShapeRenderCanvasContext,
 ) => {
-  if (shape.points.length < 2) return;
+  const bounds = getSemanticNodeBounds(shape);
+  if (!bounds) return;
   const { ctx, zoom, panOffset } = context;
-  const startX = shape.points[0].x * zoom + panOffset.x;
-  const startY = shape.points[0].y * zoom + panOffset.y;
-  const endX = shape.points[1].x * zoom + panOffset.x;
-  const endY = shape.points[1].y * zoom + panOffset.y;
-  const left = Math.min(startX, endX);
-  const top = Math.min(startY, endY);
-  const width = Math.abs(endX - startX);
-  const height = Math.abs(endY - startY);
-  const radius = screenCornerRadius(CORNER_RADIUS.semanticNode, zoom, width, height);
+  const layout = layoutSemanticNode(bounds, shape.nodeStyle);
+  const left = bounds.minX * zoom + panOffset.x;
+  const top = bounds.minY * zoom + panOffset.y;
+  const width = bounds.width * zoom;
+  const height = bounds.height * zoom;
 
+  const dark = isDarkRender();
   ctx.beginPath();
-  ctx.roundRect(left, top, width, height, radius);
+  ctx.roundRect(left, top, width, height, screenCornerRadius(layout.radius, zoom, width, height));
   if (shape.fill) {
     ctx.fillStyle = shape.fill;
     ctx.fill();
   }
+  // A node with no fill is just a border on the dark canvas: lighten a border that would not read there.
+  if (dark && !hasReadableFill(shape.fill)) ctx.strokeStyle = readableOnDark(String(ctx.strokeStyle));
   ctx.stroke();
 
-  const iconSize = semanticIconSize(height / zoom) * zoom;
-  const iconX = left + SEMANTIC_ICON_LEFT * zoom + iconSize / 2;
-  const iconY = top + height / 2;
-  drawIconTile(ctx, iconForNode(shape.ai), iconX, iconY, iconSize);
+  if (layout.icon) {
+    const icon = iconForNode(shape.ai);
+    const tint = resolveIconTint({ icon, override: normalizeNodeStyle(shape.nodeStyle).iconColor, fill: shape.fill, dark });
+    drawIconTile(
+      ctx,
+      icon,
+      layout.icon.cx * zoom + panOffset.x,
+      layout.icon.cy * zoom + panOffset.y,
+      layout.icon.size * zoom,
+      tint,
+    );
+  }
 
   if (shape.label) {
-    const worldMinX = Math.min(shape.points[0].x, shape.points[1].x);
-    const worldMinY = Math.min(shape.points[0].y, shape.points[1].y);
-    const worldWidth = width / zoom;
-    const worldHeight = height / zoom;
-    const region = getShapeLabelRegion("semantic-node", {
-      minX: worldMinX,
-      minY: worldMinY,
-      maxX: worldMinX + worldWidth,
-      maxY: worldMinY + worldHeight,
-      width: worldWidth,
-      height: worldHeight,
-    });
+    const { region } = layout;
     const regionWidth = region.width * zoom;
+    const regionHeight = region.height * zoom;
     const centerX = region.centerX * zoom + panOffset.x;
+    const centerY = region.centerY * zoom + panOffset.y;
     renderShapeLabel({
       ctx,
       label: shape.label,
       centerX,
-      centerY: region.centerY * zoom + panOffset.y,
+      centerY,
       maxWidth: regionWidth,
-      maxHeight: region.height * zoom,
+      maxHeight: regionHeight,
       zoom,
+      align: region.align,
+      // The region, never past the node: a label that cannot be made to fit is cut, not drawn over the border.
       clipPath: (canvasContext) => {
+        const x = Math.max(left, centerX - regionWidth / 2);
+        const y = Math.max(top, centerY - regionHeight / 2);
+        const right = Math.min(left + width, centerX + regionWidth / 2);
+        const bottom = Math.min(top + height, centerY + regionHeight / 2);
         canvasContext.beginPath();
-        canvasContext.rect(centerX - regionWidth / 2, top, regionWidth, height);
+        canvasContext.rect(x, y, Math.max(0, right - x), Math.max(0, bottom - y));
         canvasContext.closePath();
       },
       preferredColor: shape.color,
