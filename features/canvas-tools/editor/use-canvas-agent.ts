@@ -219,7 +219,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   );
 
   const send = useCallback(
-    async (prompt: string, provider?: AIModelProvider) => {
+    async (prompt: string, provider?: AIModelProvider, model?: string) => {
       const text = prompt.trim();
       const c = latest.current;
       if (!text || running) return;
@@ -249,7 +249,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
           history: historyRef.current,
           executor,
           unified,
-          callTurn: createTurnClient({ whiteboardId, provider, signal: abort.signal }),
+          callTurn: createTurnClient({ whiteboardId, provider, model, signal: abort.signal }),
           signal: abort.signal,
           onEvent: record,
         });

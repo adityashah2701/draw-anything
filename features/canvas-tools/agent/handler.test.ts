@@ -84,6 +84,27 @@ describe("canvas agent endpoint: what it accepts", () => {
     expect(seen).toHaveLength(0);
   });
 
+  it("accepts a listed NVIDIA model and passes it to the transport", async () => {
+    const created: Array<[string, string | undefined]> = [];
+    const { handler } = harness({
+      enabledProviders: () => ["nvidia", "groq"],
+      createTransport: (provider, _specs, model) => { created.push([provider, model]); return { kind: "native", complete: async () => ({ text: "ok", calls: [] }) }; },
+    });
+    for (const model of ["z-ai/glm-5.3", "z-ai/glm-5.3-flash"]) expect((await handler(post({ ...valid, provider: "nvidia", model }))).status).toBe(200);
+    expect((await handler(post({ ...valid, provider: "nvidia" }))).status).toBe(200);
+    expect(created).toEqual([["nvidia", "z-ai/glm-5.3"], ["nvidia", "z-ai/glm-5.3-flash"], ["nvidia", undefined]]);
+  });
+
+  it.each([
+    ["a model that is not listed", { provider: "nvidia", model: "z-ai/glm-9" }],
+    ["a model for another provider", { provider: "groq", model: "z-ai/glm-5.3" }],
+    ["a model without a provider", { model: "z-ai/glm-5.3" }],
+  ])("rejects %s with 400 and no model call", async (_name, extra) => {
+    const { handler, seen } = harness({ enabledProviders: () => ["groq", "nvidia"] });
+    expect((await handler(post({ ...valid, ...extra }))).status).toBe(400);
+    expect(seen).toHaveLength(0);
+  });
+
   it("rejects a provider this server has no key for", async () => {
     const { handler, seen } = harness();
     expect((await handler(post({ ...valid, provider: "openai" }))).status).toBe(400);

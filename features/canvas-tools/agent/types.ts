@@ -46,6 +46,8 @@ export const turnRequestSchema = z
   .object({
     whiteboardId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
     provider: z.enum(["gemini", "groq", "openai", "anthropic", "openrouter", "nvidia", "local"]).optional(),
+    /** NVIDIA only: one of the listed models (checked by the handler); omitted means the provider's default. */
+    model: z.string().max(80).optional(),
     messages: z.array(messageSchema).min(1).max(MAX_TURN_MESSAGES),
     enabledGroups: z.array(z.enum(TOOL_GROUPS)).max(TOOL_GROUPS.length).optional(),
   })

@@ -55,7 +55,7 @@ const handler = createCanvasAgentHandler({
     return notes.map((note) => ({ kind: note.kind, text: note.text }));
   },
   limiter,
-  createTransport: (provider, specs) => createCanvasTransport(provider, specs, (reason) => console.warn("[canvas-agent] tool calling unavailable, using the text protocol:", reason)),
+  createTransport: (provider, specs, model) => createCanvasTransport(provider, specs, (reason) => console.warn("[canvas-agent] tool calling unavailable, using the text protocol:", reason), process.env, model),
   log: (event) => console.info(JSON.stringify(event)),
 });
 
