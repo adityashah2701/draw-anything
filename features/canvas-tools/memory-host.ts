@@ -1,6 +1,6 @@
 import { applyPatch, isEmptyPatch, type DocPatch } from "@/core/groups/patch";
 import type { Bounds, DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
-import type { CanvasHost, DocumentInfo, ExportOutcome, ExportRequest, HostCapabilities, LoadOutcome, LoadSource, ViewportInfo } from "./types";
+import type { CanvasHost, GenerateOutcome, GenerateRequest, MemoryKind, DocumentInfo, ExportOutcome, ExportRequest, HostCapabilities, LoadOutcome, LoadSource, ViewportInfo } from "./types";
 
 export interface MemoryHostOptions {
   elements?: readonly StoredElement[];
@@ -13,6 +13,8 @@ export interface MemoryHostOptions {
   /** Answers `requestConfirmation`; default approves. */
   approve?: (request: { tool: string; message: string }) => boolean;
   getBounds?: (shape: DrawingElement) => Bounds | null;
+  /** Answers `generateDiagram`; enables the `generate` capability when given. */
+  generate?: (request: GenerateRequest) => GenerateOutcome | Promise<GenerateOutcome>;
 }
 
 /**
@@ -27,9 +29,9 @@ export const createMemoryHost = (options: MemoryHostOptions = {}) => {
   const future: StoredElement[][] = [];
   let counter = 0;
   const document: DocumentInfo = { id: "memory-board", title: "Memory board", canEdit: true, ...options.document };
-  const calls = { saves: 0, fits: [] as Array<Bounds | null>, exports: [] as ExportRequest[], confirmations: [] as Array<{ tool: string; message: string }>, loads: [] as LoadSource[] };
+  const calls = { saves: 0, fits: [] as Array<Bounds | null>, exports: [] as ExportRequest[], confirmations: [] as Array<{ tool: string; message: string }>, generates: [] as GenerateRequest[], remembered: [] as Array<{ kind: MemoryKind; text: string }>, loads: [] as LoadSource[] };
 
-  const capabilities: HostCapabilities = { history: true, selection: true, viewport: true, save: true, load: true, export: true, confirm: true, ...options.capabilities };
+  const capabilities: HostCapabilities = { history: true, selection: true, viewport: true, save: true, load: true, export: true, confirm: true, generate: Boolean(options.generate), memory: true, ...options.capabilities };
 
   const host: CanvasHost = {
     capabilities,
@@ -85,6 +87,19 @@ export const createMemoryHost = (options: MemoryHostOptions = {}) => {
     exportDiagram: async (request): Promise<ExportOutcome> => {
       calls.exports.push(request);
       return { filename: `board.${request.format}`, mime: request.format === "png" ? "image/png" : request.format === "svg" ? "image/svg+xml" : "application/pdf", bytes: 1024, width: 800, height: 600 };
+    },
+    ...(options.generate
+      ? {
+          generateDiagram: async (request: GenerateRequest) => {
+            calls.generates.push(request);
+            return options.generate!(request);
+          },
+        }
+      : {}),
+    remember: async (entry) => {
+      const duplicate = calls.remembered.some((m) => m.text.toLowerCase() === entry.text.toLowerCase());
+      if (!duplicate) calls.remembered.push(entry);
+      return { duplicate };
     },
     requestConfirmation: async (request) => {
       calls.confirmations.push(request);

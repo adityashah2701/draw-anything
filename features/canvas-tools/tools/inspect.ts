@@ -325,6 +325,8 @@ export const GROUP_DESCRIPTIONS: Record<ToolGroup, string> = {
   arrange: "align, distribute, space, auto layout, tidy, layout presets",
   organize: "group, ungroup, rename groups",
   document: "undo, redo, clear, export, save, load, repair",
+  generate: "draw a new diagram from a description",
+  memory: "remember a preference or decision",
 };
 
 export const enableTools = (onEnable: (groups: ToolGroup[]) => void): ToolDefinition<typeof enableInput> => ({

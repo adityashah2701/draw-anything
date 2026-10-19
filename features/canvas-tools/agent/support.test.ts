@@ -100,3 +100,14 @@ describe("turn client", () => {
     await expect(junk({ messages: [], enabledGroups: [] })).rejects.toThrow(/could not be read/);
   });
 });
+
+describe("suggestGroups with the unified agent", () => {
+  it("adds generate and memory only when the flag is on", async () => {
+    const { suggestGroups } = await import("./groups");
+    expect(suggestGroups("Draw an architecture diagram of a web shop")).not.toContain("generate");
+    expect(suggestGroups("Draw an architecture diagram of a web shop", { unified: true })).toContain("generate");
+    expect(suggestGroups("Always draw databases in blue, remember that", { unified: true })).toContain("memory");
+    expect(suggestGroups("Always draw databases in blue, remember that")).not.toContain("memory");
+    expect(suggestGroups("Rename the API node", { unified: true })).not.toContain("generate");
+  });
+});

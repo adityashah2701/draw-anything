@@ -44,12 +44,21 @@ interface Props {
   canUndoRun: boolean;
   onExample: (text: string) => void;
   disabled: boolean;
+  /** The unified agent is on: everyone with access to the board shares this conversation. */
+  shared?: boolean;
 }
 
-export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmation, onConfirm, onStop, onUndoRun, canUndoRun, onExample, disabled }) => {
+export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmation, onConfirm, onStop, onUndoRun, canUndoRun, onExample, disabled, shared = false }) => {
+  const notice = shared ? (
+    <p data-testid="agent-shared-notice" className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+      This conversation is shared with everyone who can open this board. What you ask here, and the assistant&apos;s answers and saved notes, are visible to them.
+    </p>
+  ) : null;
+
   if (messages.length === 0) {
     return (
       <div className="px-5 py-5" data-testid="canvas-agent-empty">
+        {notice}
         <p className="max-w-[36ch] text-[13px] leading-relaxed text-muted-foreground">
           Ask for a change to this board. The assistant uses the same commands as the editor, so every step can be undone, and it tells you exactly what it did.
         </p>
@@ -75,6 +84,7 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
 
   return (
     <div className="px-5 py-4" data-testid="canvas-agent-messages">
+      {notice}
       <ol className="space-y-3">
         {messages.map((message, index) => {
           if (message.kind === "user") {

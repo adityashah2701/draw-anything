@@ -90,6 +90,11 @@ export default defineSchema({
     tags: v.array(v.string()),
     payload: v.optional(v.any()),
     sourceFrameId: v.optional(v.string()),
+    // Board memory written by the agent's `remember` tool (see convex/aiMemory.ts). Older rows lack both.
+    kind: v.optional(
+      v.union(v.literal("preference"), v.literal("correction"), v.literal("decision"), v.literal("fact")),
+    ),
+    text: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -112,4 +117,29 @@ export default defineSchema({
     .index("by_frameId", ["frameId"])
     .index("by_whiteboardId", ["whiteboardId"])
     .index("by_createdBy", ["createdBy"]),
+
+  // One shared assistant conversation per board (see convex/aiConversation.ts).
+  aiConversations: defineTable({
+    whiteboardId: v.id("whiteboards"),
+    // The model-facing history (CanvasMessage[] as JSON, last turns only) so every collaborator continues the same thread.
+    history: v.optional(v.string()),
+    messageCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_whiteboardId", ["whiteboardId"]),
+
+  aiMessages: defineTable({
+    conversationId: v.id("aiConversations"),
+    seq: v.number(),
+    role: v.union(v.literal("user"), v.literal("assistant"), v.literal("tool"), v.literal("status")),
+    content: v.string(),
+    authorId: v.optional(v.id("users")),
+    // What the panel needs to draw a tool step or status line (small JSON).
+    ui: v.optional(v.any()),
+    // Set on messages imported from the legacy `aiFrames` history, so the import is idempotent.
+    sourceFrameId: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_conversation_seq", ["conversationId", "seq"])
+    .index("by_sourceFrameId", ["sourceFrameId"]),
 });

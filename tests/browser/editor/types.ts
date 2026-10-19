@@ -31,6 +31,10 @@ export interface EditorDebug {
     mutationLog(): string[];
     /** Another whiteboard this user may read (for loading one board into another). */
     seedOtherBoard(id: string, title: string, content: string): void;
+    /** The unified agent's shared conversation, as the fake Convex holds it. */
+    seedLegacyFrame(frameId: string, prompt: string): void;
+    conversation(): { conversationId: string | null; history: string | null; messages: Array<{ id: string; role: string; content: string; ui?: unknown }> };
+    memories(): Array<{ id: string; kind: string; text: string }>;
   };
 }
 
