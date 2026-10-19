@@ -101,6 +101,8 @@ export const reorder = (order: string[], selected: ReadonlySet<string>, move: ZM
   return next;
 };
 
+const isConnector = (el: DrawingElement) => el.type === "arrow" || el.type === "arrow-bidirectional";
+
 type WithConnections = DrawingElement & {
   startConnection?: { elementId: string };
   endConnection?: { elementId: string };
@@ -116,7 +118,8 @@ export const collectCopySet = (elements: DrawingElement[], selected: ReadonlySet
     const c = el as WithConnections;
     return c.startConnection && c.endConnection && ids.has(c.startConnection.elementId) && ids.has(c.endConnection.elementId);
   });
-  const labelOf = new Set(connectors.map((c) => (c.ai?.semanticId ? `${c.ai.semanticId}-label` : null)).filter(Boolean));
+  // A connector's label is linked by `<semanticId or id>-label` (see `labelKeyOf` in the connector commands).
+  const labelOf = new Set(connectors.map((c) => `${c.ai?.semanticId ?? c.id}-label`));
   return elements.filter(
     (el) =>
       selected.has(el.id) ||
@@ -133,6 +136,8 @@ export const collectCopySet = (elements: DrawingElement[], selected: ReadonlySet
  */
 export const cloneElements = (source: DrawingElement[], offset: Offset, newId: () => string): DrawingElement[] => {
   const idMap = new Map(source.map((el) => [el.id, newId()]));
+  // A copied label must stay linked to the copy of its connector, whose key is its own (new) id.
+  const copyOfLabelled = new Map(source.filter(isConnector).map((c) => [`${c.ai?.semanticId ?? c.id}-label`, idMap.get(c.id)!]));
   return source.map((el) => {
     const copy = {
       ...structuredClone(el),
@@ -147,9 +152,10 @@ export const cloneElements = (source: DrawingElement[], offset: Offset, newId: (
       else delete copy[key];
     }
     if (copy.ai) {
-      const { semanticId: _s, frameId: _f, generationId: _g, ...kept } = copy.ai;
-      void _s; void _f; void _g;
-      copy.ai = kept;
+      const { semanticId, frameId: _f, generationId: _g, ...kept } = copy.ai;
+      void _f; void _g;
+      const owner = kept.role === "edge-label" && semanticId !== undefined ? copyOfLabelled.get(semanticId) : undefined;
+      copy.ai = owner ? { ...kept, semanticId: `${owner}-label` } : kept;
     }
     return copy;
   });

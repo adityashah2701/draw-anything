@@ -20,14 +20,12 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { DrawingElementJson } from "@/liveblocks.config";
 import {
-  ArrowRoutingMode,
-  ArrowType,
   DrawingElement,
   Point,
   StoredElement,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { buildGroupIndex, expandUnits, isEffectivelyLocked, splitStored } from "@/core/groups/group-index";
-import { groupsEmptiedBy, planDelete } from "@/core/groups/group-commands";
+import { groupsEmptiedBy } from "@/core/groups/group-commands";
 import type { DocPatch } from "@/core/groups/patch";
 import { movesToOrder } from "@/core/groups/order";
 import { visibleShapes } from "@/core/groups/visibility";
@@ -50,6 +48,7 @@ import { useOrganizeCommands } from "@/features/whiteboard/hooks/interaction/use
 import { useElementCommands } from "@/features/whiteboard/hooks/interaction/use-element-commands";
 import type { CommandContext } from "@/features/whiteboard/commands/context";
 import { rerouteWithLabels } from "@/features/whiteboard/commands/connectors";
+import { planRemove } from "@/features/whiteboard/commands/remove";
 import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/data/use-whiteboard-auto-save";
 import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whiteboard-ui-state";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
@@ -284,14 +283,15 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
 
   /**
    * Delete shapes, the connectors attached to them and any group left empty, as one step. Locked
-   * shapes are never deleted (`planDelete`), so the eraser and the Delete key respect locks alike.
+   * shapes are never deleted (`planRemove`), so the eraser and the Delete key respect locks alike.
    */
   const deleteElementsWithConnectedArrows = useCallback(
     (ids: string[]) => {
-      const patch = planDelete(stored, ids);
+      const ctx = commandContextRef.current;
+      const patch = ctx ? planRemove(ctx, ids) : null;
       if (patch) deleteElementsLive(patch.remove);
     },
-    [deleteElementsLive, stored],
+    [deleteElementsLive],
   );
 
   // The selection chrome as data: unit boxes, the resize frame, the entered group's outline.
