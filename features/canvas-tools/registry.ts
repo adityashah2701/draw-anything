@@ -8,7 +8,7 @@ import { EDIT_TOOLS } from "./tools/edit";
 import { GENERATE_TOOLS, MEMORY_TOOLS } from "./tools/generate";
 import { enableTools, INSPECT_TOOLS } from "./tools/inspect";
 import { ORGANIZE_TOOLS } from "./tools/organize";
-import { TOOL_GROUPS, type ToolDefinition, type ToolGroup } from "./types";
+import { TOOL_GROUPS, toolEnabled, type ToolDefinition, type ToolGroup } from "./types";
 
 /** Every tool except the meta tool that needs the live session; each is a separate, independently callable definition. */
 export const STATIC_TOOLS: readonly ToolDefinition[] = [
@@ -79,7 +79,7 @@ export const toolSpec = (tool: ToolDefinition): ToolSpec => ({
 /** The specs for the tools in the enabled groups (the server sends exactly these; the executor enforces the same set). */
 export const specsFor = (tools: readonly ToolDefinition[], groups: ReadonlySet<ToolGroup> | readonly ToolGroup[]): ToolSpec[] => {
   const on = new Set(groups);
-  return tools.filter((tool) => on.has(tool.group)).map(toolSpec);
+  return tools.filter((tool) => toolEnabled(tool, on)).map(toolSpec);
 };
 
 export const toolsByGroup = (tools: readonly ToolDefinition[]): Record<ToolGroup, string[]> =>

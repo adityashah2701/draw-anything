@@ -214,7 +214,10 @@ export const createIconTool: ToolDefinition<typeof iconInput> = {
       element = { ...buildIconElement(def, { x: x + glyph / 2, y: y + glyph / 2 }, id), points: [{ x, y }, { x: x + glyph, y: y + glyph }] } as DrawingElement;
     }
     if (input.color) element = { ...element, color: input.color } as DrawingElement;
+    const bounds = element.points;
+    const placement = overlapWarnings(env, { x, y, width: bounds[1].x - bounds[0].x, height: bounds[1].y - bounds[0].y }, id);
     return {
+      ...(placement.length > 0 ? { warnings: placement } : {}),
       summary: `Created icon "${id}" (${def.id}).`,
       data: { id, icon: def.id },
       patch: { add: [element], update: [], remove: [] },
@@ -419,6 +422,7 @@ const fitFrameInput = z
 export const fitFrameTool: ToolDefinition<typeof fitFrameInput> = {
   name: "fit_frame",
   group: "create",
+  alsoWith: ["edit", "arrange", "connect", "organize"],
   description: "Re-fit a frame around its members (heading included). Frames do not follow their contents: call after moving, adding or removing members.",
   input: fitFrameInput,
   access: "write",

@@ -195,8 +195,13 @@ export interface ToolDefinition<Schema extends z.ZodType = z.ZodType> {
   /** The board must not have changed (by anyone else) since the model last looked. */
   strictRevision?: boolean;
   needs?: Array<keyof HostCapabilities>;
+  /** Also usable while any of these groups is on: a follow-up tool that belongs with the work of other groups (fit_frame after moving things). */
+  alsoWith?: ToolGroup[];
   run(input: z.infer<Schema>, env: ToolEnv): ToolRun | Promise<ToolRun>;
 }
+
+/** Whether a tool may be used with these groups on: its own group, or one it also works with. */
+export const toolEnabled = (tool: Pick<ToolDefinition, "group" | "alsoWith">, on: ReadonlySet<ToolGroup>): boolean => on.has(tool.group) || (tool.alsoWith ?? []).some((group) => on.has(group));
 
 export interface ToolCallRequest {
   /** Provider call id; the key for idempotent retries. */

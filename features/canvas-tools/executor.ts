@@ -1,3 +1,4 @@
+import { normalizeArgs } from "./args";
 import { isEmptyPatch } from "@/core/groups/patch";
 import { createCommandContext } from "@/features/whiteboard/commands/context";
 import { ToolError, isToolError, type ToolErrorInfo } from "./errors";
@@ -6,6 +7,7 @@ import { revisionOf } from "./revision";
 import { describeIssues } from "./schemas";
 import {
   TOOL_GROUPS,
+  toolEnabled,
   type CanvasHost,
   type ToolCallRequest,
   type ToolDefinition,
@@ -90,7 +92,7 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     if (!tool) {
       return failure(name || "unknown", { code: "unknown_tool", message: `There is no tool called "${name}". Use only the tools you were given.` }, started, call.id);
     }
-    if (!session.enabledGroups.has(tool.group)) {
+    if (!toolEnabled(tool, session.enabledGroups)) {
       return failure(tool.name, { code: "tool_not_enabled", message: `"${tool.name}" belongs to the "${tool.group}" tools, which are not enabled. Call enable_tools with {"groups":["${tool.group}"]} first.`, details: { group: tool.group } }, started, call.id);
     }
 
@@ -99,7 +101,8 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       if (previous) return { ...previous, replayed: true };
     }
 
-    const parsed = tool.input.safeParse(call.args ?? {});
+    const { args: callArgs, read: renamed } = normalizeArgs(tool, call.args ?? {});
+    const parsed = tool.input.safeParse(callArgs);
     if (!parsed.success) {
       const names = argumentNames(tool);
       return failure(tool.name, { code: "invalid_arguments", message: `Invalid arguments for ${tool.name}: ${describeIssues(parsed.error)}. ${names.length > 0 ? `${tool.name} takes only: ${names.join(", ")}.` : `${tool.name} takes no arguments.`}`, details: { accepts: names } }, started, call.id);
@@ -191,7 +194,7 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       ...(run.data || unchanged ? { data: { ...(run.data ?? {}), ...(unchanged ? { requested: run.summary } : {}) } } : {}),
       affected,
       revision: after,
-      ...(run.warnings && run.warnings.length > 0 ? { warnings: run.warnings } : {}),
+      ...(run.warnings || renamed.length > 0 ? { warnings: [...(run.warnings ?? []), ...(renamed.length > 0 ? [`Read ${renamed.join(", ")}: ${tool.name} takes ${argumentNames(tool).join(", ")}.`] : [])] } : {}),
       ...(run.skipped && run.skipped.length > 0 ? { skipped: run.skipped } : {}),
     };
     if (call.id && tool.access === "write") session.replay.set(call.id, result);

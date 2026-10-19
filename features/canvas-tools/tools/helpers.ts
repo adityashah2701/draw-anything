@@ -186,8 +186,8 @@ export const settleConnectors = (env: ToolEnv, patch: DocPatch | null): { patch:
     }
   }
   const warnings = validateBoard(ctx)
-    .filter((issue) => issue.code === "stale_connector" || issue.code === "connector_through_node" || issue.code === "connector_through_heading" || issue.code === "dangling_connector")
-    .map((issue) => `${issue.ids.length} connector${issue.ids.length === 1 ? "" : "s"} (${issue.ids.slice(0, 6).join(", ")}) ${issue.code === "connector_through_node" ? "run through a shape" : issue.code === "connector_through_heading" ? "run through a frame heading (fit_frame moves it clear)" : issue.code === "stale_connector" ? "do not reach their shapes" : "point at missing shapes"}: fix with reroute_connector or move the shapes before saying the diagram is tidy.`);
+    .filter((issue) => issue.code === "stale_connector" || issue.code === "connector_through_node" || issue.code === "connector_through_heading" || issue.code === "connector_through_frame" || issue.code === "dangling_connector")
+    .map((issue) => `${issue.ids.length} connector${issue.ids.length === 1 ? "" : "s"} (${issue.ids.slice(0, 6).join(", ")}) ${issue.code === "connector_through_node" ? "run through a shape" : issue.code === "connector_through_heading" ? "run through a frame heading (fit_frame moves it clear)" : issue.code === "connector_through_frame" ? "cross a frame their ends are not in" : issue.code === "stale_connector" ? "do not reach their shapes" : "point at missing shapes"}: fix with reroute_connector or move the shapes before saying the diagram is tidy.`);
   return { patch: result, warnings };
 };
 
@@ -242,6 +242,21 @@ export const lockedSkips = (ids: readonly string[]) => ids.map((id) => ({ id, re
 export const canHoldLabel = (shape: DrawingElement): boolean =>
   !isArrowElement(shape) && (shape.type === "icon" || getShapeDefinition(shape.type)?.labelConfig?.anchor === "center");
 
+/** A frame's border is not a place for a new node: it should sit clear of it, or be a member (inside, then fit_frame). */
+const FRAME_CLEARANCE = 40;
+const frameWarnings = (env: ToolEnv, box: { x: number; y: number; width: number; height: number }): string[] => {
+  const out: string[] = [];
+  for (const shape of env.ctx.shapes) {
+    if (shape.ai?.role !== "group" || shape.type !== "rectangle") continue;
+    const f = env.ctx.getBounds(shape);
+    if (!f) continue;
+    const near = box.x < f.maxX + FRAME_CLEARANCE && f.minX - FRAME_CLEARANCE < box.x + box.width && box.y < f.maxY + FRAME_CLEARANCE && f.minY - FRAME_CLEARANCE < box.y + box.height;
+    const inside = box.x >= f.minX && box.y >= f.minY && box.x + box.width <= f.maxX && box.y + box.height <= f.maxY;
+    if (near && !inside) out.push(`The new element touches or crowds the frame "${shape.id}" (${FRAME_CLEARANCE}px clearance wanted). Put it fully outside with a gap, or inside it and call fit_frame; its connectors would otherwise cut across the frame.`);
+  }
+  return out;
+};
+
 /** Shapes a box would land on (frames, labels and connectors do not count), as a warning a model can act on. */
 export const overlapWarnings = (env: ToolEnv, box: { x: number; y: number; width: number; height: number }, ignoreId?: string): string[] => {
   const hit: string[] = [];
@@ -251,6 +266,7 @@ export const overlapWarnings = (env: ToolEnv, box: { x: number; y: number; width
     if (!other) continue;
     if (box.x < other.maxX && other.minX < box.x + box.width && box.y < other.maxY && other.minY < box.y + box.height) hit.push(`"${shape.label ?? shape.id}" (${shape.id})`);
   }
-  if (hit.length === 0) return [];
-  return [`The new element overlaps ${hit.slice(0, 4).join(", ")}${hit.length > 4 ? " and more" : ""}. Move it, or make room first with move_elements / tidy_diagram, then reconnect.`];
+  const frames = frameWarnings(env, box);
+  if (hit.length === 0) return frames;
+  return [...frames, `The new element overlaps ${hit.slice(0, 4).join(", ")}${hit.length > 4 ? " and more" : ""}. Move it, or make room first with move_elements / tidy_diagram, then reconnect.`];
 };
