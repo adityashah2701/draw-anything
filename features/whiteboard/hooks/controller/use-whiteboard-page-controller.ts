@@ -30,7 +30,7 @@ import type { DocPatch } from "@/core/groups/patch";
 import { movesToOrder } from "@/core/groups/order";
 import { visibleShapes } from "@/core/groups/visibility";
 import { createBaselineResolver } from "@/features/whiteboard/utils/text-baseline";
-import { planFrameScale, planShapeMoves, uniformOffsets } from "@/features/whiteboard/utils/move-plan";
+import { planFrameScale, planShapeMoves, uniformOffsets, withInternalConnectors } from "@/features/whiteboard/utils/move-plan";
 import { buildSelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
 import { useSelectionInspector } from "./use-selection-inspector";
 import { useGroupCommands } from "@/features/whiteboard/hooks/interaction/use-group-commands";
@@ -327,10 +327,10 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         const frame = selectionOverlay?.frame;
         if (!frame || frame.locked) return null;
         const elements = expandUnits(groupIndex, frame.unitIds).flatMap((id) => groupIndex.shapes.get(id) ?? []);
-        return elements.length > 0 ? { bounds: frame.bounds, elements } : null;
+        return elements.length > 0 ? { bounds: frame.bounds, elements: withInternalConnectors(elements, allShapes) } : null;
       },
     }),
-    [groupIndex, enteredGroupId, selectionOverlay],
+    [allShapes, groupIndex, enteredGroupId, selectionOverlay],
   );
 
   const completeCurrentElement = useCallback(() => {

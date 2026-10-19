@@ -1,6 +1,7 @@
 import type { DocPatch } from "@/core/groups/patch";
 import { storedOrderFromShapes } from "@/core/groups/order";
 import { expandOffsets, unitBoxes, type Offset } from "@/core/groups/units";
+import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import {
   alignOffsets,
@@ -11,7 +12,8 @@ import {
   type DistributeAxis,
   type ZMove,
 } from "@/features/whiteboard/utils/arrange";
-import { planShapeMoves, uniformOffsets } from "@/features/whiteboard/utils/move-plan";
+import { planShapeMoves, uniformOffsets, withInternalConnectors } from "@/features/whiteboard/utils/move-plan";
+import { labelKeyOf } from "./connectors";
 import { editableIds } from "./editable";
 import type { CommandContext } from "./context";
 
@@ -26,8 +28,24 @@ export const updatePatch = (changed: readonly DrawingElement[]): DocPatch | null
 export const planMoveByOffsets = (ctx: CommandContext, offsets: ReadonlyMap<string, Offset>): DocPatch | null => {
   const movable = new Set(editableIds(ctx, [...offsets.keys()]));
   const wanted = new Map([...offsets].filter(([id]) => movable.has(id)));
-  const origin = ctx.shapes.filter((shape) => wanted.has(shape.id));
-  return updatePatch(planShapeMoves(origin, wanted, ctx.reroute));
+  const moving = ctx.shapes.filter((shape) => wanted.has(shape.id));
+  const origin = withInternalConnectors(moving, ctx.shapes);
+  // A connector between two shapes that move by the same amount moves by that amount too, and so does its label.
+  const all = new Map(wanted);
+  const labelOffsets = new Map<string, Offset>();
+  for (const shape of origin) {
+    if (all.has(shape.id) || !isArrowElement(shape)) continue;
+    const from = wanted.get(shape.startConnection?.elementId ?? "");
+    const to = wanted.get(shape.endConnection?.elementId ?? "");
+    if (!from || !to || from.dx !== to.dx || from.dy !== to.dy) continue;
+    all.set(shape.id, from);
+    labelOffsets.set(labelKeyOf(shape), from);
+  }
+  for (const shape of origin) {
+    const offset = shape.ai?.role === "edge-label" ? labelOffsets.get(shape.ai.semanticId ?? "") : undefined;
+    if (offset && !all.has(shape.id)) all.set(shape.id, offset);
+  }
+  return updatePatch(planShapeMoves(origin, all, ctx.reroute));
 };
 
 /** The selection (shapes and whole groups) moved by the same offset: nudge, drag, "move by". */

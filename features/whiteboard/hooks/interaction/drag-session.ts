@@ -2,6 +2,7 @@ import type { Bounds, DrawingElement, Point } from "@/features/whiteboard/types/
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { unionBounds } from "@/core/geometry/box";
 import { rootOf, unitUnder, type GroupIndex } from "@/core/groups/group-index";
+import { withInternalConnectors } from "@/features/whiteboard/utils/move-plan";
 import { snapSelection, type AlignTarget, type Guide, type SnapOptions, type Span } from "@/core/snap/alignment";
 
 export type { Guide, Span };
@@ -85,9 +86,11 @@ export const startDragSession = (
   { index, context = null, baselineOf }: DragSessionOptions = {},
 ): DragSession | null => {
   const moving = new Set(movingIds);
-  const origin = elements.filter((el) => moving.has(el.id));
-  const selection = unionBounds(origin.flatMap((el) => getBounds(el) ?? []));
+  const selected = elements.filter((el) => moving.has(el.id));
+  const selection = unionBounds(selected.flatMap((el) => getBounds(el) ?? []));
   if (!selection) return null;
+  // Connectors between moving shapes travel with them whether or not they were selected.
+  const origin = withInternalConnectors(selected, elements);
 
   const alignTargets: AlignTarget[] = [];
   const unitBoxes = new Map<string, Bounds[]>();
@@ -112,7 +115,7 @@ export const startDragSession = (
     targets: alignTargets.map((t) => t.box),
     alignTargets,
     spaceTargets: [...unitBoxes.values()].flatMap((boxes) => unionBounds(boxes) ?? []),
-    baselines: origin.flatMap((el) => baselineOf?.(el) ?? []),
+    baselines: selected.flatMap((el) => baselineOf?.(el) ?? []),
   };
 };
 
