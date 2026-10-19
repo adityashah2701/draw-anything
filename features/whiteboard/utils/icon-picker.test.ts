@@ -2,7 +2,19 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { getIcon } from "@/core/icons/registry";
 import { validateCustomIcon } from "@/core/icons/custom-icon";
 import { categoryTint, loadIconLibrary } from "@/core/icons/registry";
-import { buildIconElement, DEFAULT_ICON_SIZE, iconCategories, iconTitle, moveGridIndex, pickerIcons } from "./icon-picker";
+import {
+  buildIconElement,
+  DEFAULT_ICON_SIZE,
+  iconCategories,
+  iconTitle,
+  isCustomIcon,
+  MAX_RECENT_ICONS,
+  moveGridIndex,
+  pickerIcons,
+  recentIcons,
+  storedCustomIcon,
+  withRecentIcon,
+} from "./icon-picker";
 
 describe("pickerIcons", () => {
   beforeAll(loadIconLibrary);
@@ -78,5 +90,34 @@ describe("buildIconElement", () => {
     expect(el.ai?.customIcon?.id).toBe("custom-x");
     expect(JSON.parse(JSON.stringify(el.ai?.customIcon))).toEqual(el.ai?.customIcon);
     expect(el.label).toBeUndefined();
+  });
+});
+
+describe("recently used icons", () => {
+  beforeAll(loadIconLibrary);
+
+  it("moves a re-picked icon to the front without repeating it, and keeps a bounded list", () => {
+    expect(withRecentIcon(["a", "b", "c"], "b")).toEqual(["b", "a", "c"]);
+    expect(withRecentIcon([], "x")).toEqual(["x"]);
+    const many = Array.from({ length: 30 }, (_, i) => `i${i}`);
+    expect(withRecentIcon(many, "new")).toHaveLength(MAX_RECENT_ICONS);
+    expect(withRecentIcon(many, "new")[0]).toBe("new");
+  });
+
+  it("resolves ids to icons in order, dropping ones that no longer exist", () => {
+    const mine = validateCustomIcon({ id: "custom-x", title: "Gizmo", paths: ["M0 0h4v4Z"], viewBox: { width: 24, height: 24 } })!;
+    expect(recentIcons(["queue", "gone", "custom-x", "database"], [mine]).map((i) => i.id)).toEqual(["queue", "custom-x", "database"]);
+    expect(recentIcons([], [mine])).toEqual([]);
+  });
+});
+
+describe("custom icons stored in elements", () => {
+  it("storedCustomIcon keeps only the fields the icon has, so storage JSON never holds undefined", () => {
+    const bare = validateCustomIcon({ id: "custom-a", title: "A", paths: ["M0 0h4v4Z"], viewBox: { width: 24, height: 24 }, style: "stroke" })!;
+    const stored = storedCustomIcon(bare);
+    expect(JSON.parse(JSON.stringify(stored))).toEqual(stored);
+    expect(Object.values(stored).includes(undefined as never)).toBe(false);
+    expect(isCustomIcon(bare)).toBe(true);
+    expect(isCustomIcon(getIcon("database"))).toBe(false);
   });
 });

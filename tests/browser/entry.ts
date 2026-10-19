@@ -37,3 +37,6 @@ export { compileAIDiagramToCanvas } from "@/features/ai/server/canvas-compiler";
 export * as baseline from "./baseline-fixtures";
 export { elementsFromDiagramCode } from "@/features/diagram-code/canvas";
 export { shapeContainsPoint } from "@/core/shapes/shape-runtime";
+export { layoutSemanticNode, semanticMinSize } from "@/core/shapes/semantic-node/layout";
+export { renderSemanticNodeSelection } from "@/core/shapes/semantic-node/selection";
+export { withRenderTheme } from "@/core/theme/render-theme";

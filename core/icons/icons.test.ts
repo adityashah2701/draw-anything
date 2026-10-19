@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { aiSemanticNodeKindSchema, normalizeIconReference, normalizeSemanticKind } from "@/features/ai/schemas";
 import { drawIconTile } from "./draw";
 import { GLYPHS } from "./glyphs";
-import { getIcon, iconForNode, listIcons, registerIcon, resolveIconId } from "./registry";
+import { isValidPathData } from "./path-data";
+import { getIcon, iconForNode, listIcons, loadIconLibrary, registerIcon, resolveIconId } from "./registry";
 
 const fakeCtx = () => {
   const calls: string[] = [];
@@ -25,6 +26,12 @@ describe("icon registry", () => {
       // Line glyphs are vendored lucide; logos come from logos.ts (covered by custom-icon.test.ts).
       if (icon.category !== "logo") expect(Object.values(GLYPHS)).toContain(icon.paths);
     }
+  });
+
+  it("every glyph is well-formed path data, so no icon is drawn half-way or logs a parse error", async () => {
+    await loadIconLibrary();
+    const broken = listIcons().flatMap((icon) => icon.paths.filter((d) => !isValidPathData(d)).map((d) => `${icon.id}: ${d.slice(0, 60)}`));
+    expect(broken).toEqual([]);
   });
 
   it("covers every semantic kind the schema allows, so no stored board loses its icon", () => {

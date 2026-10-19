@@ -23,6 +23,7 @@ import {
   ArrowRoutingMode,
   ArrowType,
   DrawingElement,
+  Point,
   StoredElement,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { buildGroupIndex, expandUnits, isEffectivelyLocked, splitStored } from "@/core/groups/group-index";
@@ -52,6 +53,10 @@ import { useEditingText } from "./use-editing-text";
 import { coveredByPanels } from "@/features/whiteboard/components/overlays/panel-layout";
 import { useSelectedArrow } from "./use-selected-arrow";
 import { useSelectionStyle } from "./use-selection-style";
+import { useSemanticNodeCommands } from "@/features/whiteboard/hooks/interaction/use-semantic-node-commands";
+import { semanticZoneAt } from "@/core/shapes/semantic-node/layout";
+import { getShapeLocalBounds, getShapeRotation } from "@/core/shapes/shape-runtime";
+import { centerOf, rotatePoint } from "@/core/geometry/box";
 import { createGestureHistory } from "@/features/whiteboard/hooks/interaction/gesture-history";
 import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
@@ -520,16 +525,28 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
    * pointer); on an ordinary shape, or inside the group that holds it, it edits the text.
    */
   const handleShapeDoubleClick = useCallback(
-    (element: DrawingElement) => {
+    (element: DrawingElement, point?: Point) => {
       const action = resolveDoubleClick(groupIndex, element.id, enteredGroupId);
       if (action.kind === "enter") {
         setEnteredGroupId(action.group);
         setSelectedElements(action.select);
         return true;
       }
+      // Double-clicking a semantic node's icon replaces the icon; anywhere else edits the label.
+      if (point && element.type === "semantic-node" && whiteboardAccess.hasEditAccess && !isEffectivelyLocked(groupIndex, element.id)) {
+        const local = getShapeLocalBounds(element);
+        if (local) {
+          const inFrame = rotatePoint(point, centerOf(local), -getShapeRotation(element));
+          if (semanticZoneAt(local, element.nodeStyle, inFrame) === "icon") {
+            setSelectedElements([element.id]);
+            uiState.openReplaceIconPicker();
+            return true;
+          }
+        }
+      }
       return beginEditing(element);
     },
-    [beginEditing, enteredGroupId, groupIndex],
+    [beginEditing, enteredGroupId, groupIndex, uiState, whiteboardAccess.hasEditAccess],
   );
 
   const runShortcut = useCallback(
@@ -688,6 +705,22 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       isLocked: groupSelection.isLocked,
       updateElements,
     });
+
+  const semanticNodes = useSemanticNodeCommands({
+    elements,
+    selectedElements,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    isLocked: groupSelection.isLocked,
+    updateElements,
+    openIconPicker: uiState.openReplaceIconPicker,
+    beginEditing,
+  });
+
+  // One picker serves both jobs: a pick adds an icon to the board, or (replace mode) retargets the selected nodes.
+  const pickIcon = useCallback(
+    (icon: IconDef) => (uiState.iconPickerMode === "replace" ? semanticNodes.replaceIcon(icon) : insertIcon(icon)),
+    [insertIcon, semanticNodes, uiState.iconPickerMode],
+  );
 
   const inspector = useSelectionInspector({
     groupIndex,
@@ -981,6 +1014,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleCommandAction,
     beginEditing,
     insertIcon,
+    pickIcon,
+    semanticNodes,
     boardExport,
     deleteSelectedElements,
     elementCommands,

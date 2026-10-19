@@ -11,6 +11,7 @@ import {
   resizeShape,
   shapeContainsPoint,
 } from "@/core/shapes/shape-runtime";
+import { resizeHandleAt } from "@/core/shapes/resize-handle-hit";
 import { SpatialHashGrid } from "@/core/routing/spatial-hash-grid";
 
 export const useWhiteboardUtils = (
@@ -178,19 +179,7 @@ export const useWhiteboardUtils = (
       const bounds = getElementBounds(element);
       if (!bounds) return null;
 
-      const handleSize = 8 / zoom;
-      const handles = getShapeResizeHandles(element, { bounds, zoom });
-
-      for (const handle of handles) {
-        if (
-          Math.abs(point.x - handle.x) <= handleSize &&
-          Math.abs(point.y - handle.y) <= handleSize
-        ) {
-          return handle.name;
-        }
-      }
-
-      return null;
+      return resizeHandleAt(getShapeResizeHandles(element, { bounds, zoom }), point, zoom);
     },
     [getElementBounds, zoom],
   );

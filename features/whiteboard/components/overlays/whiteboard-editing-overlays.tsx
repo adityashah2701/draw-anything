@@ -2,7 +2,6 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { IconPicker } from "@/features/whiteboard/components/overlays/icon-picker";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text-block";
-import { getAdaptiveColor } from "@/features/whiteboard/utils/canvas-render-utils";
 import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
 import { AIPanel } from "@/features/whiteboard/components/overlays/ai-panel";
 import { DiagramCodePanel } from "@/features/whiteboard/components/overlays/diagram-code-panel";
@@ -15,7 +14,7 @@ import {
   markdownToEditableHtml,
   normalizeRichTextInput,
 } from "@/features/whiteboard/utils/rich-text-renderer";
-import { measureShapeLabel } from "@/core/shapes/base/shape-label-renderer";
+import { measureShapeLabel, resolveTextColor } from "@/core/shapes/base/shape-label-renderer";
 import { getShapeLabelRegion } from "@/core/text/label-region";
 import { getShapeLocalBounds, getShapeRotation } from "@/core/shapes/shape-runtime";
 import { centerOf, rotatePoint } from "@/core/geometry/box";
@@ -43,6 +42,8 @@ interface ShapeLabelEditorProps {
   maxLines?: number;
   /** Degrees the shape is rotated by; the editor is turned to match. */
   rotation?: number;
+  /** Same alignment the canvas uses for this shape's label. */
+  align?: "left" | "center";
   onCommit: (
     label: string,
     fontSize: number,
@@ -65,6 +66,7 @@ function ShapeLabelEditor({
   availableHeightPx,
   maxLines,
   rotation,
+  align,
   onCommit,
   updateElement,
 }: ShapeLabelEditorProps) {
@@ -158,10 +160,6 @@ function ShapeLabelEditor({
     // Emptying the editor is deliberate: the shape goes back to blank.
     onCommit(editableHtmlToMarkdown(editorRef.current || ""), fontSize, fontWeight, fontStyle);
   }, [onCommit, fontSize, fontWeight, fontStyle]);
-
-  const isDark =
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark");
 
   return (
     <>
@@ -288,8 +286,10 @@ function ShapeLabelEditor({
           editorMinHeight,
           fontWeight,
           fontStyle,
-          color: getAdaptiveColor(shape.color, isDark),
+          // The colour the canvas draws the label in (contrast against the fill), so typing never changes it.
+          color: resolveTextColor(shape.color, shape.fill),
           rotation,
+          align,
         })}
         className="bg-transparent outline-none"
       />
@@ -386,7 +386,18 @@ export const WhiteboardEditingOverlays = ({
       <IconPicker
         open={controller.showIconPicker}
         onOpenChange={controller.setShowIconPicker}
-        onInsert={controller.insertIcon}
+        mode={controller.iconPickerMode}
+        onPick={controller.pickIcon}
+        replace={
+          controller.iconPickerMode === "replace"
+            ? {
+                onRemove: controller.semanticNodes.removeIcon,
+                onRestore: controller.semanticNodes.restoreIcon,
+                canRestore: controller.semanticNodes.model?.canRestore === true,
+                hidden: controller.semanticNodes.model?.icon !== "mixed" && controller.semanticNodes.model?.icon.hidden === true,
+              }
+            : undefined
+        }
       />
 
       <CommandMenu
@@ -420,7 +431,7 @@ export const WhiteboardEditingOverlays = ({
           if (!bounds) return null;
 
           // The text region, not the whole shape: semantic nodes keep their label beside the icon.
-          const region = getShapeLabelRegion(shape.type, bounds);
+          const region = getShapeLabelRegion(shape.type, bounds, shape.type === "semantic-node" ? shape.nodeStyle : undefined);
           const rotation = getShapeRotation(shape);
           const labelCenter = rotatePoint({ x: region.centerX, y: region.centerY }, centerOf(bounds), rotation);
           const sx = labelCenter.x * canvasViewport.zoom + canvasViewport.panOffset.x;
@@ -448,6 +459,7 @@ export const WhiteboardEditingOverlays = ({
               availableHeightPx={availableHeightPx}
               maxLines={region.maxLines}
               rotation={rotation}
+              align={region.align}
               updateElement={updateElement}
               onCommit={(label, fontSize, fontWeight, fontStyle) => {
                 updateElement({

@@ -13,6 +13,7 @@ import {
   resizeSemanticNode,
 } from "@/core/shapes/semantic-node/interaction";
 import { renderSemanticNodeToCanvas } from "@/core/shapes/semantic-node/renderer";
+import { renderSemanticNodeSelection } from "@/core/shapes/semantic-node/selection";
 import { SemanticNodeShape } from "@/core/shapes/semantic-node/types";
 
 export const semanticNodeDefinition = createShapeDefinition<SemanticNodeShape>({
@@ -35,9 +36,12 @@ export const semanticNodeDefinition = createShapeDefinition<SemanticNodeShape>({
     fontWeight: props.fontWeight ?? "600",
     fontStyle: props.fontStyle ?? "normal",
     ai: props.ai,
+    // Only present when the user changed something, so a fresh node is stored like every older one.
+    ...(props.nodeStyle ? { nodeStyle: props.nodeStyle } : {}),
   }),
   render: () => null,
   renderToCanvas: renderSemanticNodeToCanvas,
+  renderSelection: renderSemanticNodeSelection,
   getBounds: (shape) => getSemanticNodeBounds(shape),
   getAnchors: (shape, bounds) => getSemanticNodeAnchors(shape, bounds ?? null),
   onResize: resizeSemanticNode,

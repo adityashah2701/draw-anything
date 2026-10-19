@@ -36,7 +36,17 @@ export const useWhiteboardUiState = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [showExport, setShowExport] = useState(false);
-  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showIconPicker, setShowIconPickerOpen] = useState(false);
+  // "insert" adds an icon to the board; "replace" changes the icon of the selected semantic nodes.
+  const [iconPickerMode, setIconPickerMode] = useState<"insert" | "replace">("insert");
+  const setShowIconPicker = useCallback((open: boolean) => {
+    setShowIconPickerOpen(open);
+    if (!open) setIconPickerMode("insert");
+  }, []);
+  const openReplaceIconPicker = useCallback(() => {
+    setIconPickerMode("replace");
+    setShowIconPickerOpen(true);
+  }, []);
   // Where the comment tool was clicked; the comment layer opens a composer there.
   const [commentDraft, setCommentDraft] = useState<Point | null>(null);
   const [showOutlineColorPicker, setShowOutlineColorPicker] = useState(false);
@@ -150,6 +160,8 @@ export const useWhiteboardUiState = () => {
     setShowExport,
     showIconPicker,
     setShowIconPicker,
+    iconPickerMode,
+    openReplaceIconPicker,
     commentDraft,
     setCommentDraft,
     showOutlineColorPicker,

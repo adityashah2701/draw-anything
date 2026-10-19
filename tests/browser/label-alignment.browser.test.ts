@@ -197,6 +197,8 @@ for (const font of FONT_MODES)
             editTopOffset: T.measureLabelEditTopOffset(m.finalFontSize, "600", "normal"),
             editorWidth: m.wrapWidth, editorFontSize: m.finalFontSize, editorLineHeight: m.finalLineHeight,
             editorMinHeight: m.height, fontWeight: "600", fontStyle: "normal", color: "#000000",
+            // The editor aligns like the canvas: a semantic node's label is flush with its left padding edge.
+            align: r.align,
           });
           const div = document.createElement("div");
           for (const [k, v] of Object.entries(style)) {

@@ -11,6 +11,17 @@ export interface ShapeResizeHandle {
   name: string;
   x: number;
   y: number;
+  /**
+   * An edge handle that can be grabbed anywhere along its edge: the world length of the grab zone,
+   * centred on (x, y) and running horizontally for "n"/"s" and vertically for "e"/"w". Absent = a
+   * point handle. (Node edges are then resizable without a visible handle sitting on the edge's
+   * connection point, which the pointer treats as a connector start.)
+   */
+  span?: number;
+  /** False = a grab zone the canvas does not draw a handle for. Default true. */
+  visible?: boolean;
+  /** Degrees the handle's frame is turned by (its shape's rotation); set by the runtime, not by shapes. */
+  angle?: number;
 }
 
 export interface ShapeHitTestOptions {
@@ -45,6 +56,12 @@ export interface BaseShapeDefinition<T extends DrawingElement> {
   create: (props: Partial<T>) => T;
   render: (shape: T) => unknown;
   renderToCanvas: (shape: T, context: ShapeRenderCanvasContext) => void;
+  /**
+   * Draws this shape's selection outline and resize handles in place of the editor's generic ones.
+   * Optional: a shape without it gets the generic chrome. It must draw exactly the handles that
+   * `getResizeHandles` returns, because that list is what the pointer hit-tests.
+   */
+  renderSelection?: (shape: T, context: ShapeRenderCanvasContext) => void;
   getBounds: (shape: T, context?: ShapeGeometryContext) => Bounds | null;
   getAnchors: (shape: T, bounds?: Bounds | null) => Anchor[];
   onMove?: (shape: T, delta: Point) => T;

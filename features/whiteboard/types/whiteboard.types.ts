@@ -138,8 +138,34 @@ export interface TextShape extends BaseDrawingElement {
   fontStyle?: string;
 }
 
+/** Where a semantic node's icon sits relative to its label. Absent = chosen from the node's proportions. */
+export type SemanticIconPlacement = "left" | "right" | "top";
+
+/**
+ * Presentation of a semantic node beyond its fill, stroke and text (see core/shapes/semantic-node/style.ts).
+ * Every field is optional and an absent field means "the design default", so boards saved before this
+ * existed draw exactly as they should. Unknown or out-of-range values are ignored on read, never trusted.
+ */
+export interface SemanticNodeStyle {
+  /** The icon is removed (the label then takes the whole node). */
+  iconHidden?: boolean;
+  /** Edge of the icon tile in world units; absent = sized from the node. */
+  iconSize?: number;
+  iconPlacement?: SemanticIconPlacement;
+  /** `#rrggbb` tint for a line icon; brand marks keep their own colours. */
+  iconColor?: string;
+  /** Corner radius in world units. */
+  cornerRadius?: number;
+  /**
+   * What the node's icon was before the user replaced it, so "restore default" can bring it back: the
+   * registry id it named, or `null` when it had none (it drew the icon its kind implies).
+   */
+  originalIcon?: string | null;
+}
+
 export interface SemanticNodeShape extends BaseDrawingElement {
   type: "semantic-node";
+  nodeStyle?: SemanticNodeStyle;
 }
 
 export interface ArrowBaseShape extends BaseDrawingElement {

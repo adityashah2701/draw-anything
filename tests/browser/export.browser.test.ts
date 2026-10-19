@@ -311,6 +311,42 @@ suite("export in real Chrome", () => {
     expect(r.roundStrokes).toBeGreaterThanOrEqual(r.nodes);
   });
 
+  it("an edited semantic node exports what the canvas shows: the replaced icon, the chosen colour, a hidden icon gone, and always in the light theme", async () => {
+    const r = await s.page.evaluate(async () => {
+      const H = window.H;
+      const base = { type: "semantic-node", color: "#1f2937", strokeWidth: 2, fill: "#eef2ff", fontSize: 17, fontWeight: "600" };
+      const els = [
+        { ...base, id: "a", label: "Orders", points: [{ x: 0, y: 0 }, { x: 168, y: 78 }], ai: { icon: "database" }, nodeStyle: { originalIcon: "queue" } },
+        { ...base, id: "b", label: "Coloured", points: [{ x: 0, y: 120 }, { x: 168, y: 198 }], ai: { icon: "database" }, nodeStyle: { iconColor: "#dc2626", iconSize: 48 } },
+        { ...base, id: "c", label: "No icon", points: [{ x: 0, y: 240 }, { x: 168, y: 318 }], ai: { icon: "database" }, nodeStyle: { iconHidden: true } },
+        { ...base, id: "d", label: "Stacked", points: [{ x: 220, y: 0 }, { x: 330, y: 130 }], ai: { icon: "queue" } },
+        { ...base, id: "e", label: "Legacy", points: [{ x: 220, y: 160 }, { x: 388, y: 238 }] },
+        { ...base, id: "f", label: "No fill", fill: undefined, points: [{ x: 220, y: 280 }, { x: 388, y: 358 }], ai: { icon: "user" } },
+      ];
+      document.documentElement.classList.add("dark");
+      try {
+        const svg = await (await H.run(els, [], { format: "svg" })).blob.text();
+        const png = await H.run(els, [], { format: "png", scale: 1 });
+        const light = await (await H.run(els, [], { format: "svg" })).blob.text();
+        const glyph = (id: string) => window.T.listIcons().find((icon) => icon.id === id)!.paths[0];
+        return { svg, light, pngSize: png.blob.size, database: glyph("database"), queue: glyph("queue") };
+      } finally {
+        document.documentElement.classList.remove("dark");
+      }
+    });
+    // The database glyph appears for a and b, not for c (hidden); the queue glyph only for d.
+    expect(r.svg.split(`d="${r.database}"`).length - 1).toBe(2);
+    expect(r.svg.split(`d="${r.queue}"`).length - 1).toBe(1);
+    expect(r.svg).toContain('stroke="#dc2626"'); // b's chosen icon colour
+    expect(r.svg).toContain("No icon");
+    expect(r.svg).toContain("Stacked");
+    // The same board exported in the dark and in the light page theme is identical: exports are always light.
+    expect(r.svg).toBe(r.light);
+    // A node with no fill exports with a dark border and label, not the lightened ones the dark canvas uses.
+    expect(r.svg).toMatch(/stroke="#1f2937"/);
+    expect(r.pngSize).toBeGreaterThan(500);
+  });
+
   it("a bare icon with a caption exports as SVG, PNG and PDF, with its caption text", async () => {
     const r = await s.page.evaluate(async () => {
       const H = window.H;

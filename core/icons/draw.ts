@@ -81,13 +81,15 @@ export const drawIconGlyph = (ctx: CanvasRenderingContext2D, def: IconDef, cx: n
 };
 
 /**
- * Draws an icon tile centred at (cx, cy), `size` screen pixels square. Everything scales from `size`,
+ * Draws an icon tile centred at (cx, cy), `size` screen pixels square, in `color` instead of the icon's
+ * own when given. Everything scales from `size`,
  * so a glyph looks the same at every zoom. If the glyph cannot be drawn (no Path2D, bad path data),
  * the registry's short text badge is drawn instead, so a node never loses its icon slot.
  */
-export const drawIconTile = (ctx: CanvasRenderingContext2D, def: IconDef, cx: number, cy: number, size: number) => {
+export const drawIconTile = (ctx: CanvasRenderingContext2D, def: IconDef, cx: number, cy: number, size: number, color?: string) => {
   const logo = def.style === "logo";
-  const tint = def.color ?? categoryTint(def.category);
+  // `color` retints a line icon; a brand mark keeps its own colours.
+  const tint = (logo ? undefined : color) ?? def.color ?? categoryTint(def.category);
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(cx - size / 2, cy - size / 2, size, size, Math.min(size * 0.25, size / 2));

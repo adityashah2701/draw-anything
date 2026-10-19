@@ -101,9 +101,12 @@ describe("semantic node label region", () => {
     expect(r).toMatchObject({ centerX: 220, centerY: 89, width: 240, height: 78 });
   });
 
-  it("never collapses below a usable width on a tiny node", () => {
-    const r = getShapeLabelRegion("semantic-node", { ...bounds, maxX: 130, width: 30 });
-    expect(r.width).toBeGreaterThanOrEqual(32);
+  it("never reaches past a tiny node: the icon yields and the region stays inside the border", () => {
+    const tiny = { ...bounds, maxX: 130, width: 30 };
+    const r = getShapeLabelRegion("semantic-node", tiny);
+    expect(r.centerX - r.width / 2).toBeGreaterThanOrEqual(tiny.minX);
+    expect(r.centerX + r.width / 2).toBeLessThanOrEqual(tiny.maxX);
+    expect(r.width).toBeGreaterThanOrEqual(0);
   });
 });
 

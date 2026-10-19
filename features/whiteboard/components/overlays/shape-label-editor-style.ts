@@ -84,6 +84,8 @@ export interface ShapeLabelEditorStyleInput {
   color: string;
   /** Degrees the shape (and so its label) is rotated by; the editor turns with it. */
   rotation?: number;
+  /** Where lines sit in the editor; it must match how the canvas draws the label (see `LabelRegion.align`). */
+  align?: "left" | "center";
 }
 
 /** Centered on (sx, sy) with translate(-50%, -50%); top is shifted by the measured baseline offset. */
@@ -97,7 +99,7 @@ export const shapeLabelEditorStyle = (i: ShapeLabelEditorStyleInput): CSSPropert
     transform: i.rotation ? `translate(-50%, -50%) rotate(${i.rotation}deg)` : "translate(-50%, -50%)",
     width: i.editorWidth,
     zIndex: 110,
-    textAlign: "center",
+    textAlign: i.align ?? "center",
     fontSize: i.editorFontSize,
     fontWeight: i.fontWeight,
     fontStyle: i.fontStyle as "normal" | "italic",
