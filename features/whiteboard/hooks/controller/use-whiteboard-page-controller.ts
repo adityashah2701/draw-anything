@@ -57,6 +57,8 @@ import { useEditingText } from "./use-editing-text";
 import { coveredByPanels } from "@/features/whiteboard/components/overlays/panel-layout";
 import { useSelectedArrow } from "./use-selected-arrow";
 import { useSelectionStyle } from "./use-selection-style";
+import { useConnectorStyle } from "./use-connector-style";
+import { readPropertiesBar } from "@/features/whiteboard/utils/properties-bar-model";
 import { useSemanticNodeCommands } from "@/features/whiteboard/hooks/interaction/use-semantic-node-commands";
 import { semanticZoneAt } from "@/core/shapes/semantic-node/layout";
 import { getShapeLocalBounds, getShapeRotation } from "@/core/shapes/shape-runtime";
@@ -700,21 +702,10 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [elements, selectedElements],
   );
 
-  const {
-    selectedArrow,
-    updateSelectedArrow,
-    updateArrowBendsAtPoint,
-    handleArrowTypeChange,
-    handleArrowRoutingModeChange,
-    handleArrowDashedChange,
-    handleArrowHeadStartChange,
-    handleArrowHeadEndChange,
-  } = useSelectedArrow({
-    selectedElement,
-    // A locked arrow keeps its style, routing and heads.
+  const { updateArrowBendsAtPoint } = useSelectedArrow({
+    // A locked arrow keeps its bends.
     hasEditAccess: whiteboardAccess.hasEditAccess && !(selectedElement && isEffectivelyLocked(groupIndex, selectedElement.id)),
     zoom: canvasViewport.zoom,
-    routeArrowByConnections,
     updateElement,
   });
 
@@ -734,7 +725,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     {},
   );
 
-  const { handleColorChange, handleFillColorChange, handleStrokeWidthChange, handleFontSizeChange, applyStyle } =
+  const { handleStyleChange, handleStrokeWidthChange, handleFontSizeChange, applyStyle } =
     useSelectionStyle({
       uiState,
       ctx: commandContext,
@@ -742,6 +733,14 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       hasEditAccess: whiteboardAccess.hasEditAccess,
       applyPatch: applyDocPatch,
     });
+
+  const updateConnectors = useConnectorStyle({
+    elements,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    routeArrowByConnections,
+    updateElements,
+  });
+  const propertiesBar = useMemo(() => readPropertiesBar(groupIndex, selectedElements), [groupIndex, selectedElements]);
 
   const semanticNodes = useSemanticNodeCommands({
     elements,
@@ -1046,7 +1045,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     selectedElements,
     setSelectedElements,
     selectedElement,
-    selectedArrow,
     whiteboardAccess,
     canvasViewport,
     magneticSnap,
@@ -1077,17 +1075,12 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     isBoardReady: liveElements !== null && seedState === "settled",
     handleSelectAllElements,
     handleClearSelection,
-    handleColorChange,
-    handleFillColorChange,
     handleStrokeWidthChange,
     handleFontSizeChange,
     applyStyle,
-    handleArrowTypeChange,
-    handleArrowRoutingModeChange,
-    handleArrowDashedChange,
-    handleArrowHeadStartChange,
-    handleArrowHeadEndChange,
-    updateSelectedArrow,
+    handleStyleChange,
+    updateConnectors,
+    propertiesBar,
     updateArrowBendsAtPoint,
     applyDiagramCode,
     handleAddAIElement,
@@ -1095,8 +1088,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleEditingTextChange,
     handleEditingTextCommit,
     handleEditingTextMove,
-    handleToggleOutlineColorPicker: uiState.toggleOutlineColorPicker,
-    handleToggleFillColorPicker: uiState.toggleFillColorPicker,
     generateId,
     getElementsAtPoint,
     getElementBounds,

@@ -20,30 +20,12 @@ interface UseSelectionStyleOptions {
  */
 export const useSelectionStyle = ({ uiState, ctx, selectedElements, hasEditAccess, applyPatch }: UseSelectionStyleOptions) => {
   const applyStyle = useCallback(
-    (change: StyleChange) => {
-      if (selectedElements.length === 0 || !hasEditAccess) return;
-      const { patch } = planStyle(ctx, selectedElements, change, { strict: false });
+    (change: StyleChange, ids: readonly string[] = selectedElements) => {
+      if (ids.length === 0 || !hasEditAccess) return;
+      const { patch } = planStyle(ctx, ids, change, { strict: false });
       if (patch) applyPatch(patch);
     },
     [applyPatch, ctx, hasEditAccess, selectedElements],
-  );
-
-  const handleColorChange = useCallback(
-    (color: string) => {
-      uiState.setCurrentColor(color);
-      uiState.setShowOutlineColorPicker(false);
-      applyStyle({ color });
-    },
-    [uiState, applyStyle],
-  );
-
-  const handleFillColorChange = useCallback(
-    (color: string) => {
-      uiState.setFillColor(color);
-      uiState.setShowFillColorPicker(false);
-      applyStyle({ fill: color });
-    },
-    [uiState, applyStyle],
   );
 
   const handleStrokeWidthChange = useCallback(
@@ -62,5 +44,20 @@ export const useSelectionStyle = ({ uiState, ctx, selectedElements, hasEditAcces
     [uiState, applyStyle],
   );
 
-  return { handleColorChange, handleFillColorChange, handleStrokeWidthChange, handleFontSizeChange, applyStyle };
+  /**
+   * The properties bar's edit: remember colour, fill, stroke and text size for new shapes, and apply the change
+   * to `ids` only (the shapes the property means something for), as one undo step.
+   */
+  const handleStyleChange = useCallback(
+    (change: StyleChange, ids: readonly string[]) => {
+      if (change.color !== undefined) uiState.setCurrentColor(change.color);
+      if (change.fill !== undefined) uiState.setFillColor(change.fill ?? "#transparent");
+      if (change.strokeWidth !== undefined) uiState.setStrokeWidth(change.strokeWidth);
+      if (change.fontSize !== undefined) uiState.setFontSize(change.fontSize);
+      applyStyle(change, ids);
+    },
+    [uiState, applyStyle],
+  );
+
+  return { handleStyleChange, handleStrokeWidthChange, handleFontSizeChange, applyStyle };
 };

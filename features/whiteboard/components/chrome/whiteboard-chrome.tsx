@@ -15,13 +15,6 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
     hideCanvasUi,
     setHideCanvasUi,
     currentTool,
-    currentColor,
-    strokeWidth,
-    fillColor,
-    fontSize,
-    showOutlineColorPicker,
-    showFillColorPicker,
-    selectedArrow,
     whiteboardAccess,
     canvasViewport,
     handleUndo,
@@ -31,17 +24,6 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
     loadWhiteboard,
     handleRenameWhiteboard,
     handleGenerateDiagram,
-    handleColorChange,
-    handleFillColorChange,
-    handleToggleOutlineColorPicker,
-    handleToggleFillColorPicker,
-    handleStrokeWidthChange,
-    handleFontSizeChange,
-    handleArrowTypeChange,
-    handleArrowRoutingModeChange,
-    handleArrowDashedChange,
-    handleArrowHeadStartChange,
-    handleArrowHeadEndChange,
   } = controller;
   // The open side panels cover the right edge: what floats on the canvas stays in what they leave free.
   const panelInset = usePanelInset(controller.showAIModal, controller.showCodePanel);
@@ -90,32 +72,7 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
         </div>
       )}
 
-      {!hideCanvasUi && (
-        <FloatingPropertiesPanel
-          currentTool={currentTool}
-          currentColor={currentColor}
-          strokeWidth={strokeWidth}
-          fillColor={fillColor}
-          fontSize={fontSize}
-          showOutlineColorPicker={showOutlineColorPicker}
-          showFillColorPicker={showFillColorPicker}
-          onColorChange={handleColorChange}
-          onFillColorChange={handleFillColorChange}
-          onToggleOutlineColorPicker={handleToggleOutlineColorPicker}
-          onToggleFillColorPicker={handleToggleFillColorPicker}
-          onStrokeWidthChange={handleStrokeWidthChange}
-          onFontSizeChange={handleFontSizeChange}
-          selectedArrow={selectedArrow}
-          onArrowTypeChange={handleArrowTypeChange}
-          onArrowRoutingModeChange={handleArrowRoutingModeChange}
-          onArrowDashedChange={handleArrowDashedChange}
-          onArrowHeadStartChange={handleArrowHeadStartChange}
-          onArrowHeadEndChange={handleArrowHeadEndChange}
-          disabled={!whiteboardAccess.hasEditAccess}
-          hasSelection={controller.selectedElements.length > 0}
-          rightInset={panelInset}
-        />
-      )}
+      {!hideCanvasUi && <FloatingPropertiesPanel controller={controller} rightInset={panelInset} />}
 
       {!hideCanvasUi && controller.selectedElements.length > 0 && <SelectionInspector controller={controller} />}
 
