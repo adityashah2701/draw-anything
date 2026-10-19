@@ -70,8 +70,23 @@ interface ConnectionSpec extends Look {
 }
 
 /** One or more connectors planned against the board as it is; ends that exist and can be attached to are required. */
+/**
+ * The colour new connectors take when none is asked for: whatever most connectors on the board already use, so
+ * an edit matches the diagram. The shape's own default is a fixed slate that does not follow the theme, while
+ * diagrams draw black, which the canvas shows light on a dark board.
+ */
+export const boardConnectorColor = (ctx: ToolEnv["ctx"]): string => {
+  const counts = new Map<string, number>();
+  for (const shape of ctx.shapes) if (isArrowElement(shape) && !shape.isGuide && typeof shape.color === "string") counts.set(shape.color, (counts.get(shape.color) ?? 0) + 1);
+  let best = "#000000";
+  let top = 0;
+  for (const [value, n] of counts) if (n > top) [best, top] = [value, n];
+  return best;
+};
+
 const planConnections = (env: ToolEnv, specs: readonly ConnectionSpec[]) => {
   const { ctx } = env;
+  const defaultColor = boardConnectorColor(ctx);
   let patch: DocPatch = { add: [], update: [], remove: [] };
   const created: Array<{ id: string; from: string; to: string; fromSide: string; toSide: string; labelId?: string }> = [];
   const existing: Array<{ id: string; from: string; to: string }> = [];
@@ -98,7 +113,7 @@ const planConnections = (env: ToolEnv, specs: readonly ConnectionSpec[]) => {
       id,
       from: { id: from, side: spec.from_side },
       to: { id: to, side: spec.to_side },
-      change: toChange(spec),
+      change: toChange({ ...spec, color: spec.color ?? defaultColor }),
       label: spec.label ? spec.label.replace(/\r\n?/g, "\n") : undefined,
     });
     if ("reason" in plan) throw failureError(plan);

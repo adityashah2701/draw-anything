@@ -253,3 +253,20 @@ describe("disconnect_elements and delete_connector", () => {
     expect((await s.run("delete_connector", { ids: ["bc"] })).error?.code).toBe("locked");
   });
 });
+
+describe("connector colour", () => {
+  it("defaults to the theme-aware black the generator draws, not the shape's fixed slate", async () => {
+    const s = setup({ elements: pair() });
+    await s.ok("create_connector", { id: "ab", from: "a", to: "b" });
+    expect(find<Arrow & { color: string }>(s.mem.stored, "ab").color).toBe("#000000");
+  });
+
+  it("matches the connectors already on the board, and an explicit colour still wins", async () => {
+    const s = setup({ elements: pair() });
+    await s.ok("create_connector", { id: "ab", from: "a", to: "b", color: "#dc2626" });
+    await s.ok("create_connector", { id: "ac", from: "a", to: "c" });
+    expect(find<Arrow & { color: string }>(s.mem.stored, "ac").color).toBe("#dc2626");
+    await s.ok("create_connector", { id: "bc", from: "b", to: "c", color: "#2563eb" });
+    expect(find<Arrow & { color: string }>(s.mem.stored, "bc").color).toBe("#2563eb");
+  });
+});
