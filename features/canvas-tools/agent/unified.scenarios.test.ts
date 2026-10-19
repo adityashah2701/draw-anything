@@ -121,3 +121,24 @@ describe("unified agent, end to end with a scripted model", () => {
     expect(mem.stored).toEqual([]);
   });
 });
+
+describe("icons and groups on a plain request", () => {
+  it("tells the model to choose icons and groups itself, and offers the grouping tools for a draw request", async () => {
+    const { run, mem, turns } = await scriptedRun({
+      unified: true,
+      prompt: "Draw a web app backend with a CDN, API gateway, auth, orders service and Postgres",
+      board: { generate: () => ({ elements: [node("auth", "Auth", 0, 0), node("orders", "Orders", 200, 0), node("db", "Orders DB", 400, 0)] }) },
+      script: [
+        reply("", [call("generate_diagram", { description: "A web app backend", diagram_type: "architecture" })]),
+        reply("", [call("group_elements", { ids: ["auth", "orders"], name: "Backend services", id: "services" })]),
+        reply("Drew the backend and grouped the services."),
+      ],
+    });
+    expect(turns[0].system).toContain("use judgment, the person should not have to ask");
+    expect(turns[0].system).toContain("group each cluster");
+    expect(turns[0].specs).toEqual(expect.arrayContaining(["generate_diagram", "group_elements", "create_icon"]));
+    expect(run.status).toBe("done");
+    expect(run.totals.failed).toBe(0);
+    expect(find(mem.stored, "services")).toMatchObject({ type: "group", name: "Backend services" });
+  });
+});

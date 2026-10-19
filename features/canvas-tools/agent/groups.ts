@@ -11,7 +11,7 @@ const RULES: Array<[ToolGroup[], RegExp]> = [
 
 /** Only with the unified agent on: new diagrams, and things worth remembering. */
 const UNIFIED_RULES: Array<[ToolGroup[], RegExp]> = [
-  [["generate"], /\b(draw|diagram|flow ?chart|architecture|topology|mind ?map|sequence|sketch|from scratch|generate|design)\b/i],
+  [["generate", "organize"], /\b(draw|diagram|flow ?chart|architecture|topology|mind ?map|sequence|sketch|from scratch|generate|design)\b/i],
   [["memory"], /\b(remember|always|never|from now on|going forward|in future|prefer|keep in mind|don'?t forget|we (decided|agreed))\b/i],
 ];
 

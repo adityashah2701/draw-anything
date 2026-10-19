@@ -185,7 +185,7 @@ const iconInput = z
 export const createIconTool: ToolDefinition<typeof iconInput> = {
   name: "create_icon",
   group: "create",
-  description: "Place a standalone icon from the editor's icon registry, optionally with a caption. For a labelled box with an icon use create_semantic_node. Adds one element.",
+  description: "Place a standalone icon from the editor's icon registry, optionally with a caption. Use it when the icon alone reads clearly (tool logos, legends, small sketches); for a labelled box with an icon use create_semantic_node. Adds one element.",
   input: iconInput,
   access: "write",
   run: (input, env) => {

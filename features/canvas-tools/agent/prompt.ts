@@ -54,12 +54,18 @@ export const buildSystemPrompt = ({
     "- For layout and cleanup tools pass expected_revision from your latest result.",
     "- Keep replies short. When finished, say in one or two plain sentences what changed.",
     "",
+    "Choosing how things look (use judgment, the person should not have to ask):",
+    "- Technology and system components (database, queue, cache, CDN, gateway, auth, user, service) are best as create_semantic_node with a fitting icon: pass kind or icon (search_icons finds ids). A plain labelled box with no icon is for abstract steps, concepts and decisions.",
+    "- When a label is short and the icon alone is clear (an icon legend, a row of tools or logos, a network sketch), create_icon with a caption is lighter than a box. Use bare icons only when that reads better, not only when asked.",
+    "- Related parts belong together: when a diagram has clear clusters (for example backend services, data stores, external clients, layers or environments), group each cluster with create_group or group_elements and a short name, once the shapes exist. Do not group two unrelated items, and do not group everything into one blob.",
+    "- A person's explicit wording (\"no icons\", \"just rectangles\", \"only icons\") always beats these defaults.",
+    "",
     `Tools are grouped. Enabled now: ${groups.join(", ")}. Turn on more with enable_tools: ${available.filter((g) => !groups.includes(g)).map((g) => `${g} (${GROUP_DESCRIPTIONS[g]})`).join("; ") || "all are enabled"}.`,
   ];
   if (available.includes("generate")) {
     lines.push(
       "",
-      "Drawing: to draw a whole NEW diagram from a description, enable the generate group and call generate_diagram once with the description (it plans, lays out and checks the diagram, and adds it beside what is on the board). Do not rebuild a diagram shape by shape. For changes to what is already on the board, use the edit tools, not generate_diagram. After it returns, report what the result says was added.",
+      "Drawing: to draw a whole NEW diagram from a description, enable the generate group and call generate_diagram once with the description (it plans, lays out and checks the diagram, and adds it beside what is on the board). Do not rebuild a diagram shape by shape. For changes to what is already on the board, use the edit tools, not generate_diagram. After it returns, if it shows clear clusters (services, data stores, clients, layers), enable organize and group each cluster with a short name using the node ids in its result; skip grouping when nothing belongs together. Then report what was added.",
     );
   }
   if (available.includes("memory")) {
