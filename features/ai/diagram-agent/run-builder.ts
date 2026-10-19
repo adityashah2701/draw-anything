@@ -5,7 +5,7 @@ import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent } from "@
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { graphFromElements } from "@/features/diagram-code/canvas";
 import { serializeDiagramCode } from "@/features/diagram-code/serialize";
-import { iconHints, wantsBareIcons } from "./builder/icon-hints";
+import { iconHints, wantsBareIcons, wantsPlainBoxes } from "./builder/icon-hints";
 import { runDiagramBuilder } from "./builder/loop";
 import { noteFor, summaryNote } from "./builder/notes";
 import { BUILDER_TOOL_SPECS, buildBuilderSystemPrompt } from "./builder/prompt";
@@ -96,6 +96,7 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
 
     const hints = await iconHints(request.prompt);
     const bareIcons = wantsBareIcons(request.prompt);
+    const plainBoxes = wantsPlainBoxes(request.prompt);
     const revealMs = options.revealMs ?? (Number(process.env.AI_REVEAL_MS ?? DEFAULT_REVEAL_MS) || 0);
     let drawnAnything = false;
     const result = yield* withLiveEvents(async (emit) =>
@@ -108,9 +109,11 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
           editing,
           iconHints: hints,
           bareIcons,
+          plainBoxes,
         }),
         goal: editing ? `Change the diagram that is already on the canvas: ${request.prompt}` : request.prompt,
         bareIcons,
+        iconPriority: !bareIcons && !plainBoxes && !editing,
         initialCode: editing ? serializeDiagramCode(existing.graph) : undefined,
         generationId,
         frameId,

@@ -1,3 +1,5 @@
+import { resolveIconId } from "@/core/icons/registry";
+import { normalizeSemanticKind } from "@/features/ai/schemas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { serializeDiagramCode } from "@/features/diagram-code/serialize";
 import type { ParsedDiagramCode, ParsedNode } from "@/features/diagram-code/types";
@@ -51,6 +53,32 @@ export const withBareIcons = (state: BuilderState): BuilderState => {
   let changed = false;
   const nodes = state.parsed.nodes.map((n) => {
     if (n.shape || OWN_SHAPE_KINDS.has((n.kind ?? "").toLowerCase()) || !(n.icon || n.kind)) return n;
+    changed = true;
+    return { ...n, shape: "icon" as const };
+  });
+  return changed ? stateFromParsed({ ...state.parsed, nodes }, state.offsets, state.edgeSides) : state;
+};
+
+/** Kinds that name a step or a thought, not a thing: they keep their box. */
+const BOX_KINDS = new Set(["generic", "process", "step", "task", "action", "note", "document", "text", "concept", "idea"]);
+/** A label that fits under a glyph: a name, not a sentence. */
+const CAPTION_WORDS = 3;
+const CAPTION_CHARS = 28;
+
+/**
+ * Icons first, boxes where the text needs one: a node the model left as a box becomes a bare icon with its name
+ * when it is a recognisable thing (service, database, client, device, cloud part) with a short name. Longer text,
+ * steps, decisions, start/end and nodes without an icon stay boxes, and a node the model already gave a shape stays as is.
+ */
+export const withIconPriority = (state: BuilderState): BuilderState => {
+  let changed = false;
+  const nodes = state.parsed.nodes.map((n) => {
+    const kind = (n.kind ?? "").toLowerCase();
+    if (n.shape || OWN_SHAPE_KINDS.has(kind) || BOX_KINDS.has(kind) || !(n.icon || n.kind)) return n;
+    const ref = n.icon ?? n.kind;
+    const known = normalizeSemanticKind(ref) !== "generic" || (resolveIconId(ref) !== undefined && resolveIconId(ref) !== "generic");
+    const words = n.label.trim().split(/\s+/).length;
+    if (!known || words > CAPTION_WORDS || n.label.length > CAPTION_CHARS) return n;
     changed = true;
     return { ...n, shape: "icon" as const };
   });

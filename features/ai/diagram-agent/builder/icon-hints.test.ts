@@ -23,3 +23,14 @@ describe("wantsBareIcons", () => {
     expect(wantsBareIcons(p)).toBe(false);
   });
 });
+
+describe("wantsPlainBoxes", () => {
+  it.each(["no icons please", "draw it without icons", "plain boxes only", "just rectangles", "boxes only", "an icon-free diagram"])("is true for %s", async (p) => {
+    const { wantsPlainBoxes } = await import("./icon-hints");
+    expect(wantsPlainBoxes(p)).toBe(true);
+  });
+  it.each(["web app with a database", "icons for each service", "a flow with boxes for the steps and icons for the data stores"])("is false for %s", async (p) => {
+    const { wantsPlainBoxes } = await import("./icon-hints");
+    expect(wantsPlainBoxes(p)).toBe(false);
+  });
+});

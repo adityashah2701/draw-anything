@@ -236,3 +236,30 @@ describe("icons only requests", () => {
     expect(result.built.elements.filter((e) => e.ai?.role === "node").every((e) => e.type === "icon")).toBe(true);
   });
 });
+
+describe("icons first", () => {
+  const code = "API Gateway [kind: gateway]\nOrders DB [kind: database]\nValidate the order against the full pricing and stock rules [kind: process]\nCheck? [kind: decision]\nPlain\nAPI Gateway > Orders DB\nOrders DB > Validate the order against the full pricing and stock rules\nValidate the order against the full pricing and stock rules > Check?\nCheck? > Plain";
+
+  it("draws recognisable things with short names as icons, and keeps boxes for long text, steps, decisions and plain nodes", async () => {
+    const m = scripted([turn(call("add", code)), turn(call("finish"))]);
+    const result = await run(m.transport, { iconPriority: true });
+    const shapes = Object.fromEntries(result.state.parsed.nodes.map((n) => [n.label, result.built.elements.find((e) => e.ai?.semanticId === n.id)?.type]));
+    expect(shapes["API Gateway"]).toBe("icon");
+    expect(shapes["Orders DB"]).toBe("icon");
+    expect(shapes["Validate the order against the full pricing and stock rules"]).toBe("semantic-node");
+    expect(shapes["Check?"]).toBe("diamond");
+    expect(shapes["Plain"]).toBe("semantic-node");
+  });
+
+  it("changes nothing when icon priority is off (plain boxes asked for, or editing)", async () => {
+    const m = scripted([turn(call("add", "Web [kind: browser]\nAPI [kind: gateway]\nWeb > API")), turn(call("finish"))]);
+    const result = await run(m.transport, {});
+    expect(result.state.parsed.nodes.every((n) => !n.shape)).toBe(true);
+  });
+
+  it("leaves a shape the model chose alone", async () => {
+    const m = scripted([turn(call("add", "Web [kind: browser, shape: pill]\nAPI [kind: gateway]\nWeb > API")), turn(call("finish"))]);
+    const result = await run(m.transport, { iconPriority: true });
+    expect(result.state.parsed.nodes.map((n) => n.shape)).toEqual(["pill", "icon"]);
+  });
+});

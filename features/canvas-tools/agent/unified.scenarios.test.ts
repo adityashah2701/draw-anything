@@ -142,3 +142,14 @@ describe("icons and groups on a plain request", () => {
     expect(find(mem.stored, "services")).toMatchObject({ type: "group", name: "Backend services" });
   });
 });
+
+describe("icons first in the agent prompt", () => {
+  it("makes icons the default for recognisable things, keeps boxes for text, treats both equally and lets explicit wording win", async () => {
+    const { buildSystemPrompt } = await import("./prompt");
+    const text = buildSystemPrompt({ groups: ["create"], specs: [], protocol: "native" });
+    expect(text).toMatch(/Icons come first\..*create_icon.*by default/);
+    expect(text).toMatch(/create_semantic_node, a labelled box.*longer text, steps, decisions/);
+    expect(text).toMatch(/as equals/);
+    expect(text).toMatch(/\"no icons\", \"plain boxes\"/);
+  });
+});
