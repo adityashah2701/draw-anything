@@ -6,6 +6,8 @@ import type { AIModelProvider } from "@/features/ai/types";
 import type { AIChatMessage } from "@/features/whiteboard/hooks/controller/use-ai-generation";
 import { AGENT_WIDTH_CSS } from "@/features/whiteboard/components/overlays/panel-layout";
 import { AITimeline } from "@/features/whiteboard/components/overlays/ai-timeline";
+import { CanvasAgentView } from "@/features/whiteboard/components/overlays/canvas-agent-view";
+import type { useCanvasAgent } from "@/features/canvas-tools/editor/use-canvas-agent";
 
 interface AIPanelProps {
   isOpen: boolean;
@@ -22,6 +24,8 @@ interface AIPanelProps {
   /** Open the code editor, optionally filled with the diagram that is on the canvas. */
   onOpenCode: (fromCanvas: boolean) => void;
   onFitToScreen: () => void;
+  /** The tool-calling assistant that edits the board itself (see features/canvas-tools). */
+  canvasAgent?: ReturnType<typeof useCanvasAgent>;
 }
 
 const PROVIDER_OPTIONS: Array<{ value: AIModelProvider; label: string }> = [
@@ -95,7 +99,10 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   onClear,
   onOpenCode,
   onFitToScreen,
+  canvasAgent,
 }) => {
+  const [mode, setMode] = React.useState<"generate" | "board">("generate");
+  const board = mode === "board" && canvasAgent !== undefined;
   const [model, setModel] = React.useState<AIModelProvider>("gemini");
   // Providers the server has credentials for; null until known (then show all).
   const [available, setAvailable] = React.useState<AIModelProvider[] | null>(null);
@@ -134,18 +141,20 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   React.useEffect(() => {
     const el = scrollRef.current;
     if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
-  }, [messages, workingLabel]);
+  }, [messages, workingLabel, canvasAgent?.messages, canvasAgent?.confirmation]);
 
   const providerOptions = PROVIDER_OPTIONS.filter((o) => available === null || available.includes(o.value));
-  const hasRun = messages.length > 0;
+  const hasRun = board ? (canvasAgent?.messages.length ?? 0) > 0 : messages.length > 0;
   const prompt = messages.find((m) => m.kind === "prompt")?.content;
   const finished = !isGenerating && messages.some((m) => m.kind === "success" || m.noteKind === "summary" || m.noteKind === "stopped");
+  const busy = board ? Boolean(canvasAgent?.running) : isGenerating;
 
   const send = (text: string) => {
     const value = text.trim();
-    if (!value || disabled || isGenerating) return;
+    if (!value || disabled || busy) return;
     stickToBottom.current = true;
-    triggerAIGeneration(value, model, canEdit && editCurrent);
+    if (board) void canvasAgent!.send(value, model);
+    else triggerAIGeneration(value, model, canEdit && editCurrent);
     setInput("");
   };
 
@@ -168,7 +177,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             id="agent-model"
             value={model}
             onChange={(e) => setModel(e.target.value as AIModelProvider)}
-            disabled={providerOptions.length === 0 || isGenerating}
+            disabled={providerOptions.length === 0 || busy}
             className="mt-1 block max-w-[220px] cursor-pointer truncate bg-transparent p-0 font-mono text-[11px] leading-none text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground disabled:cursor-default"
           >
             {providerOptions.length === 0 && <option value="">No AI provider configured</option>}
@@ -184,7 +193,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             <Code2 size={14} />
           </IconButton>
           {hasRun && (
-            <IconButton label="Clear this run" onClick={onClear} disabled={isGenerating}>
+            <IconButton label="Clear this run" onClick={board ? canvasAgent!.clear : onClear} disabled={busy}>
               <RotateCcw size={14} />
             </IconButton>
           )}
@@ -194,6 +203,27 @@ export const AIPanel: React.FC<AIPanelProps> = ({
         </div>
       </header>
 
+      {canvasAgent && (
+        <div role="tablist" aria-label="What the assistant does" className="flex shrink-0 gap-1 border-b border-border px-3 py-1.5">
+          {([
+            ["generate", "Generate"],
+            ["board", "Edit board"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={mode === value}
+              data-testid={`agent-tab-${value}`}
+              onClick={() => setMode(value)}
+              className={`h-6 rounded-md px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${mode === value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div
         ref={scrollRef}
         onScroll={(e) => {
@@ -202,7 +232,19 @@ export const AIPanel: React.FC<AIPanelProps> = ({
         }}
         className="min-h-0 flex-1 overflow-y-auto"
       >
-        {!hasRun ? (
+        {board ? (
+          <CanvasAgentView
+            messages={canvasAgent!.messages}
+            running={canvasAgent!.running}
+            confirmation={canvasAgent!.confirmation}
+            onConfirm={canvasAgent!.resolveConfirmation}
+            onStop={canvasAgent!.stop}
+            onUndoRun={() => void canvasAgent!.undoRun()}
+            canUndoRun={canvasAgent!.canUndoRun}
+            onExample={send}
+            disabled={disabled}
+          />
+        ) : !hasRun ? (
           <div className="px-5 py-5">
             <p className="max-w-[34ch] text-[13px] leading-relaxed text-muted-foreground">
               Describe a diagram. The agent builds it on the canvas step by step, shows what it is thinking, then reviews its own work and fixes what looks wrong.
@@ -271,15 +313,17 @@ export const AIPanel: React.FC<AIPanelProps> = ({
                 send(input);
               }
             }}
-            aria-label="Describe your diagram"
-            placeholder={isGenerating ? "The agent is working…" : canEdit && editCurrent ? "Describe a change to the diagram…" : hasRun ? "Describe another diagram…" : "Describe your diagram…"}
+            aria-label={board ? "Describe a change to the board" : "Describe your diagram"}
+            placeholder={busy ? "The agent is working…" : board ? "Describe a change to the board…" : canEdit && editCurrent ? "Describe a change to the diagram…" : hasRun ? "Describe another diagram…" : "Describe your diagram…"}
             rows={2}
-            disabled={disabled || isGenerating}
+            disabled={disabled || busy}
             className="block max-h-40 min-h-[52px] w-full resize-none bg-transparent px-3 pt-2.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
           <div className="flex items-center justify-between px-2 pb-2 pl-3">
-            {canEdit ? (
+            {board ? (
+              <span className="font-mono text-[10px] text-muted-foreground">Edits use the editor&apos;s own commands</span>
+            ) : canEdit ? (
               <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
                 <input type="checkbox" checked={editCurrent} onChange={(e) => setEditCurrent(e.target.checked)} disabled={isGenerating} />
                 Edit current diagram
@@ -290,7 +334,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             <button
               type="submit"
               aria-label="Send"
-              disabled={!input.trim() || disabled || isGenerating}
+              disabled={!input.trim() || disabled || busy}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-30"
             >
               <ArrowUp size={15} strokeWidth={2.25} />

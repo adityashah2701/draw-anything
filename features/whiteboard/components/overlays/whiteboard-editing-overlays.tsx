@@ -4,6 +4,7 @@ import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller
 import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text-block";
 import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
 import { AIPanel } from "@/features/whiteboard/components/overlays/ai-panel";
+import { useCanvasAgent } from "@/features/canvas-tools/editor/use-canvas-agent";
 import { DiagramCodePanel } from "@/features/whiteboard/components/overlays/diagram-code-panel";
 import { ExportDialog } from "@/features/whiteboard/components/overlays/export-dialog";
 import { CommandMenu } from "@/features/whiteboard/components/overlays/command-menu";
@@ -340,6 +341,8 @@ export const WhiteboardEditingOverlays = ({
     updateElement,
   } = controller;
 
+  const canvasAgent = useCanvasAgent(controller);
+
   return (
     <>
       <KeyboardShortcuts
@@ -359,6 +362,7 @@ export const WhiteboardEditingOverlays = ({
         onClear={controller.clearAIMessages}
         onOpenCode={controller.openCodePanel}
         onFitToScreen={controller.handleFitToScreen}
+        canvasAgent={canvasAgent}
       />
 
       <DiagramCodePanel

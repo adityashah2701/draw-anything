@@ -174,6 +174,13 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     if (patch.order) restackList(list, patch.order);
   }, []);
 
+  /**
+   * The board right now, read straight from shared storage (not from React state, which lags a render
+   * behind): the AI tools read the board between their own writes and need to see them. No write happens,
+   * so it is not an undo step.
+   */
+  const readLiveStored = useLiveblocksM(({ storage }) => storage.get("elements").toImmutable() as unknown as StoredElement[], []);
+
   const seedElements = useLiveblocksM(
     ({ storage }, initial: DrawingElementJson[]) => {
       const list = storage.get("elements");
@@ -1096,6 +1103,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     addElement,
     updateElement,
     deleteElementsLive,
+    applyDocPatch,
+    readLiveStored,
     seededRef,
     viewportLoadedRef,
     ...uiState,

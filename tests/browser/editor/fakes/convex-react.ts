@@ -12,3 +12,8 @@ export function useMutation(ref: string) {
 }
 
 export const useAction = useMutation;
+
+/** The client the editor uses to read another whiteboard: a query by ref and args. */
+export const useConvex = () => ({
+  query: async (ref: string, args?: Record<string, unknown>) => backend.query(ref, args),
+});

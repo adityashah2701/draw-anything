@@ -104,6 +104,8 @@ const mutateComments = (name: string, args: Record<string, unknown>): string | n
   return id;
 };
 
+const otherBoards = new Map<string, FakeBoard>();
+
 export const backend = {
   subscribe: (listener: () => void) => {
     listeners.add(listener);
@@ -129,7 +131,9 @@ export const backend = {
     }
     notify();
   },
-  query(name: string): unknown {
+  query(name: string, args?: Record<string, unknown>): unknown {
+    // A board other than the open one: only the ones a test seeded are readable (the rest are "not yours").
+    if (name === "whiteboard:getById" && typeof args?.id === "string" && args.id !== board?._id) return otherBoards.get(args.id) ?? null;
     if (name === "whiteboard:getById" || name === "whiteboard:getAccess") return board;
     if (name === "comments:list") return board ? comments : [];
     if (name === "comments:participants") return board ? participants() : [];
@@ -157,6 +161,10 @@ export const backend = {
     if (name.startsWith("comments:")) return mutateComments(name, args ?? {});
     if (name === "aiFrames:create") return "fake-ai-frame";
     return null;
+  },
+  /** Test hook: another whiteboard the signed-in user may read (for loading one board into another). */
+  seedOtherBoard(id: string, title: string, content: string) {
+    otherBoards.set(id, { _id: id, _creationTime: 1_700_000_000_000, title, content });
   },
   /** Test hook: adds a comment written by someone else. */
   seedComment(comment: Partial<FakeComment> & Pick<FakeComment, "x" | "y" | "text">) {
