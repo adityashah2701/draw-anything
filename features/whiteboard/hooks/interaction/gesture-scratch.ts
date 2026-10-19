@@ -13,8 +13,8 @@ interface EndSnaps {
  */
 export interface GestureScratch {
   dragSession: DragSession | null;
-  /** A plain click on one member of a multi-selection: collapse to it on release unless the pointer moved. */
-  collapseOnRelease: { id: string; origin: Point } | null;
+  /** A plain click on one member (a shape or a whole group) of a multi-selection: collapse to its shapes on release unless the pointer moved. */
+  collapseOnRelease: { ids: string[]; origin: Point } | null;
   lastPoint: Point | null;
   resizeInitialBounds: Bounds | null;
   /** The element as it was when a resize began; every frame is computed from it. */

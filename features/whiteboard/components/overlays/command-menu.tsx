@@ -27,6 +27,17 @@ import {
   Shapes,
   Bot,
   Code2,
+  Group,
+  Ungroup,
+  Lock,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignCenterHorizontal,
+  AlignEndHorizontal,
+  AlignHorizontalSpaceBetween,
+  AlignVerticalSpaceBetween,
 } from "lucide-react";
 
 import {
@@ -144,6 +155,64 @@ export function CommandMenu({
             <Hand className="mr-2 h-4 w-4" />
             <span>Pan</span>
             <CommandShortcut>H</CommandShortcut>
+          </CommandItem>
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="Selection">
+          <CommandItem onSelect={() => runCommand(() => onAction?.("group"))}>
+            <Group className="mr-2 h-4 w-4" />
+            <span>Group</span>
+            <CommandShortcut>⌘G</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("ungroup"))}>
+            <Ungroup className="mr-2 h-4 w-4" />
+            <span>Ungroup</span>
+            <CommandShortcut>⇧⌘G</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("toggle-lock"))}>
+            <Lock className="mr-2 h-4 w-4" />
+            <span>Lock / unlock</span>
+            <CommandShortcut>⇧⌘L</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("align-left"))}>
+            <AlignStartVertical className="mr-2 h-4 w-4" />
+            <span>Align left</span>
+            <CommandShortcut>⌥A</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("align-center"))}>
+            <AlignCenterVertical className="mr-2 h-4 w-4" />
+            <span>Align horizontal centres</span>
+            <CommandShortcut>⌥H</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("align-right"))}>
+            <AlignEndVertical className="mr-2 h-4 w-4" />
+            <span>Align right</span>
+            <CommandShortcut>⌥D</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("align-top"))}>
+            <AlignStartHorizontal className="mr-2 h-4 w-4" />
+            <span>Align top</span>
+            <CommandShortcut>⌥W</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("align-middle"))}>
+            <AlignCenterHorizontal className="mr-2 h-4 w-4" />
+            <span>Align vertical centres</span>
+            <CommandShortcut>⌥V</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("align-bottom"))}>
+            <AlignEndHorizontal className="mr-2 h-4 w-4" />
+            <span>Align bottom</span>
+            <CommandShortcut>⌥S</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("distribute-horizontal"))}>
+            <AlignHorizontalSpaceBetween className="mr-2 h-4 w-4" />
+            <span>Distribute horizontally</span>
+            <CommandShortcut>⇧⌥H</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("distribute-vertical"))}>
+            <AlignVerticalSpaceBetween className="mr-2 h-4 w-4" />
+            <span>Distribute vertically</span>
+            <CommandShortcut>⇧⌥V</CommandShortcut>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />

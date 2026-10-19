@@ -12,6 +12,8 @@ import {
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 import { drawGuides } from "@/features/whiteboard/utils/draw-guides";
 import type { Guide } from "@/features/whiteboard/hooks/interaction/drag-session";
+import type { SelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
+import { drawSelectionOverlay } from "@/features/whiteboard/utils/draw-selection-overlay";
 
 interface ConnectionDraft {
   fromElementId: string;
@@ -55,6 +57,8 @@ interface CanvasEngineProps {
   editingShapeLabelId?: string | null;
   /** Alignment lines shown while dragging */
   alignmentGuides?: Guide[];
+  /** Chrome for groups and multi-selections (unit boxes, frame, handles, name tags, entered group). */
+  selectionOverlay?: SelectionOverlay | null;
   /** Changes when more icons finish loading, so icons drawn as placeholders are redrawn. */
   iconLibraryVersion?: number;
 }
@@ -70,6 +74,7 @@ const useCanvasEngine = ({
   selectedElements,
   selectionBox,
   alignmentGuides,
+  selectionOverlay,
   editingTextId,
   otherUsersDrafts = [],
   otherUsersSelections = {},
@@ -134,12 +139,16 @@ const useCanvasEngine = ({
       );
     };
 
-    // Draw all elements with selection state
+    // Draw all elements with selection state. When an overlay stands in for the per-shape box and
+    // handles (a group or several shapes), the shapes themselves are drawn unselected.
+    const selectedSet = new Set(selectedElements);
+    const shapeChrome = !selectionOverlay?.replacesShapeChrome;
     elements.forEach((element) => {
-      if (!isVisible(element) && !selectedElements.includes(element.id)) {
+      const selected = selectedSet.has(element.id);
+      if (!isVisible(element) && !selected) {
         return;
       }
-      const isSelected = selectedElements.includes(element.id);
+      const isSelected = selected && shapeChrome;
       const renderElement =
         editingShapeLabelId &&
         element.id === editingShapeLabelId &&
@@ -207,6 +216,8 @@ const useCanvasEngine = ({
       );
       ctx.restore();
     }
+
+    if (selectionOverlay) drawSelectionOverlay(ctx, selectionOverlay, zoom, panOffset);
 
     if (alignmentGuides) drawGuides(ctx, alignmentGuides, zoom, panOffset);
 
@@ -312,6 +323,7 @@ const useCanvasEngine = ({
     otherUsersDrafts,
     selectionBox,
     alignmentGuides,
+    selectionOverlay,
     zoom,
     panOffset,
     cursorPosition,

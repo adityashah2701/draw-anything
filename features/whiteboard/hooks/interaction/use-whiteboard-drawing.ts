@@ -13,7 +13,7 @@ import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 import { createShape } from "@/core/shapes/shape-runtime";
 import { buildConnectorArrow, handleUnderPoint, resolveConnectionDrop } from "@/features/whiteboard/hooks/interaction/connector-arrow";
-import { resolveClickSelection } from "@/features/whiteboard/hooks/interaction/selection";
+import type { ClickOutcome } from "@/features/whiteboard/hooks/interaction/group-selection";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { computeDrag, startDragSession, type Guide } from "@/features/whiteboard/hooks/interaction/drag-session";
 import { isActive, isDrawingGesture, type Gesture } from "@/features/whiteboard/hooks/interaction/gesture-state";
@@ -40,6 +40,21 @@ const TOOL_TO_SHAPE_TYPE: Partial<Record<Tool, DrawingElement["type"]>> = {
   // Other tools will fall back to their name if they exist in shapeRegistry
 };
 
+/**
+ * What the pointer code needs to know about composite groups and locks. The controller supplies it,
+ * so this hook neither knows how groups are stored nor how a click is resolved against them.
+ */
+export interface GroupSelectionPort {
+  /** What a press on `hitId` (null = empty canvas) selects, given the current selection and entered group. */
+  resolveClick: (input: { selected: string[]; hitId: string | null; additive: boolean }) => ClickOutcome;
+  /** What a marquee that touched `hitIds` selects. */
+  resolveMarquee: (hitIds: string[]) => { selected: string[]; context: string | null };
+  /** True for a shape that is locked itself or sits inside a locked group. */
+  isLocked: (shapeId: string) => boolean;
+  /** Step into (or out of) a group. */
+  setContext: (groupId: string | null) => void;
+}
+
 /** Connector snap distance in screen pixels (divided by zoom to get world units). */
 const CONNECTOR_SNAP_PX = 14;
 /** Reach of a connection handle, in world units. */
@@ -62,6 +77,7 @@ interface UseWhiteboardDrawingProps {
   /** Writes `origin` (the elements as they were when the drag began) moved by the total delta. */
   moveElements: (origin: DrawingElement[], deltaX: number, deltaY: number) => void;
   zoom: number;
+  selection: GroupSelectionPort;
   resizeElement: (
     elementId: string,
     handle: string,
@@ -124,6 +140,7 @@ export const useWhiteboardDrawing = ({
   deleteElements,
   moveElements,
   zoom,
+  selection,
   resizeElement,
   updateElement,
   getElementBounds,
@@ -258,11 +275,12 @@ export const useWhiteboardDrawing = ({
 
         // ── Existing resize / select / drag logic ─────────────────────────
         let foundResizeHandle = false;
-        for (const elementId of selectedElements) {
+        // Only a lone shape shows its own handles; a group or multi-selection is resized from its frame.
+        for (const elementId of selectedElements.length === 1 ? selectedElements : []) {
           const element = elements.find((el) => el.id === elementId);
           if (element) {
             const handle = getResizeHandle(point, element);
-            if (handle && hasEditAccess) {
+            if (handle && hasEditAccess && !selection.isLocked(element.id)) {
               beginGesture?.();
               setGesture("resizing");
               setResizeHandle(handle);
@@ -283,19 +301,22 @@ export const useWhiteboardDrawing = ({
 
         const elementsAtPoint = getElementsAtPoint(point);
         const hit = elementsAtPoint[elementsAtPoint.length - 1] ?? null;
-        const outcome = resolveClickSelection({
+        const outcome = selection.resolveClick({
           selected: selectedElements,
           hitId: hit?.id ?? null,
           additive: e.ctrlKey || e.metaKey || e.shiftKey,
         });
+        selection.setContext(outcome.context);
         setSelectedElements(outcome.selected);
         scratchRef.current.collapseOnRelease = outcome.collapseOnRelease
-          ? { id: outcome.collapseOnRelease, origin: point }
+          ? { ids: outcome.collapseOnRelease, origin: point }
           : null;
 
-        if (outcome.startDrag && hasEditAccess) {
+        // Locked shapes can be selected but never dragged; the rest of a mixed selection still moves.
+        const movable = outcome.selected.filter((id) => !selection.isLocked(id));
+        if (outcome.startDrag && hasEditAccess && movable.length > 0) {
           beginGesture?.();
-          scratchRef.current.dragSession = startDragSession(outcome.selected, elements, point, getElementBounds);
+          scratchRef.current.dragSession = startDragSession(movable, elements, point, getElementBounds);
           setGesture("dragging");
           setDragStart(point);
         } else if (!hit && hasEditAccess) {
@@ -386,6 +407,7 @@ export const useWhiteboardDrawing = ({
       zoom,
       resetStaleGesture,
       setGesture,
+      selection,
     ],
   );
 
@@ -707,7 +729,7 @@ export const useWhiteboardDrawing = ({
 
     const { collapseOnRelease: collapseTo, pendingArrowReroute } = scratchRef.current;
     resetScratch();
-    if (collapseTo) setSelectedElements([collapseTo.id]);
+    if (collapseTo) setSelectedElements(collapseTo.ids);
 
     if (isSelectingArea && selectionBox) {
       if (
@@ -718,7 +740,9 @@ export const useWhiteboardDrawing = ({
           selectionBox.start,
           selectionBox.end,
         );
-        setSelectedElements(intersectedElements.map((el) => el.id));
+        const picked = selection.resolveMarquee(intersectedElements.map((el) => el.id));
+        setSelectedElements(picked.selected);
+        selection.setContext(picked.context);
       }
       setSelectionBox(null);
     }
@@ -784,6 +808,7 @@ export const useWhiteboardDrawing = ({
     updateElement,
     onElementCreated,
     resetScratch,
+    selection,
   ]);
 
   // Text handling

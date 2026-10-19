@@ -131,12 +131,18 @@ const isConnector = (shape: DrawingElement) => shape.type === "arrow" || shape.t
 
 /**
  * Split the connectors among `moving` shapes into those that can travel rigidly with them (every
- * attached end is on a shape that moves too) and those that must be re-routed instead (an end is
- * attached to something staying put). Rigid connectors keep their bends exactly; the others go back
- * to the router with their original geometry, so an arrow between a moved shape and an unmoved one
- * stays attached to both.
+ * attached end is on a shape that moves by the same amount) and those that must be re-routed instead
+ * (an end is attached to something staying put, or moving differently). Rigid connectors keep their
+ * bends exactly; the others go back to the router with their original geometry, so an arrow between
+ * a moved shape and an unmoved one stays attached to both.
+ *
+ * `sameMotion(a, b)` says whether two moving shapes get the same displacement (default: they all do,
+ * as in a drag). Align and distribute pass a comparison of the per-shape offsets.
  */
-export const partitionConnectors = (moving: readonly DrawingElement[]): { rigid: DrawingElement[]; reroute: DrawingElement[] } => {
+export const partitionConnectors = (
+  moving: readonly DrawingElement[],
+  sameMotion: (a: string, b: string) => boolean = () => true,
+): { rigid: DrawingElement[]; reroute: DrawingElement[] } => {
   const ids = new Set(moving.map((shape) => shape.id));
   const rigid: DrawingElement[] = [];
   const reroute: DrawingElement[] = [];
@@ -147,7 +153,7 @@ export const partitionConnectors = (moving: readonly DrawingElement[]): { rigid:
     }
     const { startConnection, endConnection } = shape as Connected;
     const ends = [startConnection?.elementId, endConnection?.elementId].filter((id): id is string => !!id);
-    (ends.every((id) => ids.has(id)) ? rigid : reroute).push(shape);
+    (ends.every((id) => ids.has(id) && sameMotion(shape.id, id)) ? rigid : reroute).push(shape);
   }
   return { rigid, reroute };
 };

@@ -48,7 +48,6 @@ export const WhiteboardCanvasStage = ({
     getElementBounds,
     updateArrowBendsAtPoint,
     setSelectedElements,
-    beginEditing,
     arrowSnapPreview,
     editingShapeLabelId,
   } = controller;
@@ -73,6 +72,7 @@ export const WhiteboardCanvasStage = ({
     selectedElements,
     selectionBox: whiteboardDrawing.selectionBox,
     alignmentGuides: whiteboardDrawing.alignmentGuides,
+    selectionOverlay: controller.selectionOverlay,
     editingTextId: editingTextElement?.id || null,
     getElementBounds,
     cursorPosition: whiteboardDrawing.cursorPosition,
@@ -109,7 +109,12 @@ export const WhiteboardCanvasStage = ({
     };
     const top = [...(getElementsAtPoint(world) || [])].reverse()[0];
     if (!top) setSelectedElements([]);
-    else if (!selectedElements.includes(top.id)) setSelectedElements([top.id]);
+    else if (!selectedElements.includes(top.id)) {
+      // A shape in a group selects the group (or the child, inside an entered group), like a click.
+      const outcome = controller.groupSelection.resolveClick({ selected: selectedElements, hitId: top.id, additive: false });
+      setSelectedElements(outcome.selected);
+      controller.groupSelection.setContext(outcome.context);
+    }
   };
 
   return (
@@ -223,7 +228,7 @@ export const WhiteboardCanvasStage = ({
               }
             }
 
-            beginEditing(topEl);
+            controller.handleShapeDoubleClick(topEl);
           }}
           onPointerMove={(e) => {
             if (touches.current.has(e.pointerId)) {

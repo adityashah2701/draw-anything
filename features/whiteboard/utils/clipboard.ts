@@ -1,9 +1,11 @@
-import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, GroupRecord } from "@/features/whiteboard/types/whiteboard.types";
 
 const KEY = "draw-anything:clipboard:v1";
 
 interface Stored {
   elements: DrawingElement[];
+  /** Group records that go with `elements`. Absent in clipboards written before groups existed. */
+  groups?: GroupRecord[];
   /** How many times this content has been pasted, so each paste lands a step further. */
   pastes: number;
 }
@@ -32,17 +34,17 @@ const write = (value: Stored) => {
   }
 };
 
-export const copyToClipboard = (elements: DrawingElement[]) => {
-  if (elements.length > 0) write({ elements: structuredClone(elements), pastes: 0 });
+export const copyToClipboard = (elements: DrawingElement[], groups: GroupRecord[] = []) => {
+  if (elements.length > 0) write({ elements: structuredClone(elements), groups: structuredClone(groups), pastes: 0 });
 };
 
-/** The copied elements and the offset multiplier for this paste (1, 2, 3...); advances the counter. */
-export const takeFromClipboard = (): { elements: DrawingElement[]; step: number } | null => {
+/** The copied elements (and their group records) and the offset multiplier for this paste (1, 2, 3...); advances the counter. */
+export const takeFromClipboard = (): { elements: DrawingElement[]; groups: GroupRecord[]; step: number } | null => {
   const stored = read();
   if (!stored) return null;
   const step = stored.pastes + 1;
   write({ ...stored, pastes: step });
-  return { elements: structuredClone(stored.elements), step };
+  return { elements: structuredClone(stored.elements), groups: structuredClone(stored.groups ?? []), step };
 };
 
 export const hasClipboard = () => read() !== null;

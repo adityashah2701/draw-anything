@@ -4,7 +4,6 @@ import { DEFAULT_LABEL_FONT_SIZE, defaultLabelWeight } from "@/core/text/label-l
 import { normalizeRichTextInput } from "@/features/whiteboard/utils/rich-text-renderer";
 import type { IconDef } from "@/core/icons/registry";
 import { buildIconElement } from "@/features/whiteboard/utils/icon-picker";
-import { moveShape } from "@/core/shapes/shape-runtime";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { LiveObject } from "@liveblocks/client";
@@ -24,7 +23,16 @@ import {
   ArrowRoutingMode,
   ArrowType,
   DrawingElement,
+  StoredElement,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { buildGroupIndex, isEffectivelyLocked, splitStored } from "@/core/groups/group-index";
+import { groupsEmptiedBy, planDelete } from "@/core/groups/group-commands";
+import type { DocPatch } from "@/core/groups/patch";
+import { storedOrderFromShapes } from "@/core/groups/order";
+import { planShapeMoves, uniformOffsets } from "@/features/whiteboard/utils/move-plan";
+import { buildSelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
+import { useGroupCommands } from "@/features/whiteboard/hooks/interaction/use-group-commands";
+import { effectiveContext, resolveDoubleClick, resolveGroupClick, resolveMarquee } from "@/features/whiteboard/hooks/interaction/group-selection";
 import { useMagneticSnap } from "@/core/snap/use-magnetic-snap";
 import { useArrowConnections } from "@/core/arrow/use-arrow-connections";
 import { useBoardExport } from "@/features/whiteboard/hooks/export/use-board-export";
@@ -76,13 +84,11 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   const canRedo = useCanRedo();
   const others = useOthers();
   const liveElements = useStorage((root) => root.elements);
-  const elements = useMemo(
-    () =>
-      (liveElements || [])
-        .filter(Boolean)
-        .map((el: DrawingElementJson) => el as unknown as DrawingElement),
-    [liveElements],
-  );
+  // The stored list holds drawable shapes and composite-group records. Everything that draws, routes,
+  // exports or hit-tests keeps receiving shapes only (`elements`); the records only describe nesting.
+  const stored = useMemo(() => (liveElements || []).filter(Boolean) as unknown as StoredElement[], [liveElements]);
+  const elements = useMemo(() => splitStored(stored).shapes, [stored]);
+  const groupIndex = useMemo(() => buildGroupIndex(stored), [stored]);
 
   const addElement = useLiveblocksM(
     ({ storage }, element: DrawingElementJson) => {
@@ -91,10 +97,14 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [],
   );
 
+  // Every removal path (delete key, eraser, AI edits) goes through here, so a group that loses its
+  // last shape is removed in the same step instead of lingering as an invisible record.
   const deleteElementsLive = useLiveblocksM(({ storage }, ids: string[]) => {
     const list = storage.get("elements");
+    const removed = new Set(ids);
+    for (const id of groupsEmptiedBy(list.toImmutable() as unknown as StoredElement[], removed)) removed.add(id);
     for (let i = list.length - 1; i >= 0; i -= 1) {
-      if (ids.includes(list.get(i)!.get("id") as string)) {
+      if (removed.has(list.get(i)!.get("id") as string)) {
         list.delete(i);
       }
     }
@@ -144,6 +154,24 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     });
   }, []);
 
+  /** A command's whole change (adds, merges, removals) as ONE mutation, hence one undo step. */
+  const applyDocPatch = useLiveblocksM(({ storage }, patch: DocPatch) => {
+    const list = storage.get("elements");
+    const indexById = new Map<string, number>();
+    for (let i = 0; i < list.length; i += 1) indexById.set(list.get(i)!.get("id") as string, i);
+    for (const element of patch.update) {
+      const index = indexById.get(element.id);
+      if (index !== undefined) writeElement(list.get(index)!, element as unknown as DrawingElementJson);
+    }
+    const doomed = new Set(patch.remove);
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      if (doomed.has(list.get(i)!.get("id") as string)) list.delete(i);
+    }
+    for (const element of patch.add) {
+      if (!doomed.has(element.id)) list.push(new LiveObject(element as unknown as DrawingElementJson));
+    }
+  }, []);
+
   const seedElements = useLiveblocksM(
     ({ storage }, initial: DrawingElementJson[]) => {
       const list = storage.get("elements");
@@ -174,6 +202,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   const [currentElement, setCurrentElement] =
     useState<DrawingElement | null>(null);
   const [selectedElements, setSelectedElements] = useState<string[]>([]);
+  // The group the user has stepped into to edit its children; null = top level (see group-selection.ts).
+  const [enteredGroupId, setEnteredGroupId] = useState<string | null>(null);
   const boardExport = useBoardExport({ elements, selectedIds: selectedElements, title: whiteboard?.title });
 
   const whiteboardAccess = useWhiteboardAccess(whiteboard);
@@ -232,27 +262,28 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     getElementBounds,
   });
 
+  /**
+   * Delete shapes, the connectors attached to them and any group left empty, as one step. Locked
+   * shapes are never deleted (`planDelete`), so the eraser and the Delete key respect locks alike.
+   */
   const deleteElementsWithConnectedArrows = useCallback(
     (ids: string[]) => {
-      if (ids.length === 0) return;
-      const selected = new Set(ids);
-      const toDelete = new Set(ids);
-
-      elements.forEach((el) => {
-        if (!isArrowElement(el)) return;
-        const startId = el.startConnection?.elementId;
-        const endId = el.endConnection?.elementId;
-        if (
-          (startId && selected.has(startId)) ||
-          (endId && selected.has(endId))
-        ) {
-          toDelete.add(el.id);
-        }
-      });
-
-      deleteElementsLive(Array.from(toDelete));
+      const patch = planDelete(stored, ids);
+      if (patch) deleteElementsLive(patch.remove);
     },
-    [deleteElementsLive, elements],
+    [deleteElementsLive, stored],
+  );
+
+  // What the pointer code needs to know about groups, without knowing how they are stored.
+  const groupSelection = useMemo(
+    () => ({
+      resolveClick: (input: { selected: string[]; hitId: string | null; additive: boolean }) =>
+        resolveGroupClick(groupIndex, { ...input, entered: enteredGroupId }),
+      resolveMarquee: (hitIds: string[]) => resolveMarquee(groupIndex, hitIds, enteredGroupId),
+      isLocked: (shapeId: string) => isEffectivelyLocked(groupIndex, shapeId),
+      setContext: setEnteredGroupId,
+    }),
+    [groupIndex, enteredGroupId],
   );
 
   const completeCurrentElement = useCallback(() => {
@@ -275,13 +306,12 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     getResizeHandle,
     deleteElements: (ids) => deleteElementsWithConnectedArrows(ids),
     moveElements: (origin, dx, dy) => {
-      const moved = origin.map((el) => moveShape(el, { x: dx, y: dy }));
-      const movedIds = new Set(moved.map((el) => el.id));
-      const arrows = (
-        rerouteConnectedArrowsForChanges(moved) as unknown as DrawingElement[]
-      ).filter((arrow) => !movedIds.has(arrow.id));
-      updateElements([...moved, ...arrows] as unknown as DrawingElementJson[]);
+      const changed = planShapeMoves(origin, uniformOffsets(origin, dx, dy), (moved) =>
+        rerouteConnectedArrowsForChanges(moved) as unknown as DrawingElement[],
+      );
+      updateElements(changed as unknown as DrawingElementJson[]);
     },
+    selection: groupSelection,
     zoom: canvasViewport.zoom,
     resizeElement: (id, handle, pt, bounds, base) => {
       const resized = resizeElement(id, handle, pt, bounds, base);
@@ -334,7 +364,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
 
   const whiteboardAutoSave = useWhiteboardAutoSave({
     whiteboardId,
-    elements,
+    elements: stored,
     hasEditAccess: whiteboardAccess.hasEditAccess,
     ready: liveElements !== null && seedState === "settled",
     canSave: !whiteboardDrawing.hasActiveDrawing && !currentElement,
@@ -384,18 +414,32 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   }, [whiteboard?.content, canvasViewport, canvasViewport.loadViewportSettings]);
 
   const elementCommands = useElementCommands({
+    stored,
     elements,
+    groupIndex,
     selectedElements,
     setSelectedElements,
     hasEditAccess: whiteboardAccess.hasEditAccess,
     getElementBounds,
     generateId,
-    addElements: (batch) => addElements(batch as unknown as DrawingElementJson[]),
+    applyPatch: applyDocPatch,
     updateElements: (batch) => updateElements(batch as unknown as DrawingElementJson[]),
     reorderElements,
     deleteElements: deleteElementsWithConnectedArrows,
     rerouteConnectedArrows: (moved) =>
       rerouteConnectedArrowsForChanges(moved) as unknown as DrawingElement[],
+  });
+
+  const groupCommands = useGroupCommands({
+    stored,
+    groupIndex,
+    selectedElements,
+    setSelectedElements,
+    enteredGroupId,
+    setEnteredGroupId,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    generateId,
+    applyPatch: applyDocPatch,
   });
 
   // The icon lands in the middle of what the user is looking at, selected, ready to drag or label.
@@ -434,6 +478,31 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [uiState, whiteboardAccess.hasEditAccess],
   );
 
+  const deleteSelectedElements = useCallback(() => {
+    if (selectedElements.length > 0) {
+      deleteElementsWithConnectedArrows(selectedElements);
+      // Locked shapes survive a delete and stay selected, so the user can see why and unlock them.
+      setSelectedElements(selectedElements.filter((id) => groupSelection.isLocked(id)));
+    }
+  }, [deleteElementsWithConnectedArrows, groupSelection, selectedElements]);
+
+  /**
+   * Double-click on a shape. In a group it steps into the group (selecting the child under the
+   * pointer); on an ordinary shape, or inside the group that holds it, it edits the text.
+   */
+  const handleShapeDoubleClick = useCallback(
+    (element: DrawingElement) => {
+      const action = resolveDoubleClick(groupIndex, element.id, enteredGroupId);
+      if (action.kind === "enter") {
+        setEnteredGroupId(action.group);
+        setSelectedElements(action.select);
+        return true;
+      }
+      return beginEditing(element);
+    },
+    [beginEditing, enteredGroupId, groupIndex],
+  );
+
   const runShortcut = useCallback(
     (command: ShortcutCommand) => {
       switch (command.type) {
@@ -445,14 +514,20 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "cut": return elementCommands.cut();
         case "paste": return elementCommands.paste();
         case "duplicate": return elementCommands.duplicate();
+        case "group": return groupCommands.group();
+        case "ungroup": return groupCommands.ungroup();
+        case "lock-toggle": return groupCommands.toggleLock();
+        case "align": return elementCommands.align(command.mode);
+        case "distribute": return elementCommands.distribute(command.axis);
         case "nudge": return elementCommands.nudge(command.dx, command.dy);
         case "z-order": return elementCommands.zOrder(command.move);
         case "delete":
-          deleteElementsWithConnectedArrows(selectedElements);
-          return setSelectedElements([]);
-        // Escape: abandon a half-made shape or connector first; then clear the selection; then leave a drawing tool.
+          return deleteSelectedElements();
+        // Escape: abandon a half-made shape or connector first; then step out of an entered group; then
+        // clear the selection; then leave a drawing tool.
         case "escape":
           if (whiteboardDrawing.cancelDrawing()) return;
+          if (groupCommands.exit()) return;
           if (selectedElements.length > 0) return setSelectedElements([]);
           return uiState.setCurrentTool("select");
         case "zoom-in": return canvasViewport.handleZoomIn();
@@ -463,8 +538,9 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "toggle-help": return uiState.setShowCommandMenu((prev) => !prev);
         case "export": return uiState.setShowExport(true);
         case "icon-picker": return uiState.setShowIconPicker(true);
-        // Enter on a selected shape edits its text, like double-clicking it.
+        // Enter on a selected group steps into it; on a selected shape it edits its text, like double-clicking it.
         case "edit": {
+          if (groupCommands.enter()) return;
           const only = selectedElements.length === 1 ? elements.find((el) => el.id === selectedElements[0]) : undefined;
           if (only) beginEditing(only);
           return;
@@ -473,9 +549,10 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     },
     [
       canvasViewport,
-      deleteElementsWithConnectedArrows,
+      deleteSelectedElements,
       elementCommands,
       elements,
+      groupCommands,
       handleFitToScreen,
       handleRedo,
       handleUndo,
@@ -531,6 +608,15 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     uiState.setFontSize,
   ]);
 
+  const selectionOverlay = useMemo(
+    () =>
+      buildSelectionOverlay(groupIndex, selectedElements, effectiveContext(groupIndex, enteredGroupId), (id) => {
+        const shape = groupIndex.shapes.get(id);
+        return shape ? getElementBounds(shape) : null;
+      }),
+    [enteredGroupId, getElementBounds, groupIndex, selectedElements],
+  );
+
   const selectedElement = useMemo(
     () =>
       selectedElements.length === 1
@@ -578,7 +664,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       elements,
       selectedElements,
       hasEditAccess: whiteboardAccess.hasEditAccess,
-      updateElement,
+      isLocked: groupSelection.isLocked,
+      updateElements,
     });
 
   const handleClearSelection = useCallback(() => setSelectedElements([]), []);
@@ -586,12 +673,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     () => setSelectedElements(elements.map((el) => el.id)),
     [elements],
   );
-  const deleteSelectedElements = useCallback(() => {
-    if (selectedElements.length > 0) {
-      deleteElementsWithConnectedArrows(selectedElements);
-      setSelectedElements([]);
-    }
-  }, [deleteElementsWithConnectedArrows, selectedElements]);
 
   const handleCommandAction = useCallback(
     (action: string) => {
@@ -647,6 +728,27 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "open-code":
           uiState.setShowCodePanel(true);
           break;
+        case "group":
+          groupCommands.group();
+          break;
+        case "ungroup":
+          groupCommands.ungroup();
+          break;
+        case "toggle-lock":
+          groupCommands.toggleLock();
+          break;
+        case "align-left":
+        case "align-center":
+        case "align-right":
+        case "align-top":
+        case "align-middle":
+        case "align-bottom":
+          elementCommands.align(action.slice("align-".length) as "left" | "center" | "right" | "top" | "middle" | "bottom");
+          break;
+        case "distribute-horizontal":
+        case "distribute-vertical":
+          elementCommands.distribute(action.slice("distribute-".length) as "horizontal" | "vertical");
+          break;
         case "copy-image":
           void boardExport.copyImage(selectedElements.length > 0).then((message) => message && toast.error(message));
           break;
@@ -663,6 +765,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       handleUndo,
       whiteboardAccess.hasEditAccess,
       boardExport,
+      elementCommands,
+      groupCommands,
       selectedElements.length,
       uiState,
     ],
@@ -810,6 +914,13 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     whiteboard,
     canvasRef,
     elements,
+    stored,
+    groupIndex,
+    groupCommands,
+    groupSelection,
+    selectionOverlay,
+    enteredGroupId: effectiveContext(groupIndex, enteredGroupId),
+    handleShapeDoubleClick,
     currentElement,
     setCurrentElement,
     selectedElements,
