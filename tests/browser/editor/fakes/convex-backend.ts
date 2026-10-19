@@ -106,6 +106,52 @@ const mutateComments = (name: string, args: Record<string, unknown>): string | n
 
 const otherBoards = new Map<string, FakeBoard>();
 
+// The board's shared assistant conversation (convex/aiConversation.ts), kept in localStorage so a reload reads it back.
+interface FakeConversationRow {
+  id: string;
+  seq: number;
+  role: string;
+  content: string;
+  ui?: unknown;
+}
+let conversation: { conversationId: string | null; history: string | null; messages: FakeConversationRow[] } = { conversationId: null, history: null, messages: [] };
+let legacyFrames: Array<{ frameId: string; prompt: string }> = [];
+let memories: Array<{ id: string; kind: string; text: string }> = [];
+const convKey = () => (board ? `${storageKey(board._id)}:conversation` : "fake-conversation");
+const persistConversation = () => {
+  try {
+    localStorage.setItem(convKey(), JSON.stringify({ conversation, legacyFrames, memories }));
+  } catch {
+    // not persisted
+  }
+};
+const mutateConversation = (name: string, args: Record<string, unknown>): unknown => {
+  if (name === "aiConversation:append") {
+    const rows = (args.messages as Array<{ role: string; content: string; ui?: unknown }>).map((m, i) => ({ id: `m${conversation.messages.length + i + 1}`, seq: conversation.messages.length + i + 1, ...m }));
+    conversation = { conversationId: "conv1", history: typeof args.history === "string" ? args.history : conversation.history, messages: [...conversation.messages, ...rows] };
+  } else if (name === "aiConversation:clear") {
+    conversation = { conversationId: "conv1", history: null, messages: [] };
+  } else if (name === "aiConversation:importLegacyFrames") {
+    const done = new Set(conversation.messages.map((m) => (m as { sourceFrameId?: string }).sourceFrameId));
+    const fresh = legacyFrames.filter((f) => !done.has(f.frameId));
+    const rows = fresh.flatMap((f, i) => [{ id: `legacy${i}`, seq: -i, role: "user", content: f.prompt, sourceFrameId: f.frameId }]);
+    conversation = { conversationId: "conv1", history: conversation.history, messages: [...rows, ...conversation.messages] };
+    persistConversation();
+    notify();
+    return { imported: fresh.length };
+  } else if (name === "aiMemory:remember") {
+    const text = String(args.text);
+    const dup = memories.find((m) => m.text.toLowerCase() === text.toLowerCase());
+    if (!dup) memories = [...memories, { id: `mem${memories.length + 1}`, kind: String(args.kind), text }];
+    persistConversation();
+    notify();
+    return { id: dup?.id ?? `mem${memories.length}`, duplicate: Boolean(dup) };
+  }
+  persistConversation();
+  notify();
+  return null;
+};
+
 export const backend = {
   subscribe: (listener: () => void) => {
     listeners.add(listener);
@@ -129,6 +175,12 @@ export const backend = {
     } catch {
       comments = [];
     }
+    try {
+      const savedConversation = JSON.parse(localStorage.getItem(convKey()) ?? "null");
+      if (savedConversation) ({ conversation, legacyFrames, memories } = savedConversation);
+    } catch {
+      // start empty
+    }
     notify();
   },
   query(name: string, args?: Record<string, unknown>): unknown {
@@ -136,6 +188,7 @@ export const backend = {
     if (name === "whiteboard:getById" && typeof args?.id === "string" && args.id !== board?._id) return otherBoards.get(args.id) ?? null;
     if (name === "whiteboard:getById" || name === "whiteboard:getAccess") return board;
     if (name === "comments:list") return board ? comments : [];
+    if (name === "aiConversation:get") return conversation;
     if (name === "comments:participants") return board ? participants() : [];
     return null;
   },
@@ -160,6 +213,7 @@ export const backend = {
     }
     if (name.startsWith("comments:")) return mutateComments(name, args ?? {});
     if (name === "aiFrames:create") return "fake-ai-frame";
+    if (name.startsWith("aiConversation:") || name === "aiMemory:remember") return mutateConversation(name, args ?? {});
     return null;
   },
   /** Test hook: another whiteboard the signed-in user may read (for loading one board into another). */
@@ -176,6 +230,13 @@ export const backend = {
     persistComments();
     notify();
   },
+  /** Test hook: a generation from before the unified agent, for the import into the conversation. */
+  seedLegacyFrame(frameId: string, prompt: string) {
+    legacyFrames = [...legacyFrames, { frameId, prompt }];
+    persistConversation();
+  },
+  conversation: () => conversation,
+  memories: () => memories,
   comments: (): FakeComment[] => comments,
   savedContent: () => board?.content ?? null,
   saveCount: () => saves,

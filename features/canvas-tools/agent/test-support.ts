@@ -29,6 +29,8 @@ export const createScriptedHandler = (options: {
   /** Resolves before each model reply: lets a test hold a turn open (to press Stop). */
   beforeReply?: () => Promise<void>;
   fail?: () => Error | null;
+  unified?: boolean;
+  memories?: Array<{ kind: string; text: string }>;
 }) => {
   const turns: Array<{ system: string; messages: readonly CanvasMessage[]; specs: string[] }> = [];
   let step = 0;
@@ -37,6 +39,8 @@ export const createScriptedHandler = (options: {
     checkBoardAccess: options.checkBoardAccess ?? (async () => ({ ok: true })),
     enabledProviders: options.enabledProviders ?? (() => ["groq", "gemini"]),
     limiter: createSlidingWindowLimiter({ windowMs: 60_000, max: 1_000 }),
+    unifiedAgent: () => options.unified === true,
+    loadMemories: async () => options.memories ?? [],
     createTransport: (_provider, specs) => ({
       kind: "native",
       complete: async (system: SystemFor, messages) => {
@@ -74,9 +78,11 @@ export const scriptedRun = async (options: {
   onEvent?: (event: AgentEvent) => void;
   checkBoardAccess?: Parameters<typeof createCanvasAgentHandler>[0]["checkBoardAccess"];
   autoApprove?: boolean;
+  unified?: boolean;
+  memories?: Array<{ kind: string; text: string }>;
 }) => {
   const mem = createMemoryHost(options.board);
-  const { handler, turns } = createScriptedHandler({ script: options.script, mem, checkBoardAccess: options.checkBoardAccess, enabledProviders: () => ["groq"] });
+  const { handler, turns } = createScriptedHandler({ script: options.script, mem, checkBoardAccess: options.checkBoardAccess, enabledProviders: () => ["groq"], unified: options.unified, memories: options.memories });
   const fetchImpl = (async (url: string, init: RequestInit) => handler(new Request(`http://localhost${url}`, init))) as unknown as typeof fetch;
   const executor = createCanvasTools({ host: mem.host, session: options.autoApprove ? { autoApproveDestructive: true } : undefined });
   const run: AgentRun = await runCanvasAgent({
@@ -84,6 +90,7 @@ export const scriptedRun = async (options: {
     executor,
     callTurn: createTurnClient({ whiteboardId: "board_1", fetchImpl, signal: options.signal }),
     maxSteps: options.maxSteps,
+    unified: options.unified,
     signal: options.signal,
     onEvent: options.onEvent,
   });

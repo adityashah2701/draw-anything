@@ -3,7 +3,7 @@ import type { DocPatch } from "@/core/groups/patch";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
 import type { Bounds, DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
 import { revisionOf } from "../revision";
-import type { CanvasHost, DocumentInfo, ExportOutcome, ExportRequest, LoadOutcome, LoadSource, ViewportInfo } from "../types";
+import type { CanvasHost, DocumentInfo, GenerateOutcome, GenerateRequest, MemoryKind, ExportOutcome, ExportRequest, LoadOutcome, LoadSource, ViewportInfo } from "../types";
 
 /** What the host needs from the running editor; each is read at the moment of the call, never captured. */
 export interface EditorHandles {
@@ -24,6 +24,9 @@ export interface EditorHandles {
   exportBoard(request: ExportRequest): Promise<ExportOutcome>;
   /** Asks the person; resolves false when they decline or when no one can be asked. */
   confirm(request: { tool: string; message: string }): Promise<boolean>;
+  /** Present only when the unified agent is on. */
+  generate?(request: GenerateRequest): Promise<GenerateOutcome>;
+  remember?(entry: { kind: MemoryKind; text: string }): Promise<{ duplicate: boolean }>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -49,7 +52,7 @@ const loadFromContent = (content: string, title?: string): LoadOutcome => {
 
 /** The editor as a `CanvasHost`: the one door the AI tools reach the live board through. */
 export const createEditorHost = (h: EditorHandles): CanvasHost => ({
-  capabilities: { history: true, selection: true, viewport: true, save: true, load: true, export: true, confirm: true },
+  capabilities: { history: true, selection: true, viewport: true, save: true, load: true, export: true, confirm: true, generate: Boolean(h.generate), memory: Boolean(h.remember) },
   getStored: () => h.stored(),
   getSelection: () => h.selection.get(),
   getViewport: () => h.viewport(),
@@ -79,4 +82,6 @@ export const createEditorHost = (h: EditorHandles): CanvasHost => ({
   },
   exportDiagram: (request) => h.exportBoard(request),
   requestConfirmation: (request) => h.confirm(request),
+  ...(h.generate ? { generateDiagram: h.generate } : {}),
+  ...(h.remember ? { remember: h.remember } : {}),
 });

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as aiConversation from "../aiConversation.js";
 import type * as aiFrames from "../aiFrames.js";
 import type * as aiMemory from "../aiMemory.js";
 import type * as comments from "../comments.js";
@@ -25,6 +26,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiConversation: typeof aiConversation;
   aiFrames: typeof aiFrames;
   aiMemory: typeof aiMemory;
   comments: typeof comments;

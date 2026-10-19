@@ -9,7 +9,7 @@ import type { ToolErrorInfo } from "./errors";
  * (or the server, from the request) enables the rest. A call to a tool outside the enabled groups is
  * refused by the executor, whatever the model wrote.
  */
-export const TOOL_GROUPS = ["inspect", "create", "edit", "connect", "arrange", "organize", "document"] as const;
+export const TOOL_GROUPS = ["inspect", "create", "edit", "connect", "arrange", "organize", "document", "generate", "memory"] as const;
 export type ToolGroup = (typeof TOOL_GROUPS)[number];
 
 /** What the editor behind a host can do. A tool that needs a capability the host lacks is refused with `unavailable`. */
@@ -21,6 +21,23 @@ export interface HostCapabilities {
   load: boolean;
   export: boolean;
   confirm: boolean;
+  /** Can draw a whole new diagram from a description (the `generate` group). */
+  generate: boolean;
+  /** Can save and read the board's agent memory (the `memory` group). */
+  memory: boolean;
+}
+
+export type MemoryKind = "preference" | "correction" | "decision" | "fact";
+
+export interface GenerateRequest {
+  description: string;
+  diagramType?: string;
+}
+
+export interface GenerateOutcome {
+  /** The new elements, absolute positions, ids chosen by the generator. */
+  elements: DrawingElement[];
+  warnings?: string[];
 }
 
 export interface ViewportInfo {
@@ -87,6 +104,10 @@ export interface CanvasHost {
   /** Fetches a document the signed-in user may read, or throws. The host enforces authorisation. */
   load?(source: LoadSource): Promise<LoadOutcome>;
   exportDiagram?(request: ExportRequest): Promise<ExportOutcome>;
+  /** Draws a new diagram from a description (a model call on the server) and returns the elements without touching the board. */
+  generateDiagram?(request: GenerateRequest): Promise<GenerateOutcome>;
+  /** Saves a note to the board's shared agent memory. */
+  remember?(entry: { kind: MemoryKind; text: string }): Promise<{ duplicate: boolean }>;
   /** Asks the person at the keyboard; false = declined. Without it, destructive tools fail closed. */
   requestConfirmation?(request: { tool: string; message: string }): Promise<boolean>;
 }

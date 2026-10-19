@@ -1,6 +1,6 @@
 "use client";
 
-import { useConvex } from "convex/react";
+import { useConvex, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
@@ -12,12 +12,16 @@ import { exportScene } from "@/features/whiteboard/export/export-scene";
 import type { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { createTurnClient } from "../agent/client";
+import { unifiedAgentClientEnabled } from "../agent/flags";
+import { parseHistory, trimHistory } from "../agent/history";
 import { describeRun, runCanvasAgent, type AgentEvent } from "../agent/run-agent";
 import type { CanvasMessage } from "../agent/types";
 import { revisionOf } from "../revision";
 import { createCanvasTools } from "../runtime";
 import type { ExportRequest } from "../types";
 import { createEditorHost } from "./editor-host";
+import { generateElements } from "./generate-client";
+import { fromRows, toRow } from "./persisted-messages";
 
 export type AgentUiMessage =
   | { id: string; kind: "user"; text: string }
@@ -40,6 +44,10 @@ const nextTick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
  */
 export const useCanvasAgent = (controller: WhiteboardPageController) => {
   const convex = useConvex();
+  // Feature flag: one shared conversation per board, plus the generate and memory tools. Off = the previous behaviour.
+  const unified = unifiedAgentClientEnabled();
+  const boardId = String(controller.whiteboard?._id ?? "");
+  const stored = useQuery(api.aiConversation.get, unified && boardId ? { whiteboardId: boardId } : "skip");
   const latest = useRef(controller);
   latest.current = controller;
 
@@ -56,6 +64,10 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const [lastRun, setLastRun] = useState<{ steps: number; revision: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const providerRef = useRef<AIModelProvider | undefined>(undefined);
+  const messagesRef = useRef<AgentUiMessage[]>([]);
+  messagesRef.current = messages;
+  const importedFor = useRef<string | null>(null);
   const confirmRef = useRef<((approved: boolean) => void) | null>(null);
   const historyRef = useRef<CanvasMessage[]>([]);
   const counter = useRef(0);
@@ -69,6 +81,22 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
 
   // Closing the panel or leaving the page while a question is open answers "no": destructive steps fail closed.
   useEffect(() => () => confirmRef.current?.(false), []);
+
+  // The model-facing history is the board's, so a collaborator's earlier turns are part of the context.
+  const storedHistory = stored?.history ?? null;
+  useEffect(() => {
+    if (unified && !running) historyRef.current = parseHistory(storedHistory);
+  }, [unified, running, storedHistory]);
+
+  // Bring the board's legacy generation history into the conversation once. It only copies; `aiFrames` is untouched.
+  const loaded = stored !== undefined && stored !== null;
+  useEffect(() => {
+    if (!unified || !loaded || !boardId || importedFor.current === boardId) return;
+    importedFor.current = boardId;
+    convex.mutation(api.aiConversation.importLegacyFrames, { whiteboardId: boardId }).catch((error) => console.warn("[canvas-agent] legacy history import failed:", error));
+  }, [unified, loaded, boardId, convex]);
+
+  const savedMessages = useMemo(() => (stored ? fromRows(stored.messages.map((m) => ({ id: m.id, role: m.role, content: m.content, ui: m.ui }))) : []), [stored]);
 
   const host = useMemo(
     () =>
@@ -126,6 +154,16 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
           downloadBlob(result.blob, filename);
           return { filename, mime: result.blob.type, bytes: result.blob.size, width: result.width, height: result.height };
         },
+        ...(unified
+          ? {
+              generate: (request: { description: string; diagramType?: string }) =>
+                generateElements({ whiteboardId: String(latest.current.whiteboard?._id ?? ""), provider: providerRef.current, description: request.description, diagramType: request.diagramType, signal: abortRef.current?.signal }),
+              remember: async (entry: { kind: "preference" | "correction" | "decision" | "fact"; text: string }) => {
+                const saved = await convex.mutation(api.aiMemory.remember, { whiteboardId: String(latest.current.whiteboard?._id ?? ""), ...entry });
+                return { duplicate: saved.duplicate };
+              },
+            }
+          : {}),
         confirm: (request) =>
           new Promise<boolean>((resolve) => {
             confirmRef.current?.(false);
@@ -133,7 +171,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
             setConfirmation(request);
           }),
       }),
-    [convex],
+    [convex, unified],
   );
 
   const record = useCallback((event: AgentEvent) => {
@@ -158,6 +196,28 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     }
   }, []);
 
+  /** Writes this run's transcript and model history to the board's conversation, then drops the local copy (it now comes back from the query). */
+  const persistRun = useCallback(
+    async (whiteboardId: string) => {
+      await nextTick(); // let the last transcript line reach messagesRef
+      const rows = messagesRef.current.map(toRow);
+      if (rows.length === 0) return;
+      try {
+        const history = JSON.stringify(historyRef.current);
+        for (let i = 0; i < rows.length; i += 40) {
+          const last = i + 40 >= rows.length;
+          await convex.mutation(api.aiConversation.append, { whiteboardId, messages: rows.slice(i, i + 40), ...(last ? { history } : {}) });
+        }
+        setMessages([]);
+      } catch (error) {
+        // Keep the local transcript so nothing the person just saw disappears; the next run tries again.
+        console.warn("[canvas-agent] could not save the conversation:", error);
+        toast.error("The assistant's conversation could not be saved for your collaborators.");
+      }
+    },
+    [convex],
+  );
+
   const send = useCallback(
     async (prompt: string, provider?: AIModelProvider) => {
       const text = prompt.trim();
@@ -171,6 +231,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
       if (!whiteboardId) return;
 
       setMessages((prev) => [...prev, { id: nextId(), kind: "user", text }]);
+      providerRef.current = provider;
       setRunning(true);
       setLastRun(null);
       const abort = new AbortController();
@@ -187,11 +248,12 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
           prompt: text,
           history: historyRef.current,
           executor,
+          unified,
           callTurn: createTurnClient({ whiteboardId, provider, signal: abort.signal }),
           signal: abort.signal,
           onEvent: record,
         });
-        historyRef.current = run.messages.slice(-30);
+        historyRef.current = trimHistory(run.messages);
         const tone = run.status === "done" && run.totals.failed === 0 ? "ok" : run.status === "done" ? "warn" : run.status === "aborted" ? "warn" : "error";
         const lead = run.status === "done" ? "" : run.status === "aborted" ? "Stopped. " : `${run.error ?? "The run did not finish."} `;
         setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone, text: `${lead}${describeRun(run)}` }]);
@@ -200,10 +262,11 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         if (writes > 0 && endRevision !== startRevision) setLastRun({ steps: writes, revision: endRevision });
       } finally {
         abortRef.current = null;
+        if (unified) await persistRun(whiteboardId);
         setRunning(false);
       }
     },
-    [host, record, running],
+    [host, record, running, unified, persistRun],
   );
 
   const stop = useCallback(() => {
@@ -216,7 +279,8 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     setMessages([]);
     historyRef.current = [];
     setLastRun(null);
-  }, [running]);
+    if (unified && boardId) convex.mutation(api.aiConversation.clear, { whiteboardId: boardId }).catch((error) => console.warn("[canvas-agent] could not clear the conversation:", error));
+  }, [running, unified, boardId, convex]);
 
   /** Undo what the last run changed: only while the board is exactly as that run left it, so nobody else's edit is undone with it. */
   const undoRun = useCallback(async () => {
@@ -231,6 +295,6 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone: "ok", text: `Undid ${lastRun.steps} change${lastRun.steps === 1 ? "" : "s"}.` }]);
   }, [host, lastRun]);
 
-  return { messages, running, send, stop, clear, undoRun, canUndoRun: lastRun !== null && !running, confirmation, resolveConfirmation };
+  return { messages: unified ? [...savedMessages, ...messages] : messages, shared: unified, running, send, stop, clear, undoRun, canUndoRun: lastRun !== null && !running, confirmation, resolveConfirmation };
 };
 

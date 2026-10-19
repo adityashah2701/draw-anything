@@ -101,7 +101,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   onFitToScreen,
   canvasAgent,
 }) => {
-  const [mode, setMode] = React.useState<"generate" | "board">("generate");
+  const [mode, setMode] = React.useState<"generate" | "board">(canvasAgent?.shared ? "board" : "generate");
   const board = mode === "board" && canvasAgent !== undefined;
   const [model, setModel] = React.useState<AIModelProvider>("gemini");
   // Providers the server has credentials for; null until known (then show all).
@@ -243,6 +243,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             canUndoRun={canvasAgent!.canUndoRun}
             onExample={send}
             disabled={disabled}
+            shared={canvasAgent!.shared}
           />
         ) : !hasRun ? (
           <div className="px-5 py-5">

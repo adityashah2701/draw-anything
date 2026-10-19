@@ -51,6 +51,9 @@ export const turnRequestSchema = z
   })
   .strict();
 
+/** The conversation history as the server accepts it; used to read a stored history back safely. */
+export const historySchema = turnRequestSchema.shape.messages;
+
 export type TurnRequest = z.infer<typeof turnRequestSchema>;
 
 export const messageChars = (message: CanvasMessage): number =>
