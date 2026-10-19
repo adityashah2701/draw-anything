@@ -20,6 +20,7 @@ export const ISSUE_CODES = [
   "orphan_edge_label",
   "overlap",
   "connector_through_node",
+  "connector_through_heading",
   "free_connector_end",
   "unlabeled_node",
 ] as const;
@@ -135,6 +136,16 @@ export const validateBoard = (ctx: CommandContext): Issue[] => {
     if (hit) through.push(arrow.id);
   }
   if (through.length > 0) issues.push(issue("connector_through_node", "warning", "These connectors run through a shape they are not attached to (reroute_connector may fix it).", through));
+
+  const headingHit: string[] = [];
+  const headings = shapes.filter((shape) => shape.ai?.role === "group-label");
+  for (const heading of headings) {
+    const b = ctx.getBounds(heading);
+    if (!b) continue;
+    const box = { minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY };
+    if (shapes.filter(isArrowElement).some((arrow) => arrow.points.length >= 2 && pathHitsBox(arrow.points, box))) headingHit.push(heading.id);
+  }
+  if (headingHit.length > 0) issues.push(issue("connector_through_heading", "warning", "A connector runs through these frame headings (fit_frame moves a heading to a clear spot).", headingHit));
 
   const unlabeled = nodes.filter((shape) => !(typeof shape.label === "string" && shape.label.trim() !== "") && shape.type !== "icon").map((s) => s.id);
   if (unlabeled.length > 0) issues.push(issue("unlabeled_node", "info", "These shapes have no label.", unlabeled.slice(0, 40)));
