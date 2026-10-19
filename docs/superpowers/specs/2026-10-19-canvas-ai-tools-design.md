@@ -1,6 +1,6 @@
 # Canvas AI tools — design
 
-Date: 2026-10-19. Status: in progress (the coverage matrix at the end is filled in from what shipped).
+Date: 2026-10-19. Status: implemented (section 4 is what shipped).
 Test results and known gaps: `docs/testing/canvas-ai-tools-tests.md`.
 
 ## 1. What the codebase already had (inspected, not assumed)
@@ -120,6 +120,108 @@ Legend: **E** exists in the editor, **+** capability added in this change, **hos
 | Serialise | `graphFromElements`, `serializeDiagramCode` | `serialize_diagram` |
 | Repair | none | `validate_and_repair_diagram` (explicit issue codes only) |
 
-## 4. Coverage matrix
+## 4. Coverage matrix (what shipped)
 
-(Filled in at the end of the change.)
+`U` = unit tests under `features/canvas-tools` (executed on an in-memory host, real tools, real commands); `S` = `agent/scenarios.test.ts` (real HTTP handler + client loop + executor + tools, scripted model); `B` = real-Chrome tests (`tests/browser/editor/canvas-agent.browser.test.ts` for the agent, `editor-capabilities.browser.test.ts` for the human-facing capability). Counts and the run are in `docs/testing/canvas-ai-tools-tests.md`.
+
+### A. Creation
+
+| Tool | Same command a person uses | Tests | Notes |
+| --- | --- | --- | --- |
+| `create_shape` | shape registry `createShape` (+ radius, opacity, rotation) | U create | rectangle, ellipse, diamond, pill, triangle, line, freehand; rejects what a shape cannot take |
+| `create_text` | `createShape("text")` | U create | multi-line kept, empty rejected |
+| `create_icon` | `buildIconElement` + icon registry | U create | unknown names return the closest ids, never "generic" |
+| `create_semantic_node` | `createShape("semantic-node")`, `sizeSemanticNode`, `mergeNodeStyle` | U create, S, B | fitted to its label; kind colours; nodeStyle validated |
+| `create_connector` | `planCreateConnector` -> the extracted connector router | U connectors, commands, S, B | anchors, routed around shapes, label, idempotent for the same pair |
+| `create_group` | `planGroup` | U create, S | nested, locked refused |
+| `create_frame_or_section` | `planFrame` (also the menu's "Frame selection") | U create, commands; B (menu) | outline + heading behind the content |
+| `duplicate_elements` | `planDuplicate` / `planInsertCopies` | U create, commands | connectors repointed, labels relinked (fixed on the way) |
+| `import_diagram` | `parseDiagramCode` + `elementsFromDiagramCode` | U create, document (round trip) | adds only; never replaces |
+| `create_image` | n/a | registry test asserts it is absent | the editor has no images |
+
+### B. Editing
+
+| Tool | Command | Tests | Notes |
+| --- | --- | --- | --- |
+| `update_element` | `planStyle` + label | U edit | text and style in one undo step |
+| `update_text` | label / text, typography | U edit | multi-line, connector labels redirected, never empties a text element |
+| `update_icon` | `planReplaceIcon` / `planRemoveIcon` / `planRestoreIcon` | U edit, S | replace, hide, restore; standalone icons |
+| `update_semantic_node` | `semantic-node-edit` plans + `planStyle` | U edit | reset list instead of nulls |
+| `update_shape_style` | `planStyle` | U edit, commands; B (Opacity field, canvas alpha) | unsupported property reported per element |
+| `move_elements` | `planMoveBy` | U edit, S | relative or absolute; groups as one; connectors follow |
+| `resize_element` | `planFrameEdit` (the inspector's W/H) | U edit, S | reports the size actually reached |
+| `rotate_elements` | `planSetRotation` / `planRotateBy` | U edit | set vs by |
+| `align_elements` | `planAlign` | U arrange, commands, S | locked units are fixed references |
+| `distribute_elements` | `planDistribute` | U arrange, S | needs three unlocked units |
+| `set_element_spacing` | `planSpacing` (also the inspector's gap fields) | U arrange, commands; B (Horizontal gap) | exact gap |
+| `reorder_elements` | `planZOrder` | U edit | stored order incl. groups |
+| `group_elements`, `ungroup_elements`, `rename_group` | `planGroup`, `planUngroup`, `planRenameGroup` | U organize, S | one level; `@selection` works |
+| `lock_elements`, `unlock_elements` | `planSetLocked` | U edit | unlock clears enclosing locks like the menu |
+| `hide_elements`, `show_elements` | `planHide`, `planShow`, `planShowAll` (menu, button, chip) | U edit, commands; B x2 | hidden stays in the document; connectors hide with an end |
+
+### C. Connectors
+
+| Tool | Command | Tests | Notes |
+| --- | --- | --- | --- |
+| `connect_elements` | `planCreateConnector` x N | U connectors, S | all or nothing |
+| `update_connector` | `applyArrowChange`, `planUpdateConnector` | U connectors, commands | type, heads, routing, dashed, colour, width, re-attach |
+| `disconnect_elements` | `planRemove` on the connectors / `planDetach` | U connectors | endpoints never removed or moved |
+| `update_connector_label` | `planConnectorLabel` | U connectors, commands; B (Connector label field) | label follows the connector |
+| `reroute_connector` | `planReroute` | U connectors, S | manual bends kept unless asked |
+| `delete_connector` | `planRemove` | U connectors | label removed, endpoints kept |
+
+### D. Deletion, inspection, selection
+
+| Tool | Command | Tests | Notes |
+| --- | --- | --- | --- |
+| `delete_elements` | `planRemove` (Delete key, eraser, cut) | U edit, commands, S | connectors + labels listed in the result; large deletes need confirmation; stale guard |
+| `get_document_state`, `get_element_details`, `find_elements` | reads | U inspect, S | compact summaries with a revision |
+| `get_selection`, `select_elements`, `clear_selection` | host selection | U inspect, S, B | `@selection` token |
+| `search_icons` | `searchIcons` | U inspect | several terms per call |
+
+### E. Layout
+
+| Tool | Command | Tests | Notes |
+| --- | --- | --- | --- |
+| `auto_layout` | `planAutoLayout` (menu "Auto layout") | U arrange, commands, S; B (menu) | layered / row / column / grid / circle; positions only |
+| `tidy_diagram` | `planTidy` (menu "Tidy up") | U arrange, commands, S; B (menu) | ids, labels, connections unchanged (asserted via serialisation) |
+| `apply_layout_preset` | the two above | U arrange | eight named presets |
+| `validate_diagram` | `validateBoard` | U inspect, document | 11 issue codes |
+| `zoom_to_fit` | `fitToBounds` | U inspect; B | does not touch the board |
+
+### F. Document
+
+| Tool | Command | Tests | Notes |
+| --- | --- | --- | --- |
+| `undo_action`, `redo_action` | Liveblocks history | U document, editor-host; B | reports what changed from a board diff |
+| `clear_canvas` | storage clear | U document, S; B (confirm bar) | `confirm: true` + the person's approval; fails closed |
+| `export_diagram` | `exportScene` + download | U document; B (SVG download) | |
+| `save_document` | autosave `saveWhiteboard` | U document; B (save count) | reported from the save state, not assumed |
+| `load_document` | Convex `getById` as the signed-in user + `parseSavedContent` | U document, editor-host; B | merge or confirmed replace; invalid documents rejected whole |
+| `serialize_diagram` | `graphFromElements` + `serializeDiagramCode` / JSON | U inspect, document | round trip tested |
+| `validate_and_repair_diagram` | `repairBoard` | U document | only the codes named |
+
+### Safety checklist
+
+| Requirement | Where | Test |
+| --- | --- | --- |
+| Strict allowlist | `executor.ts` (name, group), `handler.ts: checkModelCalls` | executor, handler, scenarios |
+| Server-side validation of every argument | handler (zod per tool), executor (again) | handler, executor |
+| Ownership / authorisation | `handler.ts` + `app/api/ai/canvas-agent/route.ts` (Clerk + Convex `getAccess`), load through Convex as the user | handler, document, editor-host |
+| No arbitrary code / filesystem / network | schemas are enums/strings/numbers; ids are patterned; `load_document` takes a whiteboard id or saved JSON only | registry, document |
+| Confirmation for destructive document-wide actions | `env.confirm`; `clear_canvas`, `load_document` replace, bulk delete | executor, edit, document, scenarios, browser |
+| Transactional / recoverable | one patch = one undo step; `checkPatch` before write; "Undo this run" | executor, edit, browser |
+| Idempotency | call-id replay; `create_connector` for an existing pair | executor, connectors, scenarios |
+| Stale state / invalid references | revision guards, `not_found` with ids, `checkPatch` | executor, edit, arrange, scenarios |
+| Errors not silent | structured `error`, `skipped`, `warnings`; failed write skips the rest | executor, edit, scenarios |
+| Never claim success early | `affected` from a board diff; a host that ignores a patch is an error; totals from results | executor, scenarios |
+| Logs without secrets | `ToolLogEvent`, `CanvasAgentLog` carry names/codes/counts | executor, handler |
+| Keys never reach model or client | providers only in `agent/transport.ts` (server) | handler (502 leaks nothing), browser |
+
+### Not done / limits
+
+- A real model's planning quality is not measured (no live provider run in this change); the scenarios script the model. The tools, executor, endpoint, loop, host and UI around it are exercised for real.
+- Prompt size: all 56 schemas are about 48,000 characters; a typical run enables three groups (`inspect` + two). Providers with tight per-minute token budgets (Groq's free tier) can run out on long runs; `AI_AGENT_TRANSPORT=text` uses compact signatures instead of JSON Schema.
+- No test against real Liveblocks (two clients), real Convex or Clerk. Read-only boards cannot be opened by the browser harness, so "viewers cannot send" rests on the executor's `read_only` check (unit tested) and the disabled composer.
+- `create_image` and any image editing do not exist because the editor has none.
+- Re-applying diagram code recompiles nodes (so a node's `nodeStyle` is lost); `import_diagram` only adds.
