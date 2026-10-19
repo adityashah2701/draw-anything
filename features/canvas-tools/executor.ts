@@ -15,6 +15,21 @@ import {
   type ToolSession,
 } from "./types";
 
+/**
+ * One queue per board host: whoever calls `execute` (the agent loop, a retry, an undo from the UI), calls run one
+ * at a time, each reading the board as the previous one left it. Without it two overlapping calls plan from the same
+ * snapshot and the later write silently replaces the earlier one.
+ */
+const queues = new WeakMap<object, Promise<unknown>>();
+const serialized = <T>(host: object, work: () => Promise<T>): Promise<T> => {
+  const next = (queues.get(host) ?? Promise.resolve()).then(work, work);
+  queues.set(host, next.catch(() => undefined));
+  return next;
+};
+
+/** The arguments a tool really takes, to answer a bad call with the true schema. */
+const argumentNames = (tool: ToolDefinition): string[] => Object.keys((tool.input as unknown as { shape?: Record<string, unknown> }).shape ?? {});
+
 export interface ToolExecutorOptions {
   host: CanvasHost;
   tools: readonly ToolDefinition[];
@@ -46,6 +61,10 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
   };
 
   const currentRevision = () => revisionOf(host.getStored());
+  /** Revisions this run has seen or produced, to tell its own earlier changes from someone else's. */
+  const known = new Set<string>();
+  /** Read results by call and revision: asking again about an unchanged board repeats nothing. */
+  const readCache = new Map<string, string>();
 
   const failure = (tool: string, info: ToolErrorInfo, started: number, callId?: string): ToolResult => {
     const revision = currentRevision();
@@ -62,7 +81,9 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     if (!approved) throw new ToolError("confirmation_denied", "The person declined, so nothing was changed. Do not retry without being asked to.");
   };
 
-  const execute = async (call: ToolCallRequest): Promise<ToolResult> => {
+  const execute = (call: ToolCallRequest): Promise<ToolResult> => serialized(host, () => executeNow(call));
+
+  const executeNow = async (call: ToolCallRequest): Promise<ToolResult> => {
     const started = now();
     const name = typeof call.name === "string" ? call.name : "";
     const tool = byName.get(name);
@@ -80,7 +101,8 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
 
     const parsed = tool.input.safeParse(call.args ?? {});
     if (!parsed.success) {
-      return failure(tool.name, { code: "invalid_arguments", message: `Invalid arguments for ${tool.name}: ${describeIssues(parsed.error)}.` }, started, call.id);
+      const names = argumentNames(tool);
+      return failure(tool.name, { code: "invalid_arguments", message: `Invalid arguments for ${tool.name}: ${describeIssues(parsed.error)}. ${names.length > 0 ? `${tool.name} takes only: ${names.join(", ")}.` : `${tool.name} takes no arguments.`}`, details: { accepts: names } }, started, call.id);
     }
 
     const document = host.getDocument();
@@ -95,14 +117,25 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     if (prepare) await prepare().catch(() => undefined);
     const before = host.getStored();
     const revision = revisionOf(before);
+    known.add(revision);
     const guard = (parsed.data as { expected_revision?: string }).expected_revision;
     if (tool.access === "write") {
-      if (guard !== undefined && guard !== revision) {
-        return failure(tool.name, { code: "stale_document", message: `The board has changed since revision ${guard}. Look again (get_document_state) and redo the call.`, details: { revision } }, started, call.id);
+      // A revision this run produced itself (an earlier call of the same reply) is not someone else's edit: when nothing
+      // has touched the board since this run's last call, the guard is still good.
+      const own = guard !== undefined && known.has(guard) && (session.lastSeenRevision === undefined || session.lastSeenRevision === revision);
+      if (guard !== undefined && guard !== revision && !own) {
+        return failure(tool.name, { code: "stale_document", message: `The board has changed since revision ${guard}; it is now ${revision}, so someone else edited it or an undo happened. Call get_document_state, check the plan still holds, then repeat the call without expected_revision or with ${revision}.`, details: { revision } }, started, call.id);
       }
       if (tool.strictRevision && session.lastSeenRevision !== undefined && session.lastSeenRevision !== revision && guard === undefined) {
         return failure(tool.name, { code: "stale_document", message: "The board has changed since you last looked (someone else edited it, or an undo happened). Call get_document_state, check it is still what you intend, then repeat this call.", details: { revision } }, started, call.id);
       }
+    }
+
+    const readKey = tool.access === "read" ? `${tool.name}|${revision}|${JSON.stringify(parsed.data)}` : undefined;
+    if (readKey && readCache.has(readKey)) {
+      const summary = `Nothing has changed since you asked this before (revision ${revision}); the earlier result still holds: ${readCache.get(readKey)}`;
+      session.log?.({ tool: tool.name, callId: call.id, runId: session.runId, ok: true, ms: now() - started, created: 0, updated: 0, removed: 0 });
+      return { ok: true, tool: tool.name, summary, data: { repeated: true }, affected: emptyAffected(), revision, warnings: ["Repeated read: use your earlier result instead of asking again."] };
     }
 
     const ctx = createCommandContext(before, { newId: () => host.newId(), getBounds: host.getBounds });
@@ -148,7 +181,9 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     if (run.selection && host.capabilities.selection) host.setSelection(run.selection);
 
     const after = currentRevision();
+    known.add(after);
     session.lastSeenRevision = after;
+    if (readKey) readCache.set(readKey, run.summary.slice(0, 300));
     const result: ToolResult = {
       ok: true,
       tool: tool.name,

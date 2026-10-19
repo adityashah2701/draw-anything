@@ -249,7 +249,7 @@ describe("failure, safety and recovery", () => {
     const look = reply("", [call("get_document_state")]);
     const { run } = await scriptedRun({ prompt: "Look forever", board: { elements: [node("a", "A", 0, 0)] }, script: Array(10).fill(look), maxSteps: 3 });
     expect(run.status).toBe("max_steps");
-    expect(run.error).toContain("Stopped after 3 steps");
+    expect(run.error).toContain("Stopped after 3 model turns");
   });
 
   it("a call id repeated by the provider in a later turn is a new call, not a replay", async () => {

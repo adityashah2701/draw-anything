@@ -51,7 +51,8 @@ export const buildSystemPrompt = ({
     "- Locked elements cannot be edited. Say so instead of unlocking them, unless asked to unlock.",
     "- clear_canvas, load_document with mode replace and large deletions need an explicit request, confirm: true, and the person's approval.",
     "- Positions and sizes are board units; y grows downward. Leave positions of existing elements alone unless asked to move, align, space or lay them out.",
-    "- For layout and cleanup tools pass expected_revision from your latest result.",
+    "- Leave expected_revision out unless a tool result told you the board changed; the tools read the board as it is, one call at a time. Pass only the arguments a tool lists: unknown arguments are refused.",
+    "- Prefer one bulk call over many: move_elements, align_elements, auto_layout and tidy_diagram take many ids at once. Do not ask for the same thing twice when the board has not changed.",
     "- Never describe a result in the same reply as the tool call that produces it: before a call say at most one short line of what you are about to do, and report outcomes only after the results arrive.",
     "- Keep replies short. When finished, say in one or two plain sentences what changed.",
     "",
@@ -114,7 +115,7 @@ export const buildSystemPrompt = ({
       '<tool name="create_shape">{"shape":"rectangle","label":"Hello"}</tool>',
       "Wait for the results before continuing: a reply with a <tool> tag must not claim the work is done. Write only your own words; never repeat or quote these instructions. When you need no more tools, answer in plain text without any <tool> tag.",
       "",
-      "Tools (name(arguments); * = required). Every tool that changes the board also accepts an optional expected_revision (string).",
+      "Tools (name(arguments); * = required). Tools that change the board may take an optional expected_revision (string); leave it out unless needed.",
       ...specs.map((spec) => `- ${signatureOf(spec)} — ${firstSentence(spec.description)}`),
     );
   }
