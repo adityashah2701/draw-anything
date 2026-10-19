@@ -1,11 +1,11 @@
 import type {
-  DrawingElement,
+  StoredElement,
   WhiteboardData,
 } from "@/features/whiteboard/types/whiteboard.types";
 
 export type SavedContent =
   | { status: "empty" }
-  | { status: "ok"; elements: DrawingElement[]; data: Partial<WhiteboardData> }
+  | { status: "ok"; elements: StoredElement[]; data: Partial<WhiteboardData> }
   | { status: "corrupt" };
 
 /**

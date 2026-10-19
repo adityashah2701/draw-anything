@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import {
-  DrawingElement,
+  StoredElement,
   WhiteboardData,
 } from "@/features/whiteboard/types/whiteboard.types";
 import {
@@ -15,7 +15,8 @@ import {
 
 interface UseWhiteboardAutoSaveProps {
   whiteboardId: string;
-  elements: DrawingElement[];
+  /** The whole stored list: shapes and group records. Saving only the shapes would drop every group. */
+  elements: StoredElement[];
   hasEditAccess: boolean;
   /**
    * True once the live document is loaded AND the stored snapshot has been

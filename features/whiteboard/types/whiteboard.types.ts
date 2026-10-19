@@ -56,6 +56,18 @@ export interface BaseDrawingElement {
   fontStyle?: string;
   /** Annotations (group frames, labels) that are not shapes to connect to or route around. */
   isGuide?: boolean;
+  /**
+   * Parent composite group (see `GroupRecord`). Absent = top level. A dangling or cyclic value is
+   * treated as "ungrouped" by `core/groups/group-index.ts`, never as an error.
+   */
+  groupId?: string;
+  /** Locked elements (and everything inside a locked group) can be selected but not edited. */
+  locked?: boolean;
+  /**
+   * Clockwise degrees about the centre of the unrotated shape; absent = 0. Only shapes that declare
+   * the `rotatable` capability honour it (see `core/shapes/capabilities/rotatable.ts`).
+   */
+  rotation?: number;
   ai?: {
     frameId?: string;
     generationId?: string;
@@ -167,13 +179,38 @@ export type DrawingElement =
   | ArrowShape
   | BidirectionalArrowShape;
 
+/**
+ * A composite group. It lives in the same stored list as the shapes (so serialisation, undo/redo and
+ * collaboration need no second structure) but is *not* a `DrawingElement`: the editor splits the
+ * stored list into shapes and group records, so renderers, export, routing and AI never see one.
+ * Children keep absolute coordinates and their own ids and point back with `groupId`; a group's
+ * bounds are always derived from its leaves. `points`, `color` and `strokeWidth` only satisfy the
+ * storage type.
+ */
+export interface GroupRecord {
+  id: string;
+  type: "group";
+  /** User-visible name; the UI shows "Group" when absent. */
+  name?: string;
+  locked?: boolean;
+  /** Parent group, for nesting. */
+  groupId?: string;
+  points: [];
+  color: string;
+  strokeWidth: number;
+}
+
+/** Everything the stored list can hold. */
+export type StoredElement = DrawingElement | GroupRecord;
+
 export interface CanvasState {
   elements: DrawingElement[];
   currentElementId: string | null;
 }
 
 export interface WhiteboardData {
-  elements: DrawingElement[];
+  /** Shapes and composite-group records, exactly as stored (array order is stacking order). */
+  elements: StoredElement[];
   canvasSettings: {
     zoom: number;
     panOffset: { x: number; y: number };

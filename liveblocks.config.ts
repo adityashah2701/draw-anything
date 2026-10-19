@@ -39,6 +39,11 @@ export type DrawingElementJson = JsonObject & {
   fontWeight?: string | number;
   fontStyle?: string;
   ai?: JsonObject;
+  /** Composite groups: parent group id, lock flag, rotation and (for group records) a name. */
+  groupId?: string;
+  locked?: boolean;
+  rotation?: number;
+  name?: string;
   dashed?: boolean;
   arrowHeadStart?: boolean;
   arrowHeadEnd?: boolean;
