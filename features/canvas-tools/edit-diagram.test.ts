@@ -28,6 +28,10 @@ describe("editing an existing diagram", () => {
     await s.ok("delete_connector", { ids: ["od"] });
     await s.ok("create_connector", { id: "oc", from: "orders", to: "cache" });
     await s.ok("create_connector", { id: "cd", from: "cache", to: "db" });
+    // The cache is a different width from the nodes above and below it but shares their left edge, so its connectors kink: reported, and one tidy fixes it.
+    const kinked = ((await s.ok("validate_diagram", {})).data as { issues: Array<{ code: string }> }).issues;
+    expect(kinked.map((issue) => issue.code)).toEqual(["misaligned_connection"]);
+    await s.ok("tidy_diagram", {});
     const check = await s.ok("validate_diagram", {});
     expect((check.data as { issues: unknown[] }).issues).toEqual([]);
     for (const id of ["oc", "cd"]) {

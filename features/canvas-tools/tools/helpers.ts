@@ -3,6 +3,7 @@ import { isHiddenByFlag } from "@/core/groups/visibility";
 import { unionBounds } from "@/core/geometry/box";
 import { applyPatch, type DocPatch } from "@/core/groups/patch";
 import { getIcon, iconForNode, resolveIconId, searchIcons, type IconDef } from "@/core/icons/registry";
+import { snapSelection } from "@/core/snap/alignment";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import { createCommandContext } from "@/features/whiteboard/commands/context";
@@ -205,6 +206,30 @@ export const defaultOrigin = (env: ToolEnv, gap = 64): { x: number; y: number } 
   const view = host.getViewport();
   if (view && view.zoom > 0) return { x: Math.round(-view.pan.x / view.zoom + 80), y: Math.round(-view.pan.y / view.zoom + 80) };
   return { x: 80, y: 80 };
+};
+
+/** How close, in board units, a new node must land to a neighbour's edge or centre to be pulled onto it. */
+const PLACE_SNAP = 16;
+
+/**
+ * Where a node asked for at (x, y) really goes: the editor's own snapping (edges, centres, equal spacing against
+ * the shapes already there) applied to the request, so an agent-placed node lines up like a hand-placed one. A
+ * position the caller did not choose (the default origin) is left alone, and nothing moves a node onto another.
+ */
+export const snapPlacement = (env: ToolEnv, wanted: { x: number; y: number; width: number; height: number }): { x: number; y: number } => {
+  const { ctx } = env;
+  const boxes = ctx.shapes.flatMap((shape) => {
+    if (shape.isGuide || isArrowElement(shape) || shape.points.length < 2 || isHiddenByFlag(ctx.index, shape.id)) return [];
+    const b = ctx.getBounds(shape);
+    return b ? [b] : [];
+  });
+  if (boxes.length === 0) return { x: wanted.x, y: wanted.y };
+  const moving: Bounds = { minX: wanted.x, minY: wanted.y, maxX: wanted.x + wanted.width, maxY: wanted.y + wanted.height, width: wanted.width, height: wanted.height };
+  const { dx, dy } = snapSelection({ moving, alignTargets: boxes.map((box) => ({ box })), spaceTargets: boxes, threshold: PLACE_SNAP, options: { spacing: true } });
+  const x = wanted.x + dx;
+  const y = wanted.y + dy;
+  const clear = boxes.every((b) => Math.min(x + wanted.width, b.maxX) - Math.max(x, b.minX) <= 0 || Math.min(y + wanted.height, b.maxY) - Math.max(y, b.minY) <= 0);
+  return clear || (dx === 0 && dy === 0) ? { x, y } : { x: wanted.x, y: wanted.y };
 };
 
 /** An id the caller chose must not already be on the board; otherwise one is made. */
