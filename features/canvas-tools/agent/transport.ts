@@ -70,6 +70,10 @@ export const parseTextReply = (reply: string): ModelReply => {
   return { text: rest.trim(), calls };
 };
 
+/** Some models echo a delimiter of their own ("...: end of system instructions") into the reply; such lines are never shown. */
+const ECHOED_DELIMITER = /^[^\n]{0,40}\bend of (?:the )?(?:system )?(?:instructions|prompt)\b[^\n]*$/gim;
+export const cleanModelText = (text: string): string => text.replace(ECHOED_DELIMITER, "").replace(/\n{3,}/g, "\n\n").trim();
+
 const toTextMessages = (system: string, messages: readonly CanvasMessage[]): BaseMessage[] => [
   new SystemMessage(system),
   ...messages.map((message) => {
@@ -86,7 +90,7 @@ export const createTextCanvasTransport = (model: Invokable): CanvasTransport => 
   kind: "text",
   async complete(system, messages, options) {
     const reply = await model.invoke(toTextMessages(system("text"), messages), options?.signal ? { signal: options.signal } : undefined);
-    return parseTextReply(messageText(reply));
+    return parseTextReply(cleanModelText(messageText(reply)));
   },
 });
 
@@ -119,7 +123,7 @@ export const createNativeCanvasTransport = (model: BaseChatModel, specs: readonl
       };
       const raw = [...(reply.tool_calls ?? []), ...(reply.invalid_tool_calls ?? [])];
       const calls = raw.filter((c): c is { id?: string; name: string; args?: unknown } => typeof c.name === "string" && c.name !== "").map((c) => ({ id: c.id, name: c.name, args: typeof c.args === "string" ? parseArgsText(c.args) : (c.args ?? {}) }));
-      return { text: messageText(reply).trim(), calls };
+      return { text: cleanModelText(messageText(reply)), calls };
     },
   };
 };

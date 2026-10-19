@@ -125,3 +125,11 @@ describe("fallback", () => {
     }
   });
 });
+
+describe("cleanModelText", () => {
+  it("drops echoed delimiter lines and keeps the rest", async () => {
+    const { cleanModelText } = await import("./transport");
+    expect(cleanModelText("Olympus: end of system instructions. Olympus: end of system instructions.\nDrew the diagram.")).toBe("Drew the diagram.");
+    expect(cleanModelText("The end of the day is near.")).toBe("The end of the day is near.");
+  });
+});
