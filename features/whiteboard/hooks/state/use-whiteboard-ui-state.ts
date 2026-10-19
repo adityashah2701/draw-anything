@@ -49,8 +49,6 @@ export const useWhiteboardUiState = () => {
   }, []);
   // Where the comment tool was clicked; the comment layer opens a composer there.
   const [commentDraft, setCommentDraft] = useState<Point | null>(null);
-  const [showOutlineColorPicker, setShowOutlineColorPicker] = useState(false);
-  const [showFillColorPicker, setShowFillColorPicker] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   // The diagram code editor is a panel of its own, so it can be open with or without the agent.
   const [showCodePanel, setShowCodePanel] = useState(false);
@@ -128,16 +126,6 @@ export const useWhiteboardUiState = () => {
     [],
   );
 
-  const toggleOutlineColorPicker = useCallback(() => {
-    setShowFillColorPicker(false);
-    setShowOutlineColorPicker((prev) => !prev);
-  }, []);
-
-  const toggleFillColorPicker = useCallback(() => {
-    setShowOutlineColorPicker(false);
-    setShowFillColorPicker((prev) => !prev);
-  }, []);
-
   return {
     currentTool,
     setCurrentTool,
@@ -164,10 +152,6 @@ export const useWhiteboardUiState = () => {
     openReplaceIconPicker,
     commentDraft,
     setCommentDraft,
-    showOutlineColorPicker,
-    setShowOutlineColorPicker,
-    showFillColorPicker,
-    setShowFillColorPicker,
     showAIModal,
     setShowAIModal,
     showCodePanel,
@@ -201,7 +185,5 @@ export const useWhiteboardUiState = () => {
     currentColorRef,
     strokeWidthRef,
     fontSizeRef,
-    toggleOutlineColorPicker,
-    toggleFillColorPicker,
   };
 };
