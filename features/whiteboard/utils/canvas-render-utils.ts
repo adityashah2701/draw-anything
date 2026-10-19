@@ -120,7 +120,8 @@ export const drawElement = (
   ctx.lineWidth = element.strokeWidth || 2;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.globalAlpha = isSelected ? 1 : 1;
+  // `opacity` fades the whole element (label included); chrome drawn after the restore below stays opaque.
+  ctx.globalAlpha = typeof element.opacity === "number" && Number.isFinite(element.opacity) ? Math.min(1, Math.max(0, element.opacity)) : 1;
 
   if (element.fill) {
     ctx.fillStyle = element.fill;

@@ -13,3 +13,23 @@ export const storedOrderFromShapes = (stored: readonly StoredElement[], shapeOrd
   const queue = [...shapeOrder];
   return stored.map((item) => (isGroupRecord(item) ? item.id : (queue.shift() ?? item.id)));
 };
+
+/**
+ * The moves that turn the list `current` into `wanted`, as `{ from, to }` index pairs applied one after
+ * another, touching only the items that are out of place. Null when `wanted` is not a permutation of
+ * `current` (a stale view of the list: the caller does nothing rather than scramble it).
+ */
+export const movesToOrder = (current: readonly string[], wanted: readonly string[]): Array<{ from: number; to: number }> | null => {
+  if (wanted.length !== current.length || new Set(wanted).size !== wanted.length) return null;
+  const known = new Set(current);
+  if (!wanted.every((id) => known.has(id))) return null;
+  const working = [...current];
+  const moves: Array<{ from: number; to: number }> = [];
+  wanted.forEach((id, target) => {
+    const from = working.indexOf(id);
+    if (from === target) return;
+    moves.push({ from, to: target });
+    working.splice(target, 0, working.splice(from, 1)[0]);
+  });
+  return moves;
+};

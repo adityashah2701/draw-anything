@@ -64,6 +64,14 @@ export interface BaseDrawingElement {
   /** Locked elements (and everything inside a locked group) can be selected but not edited. */
   locked?: boolean;
   /**
+   * Hidden elements (and everything inside a hidden group) are not drawn, hit-tested or exported, but stay in
+   * the document, its history and its connections; showing them again changes nothing else. A connector
+   * with a hidden end is hidden with it (derived, see `core/groups/visibility.ts`).
+   */
+  hidden?: boolean;
+  /** 0 (invisible) to 1 (opaque); absent = 1. Applies to the element's whole drawing, label included. */
+  opacity?: number;
+  /**
    * Clockwise degrees about the centre of the unrotated shape; absent = 0. Only shapes that declare
    * the `rotatable` capability honour it (see `core/shapes/capabilities/rotatable.ts`).
    */
@@ -97,6 +105,8 @@ export interface FreehandShape extends BaseDrawingElement {
 
 export interface RectangleShape extends BaseDrawingElement {
   type: "rectangle";
+  /** Corner radius in world units; absent = the standard rectangle radius (6). 0 is square. */
+  cornerRadius?: number;
 }
 
 export interface CircleShape extends BaseDrawingElement {
@@ -219,6 +229,7 @@ export interface GroupRecord {
   /** User-visible name; the UI shows "Group" when absent. */
   name?: string;
   locked?: boolean;
+  hidden?: boolean;
   /** Parent group, for nesting. */
   groupId?: string;
   points: [];

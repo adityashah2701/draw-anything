@@ -13,6 +13,7 @@ export type ShortcutCommand =
   | { type: "group" }
   | { type: "ungroup" }
   | { type: "lock-toggle" }
+  | { type: "hide" }
   | { type: "align"; mode: AlignMode }
   | { type: "distribute"; axis: DistributeAxis }
   | { type: "delete" }
@@ -135,6 +136,8 @@ export const resolveShortcut = (e: ShortcutEvent, ctx: ShortcutContext): Shortcu
         return e.shiftKey ? { type: "ungroup" } : { type: "group" };
       case "l":
         return edit && ctx.hasSelection && e.shiftKey ? { type: "lock-toggle" } : null;
+      case "h":
+        return edit && ctx.hasSelection && e.shiftKey ? { type: "hide" } : null;
       case "]":
         return edit && ctx.hasSelection ? { type: "z-order", move: e.shiftKey ? "front" : "forward" } : null;
       case "[":

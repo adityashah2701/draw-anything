@@ -6,7 +6,7 @@ import type { IconDef } from "@/core/icons/registry";
 import { buildIconElement } from "@/features/whiteboard/utils/icon-picker";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import { LiveObject } from "@liveblocks/client";
+import { LiveList, LiveObject } from "@liveblocks/client";
 import {
   useCanRedo,
   useCanUndo,
@@ -20,15 +20,15 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { DrawingElementJson } from "@/liveblocks.config";
 import {
-  ArrowRoutingMode,
-  ArrowType,
   DrawingElement,
   Point,
   StoredElement,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { buildGroupIndex, expandUnits, isEffectivelyLocked, splitStored } from "@/core/groups/group-index";
-import { groupsEmptiedBy, planDelete } from "@/core/groups/group-commands";
+import { groupsEmptiedBy } from "@/core/groups/group-commands";
 import type { DocPatch } from "@/core/groups/patch";
+import { movesToOrder } from "@/core/groups/order";
+import { visibleShapes } from "@/core/groups/visibility";
 import { createBaselineResolver } from "@/features/whiteboard/utils/text-baseline";
 import { planFrameScale, planShapeMoves, uniformOffsets } from "@/features/whiteboard/utils/move-plan";
 import { buildSelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
@@ -44,7 +44,11 @@ import { useWhiteboardUtils } from "@/features/whiteboard/hooks/utils/use-whiteb
 import { useWhiteboardDrawing } from "@/features/whiteboard/hooks/interaction/use-whiteboard-drawing";
 import { useWhiteboardKeyboard } from "@/features/whiteboard/hooks/interaction/use-whiteboard-keyboard";
 import type { ShortcutCommand } from "@/features/whiteboard/hooks/interaction/keyboard-policy";
+import { useOrganizeCommands } from "@/features/whiteboard/hooks/interaction/use-organize-commands";
 import { useElementCommands } from "@/features/whiteboard/hooks/interaction/use-element-commands";
+import type { CommandContext } from "@/features/whiteboard/commands/context";
+import { rerouteWithLabels } from "@/features/whiteboard/commands/connectors";
+import { planRemove } from "@/features/whiteboard/commands/remove";
 import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/data/use-whiteboard-auto-save";
 import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whiteboard-ui-state";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
@@ -66,6 +70,13 @@ import { useAIGeneration } from "./use-ai-generation";
  * LiveObject.update ignores keys whose value is undefined, so a cleared field (an arrow end
  * disconnected from its shape) would silently keep its old value. Delete those keys instead.
  */
+/** Moves list items into `orderedIds`; does nothing unless that is exactly a permutation of the list (a stale view must not scramble it). */
+const restackList = (list: LiveList<LiveObject<DrawingElementJson>>, orderedIds: readonly string[]) => {
+  const current: string[] = [];
+  for (let i = 0; i < list.length; i += 1) current.push(list.get(i)!.get("id") as string);
+  for (const move of movesToOrder(current, orderedIds) ?? []) list.move(move.from, move.to);
+};
+
 const writeElement = (live: LiveObject<DrawingElementJson>, element: DrawingElementJson) => {
   const fields = element as unknown as Record<string, unknown>;
   const cleared = Object.keys(fields).filter((key) => fields[key] === undefined);
@@ -93,8 +104,11 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   // The stored list holds drawable shapes and composite-group records. Everything that draws, routes,
   // exports or hit-tests keeps receiving shapes only (`elements`); the records only describe nesting.
   const stored = useMemo(() => (liveElements || []).filter(Boolean) as unknown as StoredElement[], [liveElements]);
-  const elements = useMemo(() => splitStored(stored).shapes, [stored]);
+  const allShapes = useMemo(() => splitStored(stored).shapes, [stored]);
   const groupIndex = useMemo(() => buildGroupIndex(stored), [stored]);
+  // What is drawn, hit-tested, snapped to, routed around and exported: hidden shapes (and connectors with a
+  // hidden end) stay in the document and in `allShapes`, which the commands and the AI tools see.
+  const elements = useMemo(() => visibleShapes(allShapes, groupIndex), [allShapes, groupIndex]);
 
   const addElement = useLiveblocksM(
     ({ storage }, element: DrawingElementJson) => {
@@ -141,20 +155,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     }
   }, []);
 
-  /** Rewrites stacking order (list order is z-order) by moving only the items that are out of place. */
-  const reorderElements = useLiveblocksM(({ storage }, orderedIds: string[]) => {
-    const list = storage.get("elements");
-    const current: string[] = [];
-    for (let i = 0; i < list.length; i += 1) current.push(list.get(i)!.get("id") as string);
-    if (orderedIds.length !== current.length) return; // stale view of the list: do nothing rather than scramble
-    orderedIds.forEach((id, target) => {
-      const from = current.indexOf(id);
-      if (from === -1 || from === target) return;
-      list.move(from, target);
-      current.splice(target, 0, current.splice(from, 1)[0]);
-    });
-  }, []);
-
   /** A command's whole change (adds, merges, removals) as ONE mutation, hence one undo step. */
   const applyDocPatch = useLiveblocksM(({ storage }, patch: DocPatch) => {
     const list = storage.get("elements");
@@ -171,7 +171,15 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     for (const element of patch.add) {
       if (!doomed.has(element.id)) list.push(new LiveObject(element as unknown as DrawingElementJson));
     }
+    if (patch.order) restackList(list, patch.order);
   }, []);
+
+  /**
+   * The board right now, read straight from shared storage (not from React state, which lags a render
+   * behind): the AI tools read the board between their own writes and need to see them. No write happens,
+   * so it is not an undo step.
+   */
+  const readLiveStored = useLiveblocksM(({ storage }) => storage.get("elements").toImmutable() as unknown as StoredElement[], []);
 
   const seedElements = useLiveblocksM(
     ({ storage }, initial: DrawingElementJson[]) => {
@@ -268,16 +276,29 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     getElementBounds,
   });
 
+  // Connectors that must follow changed shapes, with the labels linked to them: one function for dragging,
+  // resizing, nudging and for the AI tools (the command context below hands out this same function).
+  const commandContextRef = useRef<CommandContext | null>(null);
+  const rerouteConnectedArrows = useMemo(
+    () =>
+      rerouteWithLabels(
+        () => commandContextRef.current!,
+        (changed) => rerouteConnectedArrowsForChanges(changed) as unknown as DrawingElement[],
+      ),
+    [rerouteConnectedArrowsForChanges],
+  );
+
   /**
    * Delete shapes, the connectors attached to them and any group left empty, as one step. Locked
-   * shapes are never deleted (`planDelete`), so the eraser and the Delete key respect locks alike.
+   * shapes are never deleted (`planRemove`), so the eraser and the Delete key respect locks alike.
    */
   const deleteElementsWithConnectedArrows = useCallback(
     (ids: string[]) => {
-      const patch = planDelete(stored, ids);
+      const ctx = commandContextRef.current;
+      const patch = ctx ? planRemove(ctx, ids) : null;
       if (patch) deleteElementsLive(patch.remove);
     },
-    [deleteElementsLive, stored],
+    [deleteElementsLive],
   );
 
   // The selection chrome as data: unit boxes, the resize frame, the entered group's outline.
@@ -332,23 +353,21 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     getResizeHandle,
     deleteElements: (ids) => deleteElementsWithConnectedArrows(ids),
     moveElements: (origin, dx, dy) => {
-      const changed = planShapeMoves(origin, uniformOffsets(origin, dx, dy), (moved) =>
-        rerouteConnectedArrowsForChanges(moved) as unknown as DrawingElement[],
-      );
+      const changed = planShapeMoves(origin, uniformOffsets(origin, dx, dy), rerouteConnectedArrows);
       updateElements(changed as unknown as DrawingElementJson[]);
     },
     selection: groupSelection,
     snapSettings: uiState.snapSettings,
     baselineOf,
     resizeFrameElements: (origin, from, to) => {
-      const changed = planFrameScale(origin, from, to, (scaled) => rerouteConnectedArrowsForChanges(scaled) as unknown as DrawingElement[]);
+      const changed = planFrameScale(origin, from, to, rerouteConnectedArrows);
       updateElements(changed as unknown as DrawingElementJson[]);
     },
     zoom: canvasViewport.zoom,
     resizeElement: (id, handle, pt, bounds, base) => {
       const resized = resizeElement(id, handle, pt, bounds, base);
       if (resized) {
-        const arrows = rerouteConnectedArrowsForChanges([resized]);
+        const arrows = rerouteConnectedArrows([resized]);
         arrows.forEach((a) =>
           updateElement(a as unknown as DrawingElementJson),
         );
@@ -445,21 +464,38 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     }
   }, [whiteboard?.content, canvasViewport, canvasViewport.loadViewportSettings]);
 
+  // The board as editor commands see it. The AI tools build the same object over their own copy of the
+  // list, so a command means the same thing whoever runs it.
+  const commandContext = useMemo<CommandContext>(
+    () => ({
+      stored,
+      shapes: allShapes,
+      index: groupIndex,
+      getBounds: getElementBounds,
+      reroute: rerouteConnectedArrows,
+      routeArrow: routeArrowByConnections,
+      newId: generateId,
+    }),
+    [allShapes, generateId, getElementBounds, groupIndex, rerouteConnectedArrows, routeArrowByConnections, stored],
+  );
+
+  commandContextRef.current = commandContext;
+
   const elementCommands = useElementCommands({
-    stored,
-    elements,
-    groupIndex,
+    ctx: commandContext,
     selectedElements,
     setSelectedElements,
     hasEditAccess: whiteboardAccess.hasEditAccess,
-    getElementBounds,
-    generateId,
     applyPatch: applyDocPatch,
-    updateElements: (batch) => updateElements(batch as unknown as DrawingElementJson[]),
-    reorderElements,
     deleteElements: deleteElementsWithConnectedArrows,
-    rerouteConnectedArrows: (moved) =>
-      rerouteConnectedArrowsForChanges(moved) as unknown as DrawingElement[],
+  });
+
+  const organizeCommands = useOrganizeCommands({
+    ctx: commandContext,
+    selectedElements,
+    setSelectedElements,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    applyPatch: applyDocPatch,
   });
 
   const groupCommands = useGroupCommands({
@@ -563,6 +599,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "group": return groupCommands.group();
         case "ungroup": return groupCommands.ungroup();
         case "lock-toggle": return groupCommands.toggleLock();
+        case "hide": return void organizeCommands.hide();
         case "align": return elementCommands.align(command.mode);
         case "distribute": return elementCommands.distribute(command.axis);
         case "nudge": return elementCommands.nudge(command.dx, command.dy);
@@ -599,6 +636,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       elementCommands,
       elements,
       groupCommands,
+      organizeCommands,
       handleFitToScreen,
       handleRedo,
       handleUndo,
@@ -696,14 +734,13 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     {},
   );
 
-  const { handleColorChange, handleFillColorChange, handleStrokeWidthChange, handleFontSizeChange } =
+  const { handleColorChange, handleFillColorChange, handleStrokeWidthChange, handleFontSizeChange, applyStyle } =
     useSelectionStyle({
       uiState,
-      elements,
+      ctx: commandContext,
       selectedElements,
       hasEditAccess: whiteboardAccess.hasEditAccess,
-      isLocked: groupSelection.isLocked,
-      updateElements,
+      applyPatch: applyDocPatch,
     });
 
   const semanticNodes = useSemanticNodeCommands({
@@ -728,7 +765,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     hasEditAccess: whiteboardAccess.hasEditAccess,
     getElementBounds,
     updateElements: (batch) => updateElements(batch),
-    rerouteConnectedArrows: (changed) => rerouteConnectedArrowsForChanges(changed) as unknown as DrawingElement[],
+    rerouteConnectedArrows,
   });
 
   const handleClearSelection = useCallback(() => setSelectedElements([]), []);
@@ -800,6 +837,22 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "toggle-lock":
           groupCommands.toggleLock();
           break;
+        case "hide":
+          organizeCommands.hide();
+          break;
+        case "show-all":
+          if (!organizeCommands.showAll().changed) toast("Nothing is hidden.");
+          break;
+        case "frame":
+          if (!organizeCommands.frame().changed) toast("Select something to put a frame around.");
+          break;
+        case "auto-layout":
+        case "tidy": {
+          const outcome = action === "tidy" ? organizeCommands.tidy() : organizeCommands.autoLayout({ algorithm: "layered" });
+          if (!outcome.changed) toast(outcome.notes[0] ?? "Nothing needed to move.");
+          else outcome.notes.forEach((note) => toast(note));
+          break;
+        }
         case "align-left":
         case "align-center":
         case "align-right":
@@ -830,6 +883,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       boardExport,
       elementCommands,
       groupCommands,
+      organizeCommands,
       selectedElements.length,
       uiState,
     ],
@@ -980,6 +1034,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     stored,
     groupIndex,
     groupCommands,
+    organizeCommands,
     groupSelection,
     selectionOverlay,
     inspector,
@@ -1026,6 +1081,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleFillColorChange,
     handleStrokeWidthChange,
     handleFontSizeChange,
+    applyStyle,
     handleArrowTypeChange,
     handleArrowRoutingModeChange,
     handleArrowDashedChange,
@@ -1047,6 +1103,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     addElement,
     updateElement,
     deleteElementsLive,
+    applyDocPatch,
+    readLiveStored,
     seededRef,
     viewportLoadedRef,
     ...uiState,

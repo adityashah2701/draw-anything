@@ -62,6 +62,26 @@ export const distributeOffsets = (items: Boxed[], axis: DistributeAxis): Map<str
   return out;
 };
 
+/**
+ * Offsets that leave exactly `gap` between neighbouring boxes along an axis (edge to edge), in their
+ * current order; the first box stays where it is. Needs two or more.
+ */
+export const spacingOffsets = (items: Boxed[], axis: DistributeAxis, gap: number): Map<string, Offset> => {
+  const out = new Map<string, Offset>();
+  if (items.length < 2 || !Number.isFinite(gap)) return out;
+  const horizontal = axis === "horizontal";
+  const lo = (b: Bounds) => (horizontal ? b.minX : b.minY);
+  const hi = (b: Bounds) => (horizontal ? b.maxX : b.maxY);
+  const sorted = [...items].sort((a, b) => lo(a.bounds) - lo(b.bounds) || a.id.localeCompare(b.id));
+  let cursor = hi(sorted[0].bounds) + gap;
+  for (const { id, bounds } of sorted.slice(1)) {
+    const shift = cursor - lo(bounds);
+    out.set(id, horizontal ? { dx: shift, dy: 0 } : { dx: 0, dy: shift });
+    cursor += hi(bounds) - lo(bounds) + gap;
+  }
+  return out;
+};
+
 /** New stacking order (array order is z-order, last = on top). Selected ids keep their relative order. */
 export const reorder = (order: string[], selected: ReadonlySet<string>, move: ZMove): string[] => {
   const pick = order.filter((id) => selected.has(id));
@@ -81,6 +101,8 @@ export const reorder = (order: string[], selected: ReadonlySet<string>, move: ZM
   return next;
 };
 
+const isConnector = (el: DrawingElement) => el.type === "arrow" || el.type === "arrow-bidirectional";
+
 type WithConnections = DrawingElement & {
   startConnection?: { elementId: string };
   endConnection?: { elementId: string };
@@ -96,7 +118,8 @@ export const collectCopySet = (elements: DrawingElement[], selected: ReadonlySet
     const c = el as WithConnections;
     return c.startConnection && c.endConnection && ids.has(c.startConnection.elementId) && ids.has(c.endConnection.elementId);
   });
-  const labelOf = new Set(connectors.map((c) => (c.ai?.semanticId ? `${c.ai.semanticId}-label` : null)).filter(Boolean));
+  // A connector's label is linked by `<semanticId or id>-label` (see `labelKeyOf` in the connector commands).
+  const labelOf = new Set(connectors.map((c) => `${c.ai?.semanticId ?? c.id}-label`));
   return elements.filter(
     (el) =>
       selected.has(el.id) ||
@@ -113,6 +136,8 @@ export const collectCopySet = (elements: DrawingElement[], selected: ReadonlySet
  */
 export const cloneElements = (source: DrawingElement[], offset: Offset, newId: () => string): DrawingElement[] => {
   const idMap = new Map(source.map((el) => [el.id, newId()]));
+  // A copied label must stay linked to the copy of its connector, whose key is its own (new) id.
+  const copyOfLabelled = new Map(source.filter(isConnector).map((c) => [`${c.ai?.semanticId ?? c.id}-label`, idMap.get(c.id)!]));
   return source.map((el) => {
     const copy = {
       ...structuredClone(el),
@@ -127,9 +152,10 @@ export const cloneElements = (source: DrawingElement[], offset: Offset, newId: (
       else delete copy[key];
     }
     if (copy.ai) {
-      const { semanticId: _s, frameId: _f, generationId: _g, ...kept } = copy.ai;
-      void _s; void _f; void _g;
-      copy.ai = kept;
+      const { semanticId, frameId: _f, generationId: _g, ...kept } = copy.ai;
+      void _f; void _g;
+      const owner = kept.role === "edge-label" && semanticId !== undefined ? copyOfLabelled.get(semanticId) : undefined;
+      copy.ai = owner ? { ...kept, semanticId: `${owner}-label` } : kept;
     }
     return copy;
   });

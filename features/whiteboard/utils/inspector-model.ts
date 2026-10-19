@@ -8,6 +8,7 @@ import {
   type GroupIndex,
 } from "@/core/groups/group-index";
 import { getShapeDefinition, getShapeLocalBounds, getShapeRotation, isRotatable } from "@/core/shapes/shape-runtime";
+import { CORNER_RADIUS } from "@/core/shapes/base/geometry-tokens";
 import { DEFAULT_LABEL_FONT_SIZE } from "@/core/text/label-layout";
 import type { Bounds, DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
@@ -49,7 +50,13 @@ export interface InspectorModel {
     fill: Mixed<string> | null;
     strokeWidth: Mixed<number> | null;
     fontSize: Mixed<number> | null;
+    /** 0 to 1; shown for every selection. */
+    opacity: Mixed<number> | null;
+    /** Rectangles only (semantic nodes have their own in the Node section). */
+    cornerRadius: Mixed<number> | null;
   };
+  /** Set when the selection is exactly one connector: its id and the text of its label ("" when it has none). */
+  connector: { id: string; label: string } | null;
   /** The shapes edits apply to (editable units' shapes), in stacking order. */
   targetIds: string[];
 }
@@ -63,6 +70,8 @@ const supports = (shape: DrawingElement, key: "supportsFill" | "supportsStrokeWi
   getShapeDefinition(shape.type)?.propertiesConfig?.[key] === true;
 
 const hasLabelText = (shape: DrawingElement) => shape.type === "text" || (typeof shape.label === "string" && shape.label.trim() !== "");
+
+const isConnectorShape = (shape: DrawingElement) => shape.type === "arrow" || shape.type === "arrow-bidirectional";
 
 const isPolyline = (shape: DrawingElement) =>
   shape.type === "line" || shape.type === "arrow" || shape.type === "arrow-bidirectional" || shape.type === "freehand";
@@ -100,6 +109,11 @@ export const readInspector = (
   const fillable = targets.filter((shape) => supports(shape, "supportsFill"));
   const strokable = targets.filter((shape) => supports(shape, "supportsStrokeWidth"));
   const texty = targets.filter(hasLabelText);
+  const rounded = targets.filter((shape) => shape.type === "rectangle") as Array<DrawingElement & { cornerRadius?: number }>;
+  const onlyConnector = only && isConnectorShape(only) ? only : null;
+  const connectorLabel = onlyConnector
+    ? [...index.shapes.values()].find((shape) => shape.ai?.role === "edge-label" && shape.ai.semanticId === `${onlyConnector.ai?.semanticId ?? onlyConnector.id}-label`)
+    : undefined;
 
   return {
     unitCount: units.length,
@@ -115,7 +129,10 @@ export const readInspector = (
       fill: same(fillable.map((shape) => shape.fill || "transparent")),
       strokeWidth: same(strokable.map((shape) => shape.strokeWidth)),
       fontSize: same(texty.map((shape) => shape.fontSize ?? DEFAULT_LABEL_FONT_SIZE)),
+      opacity: same(targets.map((shape) => shape.opacity ?? 1)),
+      cornerRadius: same(rounded.map((shape) => shape.cornerRadius ?? CORNER_RADIUS.rectangle)),
     },
+    connector: onlyConnector ? { id: onlyConnector.id, label: connectorLabel?.text ?? "" } : null,
     targetIds,
   };
 };

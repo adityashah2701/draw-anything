@@ -119,6 +119,19 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
 
       {!hideCanvasUi && controller.selectedElements.length > 0 && <SelectionInspector controller={controller} />}
 
+      {controller.organizeCommands.hiddenCount > 0 && whiteboardAccess.hasEditAccess && (
+        <button
+          type="button"
+          data-testid="hidden-chip"
+          onClick={() => controller.organizeCommands.showAll()}
+          className="pointer-events-auto absolute bottom-6 left-[68px] z-50 inline-flex items-center gap-2 rounded-lg border border-border bg-popover/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur hover:bg-popover"
+          title="Show every hidden element again"
+        >
+          <EyeOff size={14} aria-hidden />
+          {controller.organizeCommands.hiddenCount} hidden · Show all
+        </button>
+      )}
+
       {!hideCanvasUi && (
         <Sidebar
           currentTool={currentTool}

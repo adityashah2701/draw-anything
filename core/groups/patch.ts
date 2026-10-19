@@ -10,11 +10,19 @@ export interface DocPatch {
   add: StoredElement[];
   update: StoredElement[];
   remove: string[];
+  /**
+   * The stacking order the list should have once the rest of the patch is applied: every stored id, in
+   * order (array order is z-order). Applied in the same mutation, so a command that creates or removes
+   * elements AND restacks them is still one undo step. Ignored unless it is exactly a permutation of what
+   * remains, so a stale order can never scramble or drop anything.
+   */
+  order?: readonly string[];
 }
 
 export const emptyPatch = (): DocPatch => ({ add: [], update: [], remove: [] });
 
-export const isEmptyPatch = (patch: DocPatch) => patch.add.length === 0 && patch.update.length === 0 && patch.remove.length === 0;
+export const isEmptyPatch = (patch: DocPatch) =>
+  patch.add.length === 0 && patch.update.length === 0 && patch.remove.length === 0 && (patch.order === undefined || patch.order.length === 0);
 
 /** The merge the storage layer performs for an update: provided keys win, `undefined` deletes. */
 export const mergeStored = <T extends StoredElement>(current: T, change: Partial<StoredElement> & { id: string }): T => {
@@ -40,5 +48,19 @@ export const applyPatch = (stored: readonly StoredElement[], patch: DocPatch): S
     out.push(change ? mergeStored(item, change) : item);
   }
   for (const added of patch.add) if (!removed.has(added.id)) out.push(added);
+  return patch.order ? restack(out, patch.order) : out;
+};
+
+/** `items` in `order`, or unchanged when `order` is not exactly a permutation of their ids. */
+export const restack = <T extends { id: string }>(items: readonly T[], order: readonly string[]): T[] => {
+  if (order.length !== items.length) return [...items];
+  const byId = new Map(items.map((item) => [item.id, item]));
+  if (byId.size !== items.length || new Set(order).size !== order.length) return [...items];
+  const out: T[] = [];
+  for (const id of order) {
+    const item = byId.get(id);
+    if (!item) return [...items];
+    out.push(item);
+  }
   return out;
 };
