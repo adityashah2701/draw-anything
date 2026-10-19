@@ -58,6 +58,40 @@ describe("editing an existing diagram", () => {
   });
 });
 
+describe("frame headings", () => {
+  const headingBox = (s: Awaited<ReturnType<typeof drawn>>) => {
+    const label = find<any>(s.mem.stored, "fr-label");
+    return { x: label.points[0].x, y: label.points[0].y, size: label.fontSize ?? 0 };
+  };
+
+  it("sizes the heading like a node caption, not a poster title", async () => {
+    const s = await drawn();
+    expect(headingBox(s).size).toBeLessThanOrEqual(18);
+  });
+
+  it("moves the heading out of the way of a connector that crosses the top-left of the frame", async () => {
+    const s = setup({ elements: [node("gw", "Gateway", 100, -200), node("auth", "Auth", 100, 100), node("orders", "Orders", 500, 100)] });
+    await s.ok("create_connector", { id: "g1", from: "gw", to: "auth" });
+    await s.ok("create_frame_or_section", { title: "Backend services", ids: ["auth", "orders"], id: "fr" });
+    const label = find<any>(s.mem.stored, "fr-label");
+    const frame = find<any>(s.mem.stored, "fr");
+    expect(label.points[0].x).toBeGreaterThan(Math.min(...frame.points.map((p: { x: number }) => p.x)) + 16);
+    const check = await s.ok("validate_diagram", {});
+    expect(JSON.stringify((check.data as { issues: unknown[] }).issues)).not.toContain("connector_through_heading");
+  });
+
+  it("warns when the members sit far apart, and the validator names a connector through a heading", async () => {
+    const s = setup({ elements: [node("gw", "Gateway", 100, -200), node("auth", "Auth", 100, 100), node("orders", "Orders", 1500, 100)] });
+    const made = await s.ok("create_frame_or_section", { title: "Services", ids: ["auth", "orders"], id: "fr" });
+    expect(made.warnings?.join(" ")).toMatch(/much larger/);
+    await s.ok("create_connector", { id: "g1", from: "gw", to: "auth" });
+    const label = find<any>(s.mem.stored, "fr-label");
+    label.points[0] = { x: 100 + 70, y: label.points[0].y };
+    const check = await s.ok("validate_diagram", {});
+    expect(JSON.stringify((check.data as { issues: unknown[] }).issues)).toContain("connector_through_heading");
+  });
+});
+
 describe("connectors after edits", () => {
   const stale = async () => {
     const s = await drawn();

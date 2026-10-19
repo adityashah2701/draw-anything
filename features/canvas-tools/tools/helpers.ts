@@ -186,8 +186,8 @@ export const settleConnectors = (env: ToolEnv, patch: DocPatch | null): { patch:
     }
   }
   const warnings = validateBoard(ctx)
-    .filter((issue) => issue.code === "stale_connector" || issue.code === "connector_through_node" || issue.code === "dangling_connector")
-    .map((issue) => `${issue.ids.length} connector${issue.ids.length === 1 ? "" : "s"} (${issue.ids.slice(0, 6).join(", ")}) ${issue.code === "connector_through_node" ? "run through a shape" : issue.code === "stale_connector" ? "do not reach their shapes" : "point at missing shapes"}: fix with reroute_connector or move the shapes before saying the diagram is tidy.`);
+    .filter((issue) => issue.code === "stale_connector" || issue.code === "connector_through_node" || issue.code === "connector_through_heading" || issue.code === "dangling_connector")
+    .map((issue) => `${issue.ids.length} connector${issue.ids.length === 1 ? "" : "s"} (${issue.ids.slice(0, 6).join(", ")}) ${issue.code === "connector_through_node" ? "run through a shape" : issue.code === "connector_through_heading" ? "run through a frame heading (fit_frame moves it clear)" : issue.code === "stale_connector" ? "do not reach their shapes" : "point at missing shapes"}: fix with reroute_connector or move the shapes before saying the diagram is tidy.`);
   return { patch: result, warnings };
 };
 

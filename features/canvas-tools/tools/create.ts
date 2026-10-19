@@ -12,7 +12,7 @@ import { kindColors } from "@/features/ai/server/canvas-compiler";
 import { elementsFromDiagramCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { planDuplicate } from "@/features/whiteboard/commands/duplicate";
-import { planFrame } from "@/features/whiteboard/commands/frame";
+import { frameHeadingPosition, planFrame } from "@/features/whiteboard/commands/frame";
 import { supportsStyle, type StyleKey } from "@/features/whiteboard/commands/style";
 import { buildIconElement, DEFAULT_ICON_SIZE } from "@/features/whiteboard/utils/icon-picker";
 import type { Bounds, DrawingElement, GroupRecord } from "@/features/whiteboard/types/whiteboard.types";
@@ -383,14 +383,28 @@ export const createFrameTool: ToolDefinition<typeof frameInput> = {
       : undefined;
     const plan = planFrame(ctx, shapeIds, { title: normalizeText(title).trim(), id: frameId, padding, bounds: box });
     if (!plan) throw new ToolError("invalid_state", "The frame has nothing to surround (the elements have no size).");
+    const warnings = looseFrameWarning(env, plan.bounds, shapeIds);
     // Frames are outlines: they sit behind the content, as in diagrams the AI draws.
     const order = [plan.ids.frame, plan.ids.label, ...ctx.stored.map((item) => item.id)];
     return {
       summary: `Created frame "${title}" (${frameId})${shapeIds.length > 0 ? ` around ${count(shapeIds.length, "element")}` : ""}.`,
       data: { id: frameId, labelId: plan.ids.label, x: Math.round(plan.bounds.minX), y: Math.round(plan.bounds.minY), width: Math.round(plan.bounds.width), height: Math.round(plan.bounds.height) },
       patch: { ...plan.patch, order },
+      warnings,
     };
   },
+};
+
+/** A frame much larger than what it holds reads as empty space and swallows the connectors beside it. */
+const looseFrameWarning = (env: Parameters<ToolDefinition["run"]>[1], frame: Bounds, members: readonly string[]): string[] => {
+  const boxes = members.flatMap((id) => {
+    const shape = env.ctx.index.shapes.get(id);
+    return shape ? (env.ctx.getBounds(shape) ?? []) : [];
+  });
+  if (boxes.length < 2) return [];
+  const used = boxes.reduce((sum, b) => sum + b.width * b.height, 0);
+  if (frame.width * frame.height <= used * 4) return [];
+  return ["The frame is much larger than its members: they sit far apart, so it also covers empty space and the connectors between them. Bring the members together (move_elements or auto_layout on them) and call fit_frame."];
 };
 
 // ── fit_frame ────────────────────────────────────────────────────────────────
@@ -421,8 +435,10 @@ export const fitFrameTool: ToolDefinition<typeof fitFrameInput> = {
     if (!plan) throw new ToolError("invalid_state", "The elements have no size to surround.");
     const { minX, minY, maxX, maxY } = plan.bounds;
     const moved = [{ ...rect, points: [{ x: minX, y: minY }, { x: maxX, y: maxY }] } as DrawingElement];
-    if (label) moved.push({ ...label, points: [{ x: minX + 16, y: minY + 8 }] } as DrawingElement);
+    if (label) moved.push({ ...label, points: [frameHeadingPosition(ctx, plan.bounds, label.text ?? "")] } as DrawingElement);
+    const warnings = looseFrameWarning(env, plan.bounds, members);
     return {
+      warnings,
       summary: `Fitted ${frameId} around ${count(members.length, "element")}.`,
       data: { id: frameId, x: Math.round(minX), y: Math.round(minY), width: Math.round(maxX - minX), height: Math.round(maxY - minY) },
       patch: { add: [], update: moved, remove: [] },
