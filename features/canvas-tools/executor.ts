@@ -1,7 +1,7 @@
 import { isEmptyPatch } from "@/core/groups/patch";
 import { createCommandContext } from "@/features/whiteboard/commands/context";
 import { ToolError, isToolError, type ToolErrorInfo } from "./errors";
-import { checkPatch } from "./integrity";
+import { checkPatch, diffAffected, normalizePatch } from "./integrity";
 import { revisionOf } from "./revision";
 import { describeIssues } from "./schemas";
 import {
@@ -20,6 +20,11 @@ export interface ToolExecutorOptions {
   tools: readonly ToolDefinition[];
   session?: Partial<ToolSession>;
   now?: () => number;
+  /**
+   * Runs before any tool body (after the call was accepted): loads what a tool may need, such as the icon
+   * library, which is a separate chunk. A failure here is not fatal; the tool then sees the smaller registry.
+   */
+  prepare?: () => Promise<unknown>;
 }
 
 const emptyAffected = () => ({ created: [] as string[], updated: [] as string[], removed: [] as string[] });
@@ -29,7 +34,7 @@ const emptyAffected = () => ({ created: [] as string[], updated: [] as string[],
  * guards, the confirmation gate, patch integrity, the single atomic write and the structured result.
  * It owns no editing logic; every edit is a tool's pure plan applied through `host.applyPatch`.
  */
-export const createToolExecutor = ({ host, tools, session: given, now = Date.now }: ToolExecutorOptions) => {
+export const createToolExecutor = ({ host, tools, session: given, now = Date.now, prepare }: ToolExecutorOptions) => {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
   const session: ToolSession = {
     runId: given?.runId ?? `run_${now().toString(36)}`,
@@ -87,6 +92,7 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       return failure(tool.name, { code: "unavailable", message: `${tool.name} is not available here (this editor cannot: ${missing.join(", ")}).` }, started, call.id);
     }
 
+    if (prepare) await prepare().catch(() => undefined);
     const before = host.getStored();
     const revision = revisionOf(before);
     const guard = (parsed.data as { expected_revision?: string }).expected_revision;
@@ -111,12 +117,15 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       return failure(tool.name, { code: "execution_failed", message: `${tool.name} failed unexpectedly; nothing was changed.` }, started, call.id);
     }
 
-    const affected = emptyAffected();
-    const patch = run.patch && !isEmptyPatch(run.patch) ? run.patch : null;
+    let affected = emptyAffected();
+    const planned = run.patch && !isEmptyPatch(run.patch) ? run.patch : null;
+    const patch = planned && !isEmptyPatch(normalizePatch(before, planned)) ? normalizePatch(before, planned) : null;
+    // A tool planned a change, but every element already had those values: say so instead of reporting a change.
+    const unchanged = planned !== null && patch === null;
+    if (planned && tool.access === "read") {
+      return failure(tool.name, { code: "execution_failed", message: `${tool.name} is a read tool and cannot change the board.` }, started, call.id);
+    }
     if (patch) {
-      if (tool.access === "read") {
-        return failure(tool.name, { code: "execution_failed", message: `${tool.name} is a read tool and cannot change the board.` }, started, call.id);
-      }
       const problems = checkPatch(before, patch);
       if (problems.length > 0) {
         return failure(tool.name, { code: "invalid_state", message: `Refused, nothing was changed: ${problems.join("; ")}.`, details: { problems } }, started, call.id);
@@ -127,10 +136,14 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
         console.error(`[canvas-tools] applying ${tool.name} failed`, error);
         return failure(tool.name, { code: "execution_failed", message: `The board rejected the change from ${tool.name}; nothing was changed.` }, started, call.id);
       }
-      const beforeIds = new Set(before.map((item) => item.id));
-      affected.created = patch.add.map((item) => item.id);
-      affected.updated = patch.update.map((item) => item.id).filter((id) => beforeIds.has(id));
-      affected.removed = patch.remove.filter((id) => beforeIds.has(id));
+    }
+    // Report what the board shows now, not what was planned: it is true whatever the host did, and it is the only
+    // account of what an undo, a redo or a load changed.
+    if (tool.access === "write") {
+      affected = diffAffected(before, host.getStored());
+      if (patch && affected.created.length + affected.updated.length + affected.removed.length === 0 && (patch.add.length > 0 || patch.remove.length > 0)) {
+        return failure(tool.name, { code: "execution_failed", message: `${tool.name} was sent to the board but the board does not show the change. Check it with get_document_state before going on.` }, started, call.id);
+      }
     }
     if (run.selection && host.capabilities.selection) host.setSelection(run.selection);
 
@@ -139,8 +152,8 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     const result: ToolResult = {
       ok: true,
       tool: tool.name,
-      summary: run.summary,
-      ...(run.data ? { data: run.data } : {}),
+      summary: unchanged ? "Nothing changed: the board already matched what was asked." : run.summary,
+      ...(run.data || unchanged ? { data: { ...(run.data ?? {}), ...(unchanged ? { requested: run.summary } : {}) } } : {}),
       affected,
       revision: after,
       ...(run.warnings && run.warnings.length > 0 ? { warnings: run.warnings } : {}),

@@ -104,7 +104,7 @@ export const createShapeTool: ToolDefinition<typeof shapeInput> = {
     });
     if (!shape) throw new ToolError("unsupported", `This editor cannot draw a "${input.shape}".`);
     requireStyle(shape, { fill: input.fill ?? undefined, cornerRadius: input.corner_radius, strokeWidth: input.stroke_width });
-    if (input.label !== undefined && !getShapeDefinition(shape.type)?.labelConfig) throw new ToolError("unsupported", `A ${input.shape} cannot have a label.`);
+    if (input.label !== undefined && getShapeDefinition(shape.type)?.labelConfig?.anchor !== "center") throw new ToolError("unsupported", `A ${input.shape} cannot have a label.`);
     if (input.rotation !== undefined && !isRotatable(shape.type)) throw new ToolError("unsupported", `A ${input.shape} cannot be rotated.`);
 
     const created: DrawingElement = {

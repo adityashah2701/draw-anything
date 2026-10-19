@@ -1,5 +1,5 @@
 import { isGroupRecord } from "@/core/groups/group-index";
-import { applyPatch, type DocPatch } from "@/core/groups/patch";
+import { applyPatch, mergeStored, type DocPatch } from "@/core/groups/patch";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
 import { MAX_ELEMENTS_ON_BOARD } from "./schemas";
@@ -70,4 +70,54 @@ export const checkPatch = (before: readonly StoredElement[], patch: DocPatch): s
     }
   }
   return [...new Set(problems)].slice(0, 8);
+};
+
+
+const stable = (value: unknown): string =>
+  JSON.stringify(value, (_key, v) =>
+    v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v,
+  );
+
+const round6 = (value: number) => Math.round(value * 1e6) / 1e6;
+
+const roundPoints = <T extends StoredElement>(element: T): T => {
+  const points = (element as { points?: unknown }).points;
+  if (!Array.isArray(points)) return element;
+  return {
+    ...element,
+    points: points.map((p) => (p && typeof p === "object" && typeof (p as { x: unknown }).x === "number" && typeof (p as { y: unknown }).y === "number" ? { ...p, x: round6((p as { x: number }).x), y: round6((p as { y: number }).y) } : p)),
+  };
+};
+
+/**
+ * The patch as it will really be written: coordinates rounded to a millionth (so `90` is stored as `90`, not
+ * `89.99999999999999`, and two nodes resized to the same size really are the same size), and updates that
+ * would not change the stored element dropped, so a no-op never lands in the history or in `affected`.
+ */
+export const normalizePatch = (before: readonly StoredElement[], patch: DocPatch): DocPatch => {
+  const current = new Map(before.map((item) => [item.id, item]));
+  const update = patch.update.map(roundPoints).filter((change) => {
+    const existing = current.get(change.id);
+    return !existing || stable(mergeStored(existing, change)) !== stable(existing);
+  });
+  return { ...patch, add: patch.add.map(roundPoints), update };
+};
+
+
+/**
+ * What really changed between two boards, by comparing them. This, not the patch a tool planned, is what a
+ * result reports: it is true whatever the host did with the patch, and it is the only way to say what an undo,
+ * a redo or a load changed.
+ */
+export const diffAffected = (before: readonly StoredElement[], after: readonly StoredElement[]) => {
+  const prev = new Map(before.map((item) => [item.id, item]));
+  const next = new Set(after.map((item) => item.id));
+  return {
+    created: after.filter((item) => !prev.has(item.id)).map((item) => item.id),
+    updated: after.filter((item) => {
+      const old = prev.get(item.id);
+      return old !== undefined && old !== item && stable(old) !== stable(item);
+    }).map((item) => item.id),
+    removed: before.filter((item) => !next.has(item.id)).map((item) => item.id),
+  };
 };

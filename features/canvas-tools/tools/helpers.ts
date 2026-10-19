@@ -4,6 +4,7 @@ import { unionBounds } from "@/core/geometry/box";
 import { applyPatch, type DocPatch } from "@/core/groups/patch";
 import { getIcon, iconForNode, resolveIconId, searchIcons, type IconDef } from "@/core/icons/registry";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
+import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import { createCommandContext } from "@/features/whiteboard/commands/context";
 
 import type { CommandContext } from "@/features/whiteboard/commands/context";
@@ -212,3 +213,7 @@ export const failureError = (failure: { reason: string; id: string }): ToolError
 
 /** Shapes a patch may not touch because they are locked, as skipped entries. */
 export const lockedSkips = (ids: readonly string[]) => ids.map((id) => ({ id, reason: "locked" }));
+
+/** Whether a label (text inside, or a caption under an icon) can be set on this shape. */
+export const canHoldLabel = (shape: DrawingElement): boolean =>
+  !isArrowElement(shape) && (shape.type === "icon" || getShapeDefinition(shape.type)?.labelConfig?.anchor === "center");

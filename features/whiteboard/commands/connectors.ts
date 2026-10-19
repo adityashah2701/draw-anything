@@ -110,6 +110,9 @@ export const planCreateConnector = (ctx: CommandContext, input: NewConnector): C
   const b = ctx.index.shapes.get(input.to.id);
   if (!a) return { reason: "missing", id: input.from.id };
   if (!b) return { reason: "missing", id: input.to.id };
+  // What an element is decides first, before whether it can be measured: text has no connection points at all.
+  if (!isConnectable(a)) return { reason: "not_connectable", id: a.id };
+  if (!isConnectable(b)) return { reason: "not_connectable", id: b.id };
   const boundsA = ctx.getBounds(a);
   const boundsB = ctx.getBounds(b);
   if (!boundsA || !boundsB) return { reason: "no_bounds", id: !boundsA ? a.id : b.id };

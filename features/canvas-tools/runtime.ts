@@ -1,3 +1,4 @@
+import { loadIconLibrary } from "@/core/icons/registry";
 import { createToolExecutor, type ToolExecutor, type ToolExecutorOptions } from "./executor";
 import { buildTools } from "./registry";
 import type { CanvasHost, ToolGroup, ToolSession } from "./types";
@@ -17,7 +18,7 @@ export interface CanvasToolRuntimeOptions {
 export const createCanvasTools = ({ host, session, groups, now }: CanvasToolRuntimeOptions): ToolExecutor => {
   let executor: ToolExecutor | null = null;
   const tools = buildTools((enabled) => executor?.enable(enabled));
-  executor = createToolExecutor({ host, tools, session, now });
+  executor = createToolExecutor({ host, tools, session, now, prepare: loadIconLibrary });
   executor.enable(["inspect", ...(groups ?? [])]);
   return executor;
 };

@@ -50,11 +50,27 @@ const flattenNullable = (node: unknown): unknown => {
   return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, flattenNullable(value)]));
 };
 
-/** What a provider is given for a tool: name, description and strict JSON Schema parameters. */
+/**
+ * Constraints a provider's function-calling does not need to see: the server and the executor enforce them
+ * on every call anyway (string patterns, lengths, list sizes), and they are a large share of the tokens when
+ * dozens of tools are offered. Types, enums, required lists, numeric ranges and descriptions stay.
+ */
+const DROPPED = new Set(["pattern", "maxLength", "minLength", "maxItems", "minItems", "format"]);
+const compact = (node: unknown, inProperties = false): unknown => {
+  if (Array.isArray(node)) return node.map((item) => compact(item));
+  if (!node || typeof node !== "object") return node;
+  return Object.fromEntries(
+    Object.entries(node as Record<string, unknown>)
+      .filter(([key]) => inProperties || !DROPPED.has(key))
+      .map(([key, value]) => [key, key === "properties" ? compact(value, true) : compact(value)]),
+  );
+};
+
+/** What a provider is given for a tool: name, description and JSON Schema parameters. */
 export const toolSpec = (tool: ToolDefinition): ToolSpec => ({
   name: tool.name,
   description: tool.description,
-  parameters: flattenNullable(toParameters(tool.input as z.ZodType)) as Record<string, unknown>,
+  parameters: compact(flattenNullable(toParameters(tool.input as z.ZodType))) as Record<string, unknown>,
 });
 
 /** The specs for the tools in the enabled groups (the server sends exactly these; the executor enforces the same set). */

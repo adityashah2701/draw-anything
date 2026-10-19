@@ -21,14 +21,14 @@ export const elementId = z.string().regex(ID, "an element id: letters, digits an
 export const newElementId = z
   .string()
   .regex(ID, "letters, digits and _ . : - only, up to 128 characters")
-  .describe("Optional id to give the new element (unique on the board). Use it to refer to the element in later calls of the same turn.");
+  .describe("Optional id for the new element, to refer to it in later calls.");
 
 /** A list of existing element ids; `"@selection"` stands for the current selection. */
 export const targetIds = z
   .array(z.string().regex(new RegExp(`^(${SELECTION_TOKEN}|[A-Za-z0-9_.:-]{1,128})$`), `an element id or "${SELECTION_TOKEN}"`))
   .min(1)
   .max(MAX_IDS)
-  .describe(`Element ids (from find_elements / get_document_state). "${SELECTION_TOKEN}" means the current selection.`);
+  .describe(`Element ids; "${SELECTION_TOKEN}" = the current selection.`);
 
 export const coordinate = z.number().finite().min(-1_000_000).max(1_000_000);
 export const length = z.number().finite().min(1).max(100_000);
@@ -57,7 +57,7 @@ export const expectedRevision = z
   .string()
   .regex(/^[0-9a-f]{8}$/)
   .optional()
-  .describe("Optional. The `revision` from a previous result; the call fails with stale_document if the board has changed since.");
+  .describe("Optional. Fails with stale_document if the board changed since this revision.");
 
 export const confirmFlag = z.literal(true).describe("Must be true. The person at the keyboard is asked to approve before anything happens.");
 

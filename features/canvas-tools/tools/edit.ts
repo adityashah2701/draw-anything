@@ -6,7 +6,6 @@ import type { DocPatch } from "@/core/groups/patch";
 import { isHiddenByFlag } from "@/core/groups/visibility";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { CORNER_RADIUS_LIMITS, ICON_SIZE_LIMITS, type NodeStylePatch } from "@/core/shapes/semantic-node/style";
-import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import { unitBoxes } from "@/core/groups/units";
 import { planMoveBy, planZOrder } from "@/features/whiteboard/commands/arrange";
 import { planHide, planShow, planShowAll } from "@/features/whiteboard/commands/visibility";
@@ -19,7 +18,7 @@ import { planNodeStyle, planRemoveIcon, planReplaceIcon, planRestoreIcon, planTy
 import { ToolError } from "../errors";
 import { color, coordinate, expectedRevision, fill, label, length, targetIds } from "../schemas";
 import type { ToolDefinition, ToolEnv, ToolRun } from "../types";
-import { count, deriveContext, listIds, lockedSkips, mergePatches, requireEditable, resolveIcon, resolveTargets } from "./helpers";
+import { canHoldLabel, count, deriveContext, listIds, lockedSkips, mergePatches, requireEditable, resolveIcon, resolveTargets } from "./helpers";
 
 const strokeWidth = z.number().finite().min(0.5).max(24);
 const opacity = z.number().finite().min(0).max(1).describe("0 invisible to 1 opaque.");
@@ -107,8 +106,6 @@ export const updateShapeStyle: ToolDefinition<typeof styleInput> = {
 
 // ── text ─────────────────────────────────────────────────────────────────────
 
-const isLabelable = (shape: DrawingElement) => Boolean(getShapeDefinition(shape.type)?.labelConfig) && !isArrowElement(shape);
-
 /** New text for each target: a text element's content or a shape's label. */
 const planText = (env: ToolEnv, editable: readonly string[], text: string): { changed: DrawingElement[]; skipped: Array<{ id: string; reason: string }> } => {
   const changed: DrawingElement[] = [];
@@ -121,7 +118,7 @@ const planText = (env: ToolEnv, editable: readonly string[], text: string): { ch
     } else if (shape.type === "text") {
       if (next.trim() === "") throw new ToolError("invalid_arguments", `Text "${id}" cannot be emptied; delete it instead (delete_elements).`, { ids: [id] });
       if ((shape.text ?? "") !== next) changed.push({ ...shape, text: next });
-    } else if (isLabelable(shape)) {
+    } else if (canHoldLabel(shape)) {
       if ((shape.label ?? "") !== next) changed.push({ ...shape, label: next });
     } else {
       skipped.push({ id, reason: `a ${shape.type} has no text` });
@@ -490,8 +487,9 @@ export const rotateElements: ToolDefinition<typeof rotateInput> = {
     const { ctx } = env;
     const { editable, skipped } = editableTargets(env, input.ids, input.skip_locked);
     const model = frameOf(env, editable);
-    if (!model?.frame) throw new ToolError("invalid_state", "The elements have no box to rotate.");
+    if (!model) throw new ToolError("invalid_state", "There is nothing to rotate.");
     if (model.rotation.mode === "none") throw new ToolError("unsupported", "These elements cannot be rotated.");
+    if (!model.frame) throw new ToolError("invalid_state", "The elements have no box to rotate.");
     const mode = input.mode ?? (model.rotation.mode === "absolute" ? "set" : "by");
     let changed: DrawingElement[];
     if (mode === "set") {

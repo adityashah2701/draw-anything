@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { unionBounds } from "@/core/geometry/box";
-import { isGroupRecord, splitStored } from "@/core/groups/group-index";
+import { splitStored } from "@/core/groups/group-index";
 import type { DocPatch } from "@/core/groups/patch";
 import { collectCopyGroups } from "@/core/groups/clone";
 import { planInsertCopies } from "@/features/whiteboard/commands/duplicate";
@@ -158,14 +158,16 @@ export const loadDocument: ToolDefinition<typeof loadInput> = {
       return { summary: `Replaced the board with ${count(loaded.elements.length, "element")}${loaded.title ? ` from "${loaded.title}"` : ""}.`, data: { loaded: loaded.elements.length, mode }, patch, selection: [] };
     }
 
-    const { shapes } = splitStored(loaded.elements);
-    const records = loaded.elements.filter(isGroupRecord);
+    const { shapes: rawShapes, records } = splitStored(loaded.elements);
+    // A group reference that points at nothing in the document must not latch onto a group of this board that happens to share the id.
+    const known = new Set(records.map((record) => record.id));
+    const shapes = rawShapes.map((shape) => (shape.groupId !== undefined && !known.has(shape.groupId) ? ({ ...shape, groupId: undefined } as DrawingElement) : shape));
     const origin = defaultOrigin(env);
     const box = unionBounds(shapes.flatMap((shape) => ctx.getBounds(shape) ?? []));
     const dx = origin.x - (box?.minX ?? 0);
     const dy = origin.y - (box?.minY ?? 0);
     const shifted = shapes.map((shape) => ({ ...shape, points: shape.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) })) as DrawingElement[];
-    const plan = planInsertCopies(ctx, shifted, collectCopyGroups(records, new Set(shifted.map((shape) => shape.id))), 0);
+    const plan = planInsertCopies(ctx, shifted, collectCopyGroups(loaded.elements, new Set(shifted.map((shape) => shape.id))), 0);
     return { summary: `Added ${count(plan.selection.length, "element")} from the loaded document beside the existing content.`, data: { loaded: plan.selection.length, mode, created: plan.selection }, patch: plan.patch };
   },
 };
