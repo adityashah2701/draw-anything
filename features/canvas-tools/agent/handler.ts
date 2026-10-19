@@ -1,3 +1,4 @@
+import { pickDefaultProvider } from "@/features/ai/default-provider";
 import { normalizeArgs } from "../args";
 import { isSelectableNvidiaModel } from "@/features/ai/nvidia-models";
 import type { AIModelProvider } from "@/features/ai/types";
@@ -149,11 +150,11 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
     if (!access.ok) return done(fail(access.status, access.message));
 
     const enabledProviders = deps.enabledProviders();
-    const provider = request.provider ?? deps.defaultProvider?.() ?? enabledProviders[0];
+    const provider = request.provider ?? deps.defaultProvider?.() ?? pickDefaultProvider(enabledProviders);
     if (!provider || !enabledProviders.includes(provider)) return done(fail(400, "That AI provider is not available on this server."));
 
-    // A model is a variant of the NVIDIA provider; anything not on its list is refused, never forwarded.
-    if (request.model !== undefined && (provider !== "nvidia" || !isSelectableNvidiaModel(request.model))) return done(fail(400, "That AI model is not available."), { provider });
+    // A model is a variant of the NVIDIA provider; anything not on its list is refused, never forwarded. The request must name the provider itself; the default provider does not imply one.
+    if (request.model !== undefined && (request.provider !== "nvidia" || !isSelectableNvidiaModel(request.model))) return done(fail(400, "That AI model is not available."), { provider });
 
     const unified = deps.unifiedAgent?.() === true;
     const tools = unified ? unifiedTools : baseTools;

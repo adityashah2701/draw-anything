@@ -1,4 +1,5 @@
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
+import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
 import { RunnableConfig } from "@langchain/core/runnables";
 import { AIStreamEvent, AIFrame, AIGenerateDiagramRequest } from "@/features/ai/types";
 import {
@@ -109,7 +110,7 @@ const createGenerationId = () => `ai_gen_${Date.now()}_${crypto.randomUUID().sli
 export const createInitialAIFrame = (
   request: AIGenerateDiagramRequest,
 ): AIFrame => {
-  const provider = request.provider ?? request.model ?? "gemini";
+  const provider = request.provider ?? request.model ?? DEFAULT_AI_PROVIDER;
   return {
     frameId: createFrameId(),
     whiteboardId: request.whiteboardId,

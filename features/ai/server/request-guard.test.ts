@@ -166,3 +166,13 @@ describe("unavailable provider", () => {
     expect(result.detail).toContain("enabled: gemini");
   });
 });
+
+describe("default provider", () => {
+  it("is NVIDIA when the server has its key, else the first configured provider", async () => {
+    const { pickDefaultProvider, DEFAULT_AI_PROVIDER } = await import("@/features/ai/default-provider");
+    expect(DEFAULT_AI_PROVIDER).toBe("nvidia");
+    expect(pickDefaultProvider(["gemini", "groq", "nvidia"])).toBe("nvidia");
+    expect(pickDefaultProvider(["groq", "gemini"])).toBe("groq");
+    expect(pickDefaultProvider([])).toBeUndefined();
+  });
+});

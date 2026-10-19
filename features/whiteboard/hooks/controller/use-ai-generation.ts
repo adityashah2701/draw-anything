@@ -1,3 +1,4 @@
+import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
 import { useRef, useState, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
@@ -389,7 +390,7 @@ export const useAIGeneration = ({
   );
 
   const triggerAIGeneration = useCallback(
-    async (prompt: string, model: AIModelProvider = "gemini", edit = false) => {
+    async (prompt: string, model: AIModelProvider = DEFAULT_AI_PROVIDER, edit = false) => {
       if (!prompt.trim() || isAIGenerating) return;
 
       setIsAIGenerating(true);

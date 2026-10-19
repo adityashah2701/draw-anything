@@ -3,6 +3,7 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatGroq } from "@langchain/groq";
 import { ChatOpenAI } from "@langchain/openai";
 import { AIModelProvider } from "@/features/ai/types";
+import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
 import { MODELS, ModelRole } from "./models";
 import { NVIDIA_DEFAULT_MODEL, isSelectableNvidiaModel, nvidiaModelInfo } from "@/features/ai/nvidia-models";
 import { GoogleGenAI, Content } from "@google/genai";
@@ -25,7 +26,7 @@ export class MissingAIProviderKeyError extends Error {
 }
 
 const readProvider = (provider?: AIModelProvider): AIModelProvider =>
-  provider ?? "gemini";
+  provider ?? DEFAULT_AI_PROVIDER;
 
 const requireEnv = (provider: AIModelProvider, envName: string) => {
   const value = process.env[envName];

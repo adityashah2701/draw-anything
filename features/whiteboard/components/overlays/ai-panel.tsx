@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ArrowUp, Code2, Maximize, RotateCcw, X } from "lucide-react";
 import type { AIModelProvider } from "@/features/ai/types";
+import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
 import { NVIDIA_MODELS, isSelectableNvidiaModel } from "@/features/ai/nvidia-models";
 import type { AIChatMessage } from "@/features/whiteboard/hooks/controller/use-ai-generation";
 import { AGENT_WIDTH_CSS } from "@/features/whiteboard/components/overlays/panel-layout";
@@ -116,7 +117,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   // Unified agent (flag on): one conversation, no Generate / Edit tabs. Drawing a diagram is a tool of the same assistant.
   const unified = canvasAgent?.shared === true;
   const board = canvasAgent !== undefined && (unified || mode === "board");
-  const [choice, setChoice] = React.useState<string>("gemini");
+  const [choice, setChoice] = React.useState<string>(DEFAULT_AI_PROVIDER);
   const { provider: model, model: variant } = parseChoice(choice);
   // Providers the server has credentials for; null until known (then show all).
   const [available, setAvailable] = React.useState<AIModelProvider[] | null>(null);
