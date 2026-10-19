@@ -217,3 +217,16 @@ export const lockedSkips = (ids: readonly string[]) => ids.map((id) => ({ id, re
 /** Whether a label (text inside, or a caption under an icon) can be set on this shape. */
 export const canHoldLabel = (shape: DrawingElement): boolean =>
   !isArrowElement(shape) && (shape.type === "icon" || getShapeDefinition(shape.type)?.labelConfig?.anchor === "center");
+
+/** Shapes a box would land on (frames, labels and connectors do not count), as a warning a model can act on. */
+export const overlapWarnings = (env: ToolEnv, box: { x: number; y: number; width: number; height: number }, ignoreId?: string): string[] => {
+  const hit: string[] = [];
+  for (const shape of env.ctx.shapes) {
+    if (shape.id === ignoreId || shape.isGuide || shape.type === "text" || isArrowElement(shape)) continue;
+    const other = env.ctx.getBounds(shape);
+    if (!other) continue;
+    if (box.x < other.maxX && other.minX < box.x + box.width && box.y < other.maxY && other.minY < box.y + box.height) hit.push(`"${shape.label ?? shape.id}" (${shape.id})`);
+  }
+  if (hit.length === 0) return [];
+  return [`The new element overlaps ${hit.slice(0, 4).join(", ")}${hit.length > 4 ? " and more" : ""}. Move it, or make room first with move_elements / tidy_diagram, then reconnect.`];
+};

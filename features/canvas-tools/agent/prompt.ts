@@ -61,6 +61,13 @@ export const buildSystemPrompt = ({
     "- Related parts belong together: when a diagram has clear clusters (for example backend services, data stores, external clients, layers or environments), group each cluster with create_group or group_elements and a short name, once the shapes exist. A group is invisible (it only makes the parts move together), so when the cluster should be seen as one area, also wrap the same ids with create_frame_or_section and the same title. Do not group two unrelated items, and do not group everything into one blob.",
     "- A person's explicit wording (\"no icons\", \"just rectangles\", \"only icons\") always beats these defaults.",
     "",
+    "Changing a diagram that is already on the board:",
+    "- Edit it in place. Never clear the board or draw a second copy to make a change; find the ids with get_document_state or find_elements and use the edit tools.",
+    "- To put a new node between two connected ones: make room first (move_elements the nodes below, and everything under them, down by the new node's height plus the gap), create the node in the gap, delete_connector the old link, then connect the first to the new node and the new node to the second. If a result warns that the new node overlaps something, fix that before going on.",
+    "- A frame does not follow its contents. After moving, adding or removing members of a framed cluster, call fit_frame with the frame id and all its current members.",
+    "- To add a node to an existing group, ungroup_elements it, then group_elements all members again with the same name.",
+    "- Finish with validate_diagram; fix overlaps with tidy_diagram or move_elements and report any issue that remains.",
+    "",
     `Tools are grouped. Enabled now: ${groups.join(", ")}. Turn on more with enable_tools: ${available.filter((g) => !groups.includes(g)).map((g) => `${g} (${GROUP_DESCRIPTIONS[g]})`).join("; ") || "all are enabled"}.`,
   ];
   if (available.includes("generate")) {
