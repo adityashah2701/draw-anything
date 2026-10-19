@@ -61,6 +61,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
 
   const [messages, setMessages] = useState<AgentUiMessage[]>([]);
   const [running, setRunning] = useState(false);
+  const [activity, setActivity] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const [lastRun, setLastRun] = useState<{ steps: number; revision: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -175,10 +176,15 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   );
 
   const record = useCallback((event: AgentEvent) => {
-    if (event.type === "assistant") {
+    if (event.type === "calling") {
+      const names = event.calls.map((c) => c.name);
+      setActivity(names.includes("generate_diagram") ? "Generating the diagram…" : names.length === 1 ? `Running ${names[0]}…` : `Running ${names.length} steps…`);
+    } else if (event.type === "assistant") {
+      setActivity(null);
       setMessages((prev) => [...prev, { id: nextId(), kind: "assistant", text: event.text }]);
     } else if (event.type === "tool") {
       const { result } = event;
+      setActivity(null);
       setMessages((prev) => [
         ...prev,
         {
@@ -262,6 +268,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         if (writes > 0 && endRevision !== startRevision) setLastRun({ steps: writes, revision: endRevision });
       } finally {
         abortRef.current = null;
+        setActivity(null);
         if (unified) await persistRun(whiteboardId);
         setRunning(false);
       }
@@ -295,6 +302,6 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone: "ok", text: `Undid ${lastRun.steps} change${lastRun.steps === 1 ? "" : "s"}.` }]);
   }, [host, lastRun]);
 
-  return { messages: unified ? [...savedMessages, ...messages] : messages, shared: unified, running, send, stop, clear, undoRun, canUndoRun: lastRun !== null && !running, confirmation, resolveConfirmation };
+  return { messages: unified ? [...savedMessages, ...messages] : messages, shared: unified, activity, running, send, stop, clear, undoRun, canUndoRun: lastRun !== null && !running, confirmation, resolveConfirmation };
 };
 

@@ -38,7 +38,7 @@ const openAgent = async (s: EditorSession) => {
   return panel;
 };
 const ask = async (panel: ReturnType<Page["getByRole"]>, text: string) => {
-  await panel.getByLabel("Describe a change to the board").fill(text);
+  await panel.getByLabel("Describe a diagram or a change to the board").fill(text);
   await panel.getByRole("button", { name: "Send" }).click();
 };
 const finished = (panel: ReturnType<Page["getByRole"]>, count = 1) => panel.getByTestId("agent-status").nth(count - 1).waitFor({ timeout: 20_000 });
@@ -59,6 +59,33 @@ suite("the unified agent (flag on) in the real editor", () => {
     const panel = await openAgent(s);
     expect(await panel.getByTestId("agent-shared-notice").innerText()).toMatch(/shared with everyone who can open this board/);
     await panel.getByTestId("canvas-agent-empty").waitFor();
+    // One conversation: no Generate / Edit board tabs, and the examples cover drawing and editing.
+    expect(await panel.getByRole("tablist").count()).toBe(0);
+    expect(await panel.getByTestId("agent-tab-generate").count()).toBe(0);
+    const examples = await panel.getByTestId("canvas-agent-empty").getByRole("button").allInnerTexts();
+    expect(examples.some((t) => /Draw a web app backend/i.test(t))).toBe(true);
+    expect(examples.some((t) => /Group|Align|Tidy/.test(t))).toBe(true);
+    noPageErrors();
+  });
+
+  it("an example prompt draws through the same conversation, shows what it is doing, and offers fit and code on the result", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await serve(s.page, [reply("", [call("generate_diagram", { description: "A web app backend" })]), reply("Drawn.")]);
+    // Hold the generator open so the working state is visible.
+    await s.page.route("**/api/ai/generate-diagram", async (route) => {
+      if (route.request().method() === "GET") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ providers: ["groq"] }) });
+      await gate;
+      return route.fulfill({ status: 200, contentType: "text/event-stream", body: sse([{ type: "element.batch", frameId: "f1", elements: DIAGRAM() }, { type: "frame.done", frameId: "f1", count: 2, graph: {} }]) });
+    });
+    const panel = await openAgent(s);
+    await panel.getByTestId("canvas-agent-empty").getByRole("button", { name: /Draw a web app backend/ }).click();
+    await panel.getByTestId("agent-activity").filter({ hasText: "Generating the diagram" }).waitFor();
+    release();
+    await finished(panel);
+    await panel.getByTestId("agent-fit").waitFor();
+    await panel.getByTestId("agent-open-code").waitFor();
+    expect(((await s.elements()) as El[]).map((e) => e.id).sort()).toEqual(["g-api", "g-db", "old"]);
     noPageErrors();
   });
 
