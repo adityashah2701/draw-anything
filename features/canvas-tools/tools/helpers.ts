@@ -6,6 +6,8 @@ import { getIcon, iconForNode, resolveIconId, searchIcons, type IconDef } from "
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import { createCommandContext } from "@/features/whiteboard/commands/context";
+import { planReroute } from "@/features/whiteboard/commands/connectors";
+import { validateBoard } from "../validate";
 
 import type { CommandContext } from "@/features/whiteboard/commands/context";
 import { labelOf } from "@/features/whiteboard/commands/connectors";
@@ -167,6 +169,28 @@ export const mergePatches = (first: DocPatch, second: DocPatch): DocPatch => {
 };
 
 /** A command context over the board as `patch` leaves it: for a tool whose second step needs the result of its first. */
+/**
+ * After a change that moves shapes, bring connectors whose ends floated off their shapes back, then name any
+ * that still cross a shape or lead nowhere, so a layout or move can never report success over a broken diagram.
+ */
+export const settleConnectors = (env: ToolEnv, patch: DocPatch | null): { patch: DocPatch | null; warnings: string[] } => {
+  if (!patch) return { patch, warnings: [] };
+  let ctx = deriveContext(env, patch);
+  let result = patch;
+  const stale = validateBoard(ctx).find((issue) => issue.code === "stale_connector");
+  if (stale) {
+    const fixed = planReroute(ctx, stale.ids, { forgetManual: true }).patch;
+    if (fixed) {
+      result = mergePatches(patch, fixed);
+      ctx = deriveContext(env, result);
+    }
+  }
+  const warnings = validateBoard(ctx)
+    .filter((issue) => issue.code === "stale_connector" || issue.code === "connector_through_node" || issue.code === "dangling_connector")
+    .map((issue) => `${issue.ids.length} connector${issue.ids.length === 1 ? "" : "s"} (${issue.ids.slice(0, 6).join(", ")}) ${issue.code === "connector_through_node" ? "run through a shape" : issue.code === "stale_connector" ? "do not reach their shapes" : "point at missing shapes"}: fix with reroute_connector or move the shapes before saying the diagram is tidy.`);
+  return { patch: result, warnings };
+};
+
 export const deriveContext = (env: ToolEnv, patch: DocPatch) =>
   createCommandContext(applyPatch(env.ctx.stored, patch), { newId: env.ctx.newId, getBounds: env.host.getBounds });
 

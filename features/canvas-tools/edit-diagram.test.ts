@@ -57,3 +57,34 @@ describe("editing an existing diagram", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("connectors after edits", () => {
+  const stale = async () => {
+    const s = await drawn();
+    // a connector whose end drifted off its shape, as after a move that did not re-route it
+    const od = find(s.mem.stored, "od") as unknown as { points: Array<{ x: number; y: number }> };
+    const broken = { ...od, points: [od.points[0], { x: od.points[0].x, y: od.points[0].y + 400 }] };
+    s.mem.stored.splice(s.mem.stored.findIndex((e) => e.id === "od"), 1, broken as never);
+    return s;
+  };
+
+  it("validate_diagram reports a connector that no longer reaches its shape", async () => {
+    const s = await stale();
+    const check = await s.ok("validate_diagram", {});
+    expect((check.data as { issues: Array<{ code: string; ids: string[] }> }).issues).toContainEqual(expect.objectContaining({ code: "stale_connector", ids: ["od"] }));
+  });
+
+  it("a move or a layout brings floating connector ends back instead of reporting success over them", async () => {
+    const s = await stale();
+    await s.ok("move_elements", { ids: ["users"], dx: 0, dy: -40 });
+    const check = await s.ok("validate_diagram", {});
+    expect((check.data as { issues: Array<{ code: string }> }).issues.map((i) => i.code)).not.toContain("stale_connector");
+  });
+
+  it("validate_and_repair_diagram can repair a stale connector", async () => {
+    const s = await stale();
+    await s.ok("validate_and_repair_diagram", { codes: ["stale_connector"] });
+    const check = await s.ok("validate_diagram", {});
+    expect((check.data as { issues: Array<{ code: string }> }).issues.map((i) => i.code)).not.toContain("stale_connector");
+  });
+});
