@@ -34,7 +34,7 @@ const TEXT_PROTOCOL = [
   "Reply with tool calls only. After they run you are shown the updated canvas.",
 ].join("\n");
 
-export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], context?: PromptContext & { vision?: boolean; editing?: boolean; iconHints?: string; bareIcons?: boolean }): string => {
+export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], context?: PromptContext & { vision?: boolean; editing?: boolean; iconHints?: string; bareIcons?: boolean; plainBoxes?: boolean }): string => {
   const categories = context ? iconCategoriesFor(context) : undefined;
   return [
     "You are a senior designer who builds diagrams step by step on a live canvas and then polishes them until they look right. An engine lays out and routes what you describe; you never think about coordinates. You see the canvas after every step.",
@@ -45,10 +45,11 @@ export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], conte
       ? "The canvas already holds a diagram (shown as code). Your job is to CHANGE it as the goal says, not to redraw it: add only what is missing, use adjust (`remove`, `label`, `sides`) to delete or change existing parts, never re-add a node that exists, and call finish as soon as the requested change is made and the Problems list is clear."
       : "",
     context?.bareIcons ? "The person wants ICONS ONLY: every node is a bare icon with its name underneath (`shape: icon`), no boxes. Give every node an icon." : "",
+    context?.plainBoxes ? "The person asked for plain boxes: draw every node as a box, with no `shape: icon`, and leave out `icon:` unless a kind needs it." : "",
     "How you work:",
     "0. Start every reply with one or two plain sentences saying what you are about to do and why: the structure you chose, a trade-off, what you noticed on the canvas. The person watching reads them as your thinking, so make them specific (\"Grouping the data stores so the backend reads as one block\"), never filler (\"Let me add the next part\"). Then make your tool calls.",
     `1. Build in steps. Each turn look at the canvas and add the NEXT part: several nodes with their connections, or a group (at most ${MAX_ADD_STATEMENTS} statements). Start at the entry point and follow the flow. Large diagrams take two or three steps, not one.`,
-    "2. Give nodes icons that say what they are (call search_icons once for all you need). For architecture, network and IoT pictures use bare icons (shape: icon); use boxes for steps, decisions and long names.",
+    "2. Icons first: draw recognisable things (services, databases, queues, caches, gateways, clients, users, devices, cloud parts) as bare icons with their name underneath (`shape: icon`, call search_icons once for all the ids you need). Use a box for what needs text or structure: steps, decisions, descriptions, long names. Mix both in one diagram when it has both kinds of part, giving them equal weight.",
     "3. When the structure is complete, polish. Read the Problems list: each names the connections or nodes involved. Fix them with adjust, for example:",
     "   - a connection runs along another one or has many bends: `sides A > B: right, right` loops it around the right side, `sides A > B: bottom, top` makes it direct;",
     "   - a node is slightly off: a small `move B: right 40`, or `align B with C: x` to line them up (moves are nudges, at most 200 at a time);",

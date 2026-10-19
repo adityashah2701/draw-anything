@@ -25,6 +25,10 @@ export const iconHints = async (prompt: string): Promise<string> => {
   return [...hints].map(([term, id]) => `${term} = ${id}`).join(", ");
 };
 
+/** "no icons", "plain boxes", "boxes only": the person asked for boxes, so icons are not the default. */
+export const wantsPlainBoxes = (prompt: string): boolean =>
+  /\b(?:no|without)\s+(?:any\s+)?(?:icons?|glyphs|pictograms)\b|\bplain\s+(?:boxes|rectangles|nodes|shapes)\b|\b(?:just|only)\s+(?:plain\s+)?(?:boxes|rectangles)\b|\b(?:boxes|rectangles)\s+only\b|\bicon[- ]?free\b/i.test(prompt);
+
 /** "bare icons", "icons only", "no boxes": the person wants glyphs with captions, not boxes. */
 export const wantsBareIcons = (prompt: string): boolean =>
   /\b(?:only|just)\s+(?:bare\s+)?icons?\b|\bicons?[- ]only\b|\bbare\s+icons?\b|\b(?:no|without)\s+(?:any\s+)?(?:boxes|rectangles|tiles|shapes)\b/i.test(prompt);

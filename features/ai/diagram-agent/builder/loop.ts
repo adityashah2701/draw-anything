@@ -7,7 +7,7 @@ import type { AgentMessage, ModelTurn, ToolCall, ToolTransport } from "../types"
 import { buildCanvas, diffElements, type BuiltCanvas, type CanvasDiff } from "./canvas";
 import { buildStateMessage } from "./prompt";
 import { reportCanvas, type CanvasReport } from "./report";
-import { addLines, adjust, createState, describeFlow, describeMoved, withBareIcons, type BuilderState } from "./state";
+import { addLines, adjust, createState, describeFlow, describeMoved, withBareIcons, withIconPriority, type BuilderState } from "./state";
 
 /** Each turn is a model call, and free tiers allow few calls a minute: keep the default small. */
 const DEFAULT_MAX_TURNS = 12;
@@ -44,6 +44,8 @@ export interface BuilderInput {
   initialCode?: string;
   /** Draw every node that has an icon as a bare icon (the person asked for icons only). */
   bareIcons?: boolean;
+  /** Recognisable things with short names become bare icons, boxes stay for steps, decisions and long text. Off when the person asked for plain boxes. */
+  iconPriority?: boolean;
   generationId: string;
   frameId: string;
   maxTurns?: number;
@@ -96,7 +98,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
   let maxTurns = baseTurns;
   let lookupTurns = 0;
 
-  const bare = (s: BuilderState) => (input.bareIcons ? withBareIcons(s) : s);
+  const bare = (s: BuilderState) => (input.bareIcons ? withBareIcons(s) : input.iconPriority ? withIconPriority(s) : s);
   let state = bare(createState(input.initialCode ?? ""));
   // Set by `redraw`, so kept in one object that type narrowing cannot freeze at its initial value.
   const live: { built: BuiltCanvas | null; report: CanvasReport | undefined } = { built: null, report: undefined };

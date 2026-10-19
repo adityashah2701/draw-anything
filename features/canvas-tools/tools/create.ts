@@ -185,7 +185,7 @@ const iconInput = z
 export const createIconTool: ToolDefinition<typeof iconInput> = {
   name: "create_icon",
   group: "create",
-  description: "Place a standalone icon from the editor's icon registry, optionally with a caption. Use it when the icon alone reads clearly (tool logos, legends, small sketches); for a labelled box with an icon use create_semantic_node. Adds one element.",
+  description: "Place a standalone icon from the editor's icon registry with a short caption. The default for recognisable things (services, databases, clients, devices, logos); use create_semantic_node when the label needs a box. Adds one element.",
   input: iconInput,
   access: "write",
   run: (input, env) => {
@@ -254,7 +254,7 @@ const nodeInput = z
 export const createSemanticNodeTool: ToolDefinition<typeof nodeInput> = {
   name: "create_semantic_node",
   group: "create",
-  description: "Create a diagram node: a rounded box with a label and an icon (service, database, queue, user...). Sized to fit its label unless width/height are given. Connectors attach to it. Adds one element.",
+  description: "Create a labelled box node, optionally with an icon. For text that needs the box (longer labels, steps, decisions, descriptions); recognisable things are better as create_icon. Sized to fit its label unless width/height are given. Connectors attach to it. Adds one element.",
   input: nodeInput,
   access: "write",
   run: (input, env) => {
