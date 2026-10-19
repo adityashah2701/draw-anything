@@ -62,7 +62,7 @@ const handler = createCanvasAgentHandler({
     return await convex.query(api.aiConversation.summary, { whiteboardId });
   },
   limiter,
-  createTransport: (provider, specs, model) => createCanvasTransport(provider, specs, (reason) => console.warn("[canvas-agent] tool calling unavailable, using the text protocol:", reason), process.env, model),
+  createTransport: (provider, specs, model, vision) => createCanvasTransport(provider, specs, (reason) => console.warn("[canvas-agent] tool calling unavailable, using the text protocol:", reason), process.env, model, vision),
   log: (event) => console.info(JSON.stringify(event)),
 });
 

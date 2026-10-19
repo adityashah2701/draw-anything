@@ -1,6 +1,6 @@
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { describe, expect, it, vi } from "vitest";
-import { createFallbackCanvasTransport, createNativeCanvasTransport, createTextCanvasTransport, parseArgsText, parseTextReply, type CanvasTransport } from "./transport";
+import { createFallbackCanvasTransport, createNativeCanvasTransport, createTextCanvasTransport, parseArgsText, parseTextReply, reasoningOf, splitThinking, type CanvasTransport } from "./transport";
 import type { CanvasMessage } from "./types";
 
 const system = () => "SYSTEM RULES";
@@ -131,5 +131,58 @@ describe("cleanModelText", () => {
     const { cleanModelText } = await import("./transport");
     expect(cleanModelText("Olympus: end of system instructions. Olympus: end of system instructions.\nDrew the diagram.")).toBe("Drew the diagram.");
     expect(cleanModelText("The end of the day is near.")).toBe("The end of the day is near.");
+  });
+});
+
+describe("the model's reasoning", () => {
+  it("takes <think> blocks out of the answer, and never runs a tool tag written inside one", () => {
+    const { text, thinking } = splitThinking('<think>I should call <tool name="delete_elements">{}</tool> maybe.</think>Done, added a box.');
+    expect(text).toBe("Done, added a box.");
+    expect(thinking).toContain("I should call");
+    expect(parseTextReply(text).calls).toEqual([]);
+    expect(splitThinking("<think>still thinking when cut off").text).toBe("");
+    expect(splitThinking("reasoning only closes</think>The answer.")).toEqual({ text: "The answer.", thinking: "reasoning only closes" });
+    expect(splitThinking("No reasoning here.")).toEqual({ text: "No reasoning here.", thinking: undefined });
+  });
+
+  it("reads reasoning a provider returns beside the answer, and nothing when there is none", () => {
+    expect(reasoningOf({ content: "x", additional_kwargs: { reasoning_content: "step 1" } })).toBe("step 1");
+    expect(reasoningOf({ content: [{ type: "thinking", thinking: "hmm" }, { type: "text", text: "hi" }] })).toBe("hmm");
+    expect(reasoningOf({ content: [{ type: "reasoning", summary: [{ text: "a" }, { text: "b" }] }] })).toBe("a\nb");
+    expect(reasoningOf({ content: "plain" })).toBeUndefined();
+    expect(reasoningOf(null)).toBeUndefined();
+    expect(reasoningOf({ content: "x", additional_kwargs: { reasoning_content: "z".repeat(20_000) } })!.length).toBeLessThanOrEqual(6_000);
+  });
+
+  it("native and text transports return it as `thinking` and keep it out of the text", async () => {
+    const invoke = vi.fn(async () => ({ content: "Added.", additional_kwargs: { reasoning_content: "plan the layout" }, tool_calls: [] }));
+    const native = createNativeCanvasTransport({ bindTools: () => ({ invoke }) } as never, []);
+    expect(await native.complete(system, conversation)).toEqual({ text: "Added.", calls: [], thinking: "plan the layout" });
+    const text = createTextCanvasTransport({ invoke: async () => new AIMessage("<think>consider</think>All set.") } as never);
+    expect(await text.complete(system, conversation)).toEqual({ text: "All set.", calls: [], thinking: "consider" });
+    const none = createTextCanvasTransport({ invoke: async () => new AIMessage("All set.") } as never);
+    expect(await none.complete(system, conversation)).toEqual({ text: "All set.", calls: [] });
+  });
+});
+
+describe("images in the conversation", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+  const withImage: CanvasMessage[] = [{ role: "user", content: "copy this", images: [png] }];
+
+  it("reach the model as image blocks next to the text, in both protocols, and plain messages stay plain strings", async () => {
+    const seen: unknown[][] = [];
+    const invoke = vi.fn(async (input: unknown[]) => {
+      seen.push(input);
+      return new AIMessage("ok");
+    });
+    await createTextCanvasTransport({ invoke } as never).complete(system, [...withImage, { role: "assistant", content: "hm" }, { role: "user", content: "and then?" }]);
+    const human = seen[0][1] as HumanMessage;
+    expect(human.content).toEqual([
+      { type: "text", text: "copy this" },
+      { type: "image_url", image_url: { url: png } },
+    ]);
+    expect((seen[0][3] as HumanMessage).content).toBe("and then?");
+    await createNativeCanvasTransport({ bindTools: () => ({ invoke }) } as never, []).complete(system, withImage);
+    expect(((seen[1][1] as HumanMessage).content as Array<{ type: string }>).map((b) => b.type)).toEqual(["text", "image_url"]);
   });
 });

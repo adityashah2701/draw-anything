@@ -1,6 +1,7 @@
 import { pickDefaultProvider } from "@/features/ai/default-provider";
 import { normalizeArgs } from "../args";
-import { isSelectableNvidiaModel } from "@/features/ai/nvidia-models";
+import { isSelectableNvidiaModel, modelSupportsVision } from "@/features/ai/nvidia-models";
+import { getAIModelProviderConfig } from "@/features/ai/server/model-providers";
 import type { AIModelProvider } from "@/features/ai/types";
 import { toUserFacingMessage } from "@/features/ai/server/errors";
 import { MAX_BODY_BYTES, type SlidingWindowLimiter } from "@/features/ai/server/request-guard";
@@ -10,7 +11,8 @@ import { UNIFIED_GROUPS } from "./flags";
 import { TOOL_GROUPS, toolEnabled, type ToolDefinition, type ToolGroup } from "../types";
 import { buildSystemPrompt, type MemoryNote } from "./prompt";
 import type { CanvasTransport, ModelReply } from "./transport";
-import { MAX_CALLS_PER_TURN, MAX_TURN_CHARS, messageChars, turnRequestSchema, type CanvasTurn } from "./types";
+import { MAX_TOTAL_IMAGE_CHARS, countImages } from "./images";
+import { MAX_CALLS_PER_TURN, MAX_THINKING_CHARS, MAX_TURN_CHARS, messageChars, turnRequestSchema, type CanvasTurn } from "./types";
 
 export interface CanvasAgentLog {
   event: "canvas_agent_turn";
@@ -30,7 +32,7 @@ export interface CanvasAgentHandlerDeps {
   enabledProviders: () => readonly AIModelProvider[];
   limiter: SlidingWindowLimiter;
   /** Runs one model turn for the provider; the route wires the real provider abstraction, tests a scripted model. */
-  createTransport: (provider: AIModelProvider, specs: ReturnType<typeof specsFor>, model?: string) => CanvasTransport;
+  createTransport: (provider: AIModelProvider, specs: ReturnType<typeof specsFor>, model?: string, vision?: boolean) => CanvasTransport;
   /**
    * The unified agent (generate and memory tools, board memory in the prompt). Off by default: while it is off
    * those groups are not offered, enabled or accepted, and the endpoint behaves as it did before.
@@ -128,7 +130,7 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
     } catch {
       return done(fail(400, "Request body could not be read."));
     }
-    if (body.length > MAX_BODY_BYTES) return done(fail(413, "The request is too large."));
+    if (body.length > MAX_BODY_BYTES + MAX_TOTAL_IMAGE_CHARS) return done(fail(413, "The request is too large."));
     let raw: unknown;
     try {
       raw = JSON.parse(body);
@@ -144,6 +146,8 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
     const first = request.messages[0];
     const last = request.messages[request.messages.length - 1];
     if (first.role !== "user" || last.role === "assistant") return done(fail(400, "The conversation must start with the user and end with a user or tool message."));
+    // Images count against their own budget; the text of the conversation keeps the ordinary one.
+    if (body.length - request.messages.reduce((sum, m) => sum + (m.role === "user" ? (m.images ?? []).reduce((n, i) => n + i.length, 0) : 0), 0) > MAX_BODY_BYTES) return done(fail(413, "The request is too large."));
     if (request.messages.reduce((sum, message) => sum + messageChars(message), 0) > MAX_TURN_CHARS) return done(fail(413, "The conversation is too long. Start a new one."));
 
     const access = await deps.checkBoardAccess({ userId, whiteboardId: request.whiteboardId });
@@ -155,6 +159,23 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
 
     // A model is a variant of the NVIDIA provider; anything not on its list is refused, never forwarded. The request must name the provider itself; the default provider does not imply one.
     if (request.model !== undefined && (request.provider !== "nvidia" || !isSelectableNvidiaModel(request.model))) return done(fail(400, "That AI model is not available."), { provider });
+
+    // Images only ever go to a model that can read them. A text-only choice that has a vision sibling (the GLM models,
+    // Groq's default) is swapped for it, and the person is told; a provider with none refuses.
+    const images = countImages(request.messages);
+    let notice: string | undefined;
+    if (images > 0) {
+      if (provider === "local") return done(fail(400, "The local model cannot read images. Remove the images or choose another model."), { provider });
+      try {
+        const chosen = getAIModelProviderConfig(provider, { model: request.model });
+        const seen = getAIModelProviderConfig(provider, { model: request.model, vision: true });
+        if (seen.modelName !== chosen.modelName || !modelSupportsVision(provider, request.model)) {
+          notice = `${chosen.displayName} cannot read images, so ${seen.displayName === chosen.displayName ? seen.modelName : seen.displayName} was used for this request.`;
+        }
+      } catch {
+        // Unknown configuration: the transport decides; there is just no notice.
+      }
+    }
 
     const unified = deps.unifiedAgent?.() === true;
     const tools = unified ? unifiedTools : baseTools;
@@ -181,13 +202,13 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
     }
 
     try {
-      const transport = deps.createTransport(provider, specs, request.model);
+      const transport = deps.createTransport(provider, specs, request.model, images > 0);
       const reply = await transport.complete(
         (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind, available, memories, summary }),
         request.messages,
       );
       const calls = checkModelCalls(reply, tools, groups, () => `call_${now().toString(36)}_${(counter += 1).toString(36)}`);
-      const turn: CanvasTurn = { text: reply.text, calls, transport: transport.kind };
+      const turn: CanvasTurn = { text: reply.text, calls, transport: transport.kind, ...(reply.thinking ? { thinking: reply.thinking.slice(0, MAX_THINKING_CHARS) } : {}), ...(notice ? { notice } : {}) };
       return done(json(200, turn), { provider, ...(request.model ? { model: request.model } : {}), transport: transport.kind, calls: calls.map((call) => call.name) });
     } catch (error) {
       console.error("[canvas-agent] model turn failed:", error);

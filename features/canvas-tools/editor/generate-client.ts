@@ -11,6 +11,8 @@ export interface GenerateClientOptions {
   fetchImpl?: typeof fetch;
   /** What the generator is doing now, for the panel: a phase, a note, how many elements have been drawn. */
   onProgress?: (text: string) => void;
+  /** The generator's own reasoning notes, as they arrive (what the old Generate tab showed as "Thinking"). */
+  onThinking?: (text: string) => void;
   /** Longest wait with nothing at all from the generator (ms). */
   idleMs?: number;
   /** Longest a whole generation may take (ms). */
@@ -63,7 +65,7 @@ export const generateElements = async (options: GenerateClientOptions): Promise<
   }
 };
 
-const readGeneration = async ({ whiteboardId, provider, description, diagramType, signal, fetchImpl = fetch, onProgress }: GenerateClientOptions, alive: () => void): Promise<GenerateOutcome> => {
+const readGeneration = async ({ whiteboardId, provider, description, diagramType, signal, fetchImpl = fetch, onProgress, onThinking }: GenerateClientOptions, alive: () => void): Promise<GenerateOutcome> => {
   const prompt = diagramType ? `${description}\n\nDiagram type: ${diagramType}.` : description;
   const response = await fetchImpl("/api/ai/generate-diagram", {
     method: "POST",
@@ -88,6 +90,7 @@ const readGeneration = async ({ whiteboardId, provider, description, diagramType
         break;
       case "agent.note":
         onProgress?.(event.note.title);
+        if (event.note.kind === "reasoning" && event.note.text?.trim()) onThinking?.(event.note.text);
         break;
       case "element.batch":
         for (const el of event.elements) elements.set(el.id, el);

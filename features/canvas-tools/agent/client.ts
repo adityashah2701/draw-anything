@@ -55,5 +55,8 @@ export const createTurnClient =
     }
     const turn = (await response.json().catch(() => null)) as CanvasTurn | null;
     if (!turn || typeof turn.text !== "string" || !Array.isArray(turn.calls)) throw new AgentRequestError("The assistant sent a reply that could not be read.", 502);
+    // Display-only fields are read defensively: a malformed one is dropped, never trusted.
+    if (typeof turn.thinking !== "string") delete turn.thinking;
+    if (typeof turn.notice !== "string") delete turn.notice;
     return turn;
   };

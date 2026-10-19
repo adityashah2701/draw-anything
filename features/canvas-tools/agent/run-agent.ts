@@ -2,11 +2,16 @@ import type { ToolExecutor } from "../executor";
 import type { ToolGroup, ToolResult } from "../types";
 import { formatResultForModel } from "./format";
 import { suggestGroups } from "./groups";
+import { stripImages } from "./images";
 import type { CanvasMessage, CanvasToolCall, CanvasTurn } from "./types";
 
 export type AgentEvent =
   | { type: "turn"; step: number }
   | { type: "assistant"; text: string }
+  /** The model's own reasoning for a turn, when it exposes any. */
+  | { type: "thinking"; step: number; text: string }
+  /** Something about how a turn ran that the person should see (images read by another model). */
+  | { type: "notice"; text: string }
   /** The calls of this step are about to run (a long one, like diagram generation, can take a while). */
   | { type: "calling"; step: number; calls: CanvasToolCall[] }
   | { type: "tool"; step: number; call: CanvasToolCall; result: ToolResult }
@@ -30,6 +35,8 @@ export interface AgentRun {
 
 export interface RunAgentOptions {
   prompt: string;
+  /** Images attached to the prompt (`data:` URLs). They go to the model with this run only; the returned messages carry a note instead. */
+  images?: string[];
   /** Earlier turns of the same conversation. */
   history?: readonly CanvasMessage[];
   executor: ToolExecutor;
@@ -90,18 +97,19 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
   let lastProgressAt = startedAt;
   let verifyRounds = 0;
   let wroteSinceCheck = false;
-  const messages: CanvasMessage[] = [...(options.history ?? []), { role: "user", content: options.prompt }];
+  const messages: CanvasMessage[] = [...(options.history ?? []), { role: "user", content: options.prompt, ...(options.images?.length ? { images: options.images } : {}) }];
   const results: ToolResult[] = [];
   executor.enable(suggestGroups(options.prompt, { unified: options.unified }));
 
   let remaining: string[] = [];
   let limit: AgentRun["limit"];
   const finish = (status: AgentRun["status"], text = "", error?: string, steps = 0): AgentRun => {
-    const run: AgentRun = { status, text, ...(error ? { error } : {}), ...(limit ? { limit } : {}), ...(remaining.length > 0 ? { remaining } : {}), steps, results, totals: tally(results), messages };
+    const run: AgentRun = { status, text, ...(error ? { error } : {}), ...(limit ? { limit } : {}), ...(remaining.length > 0 ? { remaining } : {}), steps, results, totals: tally(results), messages: stripImages(messages) };
     onEvent?.({ type: "finished", run });
     return run;
   };
 
+  let lastNotice = "";
   let lastFailure = "";
   let repeated = 0;
   let lastSignature = "";
@@ -128,6 +136,11 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
       return finish("error", "", error instanceof Error ? error.message : "The assistant could not be reached.", step - 1);
     }
     if (signal?.aborted) return finish("aborted", "", undefined, step);
+    if (turn.notice && turn.notice !== lastNotice) {
+      lastNotice = turn.notice;
+      onEvent?.({ type: "notice", text: turn.notice });
+    }
+    if (turn.thinking?.trim()) onEvent?.({ type: "thinking", step, text: turn.thinking });
 
     // Ids are made unique across turns (providers may reuse "call_1"), so a retried id is never mistaken for a replay.
     const calls: CanvasToolCall[] = turn.calls.map((call, index) => ({ id: `s${step}_${index}_${call.id}`.slice(0, 80), name: call.name, args: call.args }));
