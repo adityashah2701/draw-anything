@@ -27,6 +27,9 @@ window.__editor = {
     saveCount: backend.saveCount,
     mutationLog: backend.mutationLog,
     seedOtherBoard: backend.seedOtherBoard,
+    seedLegacyFrame: backend.seedLegacyFrame,
+    conversation: backend.conversation,
+    memories: backend.memories,
   },
 };
 

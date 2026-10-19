@@ -29,6 +29,8 @@ export interface RunAgentOptions {
   executor: ToolExecutor;
   callTurn: (input: { messages: CanvasMessage[]; enabledGroups: ToolGroup[] }) => Promise<CanvasTurn>;
   maxSteps?: number;
+  /** The unified agent is on: the generate and memory groups can be suggested from the request. */
+  unified?: boolean;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
 }
@@ -55,7 +57,7 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
   const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
   const messages: CanvasMessage[] = [...(options.history ?? []), { role: "user", content: options.prompt }];
   const results: ToolResult[] = [];
-  executor.enable(suggestGroups(options.prompt));
+  executor.enable(suggestGroups(options.prompt, { unified: options.unified }));
 
   const finish = (status: AgentRun["status"], text = "", error?: string, steps = 0): AgentRun => {
     const run: AgentRun = { status, text, ...(error ? { error } : {}), steps, results, totals: tally(results), messages };

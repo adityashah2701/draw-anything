@@ -1,10 +1,12 @@
+import { isSelectableNvidiaModel } from "@/features/ai/nvidia-models";
 import type { AIModelProvider } from "@/features/ai/types";
 import { toUserFacingMessage } from "@/features/ai/server/errors";
 import { MAX_BODY_BYTES, type SlidingWindowLimiter } from "@/features/ai/server/request-guard";
 import { buildTools, specsFor } from "../registry";
 import { describeIssues } from "../schemas";
+import { UNIFIED_GROUPS } from "./flags";
 import { TOOL_GROUPS, type ToolDefinition, type ToolGroup } from "../types";
-import { buildSystemPrompt } from "./prompt";
+import { buildSystemPrompt, type MemoryNote } from "./prompt";
 import type { CanvasTransport, ModelReply } from "./transport";
 import { MAX_CALLS_PER_TURN, MAX_TURN_CHARS, messageChars, turnRequestSchema, type CanvasTurn } from "./types";
 
@@ -26,7 +28,14 @@ export interface CanvasAgentHandlerDeps {
   enabledProviders: () => readonly AIModelProvider[];
   limiter: SlidingWindowLimiter;
   /** Runs one model turn for the provider; the route wires the real provider abstraction, tests a scripted model. */
-  createTransport: (provider: AIModelProvider, specs: ReturnType<typeof specsFor>) => CanvasTransport;
+  createTransport: (provider: AIModelProvider, specs: ReturnType<typeof specsFor>, model?: string) => CanvasTransport;
+  /**
+   * The unified agent (generate and memory tools, board memory in the prompt). Off by default: while it is off
+   * those groups are not offered, enabled or accepted, and the endpoint behaves as it did before.
+   */
+  unifiedAgent?: () => boolean;
+  /** The notes saved for this board, read as the signed-in user. A failure only means the prompt carries no memory. */
+  loadMemories?: (input: { userId: string; whiteboardId: string }) => Promise<readonly MemoryNote[]>;
   /** Provider used when the request names none. */
   defaultProvider?: () => AIModelProvider | undefined;
   /** Structured log sink: events carry names and counts only, never arguments, content or keys. */
@@ -64,6 +73,7 @@ const asArgs = (args: unknown): unknown => {
  */
 export const checkModelCalls = (reply: ModelReply, tools: readonly ToolDefinition[], enabled: ReadonlySet<ToolGroup>, newId: () => string): CanvasTurn["calls"] => {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
+  const offered = new Set(tools.map((tool) => tool.group));
   const on = new Set(enabled);
   return reply.calls.slice(0, MAX_CALLS_PER_TURN).map((call) => {
     const id = call.id && call.id.length <= 80 ? call.id : newId();
@@ -75,7 +85,7 @@ export const checkModelCalls = (reply: ModelReply, tools: readonly ToolDefinitio
     const args = asArgs(call.args);
     const parsed = tool.input.safeParse(args);
     if (!parsed.success) return { id, name: tool.name, args, problem: { code: "invalid_arguments" as const, message: `Invalid arguments for ${tool.name}: ${describeIssues(parsed.error)}.` } };
-    if (tool.name === "enable_tools") for (const group of (parsed.data as { groups: ToolGroup[] }).groups) on.add(group);
+    if (tool.name === "enable_tools") for (const group of (parsed.data as { groups: ToolGroup[] }).groups) if (offered.has(group)) on.add(group);
     return { id, name: tool.name, args };
   });
 };
@@ -90,7 +100,9 @@ let counter = 0;
  */
 export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
   const now = deps.now ?? Date.now;
-  const tools = buildTools(() => undefined);
+  const everyTool = buildTools(() => undefined);
+  const unifiedTools = everyTool;
+  const baseTools = everyTool.filter((tool) => !(UNIFIED_GROUPS as readonly string[]).includes(tool.group));
 
   return async (req: Request): Promise<Response> => {
     const started = now();
@@ -137,18 +149,33 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
     const provider = request.provider ?? deps.defaultProvider?.() ?? enabledProviders[0];
     if (!provider || !enabledProviders.includes(provider)) return done(fail(400, "That AI provider is not available on this server."));
 
-    const groups = new Set<ToolGroup>(["inspect", ...(request.enabledGroups ?? [])].filter((group): group is ToolGroup => (TOOL_GROUPS as readonly string[]).includes(group)));
+    // A model is a variant of the NVIDIA provider; anything not on its list is refused, never forwarded.
+    if (request.model !== undefined && (provider !== "nvidia" || !isSelectableNvidiaModel(request.model))) return done(fail(400, "That AI model is not available."), { provider });
+
+    const unified = deps.unifiedAgent?.() === true;
+    const tools = unified ? unifiedTools : baseTools;
+    const available = TOOL_GROUPS.filter((group) => unified || !(UNIFIED_GROUPS as readonly string[]).includes(group));
+    const groups = new Set<ToolGroup>(["inspect", ...(request.enabledGroups ?? [])].filter((group): group is ToolGroup => available.includes(group as ToolGroup)));
     const specs = specsFor(tools, groups);
 
+    let memories: readonly MemoryNote[] = [];
+    if (unified && deps.loadMemories) {
+      try {
+        memories = await deps.loadMemories({ userId, whiteboardId: request.whiteboardId });
+      } catch (error) {
+        console.warn("[canvas-agent] board memory unavailable, continuing without it:", error instanceof Error ? error.message : error);
+      }
+    }
+
     try {
-      const transport = deps.createTransport(provider, specs);
+      const transport = deps.createTransport(provider, specs, request.model);
       const reply = await transport.complete(
-        (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind }),
+        (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind, available, memories }),
         request.messages,
       );
       const calls = checkModelCalls(reply, tools, groups, () => `call_${now().toString(36)}_${(counter += 1).toString(36)}`);
       const turn: CanvasTurn = { text: reply.text, calls, transport: transport.kind };
-      return done(json(200, turn), { provider, transport: transport.kind, calls: calls.map((call) => call.name) });
+      return done(json(200, turn), { provider, ...(request.model ? { model: request.model } : {}), transport: transport.kind, calls: calls.map((call) => call.name) });
     } catch (error) {
       console.error("[canvas-agent] model turn failed:", error);
       return done(fail(502, publicMessage(error)), { provider });
