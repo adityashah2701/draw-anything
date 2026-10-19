@@ -1,4 +1,5 @@
 import { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
+import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
 import { phaseCompleted, phaseStarted } from "@/features/ai/server/agents/types";
 import { createInitialAIFrame } from "@/features/ai/server/workflow";
 import { documentFromParsedCode } from "@/features/diagram-code/canvas";
@@ -58,7 +59,7 @@ export async function* withLiveEvents<T>(work: (emit: (event: AIStreamEvent) => 
  */
 export async function* streamDiagramAgentEvents(options: DiagramAgentOptions): AsyncGenerator<AIStreamEvent> {
   const { request } = options;
-  const provider: AIModelProvider = request.provider ?? request.model ?? "gemini";
+  const provider: AIModelProvider = request.provider ?? request.model ?? DEFAULT_AI_PROVIDER;
   const frame = createInitialAIFrame(request);
   const frameId = frame.frameId;
   const controller = new AbortController();

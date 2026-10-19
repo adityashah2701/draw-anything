@@ -6,8 +6,9 @@ import {
 } from "@/features/ai/server/model-providers";
 
 describe("AI model providers", () => {
-  it("uses Gemini as the default provider", () => {
-    expect(getAIModelProviderConfig().provider).toBe("gemini");
+  it("uses NVIDIA Nemotron as the default provider and keeps Gemini selectable", () => {
+    expect(getAIModelProviderConfig()).toMatchObject({ provider: "nvidia", modelName: "nvidia/nemotron-3.5-super-vl-120b-a12b" });
+    expect(getAIModelProviderConfig("gemini").provider).toBe("gemini");
   });
 
   it("throws a clear missing-key error", () => {

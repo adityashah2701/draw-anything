@@ -1,3 +1,4 @@
+import { pickDefaultProvider } from "@/features/ai/default-provider";
 import type {
   AIGenerateDiagramRequest,
   AIModelProvider,
@@ -123,9 +124,7 @@ export const parseGenerateRequest = (
   const requested = body.provider ?? body.model;
   let provider: AIModelProvider;
   if (requested === undefined || requested === null || requested === "") {
-    provider = options.enabledProviders.includes("gemini")
-      ? "gemini"
-      : options.enabledProviders[0];
+    provider = pickDefaultProvider(options.enabledProviders)!;
   } else if (
     typeof requested !== "string" ||
     !ALL_PROVIDERS.includes(requested as AIModelProvider)

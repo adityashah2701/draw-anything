@@ -1,4 +1,5 @@
 import { phaseCompleted, phaseStarted } from "@/features/ai/server/agents/types";
+import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
 import { createInitialAIFrame } from "@/features/ai/server/workflow";
 import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -66,7 +67,7 @@ const visionRequested = (env: Record<string, string | undefined> = process.env) 
  */
 export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions): AsyncGenerator<AIStreamEvent> {
   const { request } = options;
-  const provider: AIModelProvider = request.provider ?? request.model ?? "gemini";
+  const provider: AIModelProvider = request.provider ?? request.model ?? DEFAULT_AI_PROVIDER;
   const frame = createInitialAIFrame(request);
   const frameId = frame.frameId;
   const generationId = createGenerationId();
