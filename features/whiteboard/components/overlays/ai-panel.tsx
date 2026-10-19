@@ -1,15 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, Code2, Maximize, RotateCcw, X } from "lucide-react";
+import { ArrowUp, Code2, ImagePlus, Maximize, RotateCcw, X } from "lucide-react";
 import type { AIModelProvider } from "@/features/ai/types";
 import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
-import { NVIDIA_MODELS, isSelectableNvidiaModel } from "@/features/ai/nvidia-models";
+import { NVIDIA_MODELS, isSelectableNvidiaModel, modelSupportsVision } from "@/features/ai/nvidia-models";
 import type { AIChatMessage } from "@/features/whiteboard/hooks/controller/use-ai-generation";
 import { AGENT_WIDTH_CSS } from "@/features/whiteboard/components/overlays/panel-layout";
 import { AITimeline } from "@/features/whiteboard/components/overlays/ai-timeline";
 import { CanvasAgentView } from "@/features/whiteboard/components/overlays/canvas-agent-view";
 import { UNIFIED_EXAMPLES } from "@/features/whiteboard/components/overlays/agent-examples";
+import { IMAGE_TYPES, MAX_IMAGES } from "@/features/canvas-tools/agent/images";
+import { imageFilesOf, useImageAttachments } from "@/features/whiteboard/components/overlays/use-image-attachments";
 import type { useCanvasAgent } from "@/features/canvas-tools/editor/use-canvas-agent";
 
 interface AIPanelProps {
@@ -125,6 +127,8 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   // On by default when there is a diagram to change; switch it off to draw a separate new one.
   const [editCurrent, setEditCurrent] = React.useState(true);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const stickToBottom = React.useRef(true);
 
@@ -166,13 +170,21 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   const lockedText = lockedBy ? (lockedBy.mine ? "The assistant is working for you in another tab…" : `${lockedBy.name} is using the assistant…`) : null;
   const busy = board ? Boolean(canvasAgent?.running) || lockedBy !== null : isGenerating;
 
+  // Pictures go to the board agent only (the diagram generator takes text). A model that cannot read them is named here, and the server never sends them to one.
+  const canAttach = board && model !== "local";
+  const attachments = useImageAttachments(canAttach);
+  const textOnly = !modelSupportsVision(model, variant);
+  const attachHint = !board ? null : model === "local" ? "The local model cannot read images." : textOnly ? "This model cannot read images, so NVIDIA Nemotron reads them for this request." : null;
+
   const send = (text: string) => {
-    const value = text.trim();
-    if (!value || disabled || busy) return;
+    const images = canAttach ? attachments.items.map((item) => item.url) : [];
+    const value = text.trim() || (images.length > 0 ? `Use the attached ${images.length === 1 ? "image" : "images"}.` : "");
+    if (!value || disabled || busy || attachments.busy) return;
     stickToBottom.current = true;
-    if (board) void canvasAgent!.send(value, model, variant);
+    if (board) void canvasAgent!.send(value, model, variant, images);
     else triggerAIGeneration(value, model, canEdit && editCurrent);
     setInput("");
+    attachments.clear();
   };
 
   if (!isOpen) return null;
@@ -324,13 +336,56 @@ export const AIPanel: React.FC<AIPanelProps> = ({
           e.preventDefault();
           send(input);
         }}
+        onDragOver={(e) => {
+          if (!canAttach || busy || !e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          setDragging(false);
+          const files = imageFilesOf(e.dataTransfer);
+          if (!canAttach || busy || files.length === 0) return;
+          e.preventDefault();
+          void attachments.add(files);
+        }}
         className="shrink-0 border-t border-border p-3"
       >
-        <div className="rounded-lg border border-input bg-background transition-colors focus-within:border-foreground/40">
+        <div data-testid="agent-composer" data-dragging={dragging ? "true" : "false"} className={`rounded-lg border bg-background transition-colors focus-within:border-foreground/40 ${dragging ? "border-foreground/60 bg-muted/40" : "border-input"}`}>
+          {attachments.items.length > 0 && (
+            <ul data-testid="agent-attachments" className="flex flex-wrap gap-2 px-3 pt-2.5">
+              {attachments.items.map((item) => (
+                <li key={item.id} className="group relative h-12 w-12 overflow-hidden rounded-md border border-border bg-muted">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a local data: URL, not something next/image can optimise */}
+                  <img src={item.url} alt={item.name} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    aria-label={`Remove ${item.name}`}
+                    data-testid="agent-attachment-remove"
+                    onClick={() => attachments.remove(item.id)}
+                    className="absolute right-0.5 top-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background/90 text-foreground opacity-0 shadow-sm transition-opacity hover:bg-background focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <X size={10} strokeWidth={2.5} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {attachHint && attachments.items.length > 0 && (
+            <p data-testid="agent-attach-hint" className="px-3 pt-1.5 font-mono text-[10px] leading-snug text-amber-600">
+              {attachHint}
+            </p>
+          )}
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={(e) => {
+              const files = imageFilesOf(e.clipboardData);
+              if (!canAttach || busy || files.length === 0) return;
+              e.preventDefault();
+              void attachments.add(files);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
@@ -355,14 +410,43 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             ) : (
               <span className="font-mono text-[10px] text-muted-foreground">Enter to send · Shift+Enter for a new line</span>
             )}
+            <div className="flex items-center gap-1">
+            {canAttach && (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept={IMAGE_TYPES.join(",")}
+                  multiple
+                  hidden
+                  data-testid="agent-file-input"
+                  onChange={(e) => {
+                    void attachments.add(e.target.files ?? []);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label={`Attach images (up to ${MAX_IMAGES})`}
+                  title={attachHint ?? `Attach images (up to ${MAX_IMAGES}), or paste or drop them`}
+                  data-testid="agent-attach"
+                  disabled={disabled || busy || attachments.items.length >= MAX_IMAGES}
+                  onClick={() => fileRef.current?.click()}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ImagePlus size={15} />
+                </button>
+              </>
+            )}
             <button
               type="submit"
               aria-label="Send"
-              disabled={!input.trim() || disabled || busy}
+              disabled={(!input.trim() && attachments.items.length === 0) || disabled || busy || attachments.busy}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-30"
             >
               <ArrowUp size={15} strokeWidth={2.25} />
             </button>
+            </div>
           </div>
         </div>
       </form>

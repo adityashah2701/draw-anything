@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Code2, Maximize, ShieldAlert, Square, Undo2, X } from "lucide-react";
+import { Check, ChevronRight, Code2, ImageIcon, Maximize, ShieldAlert, Square, Undo2, X } from "lucide-react";
 import type { AgentUiMessage, PendingConfirmation } from "@/features/canvas-tools/editor/use-canvas-agent";
 import { BOARD_EXAMPLES } from "./agent-examples";
 import { AgentMarkdown } from "./agent-markdown";
@@ -49,6 +49,44 @@ const Step: React.FC<{ message: Extract<AgentUiMessage, { kind: "tool" }>; actio
   </li>
 );
 
+/**
+ * What the model (or the diagram generator) said while it worked. Clearly secondary: small, muted, collapsed once
+ * the run moves on, open while it is the newest thing in a running transcript so it can be followed live.
+ */
+const Thinking: React.FC<{ message: Extract<AgentUiMessage, { kind: "thinking" }>; live: boolean }> = ({ message, live }) => {
+  const [open, setOpen] = React.useState(live);
+  const touched = React.useRef(false);
+  React.useEffect(() => {
+    if (!touched.current) setOpen(live);
+  }, [live]);
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (live && open && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [live, open, message.text]);
+  return (
+    <li data-testid="agent-thinking" data-open={open ? "true" : "false"} data-live={live ? "true" : "false"} data-source={message.source}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => {
+          touched.current = true;
+          setOpen((value) => !value);
+        }}
+        className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
+      >
+        <ChevronRight size={11} aria-hidden className={`transition-transform ${open ? "rotate-90" : ""}`} />
+        {live ? "Thinking…" : "Thought"}
+        {message.source === "generator" && <span className="text-muted-foreground/70">· diagram generator</span>}
+      </button>
+      {open && (
+        <div ref={bodyRef} data-testid="agent-thinking-body" className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words border-l border-border pl-3 text-[12px] leading-snug text-muted-foreground">
+          {message.text}
+        </div>
+      )}
+    </li>
+  );
+};
+
 interface Props {
   messages: AgentUiMessage[];
   running: boolean;
@@ -73,7 +111,7 @@ interface Props {
 export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmation, onConfirm, onStop, onUndoRun, canUndoRun, onExample, disabled, shared = false, activity = null, examples = BOARD_EXAMPLES, intro, onFit, onOpenCode }) => {
   const notice = shared ? (
     <p data-testid="agent-shared-notice" className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-      This conversation is shared with everyone who can open this board. What you ask here, and the assistant&apos;s answers and saved notes, are visible to them.
+      This conversation is shared with everyone who can open this board. What you ask here, and the assistant&apos;s answers, thinking and saved notes, are visible to them. Attached images are used for the request only and are not saved.
     </p>
   ) : null;
 
@@ -112,7 +150,20 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
           if (message.kind === "user") {
             return (
               <li key={message.id} className="rounded-md bg-muted/60 px-3 py-2 text-[13px] leading-relaxed text-foreground" data-testid="agent-user">
-                {message.text}
+                {message.previews && message.previews.length > 0 && (
+                  <div className="mb-1.5 flex flex-wrap gap-1.5" data-testid="agent-user-images">
+                    {message.previews.map((url, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element -- a local data: URL
+                      <img key={i} src={url} alt={`Attached image ${i + 1}`} className="h-14 w-14 rounded border border-border object-cover" />
+                    ))}
+                  </div>
+                )}
+                {!message.previews?.length && message.images ? (
+                  <p data-testid="agent-user-image-count" className="mb-1 inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
+                    <ImageIcon size={11} aria-hidden /> {message.images} image{message.images === 1 ? "" : "s"} attached
+                  </p>
+                ) : null}
+                <p>{message.text}</p>
               </li>
             );
           }
@@ -122,6 +173,9 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
                 <AgentMarkdown text={message.text} />
               </li>
             );
+          }
+          if (message.kind === "thinking") {
+            return <Thinking key={message.id} message={message} live={running && messages.slice(index + 1).every((later) => later.kind === "thinking")} />;
           }
           if (message.kind === "status") {
             return (

@@ -79,6 +79,7 @@ export const scriptedRun = async (options: {
   budget?: Partial<RunBudget>;
   now?: () => number;
   history?: CanvasMessage[];
+  images?: string[];
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
   checkBoardAccess?: Parameters<typeof createCanvasAgentHandler>[0]["checkBoardAccess"];
@@ -98,6 +99,7 @@ export const scriptedRun = async (options: {
     budget: options.budget,
     now: options.now,
     history: options.history,
+    images: options.images,
     unified: options.unified,
     signal: options.signal,
     onEvent: options.onEvent,

@@ -15,7 +15,7 @@ import { createTurnClient } from "../agent/client";
 import { unifiedAgentClientEnabled } from "../agent/flags";
 import { compactHistory, parseHistory } from "../agent/history";
 import { describeRun, runCanvasAgent, type AgentEvent } from "../agent/run-agent";
-import type { CanvasMessage } from "../agent/types";
+import { MAX_THINKING_CHARS, type CanvasMessage } from "../agent/types";
 import { revisionOf } from "../revision";
 import { createCanvasTools } from "../runtime";
 import type { ExportRequest } from "../types";
@@ -24,7 +24,10 @@ import { generateElements } from "./generate-client";
 import { fromRows, toRow } from "./persisted-messages";
 
 export type AgentUiMessage =
-  | { id: string; kind: "user"; text: string }
+  /** `images` counts the pictures attached; `previews` (this tab only, while the run is local) are small data URLs. Pixels are never stored. */
+  | { id: string; kind: "user"; text: string; images?: number; previews?: string[] }
+  /** The model's or generator's own reasoning: secondary to the answer, collapsible. */
+  | { id: string; kind: "thinking"; text: string; source: "model" | "generator" }
   | { id: string; kind: "assistant"; text: string }
   | { id: string; kind: "tool"; tool: string; ok: boolean; summary: string; changed: number; skipped: number; warnings: string[]; code?: string }
   | { id: string; kind: "status"; text: string; tone: "ok" | "warn" | "error" };
@@ -38,6 +41,8 @@ export interface PendingConfirmation {
 const LEASE_RENEW_MS = 30_000;
 
 const newRunId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+
+const capThinking = (text: string) => (text.length > MAX_THINKING_CHARS ? `…${text.slice(text.length - MAX_THINKING_CHARS + 1)}` : text);
 
 const nextTick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -81,6 +86,19 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   const [, forceTick] = useState(0);
   const counter = useRef(0);
   const nextId = () => `agent-${(counter.current += 1)}`;
+  // The generator's reasoning notes arrive while one generate_diagram call runs: they grow one block, not one block each.
+  const generatorThinkingId = useRef<string | null>(null);
+  const appendGeneratorThinking = useRef<(text: string) => void>(() => {});
+  appendGeneratorThinking.current = (text: string) => {
+    const id = generatorThinkingId.current;
+    if (id) {
+      setMessages((prev) => prev.map((m) => (m.id === id && m.kind === "thinking" ? { ...m, text: capThinking(`${m.text}\n\n${text}`) } : m)));
+      return;
+    }
+    const created = nextId();
+    generatorThinkingId.current = created;
+    setMessages((prev) => [...prev, { id: created, kind: "thinking", text: capThinking(text), source: "generator" }]);
+  };
 
   const resolveConfirmation = useCallback((approved: boolean) => {
     confirmRef.current?.(approved);
@@ -182,7 +200,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         ...(unified
           ? {
               generate: (request: { description: string; diagramType?: string }) =>
-                generateElements({ whiteboardId: String(latest.current.whiteboard?._id ?? ""), provider: providerRef.current, description: request.description, diagramType: request.diagramType, signal: abortRef.current?.signal, onProgress: (text) => setActivity(text) }),
+                generateElements({ whiteboardId: String(latest.current.whiteboard?._id ?? ""), provider: providerRef.current, description: request.description, diagramType: request.diagramType, signal: abortRef.current?.signal, onProgress: (text) => setActivity(text), onThinking: (text) => appendGeneratorThinking.current(text) }),
               remember: async (entry: { kind: "preference" | "correction" | "decision" | "fact"; text: string }) => {
                 const saved = await convex.mutation(api.aiMemory.remember, { whiteboardId: String(latest.current.whiteboard?._id ?? ""), ...entry });
                 return { duplicate: saved.duplicate };
@@ -200,7 +218,13 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   );
 
   const record = useCallback((event: AgentEvent) => {
-    if (event.type === "calling") {
+    if (event.type === "thinking") {
+      generatorThinkingId.current = null;
+      setMessages((prev) => [...prev, { id: nextId(), kind: "thinking", text: event.text, source: "model" }]);
+    } else if (event.type === "notice") {
+      setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone: "warn", text: event.text }]);
+    } else if (event.type === "calling") {
+      generatorThinkingId.current = null;
       const names = event.calls.map((c) => c.name);
       setActivity(names.includes("generate_diagram") ? "Generating the diagram…" : names.length === 1 ? `Running ${names[0]}…` : `Running ${names.length} steps…`);
     } else if (event.type === "assistant") {
@@ -249,7 +273,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   );
 
   const send = useCallback(
-    async (prompt: string, provider?: AIModelProvider, model?: string) => {
+    async (prompt: string, provider?: AIModelProvider, model?: string, images: string[] = []) => {
       const text = prompt.trim();
       const c = latest.current;
       if (!text || running) return;
@@ -279,7 +303,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         runIdRef.current = runId;
       }
 
-      setMessages((prev) => [...prev, { id: nextId(), kind: "user", text }]);
+      setMessages((prev) => [...prev, { id: nextId(), kind: "user", text, ...(images.length > 0 ? { images: images.length, previews: images } : {}) }]);
       providerRef.current = provider;
       setRunning(true);
       setLastRun(null);
@@ -309,6 +333,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
       try {
         const run = await runCanvasAgent({
           prompt: text,
+          images,
           history: historyRef.current,
           executor,
           unified,

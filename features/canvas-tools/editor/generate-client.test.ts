@@ -122,3 +122,19 @@ describe("generateElements", () => {
     await expect(generateElements({ ...base, signal: controller.signal, fetchImpl: responding(silent()) })).rejects.toMatchObject({ name: "AbortError" });
   });
 });
+
+describe("generator reasoning notes", () => {
+  it("passes reasoning notes to onThinking as they stream, and only those", async () => {
+    const events = [
+      { type: "phase.started", message: "Planning" },
+      { type: "agent.note", note: { kind: "reasoning", title: "Thinking", text: "Group the services by tier." } },
+      { type: "agent.note", note: { kind: "icons", title: "Looking up icons", text: "Searching for db." } },
+      { type: "frame.done" },
+    ];
+    const body = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
+    const fetchImpl = (async () => new Response(body)) as unknown as typeof fetch;
+    const thoughts: string[] = [];
+    await generateElements({ whiteboardId: "b", description: "x", fetchImpl, onThinking: (t) => thoughts.push(t) });
+    expect(thoughts).toEqual(["Group the services by tier."]);
+  });
+});

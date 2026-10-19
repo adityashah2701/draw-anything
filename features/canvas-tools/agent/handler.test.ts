@@ -282,3 +282,81 @@ describe("canvas agent endpoint: the summary of earlier turns", () => {
     warn.mockRestore();
   });
 });
+
+describe("canvas agent endpoint: images", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+  const withImage = { whiteboardId: "board_1", messages: [{ role: "user", content: "copy this layout", images: [png] }] };
+
+  const visionHarness = (provider: "nvidia" | "local" | "groq" = "nvidia") => {
+    const asked: Array<{ provider: string; model?: string; vision?: boolean }> = [];
+    const result = harness({
+      enabledProviders: () => [provider],
+      createTransport: (p, _specs, model, vision): CanvasTransport => {
+        asked.push({ provider: p, model, vision });
+        return { kind: "native", complete: async () => ({ text: "seen", calls: [] }) };
+      },
+    });
+    return { ...result, asked };
+  };
+
+  it("asks the transport for a vision model whenever the request carries images, and not otherwise", async () => {
+    const { handler, asked } = visionHarness();
+    expect((await handler(post({ ...withImage, provider: "nvidia" }))).status).toBe(200);
+    expect((await handler(post({ ...valid, provider: "nvidia" }))).status).toBe(200);
+    expect(asked.map((a) => a.vision)).toEqual([true, false]);
+  });
+
+  it("tells the person when a text-only model's images were read by its vision sibling, and says nothing for a vision model", async () => {
+    const { handler } = visionHarness();
+    const textOnly = (await (await handler(post({ ...withImage, provider: "nvidia", model: "z-ai/glm-5.3" }))).json()) as { notice?: string };
+    expect(textOnly.notice).toMatch(/cannot read images/);
+    expect(textOnly.notice).toMatch(/Nemotron/);
+    const vision = (await (await handler(post({ ...withImage, provider: "nvidia" }))).json()) as { notice?: string };
+    expect(vision.notice).toBeUndefined();
+  });
+
+  it("refuses images for a provider with no vision model, before any model call", async () => {
+    const { handler, asked } = visionHarness("local");
+    const response = await handler(post({ ...withImage, provider: "local" }));
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toMatch(/cannot read images/);
+    expect(asked).toHaveLength(0);
+  });
+
+  it.each([
+    ["an svg", ["data:image/svg+xml;base64,PHN2Zz4="]],
+    ["a remote url", ["https://example.com/a.png"]],
+    ["five images", Array(5).fill(png)],
+  ])("rejects %s", async (_name, images) => {
+    const { handler, seen } = harness();
+    const response = await handler(post({ whiteboardId: "board_1", messages: [{ role: "user", content: "x", images }] }));
+    expect(response.status).toBe(400);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("keeps auth and the rate limit in front of images", async () => {
+    expect((await harness({ getUserId: async () => null }).handler(post(withImage))).status).toBe(401);
+    const limited = harness({ limiter: createSlidingWindowLimiter({ windowMs: 60_000, max: 1 }) });
+    await limited.handler(post(withImage));
+    expect((await limited.handler(post(withImage))).status).toBe(429);
+  });
+
+  it("gives images their own byte budget but keeps the ordinary one for text", async () => {
+    const big = `data:image/jpeg;base64,${"A".repeat(900_000)}`;
+    const ok = await harness().handler(post({ whiteboardId: "board_1", messages: [{ role: "user", content: "x", images: [big, big] }] }));
+    expect(ok.status).toBe(200);
+    const text = await harness().handler(post({ whiteboardId: "board_1", messages: [{ role: "user", content: "x".repeat(7000) }, { role: "assistant", content: "y".repeat(20_000) }, { role: "user", content: "z", images: [big] }].concat(Array(20).fill({ role: "tool", callId: "c", name: "n", content: "q".repeat(24_000) })) }));
+    expect(text.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe("canvas agent endpoint: thinking", () => {
+  it("returns the model's reasoning with the turn, capped, and omits it when the model shows none", async () => {
+    const shown = await harness({}, { text: "Done.", calls: [], thinking: "t".repeat(20_000) }).handler(post(valid));
+    const turn = (await shown.json()) as { thinking?: string; text: string };
+    expect(turn.text).toBe("Done.");
+    expect(turn.thinking?.length).toBe(6_000);
+    const none = (await (await harness({}, { text: "Done.", calls: [] }).handler(post(valid))).json()) as Record<string, unknown>;
+    expect("thinking" in none).toBe(false);
+  });
+});

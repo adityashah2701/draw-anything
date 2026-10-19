@@ -8,7 +8,7 @@ const suite = findChrome() ? describe : describe.skip;
 
 declare global {
   interface Window {
-    U: { mountExport(elements: DrawingElement[], selectedIds: string[]): void };
+    U: typeof import("./ui-entry");
     fixtureElements: DrawingElement[];
   }
 }
