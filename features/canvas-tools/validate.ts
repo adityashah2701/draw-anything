@@ -14,6 +14,7 @@ export const ISSUE_CODES = [
   "invalid_geometry",
   "dangling_connector",
   "bad_anchor",
+  "stale_connector",
   "dangling_group_ref",
   "empty_group",
   "orphan_edge_label",
@@ -25,7 +26,7 @@ export const ISSUE_CODES = [
 export type IssueCode = (typeof ISSUE_CODES)[number];
 
 /** Problems the repair tool may fix when asked by code. The rest are reported only. */
-export const REPAIRABLE: ReadonlySet<IssueCode> = new Set(["dangling_connector", "bad_anchor", "dangling_group_ref", "empty_group", "orphan_edge_label", "invalid_geometry", "connector_through_node"]);
+export const REPAIRABLE: ReadonlySet<IssueCode> = new Set(["dangling_connector", "bad_anchor", "stale_connector", "dangling_group_ref", "empty_group", "orphan_edge_label", "invalid_geometry", "connector_through_node"]);
 
 export interface Issue {
   code: IssueCode;
@@ -36,6 +37,9 @@ export interface Issue {
 }
 
 const issue = (code: IssueCode, severity: Issue["severity"], message: string, ids: string[]): Issue => ({ code, severity, message, ids, repairable: REPAIRABLE.has(code) });
+
+/** How far a connector end may sit from its connection point before it counts as floating. */
+const STALE_END = 12;
 
 const finite = (n: unknown) => typeof n === "number" && Number.isFinite(n);
 
@@ -58,6 +62,7 @@ export const validateBoard = (ctx: CommandContext): Issue[] => {
   const dangling: string[] = [];
   const badAnchor: string[] = [];
   const freeEnd: string[] = [];
+  const stale: string[] = [];
   for (const arrow of shapes.filter(isArrowElement)) {
     const ends = [arrow.startConnection, arrow.endConnection];
     if (ends.some((end) => end && !ctx.index.shapes.has(end.elementId))) {
@@ -65,17 +70,29 @@ export const validateBoard = (ctx: CommandContext): Issue[] => {
       continue;
     }
     if (ends.some((end) => !end)) freeEnd.push(arrow.id);
-    for (const end of ends) {
+    for (const [index, end] of ends.entries()) {
       if (!end?.anchorId) continue;
       const target = ctx.index.shapes.get(end.elementId)!;
       const bounds = ctx.getBounds(target);
-      if (!bounds || getShapeAnchors(target, bounds).some((anchor) => anchor.id === end.anchorId)) continue;
-      badAnchor.push(arrow.id);
-      break;
+      const anchor = bounds ? getShapeAnchors(target, bounds).find((candidate) => candidate.id === end.anchorId) : undefined;
+      if (!anchor) {
+        if (bounds) {
+          badAnchor.push(arrow.id);
+          break;
+        }
+        continue;
+      }
+      // The path must still reach the connection point; after a move that did not re-route it, an end floats in space.
+      const tip = index === 0 ? arrow.points[0] : arrow.points[arrow.points.length - 1];
+      if (tip && Math.hypot(tip.x - anchor.x, tip.y - anchor.y) > STALE_END) {
+        stale.push(arrow.id);
+        break;
+      }
     }
   }
   if (dangling.length > 0) issues.push(issue("dangling_connector", "error", "These connectors are attached to elements that are not on the board.", dangling));
   if (badAnchor.length > 0) issues.push(issue("bad_anchor", "warning", "These connectors name a connection point their shape does not have (re-routing re-attaches them).", badAnchor));
+  if (stale.length > 0) issues.push(issue("stale_connector", "warning", "These connectors no longer reach the shapes they are attached to, so an end floats in empty space (reroute_connector re-attaches them).", stale));
   if (freeEnd.length > 0) issues.push(issue("free_connector_end", "info", "These connectors have an end that is not attached to any shape.", freeEnd));
 
   const records = ctx.stored.filter(isGroupRecord);
@@ -163,8 +180,9 @@ export const repairBoard = (ctx: CommandContext, codes: readonly IssueCode[], { 
         break;
       }
       case "bad_anchor":
+      case "stale_connector":
       case "connector_through_node": {
-        const result = planReroute(ctx, entry.ids, { forgetManual: code === "bad_anchor" });
+        const result = planReroute(ctx, entry.ids, { forgetManual: code === "bad_anchor" || code === "stale_connector" });
         result.patch?.update.forEach((el) => updated.set(el.id, el));
         break;
       }

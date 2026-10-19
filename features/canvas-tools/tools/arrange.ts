@@ -6,7 +6,7 @@ import { planAutoLayout, planTidy, type LayoutPlan } from "@/features/whiteboard
 import { ToolError } from "../errors";
 import { expectedRevision, targetIds } from "../schemas";
 import type { ToolDefinition, ToolEnv, ToolRun } from "../types";
-import { count, lockedSkips, resolveTargets } from "./helpers";
+import { count, lockedSkips, resolveTargets, settleConnectors } from "./helpers";
 
 const unitsIn = (env: ToolEnv, shapeIds: readonly string[]) => {
   const { ctx } = env;
@@ -97,7 +97,9 @@ export const setElementSpacing: ToolDefinition<typeof spacingInput> = {
 
 // ── layouts ──────────────────────────────────────────────────────────────────
 
-const layoutRun = (plan: LayoutPlan, label: string): ToolRun => {
+const layoutRun = (env: ToolEnv, plan: LayoutPlan, label: string): ToolRun => {
+  const settled = settleConnectors(env, plan.patch);
+  plan = { ...plan, patch: settled.patch, notes: [...plan.notes, ...settled.warnings] };
   const changed = moved(plan.patch);
   const hardFail = plan.patch === null && plan.units < 2 && plan.notes.length > 0;
   if (hardFail) throw new ToolError("invalid_state", plan.notes[0]);
@@ -129,7 +131,7 @@ export const autoLayout: ToolDefinition<typeof layoutInput> = {
   strictRevision: true,
   run: ({ ids, algorithm, direction, gap, columns }, env) => {
     const shapeIds = ids ? resolveTargets(env, ids).shapeIds : null;
-    return layoutRun(planAutoLayout(env.ctx, shapeIds, { algorithm, direction, gap, columns }), `auto_layout (${algorithm})`);
+    return layoutRun(env, planAutoLayout(env.ctx, shapeIds, { algorithm, direction, gap, columns }), `auto_layout (${algorithm})`);
   },
 };
 
@@ -151,7 +153,7 @@ export const tidyDiagram: ToolDefinition<typeof tidyInput> = {
   strictRevision: true,
   run: ({ ids, tolerance, min_gap }, env) => {
     const shapeIds = ids ? resolveTargets(env, ids).shapeIds : null;
-    return layoutRun(planTidy(env.ctx, shapeIds, { tolerance, minGap: min_gap }), "tidy_diagram");
+    return layoutRun(env, planTidy(env.ctx, shapeIds, { tolerance, minGap: min_gap }), "tidy_diagram");
   },
 };
 
@@ -184,7 +186,7 @@ export const applyLayoutPreset: ToolDefinition<typeof presetInput> = {
   run: ({ preset, ids }, env) => {
     const shapeIds = ids ? resolveTargets(env, ids).shapeIds : null;
     const entry = PRESETS[preset];
-    return layoutRun(entry.run(env, shapeIds), entry.label);
+    return layoutRun(env, entry.run(env, shapeIds), entry.label);
   },
 };
 

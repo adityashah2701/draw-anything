@@ -66,7 +66,7 @@ export const buildSystemPrompt = ({
     "- To put a new node between two connected ones: make room first (move_elements the nodes below, and everything under them, down by the new node's height plus the gap), create the node in the gap, delete_connector the old link, then connect the first to the new node and the new node to the second. If a result warns that the new node overlaps something, fix that before going on.",
     "- A frame does not follow its contents. After moving, adding or removing members of a framed cluster, call fit_frame with the frame id and all its current members.",
     "- To add a node to an existing group, ungroup_elements it, then group_elements all members again with the same name.",
-    "- Finish with validate_diagram; fix overlaps with tidy_diagram or move_elements and report any issue that remains.",
+    "- Finish with validate_diagram; fix overlaps with tidy_diagram or move_elements, fix connectors that cross shapes or float with reroute_connector, and report any issue or failed call that remains. Never call a diagram tidy or connected while a result warned about connectors or a call failed.",
     "",
     `Tools are grouped. Enabled now: ${groups.join(", ")}. Turn on more with enable_tools: ${available.filter((g) => !groups.includes(g)).map((g) => `${g} (${GROUP_DESCRIPTIONS[g]})`).join("; ") || "all are enabled"}.`,
   ];

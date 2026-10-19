@@ -18,7 +18,7 @@ import { planNodeStyle, planRemoveIcon, planReplaceIcon, planRestoreIcon, planTy
 import { ToolError } from "../errors";
 import { color, coordinate, expectedRevision, fill, label, length, targetIds } from "../schemas";
 import type { ToolDefinition, ToolEnv, ToolRun } from "../types";
-import { canHoldLabel, count, deriveContext, listIds, lockedSkips, mergePatches, requireEditable, resolveIcon, resolveTargets } from "./helpers";
+import { canHoldLabel, count, deriveContext, listIds, lockedSkips, mergePatches, requireEditable, resolveIcon, resolveTargets, settleConnectors } from "./helpers";
 
 const strokeWidth = z.number().finite().min(0.5).max(24);
 const opacity = z.number().finite().min(0).max(1).describe("0 invisible to 1 opaque.");
@@ -398,8 +398,10 @@ export const moveElements: ToolDefinition<typeof moveInput> = {
     const dx = relative ? (input.dx ?? 0) : input.x !== undefined ? input.x - box.minX : 0;
     const dy = relative ? (input.dy ?? 0) : input.y !== undefined ? input.y - box.minY : 0;
     if (dx === 0 && dy === 0) return { summary: "Already there; nothing moved.", data: { x: Math.round(box.minX), y: Math.round(box.minY) }, skipped };
-    const patch = planMoveBy(ctx, editable, dx, dy);
+    const settled = settleConnectors(env, planMoveBy(ctx, editable, dx, dy));
+    const patch = settled.patch;
     return {
+      warnings: settled.warnings,
       summary: `Moved ${count(units.length, "item")} by (${Math.round(dx)}, ${Math.round(dy)}); now at (${Math.round(box.minX + dx)}, ${Math.round(box.minY + dy)}).`,
       data: { dx, dy, x: Math.round(box.minX + dx), y: Math.round(box.minY + dy), width: Math.round(box.width), height: Math.round(box.height) },
       patch,
