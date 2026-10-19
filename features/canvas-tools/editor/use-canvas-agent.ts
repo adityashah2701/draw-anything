@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { AIModelProvider } from "@/features/ai/types";
+import { coveredByPanels } from "@/features/whiteboard/components/overlays/panel-layout";
 import { downloadBlob, exportFilename } from "@/features/whiteboard/export/deliver";
 import { exportScene } from "@/features/whiteboard/export/export-scene";
 import type { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
@@ -94,7 +95,8 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         history: { undo: () => latest.current.history.undo(), redo: () => latest.current.history.redo() },
         fit: (bounds) => {
           const c = latest.current;
-          if (bounds) c.canvasViewport.fitToBounds(bounds);
+          // The agent panel is open while this runs: fit into what it leaves free, as the generator does.
+          if (bounds) c.canvasViewport.fitToBounds(bounds, { rightInset: coveredByPanels(c.showAIModal, c.showCodePanel) });
           else c.handleFitToScreen();
         },
         save: async () => {
