@@ -1,6 +1,7 @@
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { resizable } from "@/core/shapes/capabilities/resizable";
+import { rotatable } from "@/core/shapes/capabilities/rotatable";
 import { connectable } from "@/core/shapes/capabilities/connectable";
 import { IconShape } from "@/core/shapes/icon/types";
 import { getIconBounds } from "@/core/shapes/icon/geometry";
@@ -15,7 +16,7 @@ import { containsPointInIcon, getIconResizeHandles, resizeIcon } from "@/core/sh
  */
 export const iconDefinition = createShapeDefinition<IconShape>({
   type: "icon",
-  capabilities: [movable<IconShape>(), resizable<IconShape>(), connectable<IconShape>(getIconAnchors)],
+  capabilities: [movable<IconShape>(), resizable<IconShape>(), rotatable<IconShape>(), connectable<IconShape>(getIconAnchors)],
   create: (props) => ({
     id: props.id ?? "",
     type: "icon",

@@ -27,11 +27,32 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * its radius scaled by the smaller factor so it stays a circle inside the box) and a `text` (a
  * single anchor plus a font size: the size follows only a uniform scale, so stretching a group does
  * not distort its text).
+ *
+ * A shape drawn rotated by `rotation` degrees keeps its orientation: its centre is mapped like any
+ * point, and its own width and height grow by the length the scale gives to its own axes (a quarter
+ * turn swaps the two factors), so scaling a group never shears or flattens a turned shape.
  */
-export const scaleShape = (shape: DrawingElement, from: Bounds, to: Bounds): DrawingElement => {
+export const scaleShape = (shape: DrawingElement, from: Bounds, to: Bounds, rotation = 0): DrawingElement => {
   const x = axis(from.minX, from.width, to.minX, to.width);
   const y = axis(from.minY, from.height, to.minY, to.height);
   const mapPoint = (p: Point): Point => ({ x: x.map(p.x), y: y.map(p.y) });
+
+  if (rotation && shape.points.length === 2 && shape.type !== "circle" && shape.type !== "text") {
+    const [a, b] = shape.points;
+    const cx = (a.x + b.x) / 2;
+    const cy = (a.y + b.y) / 2;
+    const turn = (rotation * Math.PI) / 180;
+    const cos = Math.cos(turn);
+    const sin = Math.sin(turn);
+    const kx = Math.hypot(x.scale * cos, y.scale * sin);
+    const ky = Math.hypot(x.scale * sin, y.scale * cos);
+    const center = { x: x.map(cx), y: y.map(cy) };
+    const place = (p: Point): Point => ({
+      x: center.x + (p.x - cx) * kx,
+      y: center.y + (p.y - cy) * ky,
+    });
+    return { ...shape, points: [place(a), place(b)] };
+  }
 
   if (shape.type === "circle" && shape.points.length >= 2) {
     const [center, edge] = shape.points;
@@ -55,8 +76,12 @@ export const scaleShape = (shape: DrawingElement, from: Bounds, to: Bounds): Dra
   return { ...shape, points: shape.points.map(mapPoint) };
 };
 
-export const scaleShapes = (shapes: readonly DrawingElement[], from: Bounds, to: Bounds): DrawingElement[] =>
-  shapes.map((shape) => scaleShape(shape, from, to));
+export const scaleShapes = (
+  shapes: readonly DrawingElement[],
+  from: Bounds,
+  to: Bounds,
+  rotationOf: (shape: DrawingElement) => number = () => 0,
+): DrawingElement[] => shapes.map((shape) => scaleShape(shape, from, to, rotationOf(shape)));
 
 /**
  * Smallest frame (as a fraction of the current one, per axis) that keeps every measurable shape at
@@ -119,7 +144,9 @@ export const rotateShape = (
   const dy = moved.y - center.y;
   const points = shape.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
   if (!canRotate) return { ...shape, points };
-  return { ...shape, points, rotation: normalizeDegrees((shape.rotation ?? 0) + degrees) };
+  // A full turn back to upright removes the field, so such a shape is stored exactly as old boards stored it.
+  const rotation = normalizeDegrees((shape.rotation ?? 0) + degrees);
+  return { ...shape, points, rotation: rotation === 0 ? undefined : rotation };
 };
 
 type Connected = DrawingElement & {

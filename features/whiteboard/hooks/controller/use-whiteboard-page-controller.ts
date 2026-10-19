@@ -25,12 +25,13 @@ import {
   DrawingElement,
   StoredElement,
 } from "@/features/whiteboard/types/whiteboard.types";
-import { buildGroupIndex, isEffectivelyLocked, splitStored } from "@/core/groups/group-index";
+import { buildGroupIndex, expandUnits, isEffectivelyLocked, splitStored } from "@/core/groups/group-index";
 import { groupsEmptiedBy, planDelete } from "@/core/groups/group-commands";
 import type { DocPatch } from "@/core/groups/patch";
 import { storedOrderFromShapes } from "@/core/groups/order";
-import { planShapeMoves, uniformOffsets } from "@/features/whiteboard/utils/move-plan";
+import { planFrameScale, planShapeMoves, uniformOffsets } from "@/features/whiteboard/utils/move-plan";
 import { buildSelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
+import { useSelectionInspector } from "./use-selection-inspector";
 import { useGroupCommands } from "@/features/whiteboard/hooks/interaction/use-group-commands";
 import { effectiveContext, resolveDoubleClick, resolveGroupClick, resolveMarquee } from "@/features/whiteboard/hooks/interaction/group-selection";
 import { useMagneticSnap } from "@/core/snap/use-magnetic-snap";
@@ -274,6 +275,16 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [deleteElementsLive, stored],
   );
 
+  // The selection chrome as data: unit boxes, the resize frame, the entered group's outline.
+  const selectionOverlay = useMemo(
+    () =>
+      buildSelectionOverlay(groupIndex, selectedElements, effectiveContext(groupIndex, enteredGroupId), (id) => {
+        const shape = groupIndex.shapes.get(id);
+        return shape ? getElementBounds(shape) : null;
+      }),
+    [enteredGroupId, getElementBounds, groupIndex, selectedElements],
+  );
+
   // What the pointer code needs to know about groups, without knowing how they are stored.
   const groupSelection = useMemo(
     () => ({
@@ -282,8 +293,14 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       resolveMarquee: (hitIds: string[]) => resolveMarquee(groupIndex, hitIds, enteredGroupId),
       isLocked: (shapeId: string) => isEffectivelyLocked(groupIndex, shapeId),
       setContext: setEnteredGroupId,
+      frame: () => {
+        const frame = selectionOverlay?.frame;
+        if (!frame || frame.locked) return null;
+        const elements = expandUnits(groupIndex, frame.unitIds).flatMap((id) => groupIndex.shapes.get(id) ?? []);
+        return elements.length > 0 ? { bounds: frame.bounds, elements } : null;
+      },
     }),
-    [groupIndex, enteredGroupId],
+    [groupIndex, enteredGroupId, selectionOverlay],
   );
 
   const completeCurrentElement = useCallback(() => {
@@ -312,6 +329,10 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       updateElements(changed as unknown as DrawingElementJson[]);
     },
     selection: groupSelection,
+    resizeFrameElements: (origin, from, to) => {
+      const changed = planFrameScale(origin, from, to, (scaled) => rerouteConnectedArrowsForChanges(scaled) as unknown as DrawingElement[]);
+      updateElements(changed as unknown as DrawingElementJson[]);
+    },
     zoom: canvasViewport.zoom,
     resizeElement: (id, handle, pt, bounds, base) => {
       const resized = resizeElement(id, handle, pt, bounds, base);
@@ -608,15 +629,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     uiState.setFontSize,
   ]);
 
-  const selectionOverlay = useMemo(
-    () =>
-      buildSelectionOverlay(groupIndex, selectedElements, effectiveContext(groupIndex, enteredGroupId), (id) => {
-        const shape = groupIndex.shapes.get(id);
-        return shape ? getElementBounds(shape) : null;
-      }),
-    [enteredGroupId, getElementBounds, groupIndex, selectedElements],
-  );
-
   const selectedElement = useMemo(
     () =>
       selectedElements.length === 1
@@ -667,6 +679,15 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       isLocked: groupSelection.isLocked,
       updateElements,
     });
+
+  const inspector = useSelectionInspector({
+    groupIndex,
+    selectedElements,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    getElementBounds,
+    updateElements: (batch) => updateElements(batch),
+    rerouteConnectedArrows: (changed) => rerouteConnectedArrowsForChanges(changed) as unknown as DrawingElement[],
+  });
 
   const handleClearSelection = useCallback(() => setSelectedElements([]), []);
   const handleSelectAllElements = useCallback(
@@ -919,6 +940,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     groupCommands,
     groupSelection,
     selectionOverlay,
+    inspector,
     enteredGroupId: effectiveContext(groupIndex, enteredGroupId),
     handleShapeDoubleClick,
     currentElement,

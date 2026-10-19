@@ -18,8 +18,12 @@ export interface OverlayUnit {
  */
 export interface SelectionOverlay {
   units: OverlayUnit[];
-  /** The bounding frame of the selection; null when a lone plain shape draws its own box and handles. */
-  frame: { bounds: Bounds; locked: boolean } | null;
+  /**
+   * The frame that carries the resize handles; null when a lone plain shape draws its own box and
+   * handles. It surrounds the units that can be edited (`unitIds`); locked units stay outside the
+   * transform. When every unit is locked the frame is drawn, without handles.
+   */
+  frame: { bounds: Bounds; locked: boolean; unitIds: string[] } | null;
   entered: { id: string; bounds: Bounds; label: string } | null;
   /** True when this overlay stands in for the per-shape selection box and handles. */
   replacesShapeChrome: boolean;
@@ -45,12 +49,14 @@ export const buildSelectionOverlay = (
   const enteredBounds = enteredGroup ? boundsOfUnit(entered!) : null;
 
   const replacesShapeChrome = units.length > 1 || (units.length === 1 && units[0].isGroup);
-  const frameBounds = replacesShapeChrome ? unionBounds(units.map((unit) => unit.bounds)) : null;
+  const editable = units.filter((unit) => !unit.locked);
+  const framed = editable.length > 0 ? editable : units;
+  const frameBounds = replacesShapeChrome ? unionBounds(framed.map((unit) => unit.bounds)) : null;
   if (units.length === 0 && !enteredBounds) return null;
 
   return {
     units: replacesShapeChrome ? units : [],
-    frame: frameBounds ? { bounds: frameBounds, locked: units.every((unit) => unit.locked) } : null,
+    frame: frameBounds ? { bounds: frameBounds, locked: editable.length === 0, unitIds: framed.map((unit) => unit.id) } : null,
     entered: enteredGroup && enteredBounds ? { id: enteredGroup.id, bounds: enteredBounds, label: groupLabel(enteredGroup) } : null,
     replacesShapeChrome,
   };

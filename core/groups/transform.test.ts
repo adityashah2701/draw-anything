@@ -176,3 +176,44 @@ describe("partitionConnectors", () => {
     expect(partitionConnectors(moving).rigid.map((s) => s.id)).toEqual(["a", "free", "half"]);
   });
 });
+
+describe("scaling turned shapes", () => {
+  const turned = (degrees: number) => rect("r", 0, 0, 100, 40, { rotation: degrees });
+  const size = (shape: DrawingElement) => {
+    const b = boundsOf(shape)!;
+    return { w: b.width, h: b.height, cx: (b.minX + b.maxX) / 2, cy: (b.minY + b.maxY) / 2 };
+  };
+
+  it("an unturned shape is scaled by the plain factors", () => {
+    const out = size(scaleShape(turned(0), box(0, 0, 200, 100), box(0, 0, 400, 100), 0));
+    expect(out).toEqual({ w: 200, h: 40, cx: 100, cy: 20 });
+  });
+
+  it("a quarter turn swaps which factor applies to which side", () => {
+    // stretching the frame 2x horizontally lengthens what is *visually* horizontal: the shape's own height
+    const out = size(scaleShape(turned(90), box(0, 0, 200, 100), box(0, 0, 400, 100), 90));
+    expect(out.w).toBeCloseTo(100, 6);
+    expect(out.h).toBeCloseTo(80, 6);
+    expect(out.cx).toBeCloseTo(100, 6); // centre mapped: 50 -> 100
+  });
+
+  it("a uniform scale scales a turned shape uniformly at any angle", () => {
+    for (const angle of [17, 45, 123]) {
+      const out = size(scaleShape(turned(angle), box(0, 0, 200, 100), box(0, 0, 400, 200), angle));
+      expect(out.w).toBeCloseTo(200, 6);
+      expect(out.h).toBeCloseTo(80, 6);
+    }
+  });
+
+  it("keeps the centre exactly where the frame mapping puts it", () => {
+    const out = size(scaleShape(turned(30), box(0, 0, 200, 100), box(50, 10, 450, 210), 30));
+    expect(out.cx).toBeCloseTo(50 + 50 * 2, 6);
+    expect(out.cy).toBeCloseTo(10 + 20 * 2, 6);
+  });
+
+  it("scaleShapes asks for each shape's own rotation", () => {
+    const out = scaleShapes([turned(0), turned(90)], box(0, 0, 200, 100), box(0, 0, 400, 100), (s) => s.rotation ?? 0);
+    expect(size(out[0]).w).toBe(200);
+    expect(size(out[1]).w).toBeCloseTo(100, 6);
+  });
+});

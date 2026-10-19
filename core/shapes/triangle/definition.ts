@@ -1,6 +1,7 @@
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { resizable } from "@/core/shapes/capabilities/resizable";
+import { rotatable } from "@/core/shapes/capabilities/rotatable";
 import { connectable } from "@/core/shapes/capabilities/connectable";
 import { labelable } from "@/core/shapes/capabilities/labelable";
 import { TriangleShape } from "@/core/shapes/triangle/types";
@@ -18,7 +19,7 @@ export const triangleDefinition = createShapeDefinition<TriangleShape>({
   type: "triangle",
   capabilities: [
     movable<TriangleShape>(),
-    resizable<TriangleShape>(),
+    resizable<TriangleShape>(), rotatable<TriangleShape>(),
     connectable<TriangleShape>(getTriangleAnchors),
     labelable<TriangleShape>(),
   ],

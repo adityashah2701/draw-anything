@@ -17,6 +17,9 @@ import type { ClickOutcome } from "@/features/whiteboard/hooks/interaction/group
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { computeDrag, startDragSession, type Guide } from "@/features/whiteboard/hooks/interaction/drag-session";
 import { isActive, isDrawingGesture, type Gesture } from "@/features/whiteboard/hooks/interaction/gesture-state";
+import { minimumScale } from "@/core/groups/transform";
+import { frameHandleAt } from "@/features/whiteboard/utils/selection-overlay";
+import { resizeFrame } from "@/features/whiteboard/utils/frame-resize";
 
 /** Pixels (on screen) within which a dragged shape snaps to another shape's edge or centre. */
 const SNAP_SCREEN_PX = 6;
@@ -53,6 +56,8 @@ export interface GroupSelectionPort {
   isLocked: (shapeId: string) => boolean;
   /** Step into (or out of) a group. */
   setContext: (groupId: string | null) => void;
+  /** The frame (and the shapes behind it) of a group or multi-selection that can be resized; null otherwise. */
+  frame: () => { bounds: Bounds; elements: DrawingElement[] } | null;
 }
 
 /** Connector snap distance in screen pixels (divided by zoom to get world units). */
@@ -78,6 +83,8 @@ interface UseWhiteboardDrawingProps {
   moveElements: (origin: DrawingElement[], deltaX: number, deltaY: number) => void;
   zoom: number;
   selection: GroupSelectionPort;
+  /** Writes `origin` (the shapes as they were when the resize began) scaled from the box `from` onto `to`. */
+  resizeFrameElements: (origin: DrawingElement[], from: Bounds, to: Bounds) => void;
   resizeElement: (
     elementId: string,
     handle: string,
@@ -141,6 +148,7 @@ export const useWhiteboardDrawing = ({
   moveElements,
   zoom,
   selection,
+  resizeFrameElements,
   resizeElement,
   updateElement,
   getElementBounds,
@@ -271,6 +279,24 @@ export const useWhiteboardDrawing = ({
               return;
             }
           }
+        }
+
+        // ── Frame handles of a group or multi-selection ───────────────────
+        const frame = hasEditAccess ? selection.frame() : null;
+        const frameHandle = frame ? frameHandleAt(frame.bounds, point, zoom) : null;
+        if (frame && frameHandle) {
+          beginGesture?.();
+          setGesture("resizing");
+          setResizeHandle(frameHandle.name);
+          setDragStart(point);
+          scratchRef.current.frameResize = {
+            handle: frameHandle.name,
+            origin: frame.elements,
+            content: frame.bounds,
+            grab: { x: point.x - frameHandle.x, y: point.y - frameHandle.y },
+            minScale: minimumScale(frame.elements.flatMap((el) => getElementBounds(el) ?? [])),
+          };
+          return;
         }
 
         // ── Existing resize / select / drag logic ─────────────────────────
@@ -484,6 +510,20 @@ export const useWhiteboardDrawing = ({
         }
 
         if (dragStart) {
+          const frameResize = scratchRef.current.frameResize;
+          if (isResizing && frameResize) {
+            const next = resizeFrame({
+              content: frameResize.content,
+              handle: frameResize.handle,
+              pointer: point,
+              grab: frameResize.grab,
+              zoom,
+              minScale: frameResize.minScale,
+              keepAspect: e.shiftKey,
+            });
+            resizeFrameElements(frameResize.origin, frameResize.content, next);
+            return;
+          }
           if (
             isResizing &&
             resizeHandle &&
@@ -651,6 +691,7 @@ export const useWhiteboardDrawing = ({
       resizeElement,
       updateElement,
       moveElements,
+      resizeFrameElements,
       zoom,
       hasEditAccess,
       deleteElements,

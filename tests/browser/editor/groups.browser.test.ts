@@ -1,47 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { hasChrome, openEditor, type EditorSession } from "./open-editor";
+import { board, byId, records, shapeIds, sorted, type El } from "./group-fixtures";
 
 const suite = hasChrome() ? describe : describe.skip;
-type El = Record<string, any>;
-
-const rect = (id: string, x: number, y: number, w = 120, h = 80, extra: El = {}): El => ({
-  id,
-  type: "rectangle",
-  points: [
-    { x, y },
-    { x: x + w, y: y + h },
-  ],
-  color: "#1f2937",
-  strokeWidth: 2,
-  ...extra,
-});
-
-/** A connector from A's right side to B's left side. */
-const connector = (id = "ab", from = "A", to = "B", extra: El = {}): El => ({
-  id,
-  type: "arrow",
-  points: [
-    { x: 220, y: 140 },
-    { x: 400, y: 140 },
-  ],
-  color: "#1f2937",
-  strokeWidth: 2,
-  arrowHeadEnd: true,
-  arrowHeadStart: false,
-  routingMode: "orthogonal",
-  isManuallyRouted: false,
-  startConnection: { elementId: from, anchorId: `${from}-anchor-right` },
-  endConnection: { elementId: to, anchorId: `${to}-anchor-left` },
-  ...extra,
-});
-
-const board = (): El[] => [rect("A", 100, 100), rect("B", 400, 100), connector(), rect("C", 250, 320), rect("D", 700, 100)];
-
-const byId = (els: El[], id: string) => els.find((e) => e.id === id) as El;
-const records = (els: El[]) => els.filter((e) => e.type === "group");
-const shapeIds = (els: El[]) => els.filter((e) => e.type !== "group").map((e) => e.id);
-const sorted = (a: string[]) => [...a].sort();
-
 suite("editor groups", () => {
   let s: EditorSession;
   beforeEach(async () => {
@@ -271,5 +232,82 @@ suite("editor groups", () => {
     expect(leftEdge).toBe(true); // the frame's left edge
     expect(corner).toBe(true); // a corner handle
     await s.screenshot("group-selected");
+  });
+
+  describe("resizing from the frame", () => {
+    // Content spans (100,100)-(520,180); the south-east handle sits 8px outside it.
+    const SE = { x: 528, y: 188 };
+
+    it("scales every member together, keeping their relative positions and the connector glued", async () => {
+      await groupAB();
+      await s.drag(SE, { x: SE.x + 210, y: SE.y + 80 }); // content becomes (100,100)-(730,260): x1.5, y2
+      const els = await s.elements();
+      const a = byId(els, "A");
+      const b = byId(els, "B");
+      expect(a.points).toEqual([{ x: 100, y: 100 }, { x: 280, y: 260 }]);
+      expect(b.points).toEqual([{ x: 550, y: 100 }, { x: 730, y: 260 }]);
+      const arrow = byId(els, "ab");
+      expect(arrow.points[0]).toMatchObject({ x: 280, y: 180 }); // A's right-middle, as scaled
+      expect(arrow.points.at(-1)).toMatchObject({ x: 550, y: 180 });
+      expect(arrow.startConnection.elementId).toBe("A");
+      expect(arrow.endConnection.elementId).toBe("B");
+      expect(byId(els, "C").points).toEqual([{ x: 250, y: 320 }, { x: 370, y: 400 }]); // outsiders untouched
+      expect(sorted(await s.selected())).toEqual(["A", "B", "ab"]);
+    });
+
+    it("is one undo step", async () => {
+      await groupAB();
+      const before = await s.elements();
+      await s.drag(SE, { x: SE.x + 100, y: SE.y + 50 });
+      expect(await s.elements()).not.toEqual(before);
+      await s.press("Control+z");
+      expect(await s.elements()).toEqual(before);
+    });
+
+    it("Shift keeps the width-to-height ratio from a corner", async () => {
+      await groupAB();
+      await s.page.keyboard.down("Shift");
+      await s.drag(SE, { x: SE.x + 210, y: SE.y + 5 });
+      await s.page.keyboard.up("Shift");
+      const a = byId(await s.elements(), "A").points;
+      const b = byId(await s.elements(), "B").points;
+      const width = b[1].x - a[0].x;
+      const height = b[1].y - a[0].y;
+      expect(width / height).toBeCloseTo(420 / 80, 1);
+      expect(width).toBeCloseTo(630, 0);
+    });
+
+    it("never collapses the group, whichever way the handle is dragged", async () => {
+      await groupAB();
+      await s.drag(SE, { x: 0, y: 0 }, { steps: 12 });
+      const els = await s.elements();
+      for (const id of ["A", "B"]) {
+        const [p, q] = byId(els, id).points;
+        expect(q.x - p.x).toBeGreaterThanOrEqual(3.9);
+        expect(q.y - p.y).toBeGreaterThanOrEqual(3.9);
+      }
+      expect(byId(els, "A").points[0]).toEqual({ x: 100, y: 100 }); // the opposite corner stayed
+    });
+
+    it("a locked group has no frame handles to grab", async () => {
+      await groupAB();
+      await s.press("Control+Shift+l");
+      const before = await s.elements();
+      await s.drag(SE, { x: SE.x + 100, y: SE.y + 50 });
+      expect(await s.elements()).toEqual(before);
+    });
+
+    it("works the same at another zoom", async () => {
+      await groupAB();
+      await s.page.evaluate(() => window.__editor.controller!.canvasViewport.handleZoomIn());
+      await s.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      const { zoom } = await s.view();
+      expect(zoom).toBeGreaterThan(1);
+      const handle = { x: 520 + 8 / zoom, y: 180 + 8 / zoom };
+      await s.drag(handle, { x: handle.x + 100 / zoom, y: handle.y }, { space: "world" });
+      const a = byId(await s.elements(), "A").points;
+      const b = byId(await s.elements(), "B").points;
+      expect(b[1].x - a[0].x).toBeCloseTo(420 + 100 / zoom, 0);
+    });
   });
 });

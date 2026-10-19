@@ -3,6 +3,7 @@ import { usePanelInset } from "@/features/whiteboard/components/overlays/panel-l
 import TopToolbar from "@/features/whiteboard/components/chrome/top-toolbar";
 import FloatingPropertiesPanel from "@/features/whiteboard/components/chrome/floating-properties-panel";
 import Sidebar from "@/features/whiteboard/components/chrome/sidebar";
+import SelectionInspector from "@/features/whiteboard/components/chrome/selection-inspector";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 
 interface WhiteboardChromeProps {
@@ -113,6 +114,8 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
           rightInset={panelInset}
         />
       )}
+
+      {!hideCanvasUi && controller.selectedElements.length > 0 && <SelectionInspector controller={controller} />}
 
       {!hideCanvasUi && (
         <Sidebar

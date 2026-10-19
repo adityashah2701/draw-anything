@@ -19,6 +19,14 @@ export interface GestureScratch {
   resizeInitialBounds: Bounds | null;
   /** The element as it was when a resize began; every frame is computed from it. */
   resizeBase: DrawingElement | null;
+  /** A group or multi-selection being resized from its frame: everything is computed from this snapshot. */
+  frameResize: {
+    handle: string;
+    origin: DrawingElement[];
+    content: Bounds;
+    grab: Point;
+    minScale: { x: number; y: number };
+  } | null;
   lastResizePoint: Point | null;
   pendingArrowReroute: DrawingElement | null;
   /** Snap matches while an existing arrow end is being dragged. */
@@ -33,6 +41,7 @@ export const createScratch = (): GestureScratch => ({
   lastPoint: null,
   resizeInitialBounds: null,
   resizeBase: null,
+  frameResize: null,
   lastResizePoint: null,
   pendingArrowReroute: null,
   previousSnap: { start: null, end: null },
