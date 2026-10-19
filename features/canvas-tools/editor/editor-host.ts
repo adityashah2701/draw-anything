@@ -72,7 +72,8 @@ export const createEditorHost = (h: EditorHandles): CanvasHost => ({
   save: () => h.save(),
   load: async (source: LoadSource): Promise<LoadOutcome> => {
     if (source.kind === "content") return loadFromContent(source.content);
-    const board = await h.loadBoard(source.id);
+    // Whatever the backend says stays on the server side of this line: the model sees one sentence for "missing" and "not yours".
+    const board = await h.loadBoard(source.id).catch(() => null);
     if (!board) throw new Error("That whiteboard does not exist or you do not have access to it.");
     return loadFromContent(board.content ?? "", board.title);
   },

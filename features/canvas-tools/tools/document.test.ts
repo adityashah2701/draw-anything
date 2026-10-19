@@ -139,7 +139,8 @@ describe("load_document", () => {
     const s = setup({ library });
     const result = await s.run("load_document", { whiteboard_id: "someone-elses-board", mode: "merge" });
     expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("execution_failed");
+    expect(result.error?.code).toBe("not_found");
+    expect(result.error?.message).toContain("access");
     expect(s.mem.stored).toEqual([]);
     expect((await s.run("load_document", { whiteboard_id: "../../etc/passwd", mode: "merge" })).error?.code).toBe("invalid_arguments");
     expect((await s.run("load_document", { whiteboard_id: "abcdefgh", content: "[]", mode: "merge" })).error?.code).toBe("invalid_arguments");

@@ -26,6 +26,7 @@ window.__editor = {
     comments: backend.comments,
     saveCount: backend.saveCount,
     mutationLog: backend.mutationLog,
+    seedOtherBoard: backend.seedOtherBoard,
   },
 };
 

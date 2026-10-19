@@ -29,6 +29,8 @@ export interface EditorDebug {
     seedComment(comment: { x: number; y: number; text: string; resolved?: boolean; authorName?: string; authorId?: string; mentionsMe?: boolean }): void;
     comments(): Array<{ _id: string; text: string; parentId?: string; resolved: boolean; x: number; y: number; sentMentions?: string[] }>;
     mutationLog(): string[];
+    /** Another whiteboard this user may read (for loading one board into another). */
+    seedOtherBoard(id: string, title: string, content: string): void;
   };
 }
 

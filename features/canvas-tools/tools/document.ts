@@ -140,7 +140,13 @@ export const loadDocument: ToolDefinition<typeof loadInput> = {
       if (!confirm) throw new ToolError("confirmation_required", "Replacing the board removes everything on it. Repeat with confirm: true if that is what was asked for.");
       await env.confirm(`Replace this board's ${ctx.shapes.length} elements with the loaded document?`);
     }
-    const loaded = await host.load(whiteboard_id !== undefined ? { kind: "whiteboard", id: whiteboard_id } : { kind: "content", content: content! });
+    let loaded;
+    try {
+      loaded = await host.load(whiteboard_id !== undefined ? { kind: "whiteboard", id: whiteboard_id } : { kind: "content", content: content! });
+    } catch (error) {
+      // The host words these (no access, not found, not a saved board) without server detail, so the model can pass them on.
+      throw new ToolError("not_found", error instanceof Error && error.message ? error.message : "The document could not be loaded.");
+    }
     if (loaded.elements.length === 0) throw new ToolError("invalid_state", "The document has no elements.");
     if (loaded.elements.length > MAX_ELEMENTS_ON_BOARD) throw new ToolError("limit_exceeded", `The document has ${loaded.elements.length} elements; the limit is ${MAX_ELEMENTS_ON_BOARD}.`);
 
