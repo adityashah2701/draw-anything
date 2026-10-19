@@ -30,6 +30,8 @@ const serialized = <T>(host: object, work: () => Promise<T>): Promise<T> => {
 };
 
 /** The arguments a tool really takes, to answer a bad call with the true schema. */
+const isAbortError = (error: unknown): boolean => typeof error === "object" && error !== null && (error as { name?: unknown }).name === "AbortError";
+
 const argumentNames = (tool: ToolDefinition): string[] => Object.keys((tool.input as unknown as { shape?: Record<string, unknown> }).shape ?? {});
 
 export interface ToolExecutorOptions {
@@ -149,6 +151,8 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       run = await tool.run(parsed.data, env);
     } catch (error) {
       if (isToolError(error)) return failure(tool.name, error.info, started, call.id);
+      // A person pressing Stop aborts the work in flight: that is a cancel, not a crash, and not worth a console error.
+      if (isAbortError(error)) return failure(tool.name, { code: "cancelled", message: `${tool.name} was cancelled; nothing was changed.` }, started, call.id);
       console.error(`[canvas-tools] ${tool.name} failed`, error);
       return failure(tool.name, { code: "execution_failed", message: `${tool.name} failed unexpectedly; nothing was changed.` }, started, call.id);
     }

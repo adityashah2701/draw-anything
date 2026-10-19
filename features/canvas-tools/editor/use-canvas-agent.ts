@@ -182,7 +182,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         ...(unified
           ? {
               generate: (request: { description: string; diagramType?: string }) =>
-                generateElements({ whiteboardId: String(latest.current.whiteboard?._id ?? ""), provider: providerRef.current, description: request.description, diagramType: request.diagramType, signal: abortRef.current?.signal }),
+                generateElements({ whiteboardId: String(latest.current.whiteboard?._id ?? ""), provider: providerRef.current, description: request.description, diagramType: request.diagramType, signal: abortRef.current?.signal, onProgress: (text) => setActivity(text) }),
               remember: async (entry: { kind: "preference" | "correction" | "decision" | "fact"; text: string }) => {
                 const saved = await convex.mutation(api.aiMemory.remember, { whiteboardId: String(latest.current.whiteboard?._id ?? ""), ...entry });
                 return { duplicate: saved.duplicate };
@@ -342,7 +342,8 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   );
 
   const stop = useCallback(() => {
-    abortRef.current?.abort();
+    // A reason that says what happened: a person's Stop is a normal end, never an unnamed "signal is aborted".
+    abortRef.current?.abort(new DOMException("Stopped by the person.", "AbortError"));
     resolveConfirmation(false);
   }, [resolveConfirmation]);
 

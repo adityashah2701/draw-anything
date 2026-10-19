@@ -18,6 +18,7 @@ export type ToolErrorCode =
   | "confirmation_required"
   | "confirmation_denied"
   | "skipped"
+  | "cancelled"
   | "execution_failed";
 
 export interface ToolErrorInfo {

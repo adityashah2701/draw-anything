@@ -71,7 +71,7 @@ const BLOCKING = new Set(["dangling_connector", "stale_connector", "connector_th
 
 const tally = (results: readonly ToolResult[]) => ({
   calls: results.length,
-  failed: results.filter((r) => !r.ok).length,
+  failed: results.filter((r) => !r.ok && r.error?.code !== "cancelled").length,
   created: results.reduce((n, r) => n + r.affected.created.length, 0),
   updated: results.reduce((n, r) => n + r.affected.updated.length, 0),
   removed: results.reduce((n, r) => n + r.affected.removed.length, 0),
