@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, Code2, Maximize, ShieldAlert, Square, Undo2, X } from "lucide-react";
 import type { AgentUiMessage, PendingConfirmation } from "@/features/canvas-tools/editor/use-canvas-agent";
 import { BOARD_EXAMPLES } from "./agent-examples";
+import { AgentMarkdown } from "./agent-markdown";
 
 export { BOARD_EXAMPLES, UNIFIED_EXAMPLES } from "./agent-examples";
 
@@ -118,7 +119,7 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
           if (message.kind === "assistant") {
             return (
               <li key={message.id} className="text-[13px] leading-relaxed text-foreground" data-testid="agent-assistant">
-                {message.text}
+                <AgentMarkdown text={message.text} />
               </li>
             );
           }
