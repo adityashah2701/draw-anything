@@ -21,6 +21,7 @@ export const ISSUE_CODES = [
   "overlap",
   "connector_through_node",
   "connector_through_heading",
+  "connector_through_frame",
   "free_connector_end",
   "unlabeled_node",
 ] as const;
@@ -145,7 +146,25 @@ export const validateBoard = (ctx: CommandContext): Issue[] => {
     const box = { minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY };
     if (shapes.filter(isArrowElement).some((arrow) => arrow.points.length >= 2 && pathHitsBox(arrow.points, box))) headingHit.push(heading.id);
   }
-  if (headingHit.length > 0) issues.push(issue("connector_through_heading", "warning", "A connector runs through these frame headings (fit_frame moves a heading to a clear spot).", headingHit));
+  if (headingHit.length > 0) issues.push(issue("connector_through_heading", "warning", "A connector runs through these frame headings (fit_frame {frame, ids} moves a heading to a clear spot).", headingHit));
+
+  const crossing: string[] = [];
+  const frames = shapes.filter((shape) => shape.ai?.role === "group" && shape.type === "rectangle");
+  for (const frame of frames) {
+    const f = ctx.getBounds(frame);
+    if (!f) continue;
+    const inFrame = (id: string | undefined) => {
+      const el = id ? ctx.index.shapes.get(id) : undefined;
+      const b = el ? ctx.getBounds(el) : undefined;
+      return !!b && b.minX >= f.minX - 1 && b.minY >= f.minY - 1 && b.maxX <= f.maxX + 1 && b.maxY <= f.maxY + 1;
+    };
+    for (const arrow of shapes.filter(isArrowElement)) {
+      if (arrow.points.length < 2 || dangling.includes(arrow.id) || crossing.includes(arrow.id)) continue;
+      if (inFrame(arrow.startConnection?.elementId) || inFrame(arrow.endConnection?.elementId)) continue;
+      if (pathHitsBox(arrow.points, { minX: f.minX + 6, minY: f.minY + 6, maxX: f.maxX - 6, maxY: f.maxY - 6 })) crossing.push(arrow.id);
+    }
+  }
+  if (crossing.length > 0) issues.push(issue("connector_through_frame", "warning", "These connectors cross a frame that neither of their ends belongs to (move the nodes, or reroute_connector).", crossing));
 
   const unlabeled = nodes.filter((shape) => !(typeof shape.label === "string" && shape.label.trim() !== "") && shape.type !== "icon").map((s) => s.id);
   if (unlabeled.length > 0) issues.push(issue("unlabeled_node", "info", "These shapes have no label.", unlabeled.slice(0, 40)));

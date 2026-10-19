@@ -142,17 +142,45 @@ describe("stalls, budgets and continuation", () => {
     expect(boxOf(find(mem.stored, "db") as never).y).toBe(450 + 10 + 11);
   });
 
-  it("ends on the time budget, keeping the changes", async () => {
+  const looking = ["orders", "cache", "queue", "db"].map((id) => reply("", [call("get_element_details", { ids: [id] })]));
+
+  it("ends when the board has not changed for the time budget, keeping the changes", async () => {
     let t = 0;
     const { run, mem } = await scriptedRun({
       prompt: "Nudge the database",
       board: { elements: column() },
       now: () => (t += 60),
       budget: { ms: 150 },
-      script: [reply("", [call("move_elements", { ids: ["db"], dy: 5 })]), reply("", [call("move_elements", { ids: ["db"], dy: 6 })]), reply("", [call("move_elements", { ids: ["db"], dy: 7 })])],
+      script: [reply("", [call("move_elements", { ids: ["db"], dy: 5 })]), ...looking],
     });
     expect(run).toMatchObject({ status: "max_steps", limit: "time" });
+    expect(run.error).toMatch(/without changing the board/);
     expect(boxOf(find(mem.stored, "db") as never).y).toBeGreaterThan(450);
+  });
+
+  it("a slow model that keeps changing the board is not cut off by the idle budget", async () => {
+    let t = 0;
+    const { run } = await scriptedRun({
+      prompt: "Nudge the database",
+      board: { elements: column() },
+      now: () => (t += 60),
+      budget: { ms: 150 },
+      script: [5, 6, 7, 8, 9].map((dy) => reply("", [call("move_elements", { ids: ["db"], dy })])).concat([reply("Done.")]),
+    });
+    expect(run.status).toBe("done");
+  });
+
+  it("still stops a run that goes on past the absolute ceiling", async () => {
+    let t = 0;
+    const { run } = await scriptedRun({
+      prompt: "Nudge the database",
+      board: { elements: column() },
+      now: () => (t += 60),
+      budget: { ms: 10_000, maxMs: 400 },
+      script: [5, 6, 7, 8, 9, 10, 11, 12].map((dy) => reply("", [call("move_elements", { ids: ["db"], dy })])),
+    });
+    expect(run).toMatchObject({ status: "max_steps", limit: "time" });
+    expect(run.error).toMatch(/in total/);
   });
 
   it("a second run continues from the board and the history it was given", async () => {

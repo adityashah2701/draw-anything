@@ -1,3 +1,4 @@
+import { normalizeArgs } from "../args";
 import { isSelectableNvidiaModel } from "@/features/ai/nvidia-models";
 import type { AIModelProvider } from "@/features/ai/types";
 import { toUserFacingMessage } from "@/features/ai/server/errors";
@@ -5,7 +6,7 @@ import { MAX_BODY_BYTES, type SlidingWindowLimiter } from "@/features/ai/server/
 import { buildTools, specsFor } from "../registry";
 import { describeIssues } from "../schemas";
 import { UNIFIED_GROUPS } from "./flags";
-import { TOOL_GROUPS, type ToolDefinition, type ToolGroup } from "../types";
+import { TOOL_GROUPS, toolEnabled, type ToolDefinition, type ToolGroup } from "../types";
 import { buildSystemPrompt, type MemoryNote } from "./prompt";
 import type { CanvasTransport, ModelReply } from "./transport";
 import { MAX_CALLS_PER_TURN, MAX_TURN_CHARS, messageChars, turnRequestSchema, type CanvasTurn } from "./types";
@@ -81,11 +82,11 @@ export const checkModelCalls = (reply: ModelReply, tools: readonly ToolDefinitio
     const id = call.id && call.id.length <= 80 ? call.id : newId();
     const tool = byName.get(call.name);
     if (!tool) return { id, name: call.name, args: call.args, problem: { code: "unknown_tool" as const, message: `There is no tool called "${call.name}". Use only the tools you were given.` } };
-    if (!on.has(tool.group)) {
+    if (!toolEnabled(tool, on)) {
       return { id, name: tool.name, args: call.args, problem: { code: "tool_not_enabled" as const, message: `"${tool.name}" belongs to the "${tool.group}" tools, which are not enabled. Call enable_tools with {"groups":["${tool.group}"]} first.` } };
     }
     const args = asArgs(call.args);
-    const parsed = tool.input.safeParse(args);
+    const parsed = tool.input.safeParse(normalizeArgs(tool, args).args);
     if (!parsed.success) return { id, name: tool.name, args, problem: { code: "invalid_arguments" as const, message: `Invalid arguments for ${tool.name}: ${describeIssues(parsed.error)}.` } };
     if (tool.name === "enable_tools") for (const group of (parsed.data as { groups: ToolGroup[] }).groups) if (offered.has(group)) on.add(group);
     return { id, name: tool.name, args };

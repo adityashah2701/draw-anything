@@ -49,13 +49,16 @@ export interface RunAgentOptions {
 export interface RunBudget {
   turns: number;
   toolCalls: number;
+  /** Time without the board changing (model waits count, work that changes it resets the clock): a hung or looping run, not a slow provider. */
   ms: number;
+  /** Absolute ceiling on one run, however much it changes. */
+  maxMs: number;
   /** Rounds of "the final check found problems, fix them" before the run ends and reports what is left. */
   verifyRounds: number;
 }
 
 /** Enough for a real edit of a large diagram, still bounded: a run that needs more says what is left and can be continued. */
-export const DEFAULT_BUDGET: RunBudget = { turns: 40, toolCalls: 120, ms: 5 * 60_000, verifyRounds: 2 };
+export const DEFAULT_BUDGET: RunBudget = { turns: 40, toolCalls: 120, ms: 5 * 60_000, maxMs: 20 * 60_000, verifyRounds: 2 };
 /** The same failing call this many times in a row ends the run instead of looping. */
 const STALL_LIMIT = 3;
 /** The same call, with the same arguments, on a board that did not change, this many times in a row is no progress. */
@@ -84,6 +87,7 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
   const now = options.now ?? Date.now;
   const budget: RunBudget = { ...DEFAULT_BUDGET, ...(options.maxSteps !== undefined ? { turns: options.maxSteps } : {}), ...options.budget };
   const startedAt = now();
+  let lastProgressAt = startedAt;
   let verifyRounds = 0;
   let wroteSinceCheck = false;
   const messages: CanvasMessage[] = [...(options.history ?? []), { role: "user", content: options.prompt }];
@@ -106,13 +110,13 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
   /** Ends the run when a budget is spent, with the work kept and the way to carry on. */
   const exhausted = (kind: NonNullable<AgentRun["limit"]>, steps: number): AgentRun => {
     limit = kind;
-    const what = kind === "turns" ? `${budget.turns} model turns` : kind === "tool_calls" ? `${budget.toolCalls} tool calls` : `${Math.round(budget.ms / 1000)} seconds`;
+    const what = kind === "turns" ? `${budget.turns} model turns` : kind === "tool_calls" ? `${budget.toolCalls} tool calls` : now() - startedAt > budget.maxMs ? `${Math.round((now() - startedAt) / 1000)} seconds in total` : `${Math.round(budget.ms / 1000)} seconds without changing the board`;
     return finish("max_steps", "", `Stopped after ${what} without finishing. The changes made so far are on the board and the work is saved; say "continue" to pick up from the board as it is now.`, steps);
   };
 
   for (let step = 1; step <= budget.turns; step += 1) {
     if (signal?.aborted) return finish("aborted", "", undefined, step - 1);
-    if (now() - startedAt > budget.ms) return exhausted("time", step - 1);
+    if (now() - lastProgressAt > budget.ms || now() - startedAt > budget.maxMs) return exhausted("time", step - 1);
     if (results.length >= budget.toolCalls) return exhausted("tool_calls", step - 1);
     onEvent?.({ type: "turn", step });
 
@@ -157,7 +161,10 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
       onEvent?.({ type: "tool", step, call, result });
     });
 
-    if (stepResults.some((r, index) => r.ok && executor.tools.get(calls[index].name)?.access === "write")) wroteSinceCheck = true;
+    if (stepResults.some((r, index) => r.ok && executor.tools.get(calls[index].name)?.access === "write")) {
+      wroteSinceCheck = true;
+      lastProgressAt = now();
+    }
     // The same calls again on a board that did not change are no progress, however politely they succeed.
     const signatureOfStep = `${stepResults.at(-1)?.revision ?? ""}|${calls.map(callKey).join("&")}`;
     sameCalls = signatureOfStep === lastSignature ? sameCalls + 1 : 1;
