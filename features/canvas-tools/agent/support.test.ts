@@ -111,3 +111,12 @@ describe("suggestGroups with the unified agent", () => {
     expect(suggestGroups("Rename the API node", { unified: true })).not.toContain("generate");
   });
 });
+
+describe("the unified panel's draw examples", () => {
+  it("turn the generate group on from their own words, so they cost no enable_tools round trip", async () => {
+    const { UNIFIED_EXAMPLES } = await import("@/features/whiteboard/components/overlays/agent-examples");
+    const drawing = UNIFIED_EXAMPLES.filter((e) => /^Draw /.test(e.text));
+    expect(drawing).toHaveLength(3);
+    for (const example of drawing) expect(suggestGroups(example.text, { unified: true }), example.text).toContain("generate");
+  });
+});

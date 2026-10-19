@@ -36,6 +36,8 @@ export interface CanvasAgentHandlerDeps {
   unifiedAgent?: () => boolean;
   /** The notes saved for this board, read as the signed-in user. A failure only means the prompt carries no memory. */
   loadMemories?: (input: { userId: string; whiteboardId: string }) => Promise<readonly MemoryNote[]>;
+  /** The summary of earlier turns of this board's conversation. A failure only means the prompt carries none. */
+  loadSummary?: (input: { userId: string; whiteboardId: string }) => Promise<string | null>;
   /** Provider used when the request names none. */
   defaultProvider?: () => AIModelProvider | undefined;
   /** Structured log sink: events carry names and counts only, never arguments, content or keys. */
@@ -167,10 +169,19 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
       }
     }
 
+    let summary: string | null = null;
+    if (unified && deps.loadSummary) {
+      try {
+        summary = await deps.loadSummary({ userId, whiteboardId: request.whiteboardId });
+      } catch (error) {
+        console.warn("[canvas-agent] conversation summary unavailable, continuing without it:", error instanceof Error ? error.message : error);
+      }
+    }
+
     try {
       const transport = deps.createTransport(provider, specs, request.model);
       const reply = await transport.complete(
-        (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind, available, memories }),
+        (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind, available, memories, summary }),
         request.messages,
       );
       const calls = checkModelCalls(reply, tools, groups, () => `call_${now().toString(36)}_${(counter += 1).toString(36)}`);

@@ -1,18 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { Check, ShieldAlert, Square, Undo2, X } from "lucide-react";
+import { Check, Code2, Maximize, ShieldAlert, Square, Undo2, X } from "lucide-react";
 import type { AgentUiMessage, PendingConfirmation } from "@/features/canvas-tools/editor/use-canvas-agent";
+import { BOARD_EXAMPLES } from "./agent-examples";
 
-export const BOARD_EXAMPLES: Array<{ tag: string; text: string }> = [
-  { tag: "Group", text: "Group the selected nodes and name the group" },
-  { tag: "Align", text: "Align the selected cards vertically with equal spacing" },
-  { tag: "Icon", text: "Change the database icon and make the nodes the same size" },
-  { tag: "Tidy", text: "Clean up this diagram without changing what it says" },
-  { tag: "Labels", text: "Rename the auth flow labels and re-route the connectors" },
-];
+export { BOARD_EXAMPLES, UNIFIED_EXAMPLES } from "./agent-examples";
 
-const Step: React.FC<{ message: Extract<AgentUiMessage, { kind: "tool" }> }> = ({ message }) => (
+interface StepActions {
+  onFit?: () => void;
+  onOpenCode?: () => void;
+}
+
+const Step: React.FC<{ message: Extract<AgentUiMessage, { kind: "tool" }>; actions?: StepActions }> = ({ message, actions }) => (
   <li className="flex gap-2.5 py-1.5" data-testid="agent-step" data-ok={message.ok ? "true" : "false"} data-tool={message.tool}>
     <span aria-hidden className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${message.ok ? "bg-emerald-500/15 text-emerald-600" : "bg-red-500/15 text-red-600"}`}>
       {message.ok ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3} />}
@@ -30,6 +30,20 @@ const Step: React.FC<{ message: Extract<AgentUiMessage, { kind: "tool" }> }> = (
           {warning}
         </p>
       ))}
+      {message.tool === "generate_diagram" && message.ok && actions && (
+        <div className="mt-1.5 flex gap-1.5">
+          {actions.onOpenCode && (
+            <button type="button" data-testid="agent-open-code" onClick={actions.onOpenCode} className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted">
+              <Code2 size={11} aria-hidden /> Open as code
+            </button>
+          )}
+          {actions.onFit && (
+            <button type="button" data-testid="agent-fit" onClick={actions.onFit} className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted">
+              <Maximize size={11} aria-hidden /> Fit to view
+            </button>
+          )}
+        </div>
+      )}
     </div>
   </li>
 );
@@ -46,9 +60,16 @@ interface Props {
   disabled: boolean;
   /** The unified agent is on: everyone with access to the board shares this conversation. */
   shared?: boolean;
+  /** What the agent is doing right now (a long step such as generating a diagram). */
+  activity?: string | null;
+  /** Examples for the empty state; defaults to the edit examples. */
+  examples?: Array<{ tag: string; text: string }>;
+  intro?: string;
+  onFit?: () => void;
+  onOpenCode?: () => void;
 }
 
-export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmation, onConfirm, onStop, onUndoRun, canUndoRun, onExample, disabled, shared = false }) => {
+export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmation, onConfirm, onStop, onUndoRun, canUndoRun, onExample, disabled, shared = false, activity = null, examples = BOARD_EXAMPLES, intro, onFit, onOpenCode }) => {
   const notice = shared ? (
     <p data-testid="agent-shared-notice" className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
       This conversation is shared with everyone who can open this board. What you ask here, and the assistant&apos;s answers and saved notes, are visible to them.
@@ -60,11 +81,11 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
       <div className="px-5 py-5" data-testid="canvas-agent-empty">
         {notice}
         <p className="max-w-[36ch] text-[13px] leading-relaxed text-muted-foreground">
-          Ask for a change to this board. The assistant uses the same commands as the editor, so every step can be undone, and it tells you exactly what it did.
+          {intro ?? "Ask for a change to this board. The assistant uses the same commands as the editor, so every step can be undone, and it tells you exactly what it did."}
         </p>
         <h3 className="mt-7 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Try</h3>
         <ul className="mt-2 divide-y divide-border border-y border-border">
-          {BOARD_EXAMPLES.map(({ tag, text }) => (
+          {examples.map(({ tag, text }) => (
             <li key={tag}>
               <button
                 type="button"
@@ -122,7 +143,7 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
             <li key={message.id}>
               <ul className="divide-y divide-border/60 border-l border-border pl-3">
                 {run.map((step) => (
-                  <Step key={step.id} message={step} />
+                  <Step key={step.id} message={step} actions={{ onFit, onOpenCode }} />
                 ))}
               </ul>
             </li>
@@ -161,7 +182,7 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
             <Undo2 size={12} aria-hidden /> Undo this run
           </button>
         )}
-        {running && <span className="font-mono text-[11px] text-muted-foreground" aria-live="polite">Working…</span>}
+        {running && <span data-testid="agent-activity" className="font-mono text-[11px] text-muted-foreground" aria-live="polite">{activity ?? "Working…"}</span>}
       </div>
     </div>
   );

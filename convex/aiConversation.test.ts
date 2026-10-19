@@ -139,3 +139,67 @@ describe("aiMemory: board memory for the remember tool", () => {
     expect(await as("alice").query(api.aiMemory.listForBoard, { whiteboardId: boardId })).toEqual([]);
   });
 });
+
+describe("aiConversation: one run at a time", () => {
+  const RUN_A = "run-aaaaaaaa";
+  const RUN_B = "run-bbbbbbbb";
+
+  it("lets one run hold the board, tells the others who, and frees it on release", async () => {
+    const { as, boardId } = await setup();
+    expect(await as("alice").mutation(api.aiConversation.acquireRun, { whiteboardId: boardId, runId: RUN_A })).toEqual({ ok: true });
+    expect(await as("bob").mutation(api.aiConversation.acquireRun, { whiteboardId: boardId, runId: RUN_B })).toEqual({ ok: false, byName: "alice", mine: false });
+    // the same person in another tab is also told to wait
+    expect(await as("alice").mutation(api.aiConversation.acquireRun, { whiteboardId: boardId, runId: RUN_B })).toEqual({ ok: false, byName: "alice", mine: true });
+
+    const seen = await as("bob").query(api.aiConversation.get, { whiteboardId: boardId });
+    expect(seen?.running).toMatchObject({ runId: RUN_A, byName: "alice", mine: false });
+    expect((await as("alice").query(api.aiConversation.get, { whiteboardId: boardId }))?.running?.mine).toBe(true);
+
+    expect(await as("bob").mutation(api.aiConversation.releaseRun, { whiteboardId: boardId, runId: RUN_A })).toBe(false); // not bob's to release
+    expect(await as("alice").mutation(api.aiConversation.releaseRun, { whiteboardId: boardId, runId: RUN_A })).toBe(true);
+    expect((await as("bob").query(api.aiConversation.get, { whiteboardId: boardId }))?.running).toBeNull();
+    expect(await as("bob").mutation(api.aiConversation.acquireRun, { whiteboardId: boardId, runId: RUN_B })).toEqual({ ok: true });
+  });
+
+  it("renews only for the holder, and a lease that ran out can be taken", async () => {
+    const { t, as, boardId } = await setup();
+    await as("alice").mutation(api.aiConversation.acquireRun, { whiteboardId: boardId, runId: RUN_A });
+    expect(await as("bob").mutation(api.aiConversation.renewRun, { whiteboardId: boardId, runId: RUN_A })).toBe(false);
+    expect(await as("alice").mutation(api.aiConversation.renewRun, { whiteboardId: boardId, runId: RUN_B })).toBe(false);
+    expect(await as("alice").mutation(api.aiConversation.renewRun, { whiteboardId: boardId, runId: RUN_A })).toBe(true);
+
+    await t.run(async (ctx) => {
+      const row = (await ctx.db.query("aiConversations").collect())[0];
+      await ctx.db.patch(row._id, { leaseUntil: Date.now() - 1 });
+    });
+    expect((await as("bob").query(api.aiConversation.get, { whiteboardId: boardId }))?.running).toBeNull();
+    expect(await as("alice").mutation(api.aiConversation.renewRun, { whiteboardId: boardId, runId: RUN_A })).toBe(true); // still hers until someone takes it
+    await t.run(async (ctx) => {
+      const row = (await ctx.db.query("aiConversations").collect())[0];
+      await ctx.db.patch(row._id, { leaseUntil: Date.now() - 1 });
+    });
+    expect(await as("bob").mutation(api.aiConversation.acquireRun, { whiteboardId: boardId, runId: RUN_B })).toEqual({ ok: true });
+    expect(await as("alice").mutation(api.aiConversation.renewRun, { whiteboardId: boardId, runId: RUN_A })).toBe(false); // lost
+  });
+
+  it("is only for people with access to the board, and checks the run id", async () => {
+    const { as, boardId } = await setup();
+    await expect(as("carol").mutation(api.aiConversation.acquireRun, { whiteboardId: boardId, runId: RUN_A })).rejects.toThrow(/Unauthorized/);
+    await expect(as("carol").mutation(api.aiConversation.releaseRun, { whiteboardId: boardId, runId: RUN_A })).rejects.toThrow(/Unauthorized/);
+    await expect(as("alice").mutation(api.aiConversation.acquireRun, { whiteboardId: boardId, runId: "x" })).rejects.toThrow(/Invalid run id/);
+  });
+});
+
+describe("aiConversation: summary of older turns", () => {
+  it("stores, serves to people with access only, replaces, and clears with the conversation", async () => {
+    const { as, boardId } = await setup();
+    await as("alice").mutation(api.aiConversation.append, { whiteboardId: boardId, messages: [{ role: "user", content: "a" }], summary: "- Asked: draw an API" });
+    expect(await as("bob").query(api.aiConversation.summary, { whiteboardId: boardId })).toBe("- Asked: draw an API");
+    expect(await as("carol").query(api.aiConversation.summary, { whiteboardId: boardId })).toBeNull();
+    await as("alice").mutation(api.aiConversation.append, { whiteboardId: boardId, messages: [], summary: "- Asked: draw an API\n- Asked: rename" });
+    expect(await as("bob").query(api.aiConversation.summary, { whiteboardId: boardId })).toContain("rename");
+    await expect(as("alice").mutation(api.aiConversation.append, { whiteboardId: boardId, messages: [], summary: "x".repeat(4_001) })).rejects.toThrow(/too large/);
+    await as("alice").mutation(api.aiConversation.clear, { whiteboardId: boardId });
+    expect(await as("bob").query(api.aiConversation.summary, { whiteboardId: boardId })).toBeNull();
+  });
+});

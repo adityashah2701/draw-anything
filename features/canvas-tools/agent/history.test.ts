@@ -38,3 +38,51 @@ describe("parseHistory", () => {
     expect(parseHistory(stored as string | null)).toEqual([]);
   });
 });
+
+import { compactHistory, summarizeDropped } from "./history";
+
+const result = (ok: boolean, created = 0, updated = 0) => JSON.stringify({ ok, tool: "t", summary: "s", affected: { created: Array(created).fill("x"), updated: Array(updated).fill("y"), removed: [] } });
+
+describe("summarizeDropped", () => {
+  it("writes one line per turn from the request and the tool results, not from the model's claims", () => {
+    const dropped = [user("Draw an API\nwith a database"), assistant("", ["c1"]), tool("c1", result(true, 5)), assistant("", ["c2"]), tool("c2", result(false)), assistant("All done, 100 things changed!"), user("Rename it"), assistant("Nothing to rename.")];
+    expect(summarizeDropped(dropped, null).split("\n")).toEqual([
+      '- Asked: "Draw an API with a database" → 5 elements changed in 2 calls, 1 failed; said: "All done, 100 things changed!"',
+      '- Asked: "Rename it" → no board changes; said: "Nothing to rename."',
+    ]);
+  });
+
+  it("appends to the earlier summary and keeps the newest lines within the budget", () => {
+    const first = summarizeDropped([user("one"), assistant("ok")], null);
+    const both = summarizeDropped([user("two"), assistant("ok")], first);
+    expect(both.split("\n")).toHaveLength(2);
+    const small = summarizeDropped([user("three"), assistant("ok")], both, 100);
+    expect(small.length).toBeLessThanOrEqual(100);
+    expect(small).toContain("three");
+    expect(small).not.toContain('"one"');
+  });
+
+  it("cuts long requests and survives results that are not JSON", () => {
+    const text = summarizeDropped([user("x".repeat(500)), assistant("", ["c"]), tool("c", "{cut off")], null);
+    expect(text.length).toBeLessThan(260);
+    expect(text).toContain("1 call");
+  });
+});
+
+describe("compactHistory", () => {
+  it("keeps the window and summarises exactly what left it", () => {
+    const messages: CanvasMessage[] = [];
+    for (let i = 0; i < 20; i += 1) messages.push(user(`request ${i}`), assistant(`reply ${i}`));
+    const { history, summary } = compactHistory(messages, "- Asked: \"earlier\" → no board changes");
+    expect(history).toHaveLength(30);
+    expect(history[0]).toEqual(user("request 5"));
+    expect(summary!.split("\n")).toHaveLength(6);
+    expect(summary).toContain('"request 4"');
+    expect(summary).not.toContain('"request 5"');
+  });
+
+  it("leaves the summary alone when nothing left the window", () => {
+    expect(compactHistory([user("a"), assistant("b")], "old").summary).toBe("old");
+    expect(compactHistory([user("a"), assistant("b")], null).summary).toBeNull();
+  });
+});

@@ -10,6 +10,9 @@ import {
 export const MAX_MESSAGES = 500;
 const MAX_CONTENT = 24_000;
 const MAX_HISTORY = 120_000;
+const MAX_SUMMARY = 4_000;
+/** A run holds the board's assistant for this long unless it renews; a crashed tab frees it by itself. */
+export const LEASE_MS = 90_000;
 const MAX_BATCH = 40;
 const DEFAULT_LIMIT = 200;
 
@@ -30,7 +33,9 @@ export const get = query({
       .query("aiConversations")
       .withIndex("by_whiteboardId", (q) => q.eq("whiteboardId", board._id))
       .unique();
-    if (!conversation) return { conversationId: null, history: null, messages: [] };
+    if (!conversation) return { conversationId: null, history: null, summary: null, running: null, messages: [] };
+    const now = Date.now();
+    const holder = conversation.runningBy && conversation.leaseUntil && conversation.leaseUntil > now ? await ctx.db.get(conversation.runningBy) : null;
     const messages = await ctx.db
       .query("aiMessages")
       .withIndex("by_conversation_seq", (q) => q.eq("conversationId", conversation._id))
@@ -39,6 +44,8 @@ export const get = query({
     return {
       conversationId: conversation._id,
       history: conversation.history ?? null,
+      summary: conversation.summary ?? null,
+      running: holder ? { runId: conversation.runId ?? "", byName: holder.name, mine: holder._id === caller.userId, until: conversation.leaseUntil! } : null,
       messages: messages.reverse().map((m) => ({ id: m._id, seq: m.seq, role: m.role, content: m.content, authorId: m.authorId, ui: m.ui, createdAt: m.createdAt })),
     };
   },
@@ -50,11 +57,14 @@ export const append = mutation({
     messages: v.array(v.object({ role, content: v.string(), ui: v.optional(v.any()) })),
     /** The model-facing history after this run; replaces the stored one. */
     history: v.optional(v.string()),
+    /** The rolling summary of turns that have left `history`; replaces the stored one. */
+    summary: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const caller = await requireCaller(ctx);
     const board = await getAccessibleWhiteboardByRawId(ctx, caller, args.whiteboardId);
     if (!board) throw new Error("Unauthorized");
+    if (args.summary !== undefined && args.summary.length > MAX_SUMMARY) throw new Error("Summary is too large");
     if (args.messages.length > MAX_BATCH) throw new Error("Too many messages in one write");
     if (args.history !== undefined && args.history.length > MAX_HISTORY) throw new Error("History is too large");
 
@@ -102,6 +112,7 @@ export const append = mutation({
       messageCount: count,
       updatedAt: now,
       ...(args.history !== undefined ? { history: args.history } : {}),
+      ...(args.summary !== undefined ? { summary: args.summary } : {}),
     });
     return { conversationId: conversation._id, lastSeq: seq };
   },
@@ -124,7 +135,7 @@ export const clear = mutation({
       .withIndex("by_conversation_seq", (q) => q.eq("conversationId", conversation._id))
       .collect();
     for (const row of rows) await ctx.db.delete(row._id);
-    await ctx.db.patch(conversation._id, { messageCount: 0, history: undefined, updatedAt: Date.now() });
+    await ctx.db.patch(conversation._id, { messageCount: 0, history: undefined, summary: undefined, updatedAt: Date.now() });
     return rows.length;
   },
 });
@@ -187,5 +198,86 @@ export const importLegacyFrames = mutation({
     }
     await ctx.db.patch(conversation._id, { messageCount: conversation.messageCount + pending.length * 2, updatedAt: now });
     return { imported: pending.length };
+  },
+});
+
+/** The summary of older turns, for the model's prompt (read by the server as the signed-in user). */
+export const summary = query({
+  args: { whiteboardId: v.string() },
+  handler: async (ctx, args) => {
+    const caller = await getCaller(ctx);
+    if (!caller) return null;
+    const board = await getAccessibleWhiteboardByRawId(ctx, caller, args.whiteboardId);
+    if (!board) return null;
+    const conversation = await ctx.db
+      .query("aiConversations")
+      .withIndex("by_whiteboardId", (q) => q.eq("whiteboardId", board._id))
+      .unique();
+    return conversation?.summary ?? null;
+  },
+});
+
+// ── One run at a time ─────────────────────────────────────────────────────────
+
+/**
+ * Takes the board's assistant for one run. Succeeds when nobody holds it (or the lease ran out, or the caller
+ * already holds it with this runId); otherwise says who does, so the panel can show it.
+ */
+export const acquireRun = mutation({
+  args: { whiteboardId: v.string(), runId: v.string() },
+  handler: async (ctx, args) => {
+    const caller = await requireCaller(ctx);
+    const board = await getAccessibleWhiteboardByRawId(ctx, caller, args.whiteboardId);
+    if (!board) throw new Error("Unauthorized");
+    if (args.runId.length < 8 || args.runId.length > 64) throw new Error("Invalid run id");
+    const now = Date.now();
+    let conversation = await ctx.db
+      .query("aiConversations")
+      .withIndex("by_whiteboardId", (q) => q.eq("whiteboardId", board._id))
+      .unique();
+    if (!conversation) {
+      const id = await ctx.db.insert("aiConversations", { whiteboardId: board._id, messageCount: 0, createdAt: now, updatedAt: now });
+      conversation = (await ctx.db.get(id))!;
+    }
+    const held = conversation.runningBy && conversation.leaseUntil && conversation.leaseUntil > now && conversation.runId !== args.runId;
+    if (held) {
+      const holder = await ctx.db.get(conversation.runningBy!);
+      return { ok: false as const, byName: holder?.name ?? "Someone", mine: conversation.runningBy === caller.userId };
+    }
+    await ctx.db.patch(conversation._id, { runningBy: caller.userId, runId: args.runId, leaseUntil: now + LEASE_MS });
+    return { ok: true as const };
+  },
+});
+
+/** Extends the lease while the run is still working; false when it was lost (expired and taken by someone else). */
+export const renewRun = mutation({
+  args: { whiteboardId: v.string(), runId: v.string() },
+  handler: async (ctx, args) => {
+    const caller = await requireCaller(ctx);
+    const board = await getAccessibleWhiteboardByRawId(ctx, caller, args.whiteboardId);
+    if (!board) throw new Error("Unauthorized");
+    const conversation = await ctx.db
+      .query("aiConversations")
+      .withIndex("by_whiteboardId", (q) => q.eq("whiteboardId", board._id))
+      .unique();
+    if (!conversation || conversation.runId !== args.runId || conversation.runningBy !== caller.userId) return false;
+    await ctx.db.patch(conversation._id, { leaseUntil: Date.now() + LEASE_MS });
+    return true;
+  },
+});
+
+export const releaseRun = mutation({
+  args: { whiteboardId: v.string(), runId: v.string() },
+  handler: async (ctx, args) => {
+    const caller = await requireCaller(ctx);
+    const board = await getAccessibleWhiteboardByRawId(ctx, caller, args.whiteboardId);
+    if (!board) throw new Error("Unauthorized");
+    const conversation = await ctx.db
+      .query("aiConversations")
+      .withIndex("by_whiteboardId", (q) => q.eq("whiteboardId", board._id))
+      .unique();
+    if (!conversation || conversation.runId !== args.runId || conversation.runningBy !== caller.userId) return false;
+    await ctx.db.patch(conversation._id, { runningBy: undefined, runId: undefined, leaseUntil: undefined });
+    return true;
   },
 });

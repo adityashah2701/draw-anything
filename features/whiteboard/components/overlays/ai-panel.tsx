@@ -8,6 +8,7 @@ import type { AIChatMessage } from "@/features/whiteboard/hooks/controller/use-a
 import { AGENT_WIDTH_CSS } from "@/features/whiteboard/components/overlays/panel-layout";
 import { AITimeline } from "@/features/whiteboard/components/overlays/ai-timeline";
 import { CanvasAgentView } from "@/features/whiteboard/components/overlays/canvas-agent-view";
+import { UNIFIED_EXAMPLES } from "@/features/whiteboard/components/overlays/agent-examples";
 import type { useCanvasAgent } from "@/features/canvas-tools/editor/use-canvas-agent";
 
 interface AIPanelProps {
@@ -111,8 +112,10 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   onFitToScreen,
   canvasAgent,
 }) => {
-  const [mode, setMode] = React.useState<"generate" | "board">(canvasAgent?.shared ? "board" : "generate");
-  const board = mode === "board" && canvasAgent !== undefined;
+  const [mode, setMode] = React.useState<"generate" | "board">("generate");
+  // Unified agent (flag on): one conversation, no Generate / Edit tabs. Drawing a diagram is a tool of the same assistant.
+  const unified = canvasAgent?.shared === true;
+  const board = canvasAgent !== undefined && (unified || mode === "board");
   const [choice, setChoice] = React.useState<string>("gemini");
   const { provider: model, model: variant } = parseChoice(choice);
   // Providers the server has credentials for; null until known (then show all).
@@ -158,7 +161,9 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   const hasRun = board ? (canvasAgent?.messages.length ?? 0) > 0 : messages.length > 0;
   const prompt = messages.find((m) => m.kind === "prompt")?.content;
   const finished = !isGenerating && messages.some((m) => m.kind === "success" || m.noteKind === "summary" || m.noteKind === "stopped");
-  const busy = board ? Boolean(canvasAgent?.running) : isGenerating;
+  const lockedBy = board ? (canvasAgent?.lockedBy ?? null) : null;
+  const lockedText = lockedBy ? (lockedBy.mine ? "The assistant is working for you in another tab…" : `${lockedBy.name} is using the assistant…`) : null;
+  const busy = board ? Boolean(canvasAgent?.running) || lockedBy !== null : isGenerating;
 
   const send = (text: string) => {
     const value = text.trim();
@@ -215,7 +220,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
         </div>
       </header>
 
-      {canvasAgent && (
+      {canvasAgent && !unified && (
         <div role="tablist" aria-label="What the assistant does" className="flex shrink-0 gap-1 border-b border-border px-3 py-1.5">
           {([
             ["generate", "Generate"],
@@ -256,6 +261,11 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             onExample={send}
             disabled={disabled}
             shared={canvasAgent!.shared}
+            activity={canvasAgent!.activity}
+            examples={unified ? UNIFIED_EXAMPLES : undefined}
+            intro={unified ? "Ask for a diagram or a change to this board. The assistant draws new diagrams and edits with the same commands as the editor, so every step can be undone, and it tells you exactly what it did." : undefined}
+            onFit={unified ? onFitToScreen : undefined}
+            onOpenCode={unified ? () => onOpenCode(true) : undefined}
           />
         ) : !hasRun ? (
           <div className="px-5 py-5">
@@ -326,8 +336,8 @@ export const AIPanel: React.FC<AIPanelProps> = ({
                 send(input);
               }
             }}
-            aria-label={board ? "Describe a change to the board" : "Describe your diagram"}
-            placeholder={busy ? "The agent is working…" : board ? "Describe a change to the board…" : canEdit && editCurrent ? "Describe a change to the diagram…" : hasRun ? "Describe another diagram…" : "Describe your diagram…"}
+            aria-label={unified ? "Describe a diagram or a change to the board" : board ? "Describe a change to the board" : "Describe your diagram"}
+            placeholder={lockedText ?? (busy ? "The agent is working…" : unified ? "Describe a diagram or a change…" : board ? "Describe a change to the board…" : canEdit && editCurrent ? "Describe a change to the diagram…" : hasRun ? "Describe another diagram…" : "Describe your diagram…")}
             rows={2}
             disabled={disabled || busy}
             className="block max-h-40 min-h-[52px] w-full resize-none bg-transparent px-3 pt-2.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"

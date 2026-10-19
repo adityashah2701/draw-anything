@@ -7,6 +7,8 @@ import type { CanvasMessage, CanvasToolCall, CanvasTurn } from "./types";
 export type AgentEvent =
   | { type: "turn"; step: number }
   | { type: "assistant"; text: string }
+  /** The calls of this step are about to run (a long one, like diagram generation, can take a while). */
+  | { type: "calling"; step: number; calls: CanvasToolCall[] }
   | { type: "tool"; step: number; call: CanvasToolCall; result: ToolResult }
   | { type: "finished"; run: AgentRun };
 
@@ -87,6 +89,7 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
     if (turn.text.trim()) onEvent?.({ type: "assistant", text: turn.text });
     if (calls.length === 0) return finish("done", turn.text, undefined, step);
 
+    onEvent?.({ type: "calling", step, calls });
     const stepResults = await executor.executeAll(calls.map((call) => ({ id: call.id, name: call.name, args: call.args })));
     calls.forEach((call, index) => {
       const result = stepResults[index];
