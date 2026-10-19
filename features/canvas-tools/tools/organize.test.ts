@@ -25,7 +25,7 @@ describe("group_elements", () => {
 
   it("refuses one element, locked members and unknown ids, changing nothing", async () => {
     const s = setup({ elements: [node("a", "A", 0, 0), node("b", "B", 300, 0, { locked: true }), node("c", "C", 600, 0)] });
-    expect((await s.run("group_elements", { ids: ["a"] })).error?.code).toBe("invalid_arguments");
+    expect((await s.run("group_elements", { ids: ["a"] })).error?.code).toBe("invalid_state");
     expect((await s.run("group_elements", { ids: ["a", "b"] })).error?.code).toBe("invalid_state");
     expect((await s.run("group_elements", { ids: ["a", "ghost"] })).error?.code).toBe("not_found");
     expect(s.mem.stored.some((e) => e.type === "group")).toBe(false);

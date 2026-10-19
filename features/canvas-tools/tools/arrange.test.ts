@@ -51,7 +51,7 @@ describe("align_elements", () => {
 
   it("needs two separate things and valid ids", async () => {
     const s = setup({ elements: cards() });
-    expect((await s.run("align_elements", { ids: ["a"], mode: "left" })).error?.code).toBe("invalid_arguments");
+    expect((await s.run("align_elements", { ids: ["a"], mode: "left" })).error?.code).toBe("invalid_state");
     expect((await s.run("align_elements", { ids: ["a", "ghost"], mode: "left" })).error?.code).toBe("not_found");
     expect((await s.run("align_elements", { ids: ["a", "b"], mode: "diagonal" })).error?.code).toBe("invalid_arguments");
     expect((await s.ok("align_elements", { ids: ["a", "b"], mode: "left" })).ok).toBe(true);
@@ -78,7 +78,7 @@ describe("distribute_elements and set_element_spacing", () => {
 
   it("needs three or more unlocked items", async () => {
     const s = setup({ elements: row() });
-    expect((await s.run("distribute_elements", { ids: ["a", "b"], axis: "horizontal" })).error?.code).toBe("invalid_arguments");
+    expect((await s.run("distribute_elements", { ids: ["a", "b"], axis: "horizontal" })).error?.code).toBe("invalid_state");
     const locked = setup({ elements: [rectangle("a", 0, 0), rectangle("b", 200, 0, 100, 80, { locked: true }), rectangle("c", 500, 0, 100, 80, { locked: true })] });
     expect((await locked.run("distribute_elements", { ids: ["a", "b", "c"], axis: "horizontal" })).error?.code).toBe("invalid_state");
   });

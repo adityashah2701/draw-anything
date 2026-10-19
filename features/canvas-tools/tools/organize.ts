@@ -8,7 +8,7 @@ import { groupElementsPatch } from "./create";
 
 const groupInput = z
   .object({
-    ids: targetIds.min(2).describe("Elements or groups to put in one group."),
+    ids: targetIds.describe("At least two elements or groups to put in one group; \"@selection\" counts as its elements."),
     name: z.string().min(1).max(80).optional(),
     id: newElementId.optional(),
     expected_revision: expectedRevision,

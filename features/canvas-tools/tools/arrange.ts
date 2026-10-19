@@ -24,7 +24,7 @@ const moved = (patch: { update: Array<{ id: string }> } | null) => patch?.update
 
 const alignInput = z
   .object({
-    ids: targetIds.min(2),
+    ids: targetIds,
     mode: z.enum(["left", "center", "right", "top", "middle", "bottom"]).describe("left/center/right line up vertical edges; top/middle/bottom line up horizontal edges. Aligned to the outermost edge (or centre) of the selection."),
     expected_revision: expectedRevision,
   })
@@ -48,7 +48,7 @@ export const alignElements: ToolDefinition<typeof alignInput> = {
 
 const distributeInput = z
   .object({
-    ids: targetIds.min(3),
+    ids: targetIds,
     axis: z.enum(["horizontal", "vertical"]).describe("horizontal: equal gaps left to right; vertical: equal gaps top to bottom. The outermost items stay put."),
     expected_revision: expectedRevision,
   })
@@ -72,7 +72,7 @@ export const distributeElements: ToolDefinition<typeof distributeInput> = {
 
 const spacingInput = z
   .object({
-    ids: targetIds.min(2),
+    ids: targetIds,
     axis: z.enum(["horizontal", "vertical"]).describe("horizontal: side-by-side gaps; vertical: stacked gaps."),
     gap: z.number().finite().min(0).max(2000).describe("The exact clear space between neighbours, in board units."),
     expected_revision: expectedRevision,

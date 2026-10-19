@@ -185,7 +185,7 @@ describe("create_group", () => {
     await s2.ok("create_group", { id: "inner", ids: ["a", "b"], name: "Inner" });
     await s2.ok("create_group", { id: "outer", ids: ["inner", "c"], name: "Outer" });
     expect(find(s2.mem.stored, "inner").groupId).toBe("outer");
-    expect((await s2.run("create_group", { ids: ["a"], name: "Solo" })).error?.code).toBe("invalid_arguments");
+    expect((await s2.run("create_group", { ids: ["a"], name: "Solo" })).error?.code).toBe("invalid_state");
     expect((await s2.run("create_group", { ids: ["a", "ghost"], name: "X" })).error?.code).toBe("not_found");
     expect((await s2.run("create_group", { ids: ["a", "c"], name: "" })).error?.code).toBe("invalid_arguments");
   });

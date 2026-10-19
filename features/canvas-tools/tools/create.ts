@@ -335,7 +335,7 @@ export const groupElementsPatch = (env: Parameters<ToolDefinition["run"]>[1], id
 
 const groupInput = z
   .object({
-    ids: targetIds.min(2).describe("Elements (or groups) to put in the new group. Connectors between them keep working."),
+    ids: targetIds.describe("At least two elements (or groups) to put in the new group; \"@selection\" counts as its elements. Connectors between them keep working."),
     name: z.string().min(1).max(80).describe("The group's name."),
     id: newElementId.optional(),
   })
