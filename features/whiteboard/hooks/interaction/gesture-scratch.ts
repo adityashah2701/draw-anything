@@ -13,12 +13,20 @@ interface EndSnaps {
  */
 export interface GestureScratch {
   dragSession: DragSession | null;
-  /** A plain click on one member of a multi-selection: collapse to it on release unless the pointer moved. */
-  collapseOnRelease: { id: string; origin: Point } | null;
+  /** A plain click on one member (a shape or a whole group) of a multi-selection: collapse to its shapes on release unless the pointer moved. */
+  collapseOnRelease: { ids: string[]; origin: Point } | null;
   lastPoint: Point | null;
   resizeInitialBounds: Bounds | null;
   /** The element as it was when a resize began; every frame is computed from it. */
   resizeBase: DrawingElement | null;
+  /** A group or multi-selection being resized from its frame: everything is computed from this snapshot. */
+  frameResize: {
+    handle: string;
+    origin: DrawingElement[];
+    content: Bounds;
+    grab: Point;
+    minScale: { x: number; y: number };
+  } | null;
   lastResizePoint: Point | null;
   pendingArrowReroute: DrawingElement | null;
   /** Snap matches while an existing arrow end is being dragged. */
@@ -33,6 +41,7 @@ export const createScratch = (): GestureScratch => ({
   lastPoint: null,
   resizeInitialBounds: null,
   resizeBase: null,
+  frameResize: null,
   lastResizePoint: null,
   pendingArrowReroute: null,
   previousSnap: { start: null, end: null },

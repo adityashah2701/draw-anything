@@ -14,6 +14,8 @@ import {
   Moon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { SnapSettingsMenu } from "@/features/whiteboard/components/chrome/snap-settings-menu";
+import type { SnapSettings } from "@/features/whiteboard/utils/snap-settings";
 import { useTheme } from "next-themes";
 
 interface TopToolbarProps {
@@ -35,6 +37,8 @@ interface TopToolbarProps {
   onLoad: () => void;
   onRename?: (title: string) => void;
   onGenerateDiagram?: () => void;
+  snapSettings?: SnapSettings;
+  onSnapSettingsChange?: (next: Partial<SnapSettings>) => void;
   disabled?: boolean;
 }
 
@@ -55,6 +59,8 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   onToggleGrid,
   onRename,
   onGenerateDiagram,
+  snapSettings,
+  onSnapSettingsChange,
   disabled = false,
 }) => {
   const router = useRouter();
@@ -197,6 +203,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         >
           <Grid3X3 size={16} />
         </button>
+        {snapSettings && onSnapSettingsChange && <SnapSettingsMenu settings={snapSettings} onChange={onSnapSettingsChange} />}
       </div>
 
       {/* Right Section - Status, AI Generate, Collaborators */}

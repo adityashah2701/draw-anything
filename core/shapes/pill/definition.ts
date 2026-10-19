@@ -2,6 +2,7 @@ import { RectangleHorizontal } from "lucide-react";
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { resizable } from "@/core/shapes/capabilities/resizable";
+import { rotatable } from "@/core/shapes/capabilities/rotatable";
 import { connectable } from "@/core/shapes/capabilities/connectable";
 import { labelable } from "@/core/shapes/capabilities/labelable";
 import { PillShape } from "@/core/shapes/pill/types";
@@ -12,7 +13,7 @@ import { renderPillToCanvas } from "@/core/shapes/pill/renderer";
 /** Flowchart terminator (start/end): from the toolbar, diagram code and AI diagrams. */
 export const pillDefinition = createShapeDefinition<PillShape>({
   type: "pill",
-  capabilities: [movable<PillShape>(), resizable<PillShape>(), connectable<PillShape>(getPillAnchors), labelable<PillShape>()],
+  capabilities: [movable<PillShape>(), resizable<PillShape>(), rotatable<PillShape>(), connectable<PillShape>(getPillAnchors), labelable<PillShape>()],
   create: (props) => ({
     id: props.id ?? "",
     type: "pill",

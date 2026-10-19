@@ -1,4 +1,5 @@
 import type { Tool } from "@/features/whiteboard/types/whiteboard.types";
+import type { AlignMode, DistributeAxis } from "@/features/whiteboard/utils/arrange";
 
 export type ShortcutCommand =
   | { type: "undo" }
@@ -9,6 +10,11 @@ export type ShortcutCommand =
   | { type: "cut" }
   | { type: "paste" }
   | { type: "duplicate" }
+  | { type: "group" }
+  | { type: "ungroup" }
+  | { type: "lock-toggle" }
+  | { type: "align"; mode: AlignMode }
+  | { type: "distribute"; axis: DistributeAxis }
   | { type: "delete" }
   | { type: "escape" }
   | { type: "nudge"; dx: number; dy: number }
@@ -27,6 +33,8 @@ export type ShortcutCommand =
 
 export interface ShortcutEvent {
   key: string;
+  /** Physical key ("KeyA"). Alt changes `key` on some layouts (Option+A types "å"), so Alt shortcuts read this. */
+  code?: string;
   ctrlKey: boolean;
   metaKey: boolean;
   shiftKey: boolean;
@@ -64,6 +72,16 @@ const TOOL_KEYS: Record<string, { tool: Tool; edit: boolean }> = {
   h: { tool: "hand", edit: false },
 };
 
+/** Align shortcuts (Alt + physical key), the same letters other editors use. */
+const ALIGN_KEYS: Record<string, AlignMode> = {
+  KeyA: "left",
+  KeyD: "right",
+  KeyW: "top",
+  KeyS: "bottom",
+  KeyH: "center",
+  KeyV: "middle",
+};
+
 const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as const;
 
 /**
@@ -78,6 +96,17 @@ export const resolveShortcut = (e: ShortcutEvent, ctx: ShortcutContext): Shortcu
   const edit = ctx.hasEditAccess;
 
   if (key === "?" || (mod && key === "/")) return { type: "toggle-help" };
+
+  // Alt+letter aligns the selection; Alt+Shift+H/V spreads three or more evenly.
+  if (e.altKey && !mod && e.code && e.code in ALIGN_KEYS) {
+    if (!edit || !ctx.hasSelection) return null;
+    if (e.shiftKey) {
+      if (e.code === "KeyH") return { type: "distribute", axis: "horizontal" };
+      if (e.code === "KeyV") return { type: "distribute", axis: "vertical" };
+      return null;
+    }
+    return { type: "align", mode: ALIGN_KEYS[e.code] };
+  }
 
   if (mod) {
     if (e.altKey) return null;
@@ -101,6 +130,11 @@ export const resolveShortcut = (e: ShortcutEvent, ctx: ShortcutContext): Shortcu
         return edit ? { type: "paste" } : null;
       case "d":
         return edit && ctx.hasSelection ? { type: "duplicate" } : null;
+      case "g":
+        if (!edit || !ctx.hasSelection) return null;
+        return e.shiftKey ? { type: "ungroup" } : { type: "group" };
+      case "l":
+        return edit && ctx.hasSelection && e.shiftKey ? { type: "lock-toggle" } : null;
       case "]":
         return edit && ctx.hasSelection ? { type: "z-order", move: e.shiftKey ? "front" : "forward" } : null;
       case "[":

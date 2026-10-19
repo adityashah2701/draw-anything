@@ -97,3 +97,53 @@ describe("export shortcut", () => {
     expect(resolveShortcut(ev("Enter"), ctx({ hasSelection: true, textEntry: true }))).toBeNull();
   });
 });
+
+describe("group, lock and align shortcuts", () => {
+  it("Ctrl/Cmd+G groups and Ctrl/Cmd+Shift+G ungroups", () => {
+    expect(resolveShortcut(ev("g", { ctrlKey: true }), ctx())).toEqual({ type: "group" });
+    expect(resolveShortcut(ev("G", { metaKey: true, shiftKey: true }), ctx())).toEqual({ type: "ungroup" });
+  });
+
+  it("bare G is still the grid toggle", () => {
+    expect(resolveShortcut(ev("g"), ctx())).toEqual({ type: "toggle-grid" });
+  });
+
+  it("Ctrl/Cmd+Shift+L toggles the lock; plain Ctrl+L is left to the browser", () => {
+    expect(resolveShortcut(ev("L", { ctrlKey: true, shiftKey: true }), ctx())).toEqual({ type: "lock-toggle" });
+    expect(resolveShortcut(ev("l", { ctrlKey: true }), ctx())).toBeNull();
+  });
+
+  it("none of them fire without a selection or edit access", () => {
+    for (const e of [ev("g", { ctrlKey: true }), ev("g", { ctrlKey: true, shiftKey: true }), ev("L", { ctrlKey: true, shiftKey: true })]) {
+      expect(resolveShortcut(e, ctx({ hasSelection: false }))).toBeNull();
+      expect(resolveShortcut(e, ctx({ hasEditAccess: false }))).toBeNull();
+    }
+  });
+
+  it("Alt plus a physical key aligns, even when Alt changes the typed character", () => {
+    expect(resolveShortcut(ev("å", { altKey: true, code: "KeyA" }), ctx())).toEqual({ type: "align", mode: "left" });
+    expect(resolveShortcut(ev("d", { altKey: true, code: "KeyD" }), ctx())).toEqual({ type: "align", mode: "right" });
+    expect(resolveShortcut(ev("w", { altKey: true, code: "KeyW" }), ctx())).toEqual({ type: "align", mode: "top" });
+    expect(resolveShortcut(ev("s", { altKey: true, code: "KeyS" }), ctx())).toEqual({ type: "align", mode: "bottom" });
+    expect(resolveShortcut(ev("h", { altKey: true, code: "KeyH" }), ctx())).toEqual({ type: "align", mode: "center" });
+    expect(resolveShortcut(ev("v", { altKey: true, code: "KeyV" }), ctx())).toEqual({ type: "align", mode: "middle" });
+  });
+
+  it("Alt+Shift+H/V distributes", () => {
+    expect(resolveShortcut(ev("H", { altKey: true, shiftKey: true, code: "KeyH" }), ctx())).toEqual({ type: "distribute", axis: "horizontal" });
+    expect(resolveShortcut(ev("V", { altKey: true, shiftKey: true, code: "KeyV" }), ctx())).toEqual({ type: "distribute", axis: "vertical" });
+    expect(resolveShortcut(ev("A", { altKey: true, shiftKey: true, code: "KeyA" }), ctx())).toBeNull();
+  });
+
+  it("align shortcuts stay quiet while typing, without a selection and for viewers", () => {
+    const e = ev("a", { altKey: true, code: "KeyA" });
+    expect(resolveShortcut(e, ctx({ textEntry: true }))).toBeNull();
+    expect(resolveShortcut(e, ctx({ hasSelection: false }))).toBeNull();
+    expect(resolveShortcut(e, ctx({ hasEditAccess: false }))).toBeNull();
+  });
+
+  it("Alt with other keys still does nothing, and Alt+Ctrl combinations are untouched", () => {
+    expect(resolveShortcut(ev("r", { altKey: true, code: "KeyR" }), ctx())).toBeNull();
+    expect(resolveShortcut(ev("a", { altKey: true, ctrlKey: true, code: "KeyA" }), ctx())).toBeNull();
+  });
+});

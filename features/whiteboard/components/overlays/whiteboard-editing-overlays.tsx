@@ -17,6 +17,8 @@ import {
 } from "@/features/whiteboard/utils/rich-text-renderer";
 import { measureShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { getShapeLabelRegion } from "@/core/text/label-region";
+import { getShapeLocalBounds, getShapeRotation } from "@/core/shapes/shape-runtime";
+import { centerOf, rotatePoint } from "@/core/geometry/box";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import { measureLabelEditTopOffset, shapeLabelEditorStyle } from "./shape-label-editor-style";
 
@@ -39,6 +41,8 @@ interface ShapeLabelEditorProps {
   availableHeightPx: number;
   /** Same line cap the canvas applies, so the editor wraps like the rendered label. */
   maxLines?: number;
+  /** Degrees the shape is rotated by; the editor is turned to match. */
+  rotation?: number;
   onCommit: (
     label: string,
     fontSize: number,
@@ -60,6 +64,7 @@ function ShapeLabelEditor({
   availableWidthPx,
   availableHeightPx,
   maxLines,
+  rotation,
   onCommit,
   updateElement,
 }: ShapeLabelEditorProps) {
@@ -284,6 +289,7 @@ function ShapeLabelEditor({
           fontWeight,
           fontStyle,
           color: getAdaptiveColor(shape.color, isDark),
+          rotation,
         })}
         className="bg-transparent outline-none"
       />
@@ -409,13 +415,16 @@ export const WhiteboardEditingOverlays = ({
             (el: DrawingElement) => el.id === editingShapeLabelId,
           );
           if (!shape) return null;
-          const bounds = getElementBounds(shape);
+          // The shape's own box (before any rotation); the region is turned about its centre below.
+          const bounds = getShapeLocalBounds(shape) ?? getElementBounds(shape);
           if (!bounds) return null;
 
           // The text region, not the whole shape: semantic nodes keep their label beside the icon.
           const region = getShapeLabelRegion(shape.type, bounds);
-          const sx = region.centerX * canvasViewport.zoom + canvasViewport.panOffset.x;
-          const sy = region.centerY * canvasViewport.zoom + canvasViewport.panOffset.y;
+          const rotation = getShapeRotation(shape);
+          const labelCenter = rotatePoint({ x: region.centerX, y: region.centerY }, centerOf(bounds), rotation);
+          const sx = labelCenter.x * canvasViewport.zoom + canvasViewport.panOffset.x;
+          const sy = labelCenter.y * canvasViewport.zoom + canvasViewport.panOffset.y;
 
           const labelMarkdown = normalizeRichTextInput(
             editingShapeLabelDraft,
@@ -438,6 +447,7 @@ export const WhiteboardEditingOverlays = ({
               availableWidthPx={availableWidthPx}
               availableHeightPx={availableHeightPx}
               maxLines={region.maxLines}
+              rotation={rotation}
               updateElement={updateElement}
               onCommit={(label, fontSize, fontWeight, fontStyle) => {
                 updateElement({

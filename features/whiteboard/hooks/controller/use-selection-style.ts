@@ -8,7 +8,10 @@ interface UseSelectionStyleOptions {
   elements: DrawingElement[];
   selectedElements: string[];
   hasEditAccess: boolean;
-  updateElement: (element: DrawingElementJson) => void;
+  /** Locked shapes (and shapes in locked groups) are never restyled. */
+  isLocked: (shapeId: string) => boolean;
+  /** One storage mutation for the whole batch, so a style change on many shapes is one undo step. */
+  updateElements: (batch: DrawingElementJson[]) => void;
 }
 
 /** Style changes from the properties panel: remember the choice for new shapes and apply it to the selection. */
@@ -17,17 +20,19 @@ export const useSelectionStyle = ({
   elements,
   selectedElements,
   hasEditAccess,
-  updateElement,
+  isLocked,
+  updateElements,
 }: UseSelectionStyleOptions) => {
   const applyToSelection = useCallback(
     (patch: Partial<DrawingElement>) => {
       if (selectedElements.length === 0 || !hasEditAccess) return;
-      for (const id of selectedElements) {
-        const element = elements.find((candidate) => candidate.id === id);
-        if (element) updateElement({ ...element, ...patch } as unknown as DrawingElementJson);
-      }
+      const targets = new Set(selectedElements);
+      const batch = elements
+        .filter((element) => targets.has(element.id) && !isLocked(element.id))
+        .map((element) => ({ ...element, ...patch }) as unknown as DrawingElementJson);
+      if (batch.length > 0) updateElements(batch);
     },
-    [elements, selectedElements, hasEditAccess, updateElement],
+    [elements, selectedElements, hasEditAccess, isLocked, updateElements],
   );
 
   const handleColorChange = useCallback(
@@ -64,5 +69,5 @@ export const useSelectionStyle = ({
     [uiState, applyToSelection],
   );
 
-  return { handleColorChange, handleFillColorChange, handleStrokeWidthChange, handleFontSizeChange };
+  return { handleColorChange, handleFillColorChange, handleStrokeWidthChange, handleFontSizeChange, applyToSelection };
 };

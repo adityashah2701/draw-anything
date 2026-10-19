@@ -8,7 +8,9 @@ import {
 import { ConnectionHandle } from "@/core/routing/connection-handles";
 import {
   getShapeAnchors,
+  getShapeLocalBounds,
   getShapeResizeHandles,
+  getShapeRotation,
   renderShapeToCanvas,
 } from "@/core/shapes/shape-runtime";
 
@@ -165,12 +167,27 @@ export const drawElement = (
         const padding = (element.strokeWidth || 2) / 2;
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = "#007bff";
-        ctx.strokeRect(
-          (minX - padding) * zoom + panOffset.x - 5,
-          (minY - padding) * zoom + panOffset.y - 5,
-          (maxX - minX + padding * 2) * zoom + 10,
-          (maxY - minY + padding * 2) * zoom + 10,
-        );
+        const rotation = getShapeRotation(element);
+        const local = rotation ? getShapeLocalBounds(element) : null;
+        if (rotation && local) {
+          // A rotated shape is outlined along its own edges, like its handles.
+          const cx = ((local.minX + local.maxX) / 2) * zoom + panOffset.x;
+          const cy = ((local.minY + local.maxY) / 2) * zoom + panOffset.y;
+          ctx.translate(cx, cy);
+          ctx.rotate((rotation * Math.PI) / 180);
+          const w = (local.maxX - local.minX + padding * 2) * zoom + 10;
+          const h = (local.maxY - local.minY + padding * 2) * zoom + 10;
+          ctx.strokeRect(-w / 2, -h / 2, w, h);
+          ctx.rotate((-rotation * Math.PI) / 180);
+          ctx.translate(-cx, -cy);
+        } else {
+          ctx.strokeRect(
+            (minX - padding) * zoom + panOffset.x - 5,
+            (minY - padding) * zoom + panOffset.y - 5,
+            (maxX - minX + padding * 2) * zoom + 10,
+            (maxY - minY + padding * 2) * zoom + 10,
+          );
+        }
       } else if (element.points.length >= 2) {
         // For lines, just subtly highlight the segment itself
         ctx.setLineDash([]);

@@ -16,10 +16,11 @@ const mod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 
 /** Right-click menu for the canvas; every entry runs the same command as its keyboard shortcut. */
 export const CanvasContextMenu = ({ controller, children }: { controller: WhiteboardPageController; children: ReactNode }) => {
-  const { elementCommands: c, selectedElements, whiteboardAccess, elements } = controller;
+  const { elementCommands: c, groupCommands: g, selectedElements, whiteboardAccess, elements } = controller;
   const edit = whiteboardAccess.hasEditAccess;
-  const count = selectedElements.length;
-  const some = count > 0;
+  // Align and distribute work on units: a group counts as one, however many shapes it holds.
+  const count = g.units.length;
+  const some = selectedElements.length > 0;
 
   return (
     <ContextMenu>
@@ -36,6 +37,21 @@ export const CanvasContextMenu = ({ controller, children }: { controller: Whiteb
         </ContextMenuItem>
         <ContextMenuItem disabled={!edit || !some} onSelect={c.duplicate}>
           Duplicate <ContextMenuShortcut>{mod}D</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={!edit || !g.canGroup} onSelect={g.group}>
+          Group <ContextMenuShortcut>{mod}G</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem disabled={!edit || !g.canUngroup} onSelect={g.ungroup}>
+          Ungroup <ContextMenuShortcut>{mod}⇧G</ContextMenuShortcut>
+        </ContextMenuItem>
+        {g.selectedGroupId && (
+          <ContextMenuItem onSelect={() => g.enter()}>
+            Edit group <ContextMenuShortcut>↵</ContextMenuShortcut>
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem disabled={!edit || !some} onSelect={g.toggleLock}>
+          {g.allLocked ? "Unlock" : "Lock"} <ContextMenuShortcut>{mod}⇧L</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuSub>

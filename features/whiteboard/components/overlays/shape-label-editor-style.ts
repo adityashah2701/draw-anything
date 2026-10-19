@@ -82,30 +82,36 @@ export interface ShapeLabelEditorStyleInput {
   fontWeight: string;
   fontStyle: string;
   color: string;
+  /** Degrees the shape (and so its label) is rotated by; the editor turns with it. */
+  rotation?: number;
 }
 
 /** Centered on (sx, sy) with translate(-50%, -50%); top is shifted by the measured baseline offset. */
-export const shapeLabelEditorStyle = (i: ShapeLabelEditorStyleInput): CSSProperties => ({
-  position: "absolute",
-  left: i.sx,
-  top: i.sy - i.editTopOffset,
-  transform: "translate(-50%, -50%)",
-  width: i.editorWidth,
-  zIndex: 110,
-  textAlign: "center",
-  fontSize: i.editorFontSize,
-  fontWeight: i.fontWeight,
-  fontStyle: i.fontStyle as "normal" | "italic",
-  lineHeight: `${i.editorLineHeight}px`,
-  letterSpacing: 0,
-  padding: 0,
-  minHeight: `${i.editorMinHeight}px`,
-  margin: 0,
-  direction: "ltr",
-  unicodeBidi: "plaintext",
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
-  fontFamily: FONT_FAMILY,
-  color: i.color,
-  caretColor: i.color,
-});
+export const shapeLabelEditorStyle = (i: ShapeLabelEditorStyleInput): CSSProperties => {
+  const turn = ((i.rotation ?? 0) * Math.PI) / 180;
+  return {
+    position: "absolute",
+    // The baseline offset points up in the label's own frame, so it turns with the label.
+    left: i.sx + i.editTopOffset * Math.sin(turn),
+    top: i.sy - i.editTopOffset * Math.cos(turn),
+    transform: i.rotation ? `translate(-50%, -50%) rotate(${i.rotation}deg)` : "translate(-50%, -50%)",
+    width: i.editorWidth,
+    zIndex: 110,
+    textAlign: "center",
+    fontSize: i.editorFontSize,
+    fontWeight: i.fontWeight,
+    fontStyle: i.fontStyle as "normal" | "italic",
+    lineHeight: `${i.editorLineHeight}px`,
+    letterSpacing: 0,
+    padding: 0,
+    minHeight: `${i.editorMinHeight}px`,
+    margin: 0,
+    direction: "ltr",
+    unicodeBidi: "plaintext",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    fontFamily: FONT_FAMILY,
+    color: i.color,
+    caretColor: i.color,
+  };
+};

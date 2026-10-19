@@ -4,6 +4,7 @@ import { connectable } from "@/core/shapes/capabilities/connectable";
 import { labelable } from "@/core/shapes/capabilities/labelable";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { resizable } from "@/core/shapes/capabilities/resizable";
+import { rotatable } from "@/core/shapes/capabilities/rotatable";
 import { getSemanticNodeAnchors } from "@/core/shapes/semantic-node/anchors";
 import { getSemanticNodeBounds } from "@/core/shapes/semantic-node/geometry";
 import {
@@ -18,7 +19,7 @@ export const semanticNodeDefinition = createShapeDefinition<SemanticNodeShape>({
   type: "semantic-node",
   capabilities: [
     movable<SemanticNodeShape>(),
-    resizable<SemanticNodeShape>(),
+    resizable<SemanticNodeShape>(), rotatable<SemanticNodeShape>(),
     connectable<SemanticNodeShape>(getSemanticNodeAnchors),
     labelable<SemanticNodeShape>(),
   ],

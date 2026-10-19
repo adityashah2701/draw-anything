@@ -56,7 +56,7 @@ describe("taller standalone text (line height 1.0 -> 1.2): what it touches", () 
     expect(parsed.status).toBe("ok");
     if (parsed.status !== "ok") return;
     expect(parsed.elements[0]).toEqual(legacyText); // no field added, removed or migrated
-    const again = getShapeBounds(parsed.elements[0], { textMeasureContext: fakeCtx(), zoom: 1 })!;
+    const again = getShapeBounds(parsed.elements[0] as DrawingElement, { textMeasureContext: fakeCtx(), zoom: 1 })!;
     expect(again).toEqual(bounds());
   });
 
@@ -67,7 +67,7 @@ describe("taller standalone text (line height 1.0 -> 1.2): what it touches", () 
     if (reloaded.status !== "ok") return;
     const measure = (els: DrawingElement[]) =>
       els.filter((e) => e.type === "text").map((e) => getShapeBounds(e, { textMeasureContext: fakeCtx(), zoom: 1 }));
-    expect(measure(reloaded.elements)).toEqual(measure(elements));
+    expect(measure(reloaded.elements as DrawingElement[])).toEqual(measure(elements));
     expect(reloaded.elements).toEqual(JSON.parse(JSON.stringify(elements)));
   });
 

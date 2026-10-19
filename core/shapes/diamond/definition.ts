@@ -1,6 +1,7 @@
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { resizable } from "@/core/shapes/capabilities/resizable";
+import { rotatable } from "@/core/shapes/capabilities/rotatable";
 import { connectable } from "@/core/shapes/capabilities/connectable";
 import { labelable } from "@/core/shapes/capabilities/labelable";
 import { DiamondShape } from "@/core/shapes/diamond/types";
@@ -18,7 +19,7 @@ export const diamondDefinition = createShapeDefinition<DiamondShape>({
   type: "diamond",
   capabilities: [
     movable<DiamondShape>(),
-    resizable<DiamondShape>(),
+    resizable<DiamondShape>(), rotatable<DiamondShape>(),
     connectable<DiamondShape>(getDiamondAnchors),
     labelable<DiamondShape>(),
   ],
