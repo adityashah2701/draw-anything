@@ -224,6 +224,47 @@ export const updateElement: ToolDefinition<typeof elementInput> = {
   },
 };
 
+// ── shape ────────────────────────────────────────────────────────────────────
+
+const SHAPE_CHOICES = ["rectangle", "diamond", "ellipse", "pill", "triangle", "semantic-node"] as const;
+/** Types whose element is a node box a person can re-shape: not connectors, text, freehand, lines or bare icons. */
+const RESHAPABLE = new Set<string>([...SHAPE_CHOICES, "circle"]);
+
+const shapeInput = z
+  .object({
+    ids: targetIds,
+    shape: z.enum(SHAPE_CHOICES).describe("The new shape: diamond for decisions, pill for start/end, semantic-node for a labelled box with an icon."),
+    skip_locked: skipLocked,
+  })
+  .strict();
+
+export const changeShape: ToolDefinition<typeof shapeInput> = {
+  name: "change_shape",
+  group: "edit",
+  description: "Change what shape nodes are drawn as (rectangle, diamond, ellipse, pill, triangle, semantic-node), keeping their id, position, size, text, colours and connectors. Use it to turn decision nodes into diamonds. One undo step.",
+  input: shapeInput,
+  access: "write",
+  run: ({ ids, shape, skip_locked }, env) => {
+    const { editable, skipped: locked } = editableTargets(env, ids, skip_locked);
+    const changed: DrawingElement[] = [];
+    const skipped = [...locked];
+    for (const id of editable) {
+      const current = env.ctx.index.shapes.get(id)!;
+      if (!RESHAPABLE.has(current.type)) skipped.push({ id, reason: `a ${current.type} cannot be re-shaped` });
+      else if (current.type === shape) skipped.push({ id, reason: `already a ${shape}` });
+      else {
+        const next = { ...current, type: shape } as DrawingElement & { nodeStyle?: unknown; cornerRadius?: number };
+        if (shape !== "semantic-node") delete next.nodeStyle;
+        if (shape !== "rectangle" && shape !== "semantic-node") delete next.cornerRadius;
+        changed.push(next);
+      }
+    }
+    if (changed.length === 0) throw new ToolError("unsupported", `Nothing was re-shaped: ${skipped.map((s) => `${s.id}: ${s.reason}`).slice(0, 4).join("; ")}.`, { ids: editable });
+    const settled = settleConnectors(env, updatePatch(changed));
+    return { summary: `Changed ${count(changed.length, "element")} to ${shape}: ${listIds(changed.map((c) => c.id))}.`, data: { changed: changed.map((c) => c.id) }, patch: settled.patch, skipped, ...(settled.warnings.length > 0 ? { warnings: settled.warnings } : {}) };
+  },
+};
+
 // ── icons ────────────────────────────────────────────────────────────────────
 
 const iconInput = z
@@ -624,6 +665,7 @@ export const deleteElements: ToolDefinition<typeof deleteInput> = {
 
 export const EDIT_TOOLS = [
   updateElement,
+  changeShape,
   updateText,
   updateIcon,
   updateSemanticNode,

@@ -71,7 +71,8 @@ describe("tool selection and arguments", () => {
     expect((await s.run("make_it_pretty", {})).error?.code).toBe("unknown_tool");
     const off = await s.run("move_elements", { ids: ["orders"], dx: 1 });
     expect(off.error).toMatchObject({ code: "tool_not_enabled" });
-    expect(off.error?.message).toContain("enable_tools");
+    expect(off.error?.message).toMatch(/on now, so call move_elements again/);
+    expect((await s.run("move_elements", { ids: ["orders"], dx: 1 })).ok).toBe(true);
   });
 
   it("does not repeat a read on a board that has not changed, and reads again after a change", async () => {

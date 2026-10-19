@@ -587,6 +587,8 @@ export const buildCanvas = (
       strokeWidth: importance >= 8 ? 3 : 2,
       // A bare icon has no box to fill.
       ...(isIcon ? {} : { fill: style.fill }),
+      // A step with no icon and no kind would otherwise show the placeholder cube: let its label have the whole box.
+      ...(!shape && !node.icon && node.kind === "generic" ? { nodeStyle: { iconHidden: true } } : {}),
       label: node.label,
       fontSize: isIcon ? ICON_NODE_FONT_SIZE : NODE_FONT_SIZE,
       fontWeight: NODE_FONT_WEIGHT,

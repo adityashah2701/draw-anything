@@ -57,3 +57,15 @@ describe("icons through the diagram code", () => {
     expect(doc.nodes[0].kind).toBe("database");
   });
 });
+
+describe("steps with no icon", () => {
+  it("do not show the placeholder cube: a generic node hides its icon tile, a typed one keeps it", () => {
+    const code = `type flowchart\nPlug in lamp\nOrders DB [kind: database]\nSensor [kind: service, icon: esp32]\nPlug in lamp > Orders DB\nOrders DB > Sensor`;
+    const { document: doc } = documentFromParsedCode(parseDiagramCode(code), "g");
+    const nodes = compileAIDiagramToCanvas(doc, "f").filter((e) => e.type === "semantic-node") as Array<{ label?: string; nodeStyle?: { iconHidden?: boolean } }>;
+    expect(nodes.find((n) => n.label === "Plug in lamp")?.nodeStyle?.iconHidden).toBe(true);
+    expect(nodes.find((n) => n.label === "Orders DB")?.nodeStyle?.iconHidden).toBeUndefined();
+    expect(nodes.find((n) => n.label === "Sensor")?.nodeStyle?.iconHidden).toBeUndefined();
+  });
+});
+

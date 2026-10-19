@@ -1,5 +1,6 @@
 import { pickDefaultProvider } from "@/features/ai/default-provider";
 import { normalizeArgs } from "../args";
+import { unknownToolMessage } from "../tool-names";
 import { isSelectableNvidiaModel, modelSupportsVision } from "@/features/ai/nvidia-models";
 import { getAIModelProviderConfig } from "@/features/ai/server/model-providers";
 import type { AIModelProvider } from "@/features/ai/types";
@@ -84,7 +85,7 @@ export const checkModelCalls = (reply: ModelReply, tools: readonly ToolDefinitio
   return reply.calls.slice(0, MAX_CALLS_PER_TURN).map((call) => {
     const id = call.id && call.id.length <= 80 ? call.id : newId();
     const tool = byName.get(call.name);
-    if (!tool) return { id, name: call.name, args: call.args, problem: { code: "unknown_tool" as const, message: `There is no tool called "${call.name}". Use only the tools you were given.` } };
+    if (!tool) return { id, name: call.name, args: call.args, problem: { code: "unknown_tool" as const, message: unknownToolMessage(call.name, tools, on) } };
     if (!toolEnabled(tool, on)) {
       return { id, name: tool.name, args: call.args, problem: { code: "tool_not_enabled" as const, message: `"${tool.name}" belongs to the "${tool.group}" tools, which are not enabled. Call enable_tools with {"groups":["${tool.group}"]} first.` } };
     }

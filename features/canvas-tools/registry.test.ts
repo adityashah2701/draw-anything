@@ -79,7 +79,7 @@ describe("tool registry", () => {
     const perGroup = Object.fromEntries(TOOL_GROUPS.map((g) => [g, chars(tools.filter((t) => t.group === g).map((t) => t.name))]));
     // ~3.6 characters per token: each group stays under ~4k tokens, and everything together under ~14.5k.
     for (const [group, size] of Object.entries(perGroup)) expect(size, group).toBeLessThan(15_000);
-    expect(JSON.stringify(specsFor(tools, TOOL_GROUPS)).length).toBeLessThan(51_000);
+    expect(JSON.stringify(specsFor(tools, TOOL_GROUPS)).length).toBeLessThan(52_000);
   });
 
   it("only offers the tools of the enabled groups", () => {
