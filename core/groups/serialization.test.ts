@@ -4,7 +4,7 @@ import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-conten
 import { buildGroupIndex, splitStored } from "./group-index";
 import { planGroup, planSetLocked } from "./group-commands";
 import { applyPatch } from "./patch";
-import { arrow, group, rect } from "./test-helpers";
+import { arrow, rect } from "./test-helpers";
 
 /** Exactly what autosave writes and the controller reads back. */
 const save = (elements: StoredElement[]) =>

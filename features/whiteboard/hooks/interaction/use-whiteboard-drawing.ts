@@ -448,6 +448,7 @@ export const useWhiteboardDrawing = ({
       resetStaleGesture,
       setGesture,
       selection,
+      baselineOf,
     ],
   );
 

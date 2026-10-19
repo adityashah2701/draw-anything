@@ -1,7 +1,7 @@
 # Groups, smart guides and precision editing — design
 
-Date: 2026-10-19. Status: implemented in this change; this file records what the existing code
-offered, what was risky, and the decisions taken.
+Date: 2026-10-19. Status: implemented; this file records what the existing code offered, what was
+risky, and the decisions taken. Test results and known gaps: `docs/testing/groups-guides-precision-tests.md`.
 
 ## 1. What the codebase already had (inspected, not assumed)
 
@@ -104,3 +104,21 @@ elements, with mixed-value display. Edits go through the same transform function
 * Browser integration (real editor in Chrome with Liveblocks fakes): group via shortcut, drag a
   group, connector integrity, resize group, enter group, ungroup, undo/redo, save → reload round
   trip, locked behaviour, guides while dragging at several zooms, panel edits.
+
+## 9. Decisions that were not obvious
+
+* **Group records live in the shape list but not in `DrawingElement`.** The alternative (a second
+  Liveblocks structure) would have needed its own seeding, autosave, undo and AI handling; a
+  separate type keeps every existing consumer unchanged.
+* **Selection stays shape ids.** Making group ids selectable would have changed presence, export,
+  style, delete and copy; instead a "unit" (maximal fully-selected subtree) is derived.
+* **Locked things stay selectable.** Without a layers panel, clicking is the only way to unlock.
+* **Empty click leaves the entered group**, Escape climbs one level, double-click/Enter descends.
+* **Rotation is stored on the shape**, applied at `shape-runtime` (the one place geometry is read),
+  so canvas and export agree; connectors keep anchor ids, so rotating a connected shape re-routes
+  rather than detaches.
+* **Group rotation is a rigid turn of its members**, not a stored angle on the group: with absolute
+  child coordinates a group has no frame of its own to remember one in.
+* **Connectors in a transform**: those with every attached end inside the moving set travel with
+  it; any other is re-routed from its original geometry, so none ever detaches (this also fixes the
+  old behaviour where a selected connector plus one of its shapes left the connector dangling).

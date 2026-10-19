@@ -167,6 +167,22 @@ suite("editor inspector: precise editing", () => {
     expect(onOutline.some((p) => Math.hypot(p.x - start.x, p.y - start.y) < 0.5)).toBe(true);
   });
 
+  it("the label editor of a rotated shape is turned with it", async () => {
+    await select("C");
+    await enter("Rotation", "90");
+    await leaveField();
+    await s.dblclick({ x: 310, y: 305 });
+    await s.page.waitForSelector("[contenteditable]:focus");
+    const transform = await s.page.evaluate(() => getComputedStyle(document.querySelector("[contenteditable]:focus")!).transform);
+    // matrix(a, b, c, d, e, f) of a quarter turn: a ~ 0, b ~ 1
+    const [a, b] = transform.replace("matrix(", "").replace(")", "").split(",").map(Number);
+    expect(Math.abs(a)).toBeLessThan(1e-6);
+    expect(b).toBeCloseTo(1, 6);
+    await s.type("turned");
+    await s.press("Escape");
+    expect(byId(await s.elements(), "C").label).toBe("turned");
+  });
+
   it("rotation is saved and survives a reload; angle 0 removes the field again", async () => {
     await select("C");
     await enter("Rotation", "30");

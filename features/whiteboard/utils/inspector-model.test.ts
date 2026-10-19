@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildGroupIndex } from "@/core/groups/group-index";
-import { arrow, boundsOf, group, rect } from "@/core/groups/test-helpers";
+import { arrow, group, rect } from "@/core/groups/test-helpers";
 import { getShapeBounds } from "@/core/shapes/shape-runtime";
 import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
 import { formatNumber, readInspector } from "./inspector-model";
@@ -133,4 +133,3 @@ describe("formatNumber", () => {
   });
 });
 
-void boundsOf;

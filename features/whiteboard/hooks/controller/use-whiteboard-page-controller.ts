@@ -28,7 +28,6 @@ import {
 import { buildGroupIndex, expandUnits, isEffectivelyLocked, splitStored } from "@/core/groups/group-index";
 import { groupsEmptiedBy, planDelete } from "@/core/groups/group-commands";
 import type { DocPatch } from "@/core/groups/patch";
-import { storedOrderFromShapes } from "@/core/groups/order";
 import { createBaselineResolver } from "@/features/whiteboard/utils/text-baseline";
 import { planFrameScale, planShapeMoves, uniformOffsets } from "@/features/whiteboard/utils/move-plan";
 import { buildSelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
@@ -126,12 +125,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   );
 
   // Batched writes: one storage mutation (hence one undo step) and one list scan for any number of
-  // elements, instead of one mutation and one scan per element.
-  const addElements = useLiveblocksM(({ storage }, batch: DrawingElementJson[]) => {
-    const list = storage.get("elements");
-    batch.forEach((element) => list.push(new LiveObject(element)));
-  }, []);
-
+  // elements, instead of one mutation and one scan per element. (Adds go through `applyDocPatch`.)
   const updateElements = useLiveblocksM(({ storage }, batch: DrawingElementJson[]) => {
     const list = storage.get("elements");
     const indexById = new Map<string, number>();
@@ -206,6 +200,11 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
   const [selectedElements, setSelectedElements] = useState<string[]>([]);
   // The group the user has stepped into to edit its children; null = top level (see group-selection.ts).
   const [enteredGroupId, setEnteredGroupId] = useState<string | null>(null);
+  // A group that no longer exists (deleted, dissolved, undone away) is not "entered" any more: forget it,
+  // so redoing the change does not silently put the user back inside.
+  useEffect(() => {
+    if (enteredGroupId !== null && !groupIndex.groups.has(enteredGroupId)) setEnteredGroupId(null);
+  }, [enteredGroupId, groupIndex]);
   const boardExport = useBoardExport({ elements, selectedIds: selectedElements, title: whiteboard?.title });
 
   const whiteboardAccess = useWhiteboardAccess(whiteboard);
