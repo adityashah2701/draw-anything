@@ -159,11 +159,12 @@ export const createCanvasTransport = (
   specs: readonly ToolSpec[],
   onFallback?: (reason: string) => void,
   env: Record<string, string | undefined> = process.env,
+  model?: string,
 ): CanvasTransport => {
   const preference = resolveTransportPreference(provider, env);
-  const text = createTextCanvasTransport(createAIChatModel(provider));
+  const text = createTextCanvasTransport(createAIChatModel(provider, { model }));
   if (preference === "text" || !NATIVE_CAPABLE.has(provider)) return text;
-  const base = createBaseChatModel(provider);
+  const base = createBaseChatModel(provider, { model });
   if (!base) return text;
   let native: CanvasTransport;
   try {

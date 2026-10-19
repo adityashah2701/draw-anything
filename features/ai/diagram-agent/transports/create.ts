@@ -1,5 +1,6 @@
 import type { AIModelProvider } from "@/features/ai/types";
 import { createAIChatModel, createBaseChatModel } from "@/features/ai/server/model-providers";
+import { modelSupportsVision } from "@/features/ai/nvidia-models";
 import { createFallbackTransport, type FallbackNotice } from "./fallback";
 import { AGENT_TOOL_SPECS, createNativeTransport } from "./native";
 import { createTextTransport } from "./text";
@@ -28,7 +29,7 @@ export interface ToolTransportOptions {
 }
 
 /** Providers whose models here can look at an image. A local model is whatever the user runs, so it is not assumed to. */
-export const supportsVision = (provider: AIModelProvider) => provider !== "local";
+export const supportsVision = (provider: AIModelProvider, model?: string) => modelSupportsVision(provider, model);
 
 export const createToolTransport = (
   provider: AIModelProvider,

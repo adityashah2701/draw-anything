@@ -74,6 +74,28 @@ describe("native tool calling", () => {
     expect((sent[3] as ToolMessage).tool_call_id).toBe("call_a");
   });
 
+  it("handles a multi-step run: calls in several turns, parallel calls, arguments as JSON text, and malformed replies", async () => {
+    const replies = [
+      { content: "", tool_calls: [{ id: "a", name: "get_document_state", args: { limit: 3 } }, { id: "b", name: "find_elements", args: { query: "db" } }] },
+      { content: [{ type: "text", text: "Fixing." }], tool_calls: [], invalid_tool_calls: [{ id: "c", name: "find_elements", args: '{"query": "x"' }] },
+      { content: "Done." },
+      { content: null, tool_calls: undefined },
+    ];
+    const invoke = vi.fn(async () => replies.shift());
+    const transport = createNativeCanvasTransport({ bindTools: () => ({ invoke }) } as never, specs);
+    expect((await transport.complete(system, conversation)).calls.map((c) => c.args)).toEqual([{ limit: 3 }, { query: "db" }]);
+    const second = await transport.complete(system, conversation);
+    expect(second.text).toBe("Fixing.");
+    expect(second.calls).toEqual([{ id: "c", name: "find_elements", args: '{"query": "x"' }]); // left as text for validation to reject
+    expect(await transport.complete(system, conversation)).toEqual({ text: "Done.", calls: [] });
+    expect(await transport.complete(system, conversation)).toEqual({ text: "", calls: [] });
+  });
+
+  it("passes provider errors up unchanged so the endpoint can answer with a safe message", async () => {
+    const transport = createNativeCanvasTransport({ bindTools: () => ({ invoke: async () => { throw new Error("401 Unauthorized"); } }) } as never, specs);
+    await expect(transport.complete(system, conversation)).rejects.toThrow("401");
+  });
+
   it("refuses a model without tool calling", () => {
     expect(() => createNativeCanvasTransport({} as never, specs)).toThrow(/tool calling/);
   });

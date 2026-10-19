@@ -4,6 +4,7 @@ import { ChatGroq } from "@langchain/groq";
 import { ChatOpenAI } from "@langchain/openai";
 import { AIModelProvider } from "@/features/ai/types";
 import { MODELS, ModelRole } from "./models";
+import { NVIDIA_DEFAULT_MODEL, isSelectableNvidiaModel, nvidiaModelInfo } from "@/features/ai/nvidia-models";
 import { GoogleGenAI, Content } from "@google/genai";
 import { z } from "zod";
 import { parseModelJson } from "./json-extract";
@@ -295,7 +296,6 @@ const GROQ_VISION_DEFAULT = "meta-llama/llama-4-scout-17b-16e-instruct";
  * (checked against the live /v1/models list); the newer one is the default, the smaller one answers
  * when it is rate limited or unavailable. Override with NVIDIA_MODEL / NVIDIA_FALLBACK_MODEL.
  */
-const NVIDIA_DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b";
 const NVIDIA_FALLBACK_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
 
 /** A reply that another model might still give: rate limit, overload, outage, or this model not served to this key. */
@@ -308,7 +308,12 @@ export const isNvidiaRetryable = (e: unknown): boolean =>
  * Reasoning config: full thinking capacity by default (unbounded), or capped when NVIDIA_REASONING_BUDGET is set.
  * Set NVIDIA_ENABLE_THINKING=0 to disable reasoning.
  */
-export const nvidiaThinking = () => {
+export const nvidiaThinking = (model?: string) => {
+  const explicit = process.env.NVIDIA_ENABLE_THINKING;
+  if (model && nvidiaModelInfo(model).thinking === "explicit") {
+    if (explicit === undefined || explicit === "") return undefined;
+    if (explicit === "0") return { enable_thinking: false };
+  }
   if (process.env.NVIDIA_ENABLE_THINKING === "0") {
     return { enable_thinking: false };
   }
@@ -329,7 +334,7 @@ export const createNvidiaModel = (model: string): BaseChatModel =>
     // No timing constraint: timeout is undefined by default so deep reasoning is never aborted mid-thought.
     // Override with NVIDIA_TIMEOUT_MS if a specific timeout limit is desired.
     timeout: process.env.NVIDIA_TIMEOUT_MS ? Number(process.env.NVIDIA_TIMEOUT_MS) || undefined : undefined,
-    modelKwargs: { chat_template_kwargs: nvidiaThinking() },
+    modelKwargs: nvidiaThinking(model) ? { chat_template_kwargs: nvidiaThinking(model) } : {},
   });
 
 type Runner = Pick<BaseChatModel, "invoke"> & { bindTools?: (tools: never[]) => Runner };
@@ -350,6 +355,8 @@ export const withNvidiaFallback = (primary: Runner, secondary: Runner): BaseChat
   }) as unknown as BaseChatModel;
 
 export interface ModelOptions {
+  /** NVIDIA only: a model from NVIDIA_MODELS to use instead of the default. Ignored (and never trusted) for other providers. */
+  model?: string;
   /** A model that accepts images: `<PROVIDER>_VISION_MODEL` when set, else the provider's usual model (Groq: a Llama 4 vision model). */
   vision?: boolean;
 }
@@ -358,8 +365,15 @@ export const getAIModelProviderConfig = (
   providerInput?: AIModelProvider,
   options: ModelOptions = {},
 ): AIModelProviderConfig => {
-  const config = baseProviderConfig(providerInput);
+  let config = baseProviderConfig(providerInput);
+  if (config.provider === "nvidia" && isSelectableNvidiaModel(options.model)) {
+    config = { ...config, modelName: options.model, displayName: nvidiaModelInfo(options.model).label };
+  }
   if (!options.vision) return config;
+  // A model that cannot read images never gets them: use the provider's vision default instead.
+  if (config.provider === "nvidia" && !nvidiaModelInfo(config.modelName).vision) {
+    return { ...config, modelName: process.env.NVIDIA_VISION_MODEL ?? NVIDIA_DEFAULT_MODEL, displayName: "NVIDIA Nemotron" };
+  }
   const override = process.env[`${config.provider.toUpperCase()}_VISION_MODEL`];
   if (override) return { ...config, modelName: override };
   return config.provider === "groq" ? { ...config, modelName: GROQ_VISION_DEFAULT } : config;
