@@ -16,6 +16,8 @@ interface NumberFieldProps {
   /** Short text inside the field, e.g. "X" or "°". */
   prefix?: string;
   suffix?: string;
+  /** Hint shown while the field has no value (default "Mixed", which is what an empty field means for a mixed selection). */
+  emptyHint?: string;
   className?: string;
 }
 
@@ -24,7 +26,7 @@ interface NumberFieldProps {
  * "1" on the way to "120" does not resize anything. Escape puts the old value back. Clamps to
  * `min`/`max`; text that is not a number is dropped.
  */
-export const NumberField = ({ label, value, onCommit, disabled, step = 1, min, max, prefix, suffix, className }: NumberFieldProps) => {
+export const NumberField = ({ label, value, onCommit, disabled, step = 1, min, max, prefix, suffix, emptyHint, className }: NumberFieldProps) => {
   const [draft, setDraft] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Escape blurs the field, and a blur normally commits: this tells that blur to discard instead.
@@ -58,7 +60,7 @@ export const NumberField = ({ label, value, onCommit, disabled, step = 1, min, m
         inputMode="decimal"
         disabled={disabled}
         value={shown}
-        placeholder={value === "mixed" ? "Mixed" : undefined}
+        placeholder={value === "mixed" ? (emptyHint ?? "Mixed") : undefined}
         onChange={(e) => setDraft(e.target.value)}
         onFocus={(e) => e.currentTarget.select()}
         onBlur={() => {

@@ -10,6 +10,7 @@ import {
   AlignVerticalSpaceBetween,
   ChevronDown,
   ChevronRight,
+  EyeOff,
   Group,
   Link2,
   Link2Off,
@@ -247,6 +248,9 @@ export const SelectionInspector = ({ controller }: { controller: WhiteboardPageC
         <IconButton label="Ungroup (Ctrl+Shift+G)" onClick={g.ungroup} disabled={!canEdit || !g.canUngroup}>
           <Ungroup size={14} />
         </IconButton>
+        <IconButton label="Hide (Ctrl+Shift+H)" onClick={() => controller.organizeCommands.hide()} disabled={!canEdit || m.locked}>
+          <EyeOff size={14} />
+        </IconButton>
         <IconButton label={g.allLocked ? "Unlock (Ctrl+Shift+L)" : "Lock (Ctrl+Shift+L)"} onClick={g.toggleLock} disabled={!canEdit} pressed={g.allLocked}>
           {g.allLocked ? <Lock size={14} /> : <Unlock size={14} />}
         </IconButton>
@@ -411,6 +415,23 @@ export const SelectionInspector = ({ controller }: { controller: WhiteboardPageC
                   </IconButton>
                 ))}
               </div>
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                <NumberField label="Horizontal gap" prefix="↔" value="mixed" emptyHint="Gap" min={0} disabled={!canEdit || m.editableUnitCount < 2} onCommit={(gap) => c.spacing("horizontal", gap)} />
+                <NumberField label="Vertical gap" prefix="↕" value="mixed" emptyHint="Gap" min={0} disabled={!canEdit || m.editableUnitCount < 2} onCommit={(gap) => c.spacing("vertical", gap)} />
+              </div>
+            </Section>
+          )}
+
+          {m.connector && (
+            <Section title="Connector">
+              <TextCommitField
+                label="Connector label"
+                value={m.connector.label}
+                placeholder="Label"
+                maxLength={120}
+                disabled={off}
+                onCommit={(text) => controller.organizeCommands.setConnectorLabel(m.connector!.id, text)}
+              />
             </Section>
           )}
 
@@ -456,18 +477,32 @@ export const SelectionInspector = ({ controller }: { controller: WhiteboardPageC
             </Section>
           )}
 
-          {(m.style.strokeWidth !== null || m.style.fontSize !== null) && (
-            <Section title="Style">
-              <div className="grid grid-cols-2 gap-1.5">
-                {m.style.strokeWidth !== null && (
-                  <NumberField label="Stroke width" prefix="S" value={m.style.strokeWidth} min={1} max={32} disabled={off} onCommit={controller.handleStrokeWidthChange} />
-                )}
-                {m.style.fontSize !== null && (
-                  <NumberField label="Font size" prefix="T" value={m.style.fontSize} min={8} max={200} disabled={off} onCommit={controller.handleFontSizeChange} />
-                )}
-              </div>
-            </Section>
-          )}
+          <Section title="Style">
+            <div className="grid grid-cols-2 gap-1.5">
+              {m.style.strokeWidth !== null && (
+                <NumberField label="Stroke width" prefix="S" value={m.style.strokeWidth} min={1} max={32} disabled={off} onCommit={controller.handleStrokeWidthChange} />
+              )}
+              {m.style.fontSize !== null && (
+                <NumberField label="Font size" prefix="T" value={m.style.fontSize} min={8} max={200} disabled={off} onCommit={controller.handleFontSizeChange} />
+              )}
+              {m.style.opacity !== null && (
+                <NumberField
+                  label="Opacity"
+                  prefix="O"
+                  suffix="%"
+                  value={m.style.opacity === "mixed" ? "mixed" : Math.round(m.style.opacity * 100)}
+                  min={0}
+                  max={100}
+                  step={5}
+                  disabled={off}
+                  onCommit={(percent) => controller.applyStyle({ opacity: percent / 100 })}
+                />
+              )}
+              {m.style.cornerRadius !== null && (
+                <NumberField label="Rectangle corner radius" prefix="R" value={m.style.cornerRadius} min={0} max={48} disabled={off} onCommit={(radius) => controller.applyStyle({ cornerRadius: radius })} />
+              )}
+            </div>
+          </Section>
         </>
       )}
     </div>

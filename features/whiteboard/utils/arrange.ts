@@ -62,6 +62,26 @@ export const distributeOffsets = (items: Boxed[], axis: DistributeAxis): Map<str
   return out;
 };
 
+/**
+ * Offsets that leave exactly `gap` between neighbouring boxes along an axis (edge to edge), in their
+ * current order; the first box stays where it is. Needs two or more.
+ */
+export const spacingOffsets = (items: Boxed[], axis: DistributeAxis, gap: number): Map<string, Offset> => {
+  const out = new Map<string, Offset>();
+  if (items.length < 2 || !Number.isFinite(gap)) return out;
+  const horizontal = axis === "horizontal";
+  const lo = (b: Bounds) => (horizontal ? b.minX : b.minY);
+  const hi = (b: Bounds) => (horizontal ? b.maxX : b.maxY);
+  const sorted = [...items].sort((a, b) => lo(a.bounds) - lo(b.bounds) || a.id.localeCompare(b.id));
+  let cursor = hi(sorted[0].bounds) + gap;
+  for (const { id, bounds } of sorted.slice(1)) {
+    const shift = cursor - lo(bounds);
+    out.set(id, horizontal ? { dx: shift, dy: 0 } : { dx: 0, dy: shift });
+    cursor += hi(bounds) - lo(bounds) + gap;
+  }
+  return out;
+};
+
 /** New stacking order (array order is z-order, last = on top). Selected ids keep their relative order. */
 export const reorder = (order: string[], selected: ReadonlySet<string>, move: ZMove): string[] => {
   const pick = order.filter((id) => selected.has(id));

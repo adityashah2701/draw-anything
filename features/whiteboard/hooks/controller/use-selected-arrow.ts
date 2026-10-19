@@ -12,6 +12,7 @@ import {
   isArrowElement,
 } from "@/core/shapes/arrow/arrow-utils";
 import { editBendAtPoint } from "@/features/whiteboard/hooks/interaction/arrow-bend-edit";
+import { applyArrowChange } from "@/features/whiteboard/commands/connectors";
 
 type ArrowPatch = Partial<
   Pick<ArrowElement, "type" | "routingMode" | "dashed" | "arrowHeadStart" | "arrowHeadEnd" | "isManuallyRouted">
@@ -52,28 +53,7 @@ export const useSelectedArrow = ({
       if (!hasEditAccess) return;
       if (!selectedElement || !isArrowElement(selectedElement)) return;
 
-      let next: ArrowElement = {
-        ...selectedElement,
-        ...patch,
-      };
-
-      if (patch.type === "arrow-bidirectional") {
-        next.arrowHeadStart = patch.arrowHeadStart ?? true;
-        next.arrowHeadEnd = patch.arrowHeadEnd ?? true;
-      }
-
-      if (patch.type === "arrow") {
-        next.arrowHeadStart = patch.arrowHeadStart ?? false;
-        next.arrowHeadEnd = patch.arrowHeadEnd ?? true;
-      }
-
-      if (patch.routingMode === "straight") {
-        const endIndex = Math.max(1, next.points.length - 1);
-        next.points = [next.points[0], next.points[endIndex]];
-        next.isManuallyRouted = false;
-      } else if (patch.routingMode === "orthogonal") {
-        next = routeArrowByConnections(next);
-      }
+      const next = applyArrowChange(selectedElement, patch, routeArrowByConnections);
 
       updateElement(next as unknown as DrawingElementJson);
     },

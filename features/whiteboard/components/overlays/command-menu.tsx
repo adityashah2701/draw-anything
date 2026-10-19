@@ -38,6 +38,11 @@ import {
   AlignEndHorizontal,
   AlignHorizontalSpaceBetween,
   AlignVerticalSpaceBetween,
+  EyeOff,
+  Eye,
+  Frame,
+  Network,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -213,6 +218,30 @@ export function CommandMenu({
             <AlignVerticalSpaceBetween className="mr-2 h-4 w-4" />
             <span>Distribute vertically</span>
             <CommandShortcut>⇧⌥V</CommandShortcut>
+          </CommandItem>
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="Organize">
+          <CommandItem onSelect={() => runCommand(() => onAction?.("hide"))}>
+            <EyeOff className="mr-2 h-4 w-4" />
+            <span>Hide selection</span>
+            <CommandShortcut>⇧⌘H</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("show-all"))}>
+            <Eye className="mr-2 h-4 w-4" />
+            <span>Show all hidden</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("frame"))}>
+            <Frame className="mr-2 h-4 w-4" />
+            <span>Frame selection</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("auto-layout"))}>
+            <Network className="mr-2 h-4 w-4" />
+            <span>Auto layout (flow)</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("tidy"))}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            <span>Tidy up</span>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />

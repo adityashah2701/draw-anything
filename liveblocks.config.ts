@@ -44,6 +44,9 @@ export type DrawingElementJson = JsonObject & {
   /** Composite groups: parent group id, lock flag, rotation and (for group records) a name. */
   groupId?: string;
   locked?: boolean;
+  hidden?: boolean;
+  opacity?: number;
+  cornerRadius?: number;
   rotation?: number;
   name?: string;
   dashed?: boolean;

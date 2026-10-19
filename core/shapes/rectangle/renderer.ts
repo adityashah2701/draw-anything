@@ -3,6 +3,10 @@ import { renderShapeLabel } from "@/core/shapes/base/shape-label-renderer";
 import { CORNER_RADIUS, screenCornerRadius } from "@/core/shapes/base/geometry-tokens";
 import { RectangleShape } from "@/core/shapes/rectangle/types";
 
+/** The corner radius in world units: the shape's own, else the standard rectangle one. */
+export const rectangleRadius = (shape: RectangleShape) =>
+  typeof shape.cornerRadius === "number" && Number.isFinite(shape.cornerRadius) ? Math.max(0, Math.min(shape.cornerRadius, 1000)) : CORNER_RADIUS.rectangle;
+
 export const renderRectangleToCanvas = (
   shape: RectangleShape,
   context: ShapeRenderCanvasContext,
@@ -22,7 +26,7 @@ export const renderRectangleToCanvas = (
     Math.min(startY, endY),
     Math.abs(width),
     Math.abs(height),
-    screenCornerRadius(CORNER_RADIUS.rectangle, zoom, width, height),
+    screenCornerRadius(rectangleRadius(shape), zoom, width, height),
   );
   if (shape.fill) {
     ctx.fillStyle = shape.fill;

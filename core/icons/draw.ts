@@ -95,9 +95,11 @@ export const drawIconTile = (ctx: CanvasRenderingContext2D, def: IconDef, cx: nu
   ctx.roundRect(cx - size / 2, cy - size / 2, size, size, Math.min(size * 0.25, size / 2));
   // A brand mark needs a neutral ground to keep its own colours; line icons sit on a faint tint of theirs.
   ctx.fillStyle = logo ? "#ffffff" : tint;
-  ctx.globalAlpha = logo ? 1 : 0.14;
+  // Relative to the alpha the element is drawn with (its `opacity`), so a faded node fades its icon tile too.
+  const alpha = ctx.globalAlpha;
+  ctx.globalAlpha = alpha * (logo ? 1 : 0.14);
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = alpha;
   if (logo) {
     ctx.strokeStyle = "rgba(15, 23, 42, 0.18)";
     ctx.lineWidth = 1;

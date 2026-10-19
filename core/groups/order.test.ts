@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { reorder } from "@/features/whiteboard/utils/arrange";
 import { splitStored } from "./group-index";
-import { storedOrderFromShapes } from "./order";
+import { movesToOrder, storedOrderFromShapes } from "./order";
 import { group, rect } from "./test-helpers";
 
 const stored = () => [group("G"), rect("a", 0, 0, 10, 10, { groupId: "G" }), rect("x", 0, 0, 10, 10), group("H"), rect("b", 0, 0, 10, 10, { groupId: "G" }), rect("c", 0, 0, 10, 10, { groupId: "H" })];
@@ -28,5 +28,27 @@ describe("storedOrderFromShapes", () => {
     expect(storedOrderFromShapes(s, front)).toEqual(["G", "x", "c", "H", "a", "b"]);
     const back = reorder(shapes, new Set(["b", "c"]), "back");
     expect(back).toEqual(["b", "c", "a", "x"]);
+  });
+});
+
+describe("movesToOrder", () => {
+  const run = (current: string[], wanted: string[]) => {
+    const moves = movesToOrder(current, wanted)!;
+    const list = [...current];
+    for (const { from, to } of moves) list.splice(to, 0, list.splice(from, 1)[0]);
+    return { list, moves };
+  };
+
+  it("turns the list into the wanted order, moving only what is out of place", () => {
+    expect(run(["a", "b", "c", "d"], ["a", "b", "c", "d"])).toEqual({ list: ["a", "b", "c", "d"], moves: [] });
+    expect(run(["a", "b", "c", "d"], ["d", "a", "b", "c"]).list).toEqual(["d", "a", "b", "c"]);
+    expect(run(["a", "b", "c", "d"], ["d", "c", "b", "a"]).list).toEqual(["d", "c", "b", "a"]);
+    expect(run(["a", "b", "c"], ["a", "c", "b"]).moves).toHaveLength(1);
+  });
+
+  it("refuses a stale or damaged order instead of scrambling the list", () => {
+    expect(movesToOrder(["a", "b"], ["a"])).toBeNull();
+    expect(movesToOrder(["a", "b"], ["a", "a"])).toBeNull();
+    expect(movesToOrder(["a", "b"], ["a", "x"])).toBeNull();
   });
 });
