@@ -15,6 +15,8 @@ export class AgentRequestError extends Error {
 export interface TurnClientOptions {
   whiteboardId: string;
   provider?: AIModelProvider;
+  /** A listed NVIDIA model (see NVIDIA_MODELS); sent only with provider "nvidia". */
+  model?: string;
   endpoint?: string;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
@@ -29,14 +31,14 @@ const FRIENDLY: Record<number, string> = {
 
 /** Posts one conversation to the turn endpoint and returns the model's reply; failures carry a message safe to show. */
 export const createTurnClient =
-  ({ whiteboardId, provider, endpoint = "/api/ai/canvas-agent", fetchImpl = fetch, signal }: TurnClientOptions) =>
+  ({ whiteboardId, provider, model, endpoint = "/api/ai/canvas-agent", fetchImpl = fetch, signal }: TurnClientOptions) =>
   async (input: { messages: CanvasMessage[]; enabledGroups: ToolGroup[] }): Promise<CanvasTurn> => {
     let response: Response;
     try {
       response = await fetchImpl(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ whiteboardId, ...(provider ? { provider } : {}), messages: input.messages, enabledGroups: input.enabledGroups }),
+        body: JSON.stringify({ whiteboardId, ...(provider ? { provider } : {}), ...(provider === "nvidia" && model ? { model } : {}), messages: input.messages, enabledGroups: input.enabledGroups }),
         signal,
       });
     } catch (error) {

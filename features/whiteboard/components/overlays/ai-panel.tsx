@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ArrowUp, Code2, Maximize, RotateCcw, X } from "lucide-react";
 import type { AIModelProvider } from "@/features/ai/types";
+import { NVIDIA_MODELS, isSelectableNvidiaModel } from "@/features/ai/nvidia-models";
 import type { AIChatMessage } from "@/features/whiteboard/hooks/controller/use-ai-generation";
 import { AGENT_WIDTH_CSS } from "@/features/whiteboard/components/overlays/panel-layout";
 import { AITimeline } from "@/features/whiteboard/components/overlays/ai-timeline";
@@ -37,6 +38,15 @@ const PROVIDER_OPTIONS: Array<{ value: AIModelProvider; label: string }> = [
   { value: "nvidia", label: "NVIDIA · Nemotron" },
   { value: "local", label: "Local model" },
 ];
+
+/** Experimental NVIDIA models are variants of the nvidia provider, offered only to the board agent (the diagram generator ignores a model). */
+const NVIDIA_VARIANTS = NVIDIA_MODELS.filter((m) => m.experimental);
+const variantKey = (id: string) => `nvidia:${id}`;
+/** A select value is a provider, or `nvidia:<model id>`. */
+const parseChoice = (choice: string): { provider: AIModelProvider; model?: string } => {
+  const m = /^nvidia:(.+)$/.exec(choice);
+  return m && isSelectableNvidiaModel(m[1]) ? { provider: "nvidia", model: m[1] } : { provider: choice as AIModelProvider };
+};
 
 const EXAMPLES: Array<{ tag: string; text: string }> = [
   { tag: "Flow", text: "A user login with MFA and a retry after a failed password" },
@@ -103,7 +113,8 @@ export const AIPanel: React.FC<AIPanelProps> = ({
 }) => {
   const [mode, setMode] = React.useState<"generate" | "board">("generate");
   const board = mode === "board" && canvasAgent !== undefined;
-  const [model, setModel] = React.useState<AIModelProvider>("gemini");
+  const [choice, setChoice] = React.useState<string>("gemini");
+  const { provider: model, model: variant } = parseChoice(choice);
   // Providers the server has credentials for; null until known (then show all).
   const [available, setAvailable] = React.useState<AIModelProvider[] | null>(null);
   const [input, setInput] = React.useState("");
@@ -123,7 +134,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
       .then((data: { providers?: AIModelProvider[] } | null) => {
         if (cancelled || !Array.isArray(data?.providers)) return;
         setAvailable(data.providers);
-        setModel((current) => (data.providers!.includes(current) ? current : (data.providers![0] ?? current)));
+        setChoice((current) => (data.providers!.includes(parseChoice(current).provider) ? current : (data.providers![0] ?? current)));
       })
       .catch(() => {
         /* keep showing every provider; the server still validates */
@@ -153,7 +164,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
     const value = text.trim();
     if (!value || disabled || busy) return;
     stickToBottom.current = true;
-    if (board) void canvasAgent!.send(value, model);
+    if (board) void canvasAgent!.send(value, model, variant);
     else triggerAIGeneration(value, model, canEdit && editCurrent);
     setInput("");
   };
@@ -175,16 +186,17 @@ export const AIPanel: React.FC<AIPanelProps> = ({
           </label>
           <select
             id="agent-model"
-            value={model}
-            onChange={(e) => setModel(e.target.value as AIModelProvider)}
+            value={board || !variant ? choice : "nvidia"}
+            onChange={(e) => setChoice(e.target.value)}
             disabled={providerOptions.length === 0 || busy}
             className="mt-1 block max-w-[220px] cursor-pointer truncate bg-transparent p-0 font-mono text-[11px] leading-none text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground disabled:cursor-default"
           >
             {providerOptions.length === 0 && <option value="">No AI provider configured</option>}
             {providerOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
+              <React.Fragment key={o.value}>
+                <option value={o.value}>{o.label}</option>
+                {board && o.value === "nvidia" && NVIDIA_VARIANTS.map((m) => <option key={m.id} value={variantKey(m.id)}>{m.label}</option>)}
+              </React.Fragment>
             ))}
           </select>
         </div>
