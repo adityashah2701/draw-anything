@@ -140,6 +140,7 @@ const tidyInput = z
     ids: targetIds.optional().describe("Tidy only these; omit for every node on the board."),
     tolerance: z.number().finite().min(0).max(200).optional().describe("Centres closer than this count as one row or column (default 24)."),
     min_gap: z.number().finite().min(0).max(400).optional().describe("Clear space kept when overlapping shapes are pulled apart (default 24)."),
+    gap: z.number().finite().min(0).max(400).optional().describe("The exact clear space between nodes that a connector joins. Default: the diagram's own typical gap, kept between 40 and 110."),
     expected_revision: expectedRevision,
   })
   .strict();
@@ -147,13 +148,13 @@ const tidyInput = z
 export const tidyDiagram: ToolDefinition<typeof tidyInput> = {
   name: "tidy_diagram",
   group: "arrange",
-  description: "Clean up an untidy diagram without changing what it says: near-aligned shapes snap into rows and columns, rows and columns get equal gaps, overlapping shapes are pulled apart. Ids, labels, connections, groups and stacking are untouched; connectors are re-routed; locked shapes stay. Moves elements: pass the board's current revision.",
+  description: "Clean up an untidy diagram without changing what it says: nodes a connector joins are put on one line (so the connector is straight) with one even gap, near-aligned shapes snap into rows and columns, overlapping shapes are pulled apart. Ids, labels, connections, groups and stacking are untouched; connectors are re-routed; locked shapes stay. Moves elements: pass the board's current revision.",
   input: tidyInput,
   access: "write",
   strictRevision: true,
-  run: ({ ids, tolerance, min_gap }, env) => {
+  run: ({ ids, tolerance, min_gap, gap }, env) => {
     const shapeIds = ids ? resolveTargets(env, ids).shapeIds : null;
-    return layoutRun(env, planTidy(env.ctx, shapeIds, { tolerance, minGap: min_gap }), "tidy_diagram");
+    return layoutRun(env, planTidy(env.ctx, shapeIds, { tolerance, minGap: min_gap, gap }), "tidy_diagram");
   },
 };
 

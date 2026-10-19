@@ -19,7 +19,7 @@ import type { Bounds, DrawingElement, GroupRecord } from "@/features/whiteboard/
 import { ToolError } from "../errors";
 import { color, coordinate, elementId, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POINTS, newElementId, point, targetIds } from "../schemas";
 import type { ToolDefinition } from "../types";
-import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets } from "./helpers";
+import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, snapPlacement } from "./helpers";
 
 const normalizeText = (value: string) => value.replace(/\r\n?/g, "\n");
 
@@ -77,9 +77,11 @@ export const createShapeTool: ToolDefinition<typeof shapeInput> = {
   run: (input, env) => {
     const id = claimId(env, input.id);
     const origin = defaultOrigin(env);
-    const x = input.x ?? origin.x;
-    const y = input.y ?? origin.y;
     const isPath = input.shape === "line" || input.shape === "freehand";
+    const fallbackBox = isPath ? undefined : DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX];
+    const snapped = !isPath && fallbackBox && (input.x !== undefined || input.y !== undefined) ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width: input.width ?? fallbackBox.width, height: input.height ?? fallbackBox.height }) : undefined;
+    const x = snapped?.x ?? input.x ?? origin.x;
+    const y = snapped?.y ?? input.y ?? origin.y;
 
     let points;
     if (isPath) {
@@ -260,8 +262,6 @@ export const createSemanticNodeTool: ToolDefinition<typeof nodeInput> = {
   run: (input, env) => {
     const id = claimId(env, input.id);
     const origin = defaultOrigin(env);
-    const x = input.x ?? origin.x;
-    const y = input.y ?? origin.y;
     const text = normalizeText(input.label).trim();
     if (text === "") throw new ToolError("invalid_arguments", "`label` is empty.");
     const icon = input.icon ? resolveIcon(input.icon) : undefined;
@@ -282,6 +282,9 @@ export const createSemanticNodeTool: ToolDefinition<typeof nodeInput> = {
       width = Math.max(width, min.width);
       height = Math.max(height, min.height);
     }
+    const placed = input.x !== undefined || input.y !== undefined ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width, height }) : undefined;
+    const x = placed?.x ?? input.x ?? origin.x;
+    const y = placed?.y ?? input.y ?? origin.y;
     const byKind = input.kind ? kindColors(input.kind) : undefined;
     const shape = createShape("semantic-node", {
       id,

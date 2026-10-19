@@ -76,6 +76,21 @@ const UNKNOWN_TOOL_LIMIT = 3;
 const callKey = (call: CanvasToolCall) => `${call.name}:${JSON.stringify(call.args ?? {})}`;
 
 /** What the final check counts as unfinished work: broken connectors and shapes on top of each other. */
+/**
+ * One deterministic tidy of what this run created or moved, before the final check: connected nodes onto one line
+ * with one even gap. Only those nodes move, so a board the person drew is never rearranged; a model asked to do it
+ * by hand tends to nudge things and leave kinks.
+ */
+const straightenWhatWasMade = async (executor: ToolExecutor, id: string) => {
+  const ids = [...executor.session.touched];
+  if (ids.length < 2) return;
+  const check = await executor.execute({ id: `layout_check_${id}`, name: "validate_diagram", args: {} });
+  const issues = check.ok ? (((check.data as { issues?: Array<{ code: string }> } | undefined)?.issues) ?? []) : [];
+  if (!issues.some((issue) => issue.code === "misaligned_connection" || issue.code === "uneven_spacing")) return;
+  executor.enable(["arrange"]);
+  await executor.execute({ id: `layout_tidy_${id}`, name: "tidy_diagram", args: { ids } });
+};
+
 const BLOCKING = new Set(["dangling_connector", "stale_connector", "connector_through_node", "overlap", "invalid_geometry", "duplicate_id", "bad_anchor"]);
 
 const tally = (results: readonly ToolResult[]) => ({
@@ -154,6 +169,7 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
       if (wroteSinceCheck && verifyRounds < budget.verifyRounds) {
         verifyRounds += 1;
         wroteSinceCheck = false;
+        await straightenWhatWasMade(executor, `${step}_${verifyRounds}`);
         const check = await executor.execute({ id: `verify_${step}_${verifyRounds}`, name: "validate_diagram", args: {} });
         const issues = check.ok ? (((check.data as { issues?: Array<{ code: string; severity: string; message: string; ids: string[] }> } | undefined)?.issues) ?? []).filter((issue) => BLOCKING.has(issue.code)) : [];
         remaining = issues.map((issue) => `${issue.message} (${issue.ids.slice(0, 5).join(", ")})`);

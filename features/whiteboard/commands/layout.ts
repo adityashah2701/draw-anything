@@ -5,6 +5,7 @@ import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import type { Bounds, DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { planMoveByOffsets } from "./arrange";
+import { labelOf } from "./connectors";
 import type { CommandContext } from "./context";
 
 export type LayoutAlgorithm = "layered" | "row" | "column" | "grid" | "circle";
@@ -258,6 +259,10 @@ export interface TidyOptions {
   tolerance?: number;
   /** Clear space kept between shapes when overlaps are pulled apart. */
   minGap?: number;
+  /** The exact clear space between nodes a connector joins. Default: the diagram's own typical gap, kept between 40 and 110. */
+  gap?: number;
+  /** Leave the connection-aware straightening and spacing out (rows and columns only). */
+  plain?: boolean;
 }
 
 interface Live {
@@ -283,6 +288,146 @@ const cluster = (items: Live[], centre: (l: Live) => number, tolerance: number):
   return groups.filter((g) => g.length >= 2);
 };
 
+
+// ── straighten: connected nodes on one line, one even gap between them ────────────────────────────────────────
+
+/** Connected nodes whose centres differ by no more than this are meant to be on one line (a jog is a slip, not a layout choice). */
+const LINK_TOLERANCE = 64;
+const GAP_FLOOR = 40;
+const GAP_CEIL = 110;
+/** Margin kept when a move is checked for collisions. */
+const CLEAR = 8;
+
+interface Link {
+  a: Live;
+  b: Live;
+  labelled: boolean;
+}
+
+export interface StraightenReport {
+  /** Units moved sideways (or up/down) so a connector between them runs straight. */
+  aligned: string[];
+  /** Units moved along a connector so the gap between connected nodes is even. */
+  spaced: string[];
+}
+
+const median = (values: number[]) => [...values].sort((x, y) => x - y)[Math.floor(values.length / 2)];
+
+const linksOf = (ctx: CommandContext, live: readonly Live[]): Link[] => {
+  const unitOf = new Map<string, Live>();
+  for (const l of live) for (const id of l.unit.leaves) unitOf.set(id, l);
+  const seen = new Set<string>();
+  const out: Link[] = [];
+  for (const arrow of ctx.shapes) {
+    if (!isArrowElement(arrow)) continue;
+    const a = unitOf.get(arrow.startConnection?.elementId ?? "");
+    const b = unitOf.get(arrow.endConnection?.elementId ?? "");
+    if (!a || !b || a === b) continue;
+    const key = a.unit.id < b.unit.id ? `${a.unit.id}|${b.unit.id}` : `${b.unit.id}|${a.unit.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ a, b, labelled: labelOf(ctx, arrow) !== undefined });
+  }
+  return out;
+};
+
+const hits = (l: Live, minX: number, minY: number, others: readonly Live[]) =>
+  others.some((o) => o !== l && Math.min(minX + l.unit.bounds.width, rightOf(o)) - Math.max(minX, o.minX) + CLEAR > 0 && Math.min(minY + l.unit.bounds.height, bottomOf(o)) - Math.max(minY, o.minY) + CLEAR > 0);
+
+/**
+ * Connected nodes onto one line and one gap, in place on `live`: nodes a connector joins whose centres almost
+ * agree get the same centre (so the connector leaves and enters at matching points and runs straight), then
+ * the gaps along those connectors become one even size. A move that would land a node on another is skipped;
+ * locked nodes stay and nodes line up with them.
+ */
+const straightenLive = (ctx: CommandContext, live: Live[], options: { gap?: number } = {}): StraightenReport => {
+  const links = linksOf(ctx, live);
+  const report: StraightenReport = { aligned: [], spaced: [] };
+  if (links.length === 0) return report;
+  const movable = (l: Live) => !l.unit.locked;
+  const note = (list: string[], l: Live) => {
+    if (!list.includes(l.unit.id)) list.push(l.unit.id);
+  };
+
+  // 1. Alignment. Along x, links that run top to bottom; along y, links that run side by side.
+  for (const axis of ["x", "y"] as const) {
+    const centre = axis === "x" ? centreX : centreY;
+    const separated = (a: Live, b: Live) => (axis === "x" ? Math.max(a.minY, b.minY) - Math.min(bottomOf(a), bottomOf(b)) : Math.max(a.minX, b.minX) - Math.min(rightOf(a), rightOf(b))) >= 0;
+    const parent = new Map(live.map((l) => [l, l]));
+    const find = (l: Live): Live => {
+      let root = l;
+      while (parent.get(root) !== root) root = parent.get(root)!;
+      parent.set(l, root);
+      return root;
+    };
+    for (const { a, b } of links) if (Math.abs(centre(a) - centre(b)) <= LINK_TOLERANCE && separated(a, b)) parent.set(find(a), find(b));
+    const groups = new Map<Live, Live[]>();
+    for (const l of live) groups.set(find(l), [...(groups.get(find(l)) ?? []), l]);
+    for (const members of groups.values()) {
+      if (members.length < 2) continue;
+      const fixed = members.find((l) => !movable(l));
+      const target = fixed ? centre(fixed) : median(members.map(centre));
+      for (const l of members) {
+        const d = target - centre(l);
+        if (!movable(l) || Math.abs(d) < 0.5 || Math.abs(d) > LINK_TOLERANCE * 1.5) continue;
+        const minX = axis === "x" ? l.minX + d : l.minX;
+        const minY = axis === "y" ? l.minY + d : l.minY;
+        if (hits(l, minX, minY, live)) continue;
+        l.minX = minX;
+        l.minY = minY;
+        note(report.aligned, l);
+      }
+    }
+  }
+
+  // 2. Spacing: every connector between stacked nodes (and every one between side-by-side nodes) gets the same gap.
+  for (const axis of ["y", "x"] as const) {
+    const start = (l: Live) => (axis === "y" ? l.minY : l.minX);
+    const end = (l: Live) => (axis === "y" ? bottomOf(l) : rightOf(l));
+    const across = (a: Live, b: Live) => (axis === "y" ? Math.max(a.minX, b.minX) - Math.min(rightOf(a), rightOf(b)) : Math.max(a.minY, b.minY) - Math.min(bottomOf(a), bottomOf(b)));
+    const ordered = links.flatMap((link) => {
+      const [a, b] = start(link.a) <= start(link.b) ? [link.a, link.b] : [link.b, link.a];
+      return start(b) >= end(a) && across(a, b) <= 20 ? [{ a, b, labelled: link.labelled }] : [];
+    });
+    // Each node is spaced from its nearest parent only, so a node with two parents is not pulled twice.
+    const nearest = new Map<Live, (typeof ordered)[number]>();
+    for (const link of ordered) {
+      const current = nearest.get(link.b);
+      if (!current || end(link.a) > end(current.a)) nearest.set(link.b, link);
+    }
+    const chosen = [...nearest.values()];
+    const plain = chosen.filter((l) => !l.labelled).map((l) => start(l.b) - end(l.a));
+    const target = options.gap ?? (plain.length > 0 ? Math.min(GAP_CEIL, Math.max(GAP_FLOOR, median(plain))) : undefined);
+    if (target === undefined) continue;
+    for (const link of chosen.sort((p, q) => start(p.b) - start(q.b))) {
+      const gap = start(link.b) - end(link.a);
+      const wanted = link.labelled ? Math.max(gap, target) : target;
+      const delta = wanted - gap;
+      if (Math.abs(delta) < 1) continue;
+      const cut = start(link.b) - 0.5;
+      const movers = live.filter((l) => start(l) >= cut);
+      if (movers.some((l) => !movable(l))) continue;
+      const still = live.filter((l) => !movers.includes(l));
+      const shifted = (l: Live) => ({ minX: axis === "x" ? l.minX + delta : l.minX, minY: axis === "y" ? l.minY + delta : l.minY });
+      // Closing a gap carries the rest of the diagram toward what stays: refuse when that lands on something.
+      if (delta < 0 && movers.some((l) => still.some((o) => hits(l, shifted(l).minX, shifted(l).minY, [o])))) continue;
+      for (const l of movers) {
+        const to = shifted(l);
+        l.minX = to.minX;
+        l.minY = to.minY;
+        note(report.spaced, l);
+      }
+    }
+  }
+  return report;
+};
+
+/** What a tidy would straighten on the board as it is: for the validator, which must agree with the tool that fixes it. */
+export const analyzeStraightness = (ctx: CommandContext, ids: readonly string[] | null = null): StraightenReport => {
+  const live: Live[] = unitsFor(ctx, ids).map((unit) => ({ unit, minX: unit.bounds.minX, minY: unit.bounds.minY }));
+  return straightenLive(ctx, live);
+};
+
 /**
  * Make an untidy diagram readable without changing what it says: shapes whose centres almost line up are
  * lined up, evenly spaced rows and columns get equal gaps, and shapes that touch or overlap are pulled
@@ -297,6 +442,9 @@ export const planTidy = (ctx: CommandContext, ids: readonly string[] | null, opt
   const movable = (l: Live) => !l.unit.locked;
   const notes: string[] = [];
   if (live.filter(movable).length === 0) return { patch: null, moved: [], notes: ["Everything selected is locked."], units: units.length };
+
+  // 0. Connected nodes onto one line with one even gap, so the connectors between them run straight.
+  if (!options.plain) straightenLive(ctx, live, { gap: options.gap });
 
   // 1. Rows, then columns: centres that almost agree are made to agree (a locked shape fixes its row or column).
   for (const row of cluster(live, centreY, tolerance)) {

@@ -61,6 +61,7 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     enabledGroups: given?.enabledGroups ?? new Set<ToolGroup>(["inspect"]),
     lastSeenRevision: given?.lastSeenRevision,
     replay: given?.replay ?? new Map(),
+    touched: given?.touched ?? new Set<string>(),
     autoApproveDestructive: given?.autoApproveDestructive,
     log: given?.log,
   };
@@ -184,6 +185,8 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     // account of what an undo, a redo or a load changed.
     if (tool.access === "write") {
       affected = diffAffected(before, host.getStored());
+      for (const id of [...affected.created, ...affected.updated]) session.touched.add(id);
+      for (const id of affected.removed) session.touched.delete(id);
       if (patch && affected.created.length + affected.updated.length + affected.removed.length === 0 && (patch.add.length > 0 || patch.remove.length > 0)) {
         return failure(tool.name, { code: "execution_failed", message: `${tool.name} was sent to the board but the board does not show the change. Check it with get_document_state before going on.` }, started, call.id);
       }

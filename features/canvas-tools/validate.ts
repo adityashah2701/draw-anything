@@ -6,7 +6,7 @@ import { getShapeAnchors, getShapeDefinition } from "@/core/shapes/shape-runtime
 import { pathHitsBox } from "@/features/ai/server/layout/geometry";
 import { labelKeyOf, planDetach, planReroute } from "@/features/whiteboard/commands/connectors";
 import type { CommandContext } from "@/features/whiteboard/commands/context";
-import { isLayoutNode } from "@/features/whiteboard/commands/layout";
+import { analyzeStraightness, isLayoutNode } from "@/features/whiteboard/commands/layout";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
 export const ISSUE_CODES = [
@@ -19,6 +19,8 @@ export const ISSUE_CODES = [
   "empty_group",
   "orphan_edge_label",
   "overlap",
+  "misaligned_connection",
+  "uneven_spacing",
   "connector_through_node",
   "connector_through_heading",
   "connector_through_frame",
@@ -128,6 +130,11 @@ export const validateBoard = (ctx: CommandContext): Issue[] => {
     }
   }
   if (overlapping.size > 0) issues.push(issue("overlap", "warning", "These shapes overlap each other (tidy_diagram pulls them apart).", [...overlapping].slice(0, 40)));
+
+  // Connected nodes that almost line up (a connector with a kink) or sit at uneven distances: what tidy_diagram straightens.
+  const straight = analyzeStraightness(ctx);
+  if (straight.aligned.length > 0) issues.push(issue("misaligned_connection", "warning", "Nodes joined by a connector are slightly off one line, so the connector kinks instead of running straight (tidy_diagram lines them up).", straight.aligned.slice(0, 40)));
+  if (straight.spaced.length > 0) issues.push(issue("uneven_spacing", "warning", "The gaps between connected nodes differ, or are too tight or too wide (tidy_diagram gives them one even gap).", straight.spaced.slice(0, 40)));
 
   const through: string[] = [];
   for (const arrow of shapes.filter(isArrowElement)) {

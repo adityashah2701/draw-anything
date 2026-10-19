@@ -136,6 +136,8 @@ export interface ToolSession {
   lastSeenRevision?: string;
   /** Results by call id, so a retried call is answered, not repeated. */
   replay: Map<string, ToolResult>;
+  /** Ids this run created or changed, so a final tidy touches only what the agent made. */
+  touched: Set<string>;
   /** True in tests: destructive tools proceed without a person to ask. */
   autoApproveDestructive?: boolean;
   log?: ToolLogger;
