@@ -4,7 +4,7 @@ import { createCanvasTools } from "../runtime";
 import type { ToolResult } from "../types";
 import { createTurnClient } from "./client";
 import { createCanvasAgentHandler } from "./handler";
-import { runCanvasAgent, type AgentEvent, type AgentRun } from "./run-agent";
+import { runCanvasAgent, type AgentEvent, type AgentRun, type RunBudget } from "./run-agent";
 import type { CanvasMessage } from "./types";
 import type { ModelReply, SystemFor } from "./transport";
 
@@ -76,6 +76,9 @@ export const scriptedRun = async (options: {
   script: ScriptStep[];
   board?: MemoryHostOptions;
   maxSteps?: number;
+  budget?: Partial<RunBudget>;
+  now?: () => number;
+  history?: CanvasMessage[];
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
   checkBoardAccess?: Parameters<typeof createCanvasAgentHandler>[0]["checkBoardAccess"];
@@ -92,6 +95,9 @@ export const scriptedRun = async (options: {
     executor,
     callTurn: createTurnClient({ whiteboardId: "board_1", fetchImpl, signal: options.signal }),
     maxSteps: options.maxSteps,
+    budget: options.budget,
+    now: options.now,
+    history: options.history,
     unified: options.unified,
     signal: options.signal,
     onEvent: options.onEvent,
