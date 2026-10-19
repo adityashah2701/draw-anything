@@ -35,7 +35,7 @@ describe("executor guards", () => {
     const { executor, mem } = build([adder], {}, ["inspect"]);
     const result = await executor.execute({ id: "1", name: "add_thing", args: { id: "a" } });
     expect(result.error?.code).toBe("tool_not_enabled");
-    expect(result.error?.message).toContain("enable_tools");
+    expect(result.error?.message).toMatch(/on now, so call add_thing again/);
     expect(mem.stored).toHaveLength(0);
   });
 

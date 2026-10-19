@@ -1,4 +1,5 @@
 import { normalizeArgs } from "./args";
+import { notEnabledMessage, unknownToolMessage } from "./tool-names";
 import { isEmptyPatch } from "@/core/groups/patch";
 import { createCommandContext } from "@/features/whiteboard/commands/context";
 import { ToolError, isToolError, type ToolErrorInfo } from "./errors";
@@ -92,10 +93,12 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     const name = typeof call.name === "string" ? call.name : "";
     const tool = byName.get(name);
     if (!tool) {
-      return failure(name || "unknown", { code: "unknown_tool", message: `There is no tool called "${name}". Use only the tools you were given.` }, started, call.id);
+      return failure(name || "unknown", { code: "unknown_tool", message: unknownToolMessage(name || "(none)", tools, session.enabledGroups) }, started, call.id);
     }
     if (!toolEnabled(tool, session.enabledGroups)) {
-      return failure(tool.name, { code: "tool_not_enabled", message: `"${tool.name}" belongs to the "${tool.group}" tools, which are not enabled. Call enable_tools with {"groups":["${tool.group}"]} first.`, details: { group: tool.group } }, started, call.id);
+      // The model named a real tool: switch its group on now (what enable_tools would do) so the next call just works.
+      session.enabledGroups.add(tool.group);
+      return failure(tool.name, { code: "tool_not_enabled", message: notEnabledMessage(tool, argumentNames(tool), tools.filter((t) => t.group === tool.group).map((t) => t.name)), details: { group: tool.group, enabled: true } }, started, call.id);
     }
 
     if (call.id && tool.access === "write") {

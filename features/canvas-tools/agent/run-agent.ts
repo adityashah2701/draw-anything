@@ -70,6 +70,8 @@ export const DEFAULT_BUDGET: RunBudget = { turns: 40, toolCalls: 120, ms: 5 * 60
 const STALL_LIMIT = 3;
 /** The same call, with the same arguments, on a board that did not change, this many times in a row is no progress. */
 const NO_PROGRESS_LIMIT = 4;
+/** This many steps in a row where every call named a tool that does not exist ends the run. */
+const UNKNOWN_TOOL_LIMIT = 3;
 
 const callKey = (call: CanvasToolCall) => `${call.name}:${JSON.stringify(call.args ?? {})}`;
 
@@ -112,6 +114,7 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
   let lastNotice = "";
   let lastFailure = "";
   let repeated = 0;
+  let unknownStreak = 0;
   let lastSignature = "";
   let sameCalls = 0;
 
@@ -185,6 +188,10 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
     if (sameCalls >= NO_PROGRESS_LIMIT) return finish("stalled", turn.text, "The assistant kept asking the same thing without changing the board, so it was stopped. Say what to do next, or \"continue\" to try again.", step);
 
     const failures = stepResults.filter((r) => !r.ok);
+    // Guessing names of tools that do not exist, step after step, is a loop the result messages did not break.
+    const guessed = failures.filter((r) => r.error?.code === "unknown_tool");
+    unknownStreak = guessed.length > 0 && guessed.length === failures.length && failures.length === stepResults.length ? unknownStreak + 1 : 0;
+    if (unknownStreak >= UNKNOWN_TOOL_LIMIT) return finish("stalled", turn.text, `The assistant kept calling tools that do not exist (${[...new Set(results.filter((r) => r.error?.code === "unknown_tool").map((r) => r.tool))].slice(-4).join(", ")}), so it was stopped. Try rephrasing the request, or pick another model.`, step);
     const signature = failures.length === stepResults.length ? failures.map((r) => `${r.tool}:${r.error?.code}`).join("|") : "";
     if (signature && signature === lastFailure) repeated += 1;
     else repeated = signature ? 1 : 0;

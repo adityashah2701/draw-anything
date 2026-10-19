@@ -2,7 +2,7 @@ import type { ToolGroup } from "../types";
 
 const RULES: Array<[ToolGroup[], RegExp]> = [
   [["create", "connect"], /\b(add|create|make|draw|build|design|generate|insert|new|duplicate|copy|clone|import)\b/i],
-  [["edit"], /\b(change|rename|recolou?r|colou?r|fill|stroke|opacity|transparent|rotate|resize|size|bigger|smaller|move|shift|nudge|delete|remove|erase|lock|unlock|hide|show|text|label|icon|font|bold|italic|update|replace|swap|front|back|style)\b/i],
+  [["edit"], /\b(change|rename|recolou?r|colou?r|fill|stroke|opacity|transparent|rotate|resize|size|bigger|smaller|move|shift|nudge|delete|remove|erase|lock|unlock|hide|show|text|label|icon|font|bold|italic|update|replace|swap|front|back|style|shape|diamond|circle|ellipse|oval|pill|rectangle|rounded|convert|turn)(?:s|ed)?\b/i],
   [["connect"], /\b(connect|connector|arrow|link|edge|reroute|route|disconnect|line between|join)\b/i],
   [["arrange"], /\b(align|distribute|space|spacing|gap|layout|tidy|clean( up)?|arrange|organi[sz]e|grid|row|column|stack|even(ly)?|equal|line up|neat)\b|\blay\b[^.]*\bout\b/i],
   [["organize"], /\b(group|ungroup|frame|section|container|bundle)\b/i],
