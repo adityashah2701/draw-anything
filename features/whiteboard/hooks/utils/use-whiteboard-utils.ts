@@ -6,6 +6,7 @@ import {
 } from "@/features/whiteboard/types/whiteboard.types";
 import {
   getShapeBounds,
+  getShapeHitBounds,
   getShapeResizeHandles,
   moveShape,
   resizeShape,
@@ -56,7 +57,7 @@ export const useWhiteboardUtils = (
     const grid = new SpatialHashGrid<string>(SPATIAL_CELL_SIZE);
 
     elements.forEach((element) => {
-      const bounds = boundsById.get(element.id);
+      const bounds = element.type === "frame" ? getShapeHitBounds(element) : boundsById.get(element.id);
       if (!bounds) return;
       grid.insertAabb(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, element.id);
     });
@@ -162,6 +163,12 @@ export const useWhiteboardUtils = (
       return candidates.filter((element) => {
         const bounds = getElementBounds(element);
         if (!bounds) return false;
+
+        // A rubber band that only reaches into a frame picks what is inside it. It picks the frame
+        // itself only when it surrounds the whole frame.
+        if (element.type === "frame") {
+          return bounds.minX >= boxMinX && bounds.maxX <= boxMaxX && bounds.minY >= boxMinY && bounds.maxY <= boxMaxY;
+        }
 
         return (
           bounds.minX <= boxMaxX &&

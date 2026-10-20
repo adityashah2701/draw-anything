@@ -329,6 +329,18 @@ export const drawElement = (
     }
   }
 
+  // A frame under the pointer shows its box, so it is clear what a click on the header or border picks.
+  if (hoveredElementId === element.id && element.type === "frame" && !isSelected) {
+    const box = getElementBounds(element);
+    if (box) {
+      ctx.save();
+      ctx.strokeStyle = selectionInk(0.55);
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(box.minX * zoom + panOffset.x, box.minY * zoom + panOffset.y, (box.maxX - box.minX) * zoom, (box.maxY - box.minY) * zoom);
+      ctx.restore();
+    }
+  }
+
   // ── Connection handles (shown when this shape is hovered) ─────────────────
   if (hoveredElementId === element.id) {
     const bounds = getElementBounds(element);

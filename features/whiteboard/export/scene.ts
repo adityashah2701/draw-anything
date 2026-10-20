@@ -1,4 +1,5 @@
 import { drawElement } from "@/features/whiteboard/utils/canvas-render-utils";
+import { paintOrder } from "@/core/frames/paint-order";
 import { getShapeBounds } from "@/core/shapes/shape-runtime";
 import { withRenderTheme } from "@/core/theme/render-theme";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -20,7 +21,7 @@ export const drawScene = async (
   signal?: AbortSignal,
 ) => {
   let sliceStart = Date.now();
-  for (const element of elements) {
+  for (const element of paintOrder(elements)) {
     if (signal?.aborted) throw signal.reason ?? new DOMException("Export cancelled", "AbortError");
     withRenderTheme(false, () => drawElement(ctx, element, false, { ...view, getElementBounds }));
     if (Date.now() - sliceStart > 12) {

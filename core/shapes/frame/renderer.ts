@@ -1,4 +1,5 @@
 import type { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
+import { resolveTextColor } from "@/core/shapes/base/shape-label-renderer";
 import { FONT_FAMILY } from "@/core/text/typography";
 import { frameRegions, resolveFrame } from "@/core/frames/frame-model";
 import type { FrameShape } from "@/features/whiteboard/types/whiteboard.types";
@@ -72,7 +73,7 @@ export const renderFrameToCanvas = (shape: FrameShape, { ctx, zoom, panOffset }:
     const inset = TITLE_INSET * zoom;
     const size = TITLE_SIZE * zoom;
     ctx.save();
-    ctx.fillStyle = border;
+    ctx.fillStyle = resolveTextColor(shape.color, shape.fill);
     ctx.font = `600 ${size}px ${FONT_FAMILY}`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";

@@ -20,12 +20,16 @@ export const Minimap = ({ elements, getElementBounds, zoom, panOffset, canvasSiz
   const ref = useRef<HTMLCanvasElement>(null);
 
   // Shape rectangles only change with the elements, not on every pan frame.
+  const frameRects = useMemo(
+    () => elements.flatMap((el) => (el.type === "frame" ? (getElementBounds(el) ?? []) : [])),
+    [elements, getElementBounds],
+  );
   const rects = useMemo(() => {
     const out: Box[] = [];
     const step = Math.max(1, Math.ceil(elements.length / MAX_DRAWN));
     for (let i = 0; i < elements.length; i += step) {
       const el = elements[i];
-      if (el.isGuide) continue;
+      if (el.isGuide || el.type === "frame") continue;
       const b = getElementBounds(el);
       if (b) out.push(b);
     }
@@ -33,14 +37,15 @@ export const Minimap = ({ elements, getElementBounds, zoom, panOffset, canvasSiz
   }, [elements, getElementBounds]);
 
   const content = useMemo<Box | null>(() => {
-    if (rects.length === 0) return null;
+    const all = [...rects, ...frameRects];
+    if (all.length === 0) return null;
     return {
-      minX: Math.min(...rects.map((r) => r.minX)),
-      minY: Math.min(...rects.map((r) => r.minY)),
-      maxX: Math.max(...rects.map((r) => r.maxX)),
-      maxY: Math.max(...rects.map((r) => r.maxY)),
+      minX: Math.min(...all.map((r) => r.minX)),
+      minY: Math.min(...all.map((r) => r.minY)),
+      maxX: Math.max(...all.map((r) => r.maxX)),
+      maxY: Math.max(...all.map((r) => r.maxY)),
     };
-  }, [rects]);
+  }, [rects, frameRects]);
 
   const viewport: Box = useMemo(
     () => ({
@@ -67,6 +72,13 @@ export const Minimap = ({ elements, getElementBounds, zoom, panOffset, canvasSiz
       const a = toMinimap(transform, { x: r.minX, y: r.minY });
       ctx.fillRect(a.x, a.y, Math.max(1.5, (r.maxX - r.minX) * transform.scale), Math.max(1.5, (r.maxY - r.minY) * transform.scale));
     }
+    // Frames are outlines, so the shapes inside them stay readable.
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.55)";
+    ctx.lineWidth = 1;
+    for (const r of frameRects) {
+      const a = toMinimap(transform, { x: r.minX, y: r.minY });
+      ctx.strokeRect(a.x + 0.5, a.y + 0.5, Math.max(1.5, (r.maxX - r.minX) * transform.scale), Math.max(1.5, (r.maxY - r.minY) * transform.scale));
+    }
     const v = toMinimap(transform, { x: viewport.minX, y: viewport.minY });
     ctx.fillStyle = "rgba(59, 130, 246, 0.12)";
     ctx.strokeStyle = "rgba(59, 130, 246, 0.9)";
@@ -75,7 +87,7 @@ export const Minimap = ({ elements, getElementBounds, zoom, panOffset, canvasSiz
     const h = (viewport.maxY - viewport.minY) * transform.scale;
     ctx.fillRect(v.x, v.y, w, h);
     ctx.strokeRect(v.x, v.y, w, h);
-  }, [rects, transform, viewport]);
+  }, [rects, frameRects, transform, viewport]);
 
   const centerFrom = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const box = e.currentTarget.getBoundingClientRect();

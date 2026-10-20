@@ -46,3 +46,22 @@ describe("selection export policy", () => {
     expect(ids(elementsForSelectionExport(board, ["c", "ghost", "b", "a"]))).toEqual(["a", "b", "c", "ab", "bc", "ab-lbl", "bc-lbl"]);
   });
 });
+
+describe("selection export of frames", () => {
+  const frame = (id: string, extra: Record<string, unknown> = {}): DrawingElement =>
+    ({ id, type: "frame", points: [{ x: 0, y: 0 }, { x: 100, y: 100 }], color: "#000", strokeWidth: 1, ...extra }) as unknown as DrawingElement;
+  const own = (el: DrawingElement, frameId: string) => ({ ...el, frameId }) as DrawingElement;
+  const scene = [frame("f"), own(frame("g"), "f"), own(node("a"), "g"), own(node("b"), "f"), node("outside")];
+
+  it("brings everything a selected frame owns, at any depth, and nothing else", () => {
+    expect(ids(elementsForSelectionExport(scene, ["f"]))).toEqual(["f", "g", "a", "b"]);
+  });
+
+  it("exports an inner frame with its contents but not its owner", () => {
+    expect(ids(elementsForSelectionExport(scene, ["g"]))).toEqual(["g", "a"]);
+  });
+
+  it("exports just the element when only a child is selected", () => {
+    expect(ids(elementsForSelectionExport(scene, ["a"]))).toEqual(["a"]);
+  });
+});
