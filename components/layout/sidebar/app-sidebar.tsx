@@ -72,7 +72,10 @@ export function AppSidebar({
           }
         },
         createWorkspace: () => router.push("/create-org"),
-        manageWorkspace: () => clerk.openOrganizationProfile(),
+        manageWorkspace: () => {
+          setSelectedPage("Members");
+          dismissOnMobile();
+        },
         manageAccount: () => clerk.openUserProfile(),
         signOut: () => clerk.signOut(),
         openBoard: (id) => router.push(`/whiteboard/${id}`),

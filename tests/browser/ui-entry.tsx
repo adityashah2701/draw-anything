@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { SidebarView } from "@/components/layout/sidebar/sidebar-view";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import type { AgentUiMessage } from "@/features/canvas-tools/editor/use-canvas-agent";
+import { TeamView } from "@/features/team/components/team-view";
+import type { TeamInvite, TeamMember } from "@/features/team/team-model";
 import { ExportDialog } from "@/features/whiteboard/components/overlays/export-dialog";
 import { useBoardExport } from "@/features/whiteboard/hooks/export/use-board-export";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -168,4 +170,100 @@ export const mountSidebar = (onEvent: (event: string) => void) => {
   const root = createRoot(host);
   sidebar = { root, host };
   root.render(<SidebarHarness onEvent={onEvent} />);
+};
+
+// ── the Team page, driven from fixtures (Clerk does not run in a test page) ───────────────────────────
+
+interface TeamFixture {
+  members?: TeamMember[];
+  invites?: TeamInvite[];
+  canManage?: boolean;
+  loading?: boolean;
+  startInviting?: boolean;
+  /** Make the named action reject, to exercise error handling. */
+  failing?: string[];
+}
+
+const day = 86_400_000;
+const teamMembers = (): TeamMember[] => [
+  { id: "m1", userId: "u1", name: "Aditya Shah", email: "aditya@example.com", role: "org:admin", joinedAt: new Date(Date.now() - 90 * day) },
+  { id: "m2", userId: "u2", name: "Grace Hopper", email: "grace@navy.example", role: "org:member", joinedAt: new Date(Date.now() - 40 * day) },
+  { id: "m3", userId: "u3", name: "Ada Lovelace with a rather long display name that must truncate", email: "ada.lovelace.with.a.very.long.address@analytical-engine.example", role: "org:admin", joinedAt: new Date(Date.now() - 12 * day) },
+];
+const teamInvites = (): TeamInvite[] => [
+  { id: "i1", email: "linus@example.com", role: "org:member", createdAt: new Date(Date.now() - 3 * day) },
+  { id: "i2", email: "margaret@example.com", role: "org:admin", createdAt: new Date(Date.now() - 2 * 3_600_000) },
+];
+
+const TeamHarness = ({ fixture, onEvent }: { fixture: TeamFixture; onEvent: (event: string) => void }) => {
+  const [members, setMembers] = useState(fixture.members ?? teamMembers());
+  const [invites, setInvites] = useState(fixture.invites ?? teamInvites());
+  const [name, setName] = useState("Northwind Studio");
+  const [hasImage, setHasImage] = useState(false);
+  const attempt = async (action: string, run: () => void) => {
+    onEvent(action);
+    await new Promise((r) => setTimeout(r, 60));
+    if (fixture.failing?.includes(action)) throw { errors: [{ longMessage: `${action} was refused by the fixture` }] };
+    run();
+  };
+  return (
+    <SidebarProvider>
+      <SidebarView
+        selectedPage="Members"
+        onNavigate={() => {}}
+        workspace={{ id: "org_1", name }}
+        membersCount={members.length}
+        workspaces={[{ id: "org_1", name }]}
+        user={{ name: "Aditya Shah", email: "aditya@example.com" }}
+        recent={[]}
+        actions={{ switchWorkspace: () => {}, createWorkspace: () => {}, manageWorkspace: () => {}, manageAccount: () => {}, signOut: () => {}, openBoard: () => {} }}
+      />
+      <SidebarInset>
+        <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3">
+          <SidebarTrigger className="-ml-1" />
+          <span className="label-mono sr-only md:not-sr-only">Members</span>
+        </header>
+        <main className="flex-1 overflow-auto bg-background">
+          <TeamView
+            workspace={{ name, hasImage, imageUrl: hasImage ? "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='%23345'/></svg>" : undefined }}
+            members={members}
+            invites={invites}
+            currentUserId="u1"
+            canManage={fixture.canManage ?? true}
+            loading={fixture.loading}
+            startInviting={fixture.startInviting}
+            actions={{
+              invite: (emails, role) =>
+                attempt(`invite:${role}:${emails.join("|")}`, () =>
+                  setInvites((prev) => [...emails.map((email, i) => ({ id: `n${prev.length + i}`, email, role, createdAt: new Date() })), ...prev]),
+                ),
+              changeRole: (member, role) => attempt(`role:${member.userId}:${role}`, () => setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role } : m)))),
+              removeMember: (member) => attempt(`remove:${member.userId}`, () => setMembers((prev) => prev.filter((m) => m.id !== member.id))),
+              revokeInvite: (invite) => attempt(`revoke:${invite.id}`, () => setInvites((prev) => prev.filter((i) => i.id !== invite.id))),
+              rename: (next) => attempt(`rename:${next}`, () => setName(next)),
+              setLogo: (file) => attempt(`logo:${file ? file.name : "none"}`, () => setHasImage(!!file)),
+              leave: () => attempt("leave", () => {}),
+              deleteWorkspace: () => attempt("delete", () => {}),
+              openAdvanced: () => onEvent("advanced"),
+            }}
+          />
+        </main>
+      </SidebarInset>
+      <Toaster />
+    </SidebarProvider>
+  );
+};
+
+let team: { root: Root; host: HTMLElement } | null = null;
+
+export const mountTeam = (fixture: TeamFixture, onEvent: (event: string) => void) => {
+  if (team) {
+    team.root.unmount();
+    team.host.remove();
+  }
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  team = { root, host };
+  root.render(<TeamHarness fixture={fixture} onEvent={onEvent} />);
 };

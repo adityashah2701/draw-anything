@@ -1,9 +1,9 @@
 "use client";
-import { useOrganization, useUser } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import React, { useState } from "react";
 import Dashboard from "@/features/dashboard/components/dashboard/dashboard";
 import Whiteboards from "@/features/dashboard/components/whiteboards/whiteboard";
-import Members from "@/features/dashboard/components/member/member";
+import { TeamPage } from "@/features/team/components/team-page";
 import CustomLoader from "@/components/shared/loader";
 import Page from "@/features/dashboard/components/unauthenticated-page";
 import CleanNavbar from "@/components/layout/navbar/navbar";
@@ -28,7 +28,8 @@ type NavigationItem =
 const LandingPage = () => {
   const { isLoaded, isSignedIn, user } = useUser();
   const [selectedPage, setSelectedPage] = useState<NavigationItem>("Dashboard");
-  const { organization } = useOrganization();
+  // "Invite people" on the dashboard lands on Members with the invite dialog open.
+  const [inviteOnArrival, setInviteOnArrival] = useState(false);
   if (!isLoaded) {
     return <CustomLoader />;
   }
@@ -38,7 +39,14 @@ const LandingPage = () => {
     return <Page />;
   }
 
-  const goTo = (page: string) => setSelectedPage(page as NavigationItem);
+  const goTo = (page: string) => {
+    setInviteOnArrival(false);
+    setSelectedPage(page as NavigationItem);
+  };
+  const goToInvite = () => {
+    setInviteOnArrival(true);
+    setSelectedPage("Members");
+  };
 
   // Render the appropriate authenticated page component
   const renderSelectedPage = () => {
@@ -46,11 +54,11 @@ const LandingPage = () => {
       case "Whiteboards":
         return <Whiteboards />;
       case "Members":
-        return <Members user={user} organization={organization} />;
+        return <TeamPage startInviting={inviteOnArrival} onLeft={() => goTo("Dashboard")} />;
       case "Billing":
         return <BillingPage />;
       default:
-        return <Dashboard user={user} selectedPage={selectedPage} setSelectedPage={goTo} />;
+        return <Dashboard user={user} selectedPage={selectedPage} setSelectedPage={goTo} onInvite={goToInvite} />;
     }
   };
 
