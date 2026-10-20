@@ -412,10 +412,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .landing-rise {
+  .landing-rise,
   .brand-node {
-    animation: none;
-  }
     animation: none;
   }
   .reveal {
