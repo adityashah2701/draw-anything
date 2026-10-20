@@ -169,3 +169,11 @@ Toolbar button, `O` (F is already "zoom to fit") and the command palette pick th
 on release `createFrame({ adopt: true })` takes over every shape whose centre is inside (connectors with both
 ends adopted), nests the frame in the frame its centre falls in, places it below its contents, selects it and
 returns to the select tool. That is one patch, hence one undo step. A click without a drag draws nothing.
+
+## Title editing
+
+Double-click on a frame's header or tab, or Enter with one frame selected, opens a single-line input over
+the title (`FrameTitleEditor`); it is the frame's own `title` field, never a text element. The canvas draws the
+frame without its title text while the input is open (`withHiddenTitle`). Enter or a click elsewhere commits
+through `renameFrame` (one undo step; an empty title clears the field and the default "Frame" shows), Escape
+discards. A frame whose header is hidden has no title to edit here (the properties UI will cover it).

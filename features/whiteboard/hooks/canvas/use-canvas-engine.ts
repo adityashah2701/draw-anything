@@ -1,3 +1,4 @@
+import { withHiddenTitle } from "@/core/shapes/frame/renderer";
 import { selectionInk } from "@/core/theme/selection-ink";
 import { paintOrder } from "@/core/frames/paint-order";
 import { useCallback, useEffect, useRef } from "react";
@@ -154,12 +155,13 @@ const useCanvasEngine = ({
         return;
       }
       const isSelected = selected && shapeChrome;
+      const editing = !!editingShapeLabelId && element.id === editingShapeLabelId;
       const renderElement =
-        editingShapeLabelId &&
-        element.id === editingShapeLabelId &&
-        typeof element.label === "string"
-          ? { ...element, label: undefined }
-          : element;
+        editing && element.type === "frame"
+          ? withHiddenTitle(element)
+          : editing && typeof element.label === "string"
+            ? { ...element, label: undefined }
+            : element;
       drawElement(ctx, renderElement, isSelected, renderCtx);
     });
 

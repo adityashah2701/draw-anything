@@ -1,4 +1,5 @@
 import { buildFrameIndex } from "@/core/frames/frame-index";
+import { frameRegions } from "@/core/frames/frame-model";
 import { makeBounds } from "@/core/geometry/box";
 import { frameForBounds } from "@/core/frames/containment";
 import { createFrame, planAutoFit, reparentMoved } from "@/core/frames/frame-api";
@@ -580,6 +581,14 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       if (isEffectivelyLocked(groupIndex, element.id)) return false;
       if (element.type === "text") {
         uiState.setEditingTextElement(element);
+        uiState.setCurrentTool("select");
+        return true;
+      }
+      if (element.type === "frame") {
+        // The title is a field of the frame, edited in place; a frame with its header hidden has none to edit.
+        if (!frameRegions(element)?.header) return false;
+        uiState.setEditingShapeLabelId(element.id);
+        setSelectedElements([element.id]);
         uiState.setCurrentTool("select");
         return true;
       }

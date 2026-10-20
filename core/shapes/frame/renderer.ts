@@ -4,10 +4,18 @@ import { FONT_FAMILY } from "@/core/text/typography";
 import { frameRegions, resolveFrame } from "@/core/frames/frame-model";
 import type { FrameShape } from "@/features/whiteboard/types/whiteboard.types";
 
-const TITLE_SIZE = 13;
-const TITLE_INSET = 10;
+export const TITLE_SIZE = 13;
+export const TITLE_INSET = 10;
 /** The header band is the border colour at this strength, so it reads on paper and on graphite alike. */
 const HEADER_TINT = 0.1;
+
+/** Copies drawn without their title text, because an editor is open over it. A weak set keeps this out of the stored shape. */
+const titleHidden = new WeakSet<FrameShape>();
+export const withHiddenTitle = (shape: FrameShape): FrameShape => {
+  const copy = { ...shape };
+  titleHidden.add(copy);
+  return copy;
+};
 
 const fit = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   if (ctx.measureText(text).width <= maxWidth) return text;
@@ -69,7 +77,7 @@ export const renderFrameToCanvas = (shape: FrameShape, { ctx, zoom, panOffset }:
   ctx.roundRect(x, y, w, h, radius);
   ctx.stroke();
 
-  if (header) {
+  if (header && !titleHidden.has(shape)) {
     const inset = TITLE_INSET * zoom;
     const size = TITLE_SIZE * zoom;
     ctx.save();
