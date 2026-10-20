@@ -19,7 +19,9 @@ suite("pending invitations in real Chrome (real components, fixture data; Clerk 
   let page: Page;
   let errors: string[];
 
-  const events = () => page.evaluate(() => window.__events);
+  // "~refresh" marks a look-again request; it is kept out of `events` so tests of other actions stay exact.
+  const events = () => page.evaluate(() => window.__events.filter((e) => e !== "~refresh"));
+  const refreshes = () => page.evaluate(() => window.__events.filter((e) => e === "~refresh").length);
   const shot = async (name: string) => {
     if (shots) await page.screenshot({ path: `${shots}/${name}.png` });
   };
@@ -68,6 +70,7 @@ suite("pending invitations in real Chrome (real components, fixture data; Clerk 
     await menu.getByRole("menuitem", { name: /^Name Change/ }).click();
     expect(await events()).toEqual(["accept:invitation:inv_1"]);
     expect(await trigger.getAttribute("aria-label")).toContain("1 waiting for you");
+    await expect.poll(() => page.getByRole("menu").count()).toBe(0);
     expect(errors).toEqual([]);
   });
 
@@ -77,6 +80,43 @@ suite("pending invitations in real Chrome (real components, fixture data; Clerk 
     await page.waitForSelector('[data-slot="sidebar-wrapper"]');
     expect(await page.locator('[data-slot="pending-dot"]').count()).toBe(0);
     expect(await page.getByRole("button", { name: /^Workspace:/ }).getAttribute("aria-label")).not.toContain("waiting");
+  });
+
+  it("says what it checked when nothing is pending, refreshes when the menu opens, and offers Check again", async () => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(() => {
+      window.__events = [];
+      window.U.mountSidebar((event) => window.__events.push(event), false);
+    });
+    await page.waitForSelector('[data-slot="sidebar-wrapper"]');
+    const trigger = page.getByRole("button", { name: /^Workspace:/ });
+    await trigger.click();
+    const menu = page.getByRole("menu");
+    await menu.waitFor();
+    expect(await refreshes()).toBe(1);
+    expect(await menu.getByRole("status").innerText()).toContain("No pending invitations for aditya@example.com.");
+    expect(await menu.getByRole("status").innerText()).toContain("unverified: old@example.com");
+    await shot("switcher-empty-light");
+    await menu.getByRole("menuitem", { name: "Check again" }).click();
+    expect(await refreshes()).toBe(2);
+    // The menu stays open so the answer is visible.
+    expect(await menu.isVisible()).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect.poll(() => page.getByRole("menu").count()).toBe(0);
+  });
+
+  it("explains an empty inbox on the no-workspace screen", async () => {
+    await page.setViewportSize({ width: 1280, height: 700 });
+    await page.evaluate(() => {
+      window.__events = [];
+      window.U.mountNotice((event) => window.__events.push(event), false, true);
+    });
+    await page.getByText("No pending invitations for aditya.work@example.com.").waitFor();
+    await shot("notice-empty-light");
+    await page.getByRole("button", { name: "Check again" }).click();
+    await page.getByText("Checking for invitations…").waitFor();
+    expect(await refreshes()).toBe(1);
+    await page.getByText("No pending invitations for aditya.work@example.com.").waitFor();
   });
 
   it("answers an invitation from the dashboard notice", async () => {

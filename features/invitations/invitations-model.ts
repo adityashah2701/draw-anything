@@ -67,3 +67,19 @@ export function toPendingWorkspaces(
 export function invitationCount(items: PendingWorkspace[]): number {
   return items.filter((i) => i.kind === "invitation").length;
 }
+
+export interface AccountEmail {
+  address: string;
+  verified: boolean;
+}
+
+/**
+ * What the "nothing pending" state says. Clerk returns invitations only for the signed-in user's verified
+ * email addresses, so name the ones being checked (and flag unverified ones) to make a missing invitation diagnosable.
+ */
+export function noInvitationsMessage(emails: AccountEmail[]): string {
+  const verified = emails.filter((e) => e.verified).map((e) => e.address);
+  const unverified = emails.filter((e) => !e.verified).map((e) => e.address);
+  const base = verified.length > 0 ? `No pending invitations for ${verified.join(", ")}.` : "No pending invitations.";
+  return unverified.length > 0 ? `${base} Not checked, because they are unverified: ${unverified.join(", ")}.` : base;
+}

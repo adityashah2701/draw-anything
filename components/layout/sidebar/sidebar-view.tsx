@@ -9,6 +9,7 @@ import {
   LogOut,
   PencilRuler,
   Plus,
+  RefreshCw,
   Settings2,
   UserCog,
   Users,
@@ -70,6 +71,14 @@ export interface SidebarActions {
   openBoard: (id: string) => void;
   /** Accept a pending invitation (or request to join a suggested workspace). */
   acceptPending: (item: SidebarPending) => void;
+  /** Look for new invitations. Called when the workspace menu opens and from "Check again". */
+  refreshPending?: () => void;
+}
+
+/** What to say in the workspace menu when nothing is pending, so a missing invitation can be diagnosed. */
+export interface SidebarPendingStatus {
+  message: string;
+  checking: boolean;
 }
 
 export interface SidebarPending {
@@ -88,6 +97,7 @@ interface SidebarViewProps extends Omit<React.ComponentProps<typeof Sidebar>, "c
   workspaces: SidebarWorkspace[];
   /** Invitations and suggestions waiting for an answer. */
   pending?: SidebarPending[];
+  pendingStatus?: SidebarPendingStatus;
   user: SidebarUser;
   /** Newest first; the sidebar shows the first few. */
   recent: SidebarBoard[];
@@ -194,12 +204,13 @@ function WorkspaceMenu({
   membersCount,
   workspaces,
   pending = [],
+  pendingStatus,
   actions,
   menuSide,
-}: Pick<SidebarViewProps, "workspace" | "membersCount" | "workspaces" | "pending" | "actions"> & { menuSide: "top" | "right" }) {
+}: Pick<SidebarViewProps, "workspace" | "membersCount" | "workspaces" | "pending" | "pendingStatus" | "actions"> & { menuSide: "top" | "right" }) {
   const invitations = pending.filter((p) => p.kind === "invitation").length;
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => open && actions.refreshPending?.()}>
       <DropdownMenuTrigger asChild>
         <SidebarMenuButton className={footerButton} tooltip={workspace?.name ?? "Select workspace"} aria-label={`Workspace: ${workspace?.name ?? "none selected"}. Switch workspace${pending.length ? `. ${pending.length} waiting for you` : ""}`}>
           <span className="relative">
@@ -242,6 +253,18 @@ function WorkspaceMenu({
                 <span className="label-mono text-primary">{item.kind === "invitation" ? "Accept" : "Request"}</span>
               </DropdownMenuItem>
             ))}
+          </>
+        )}
+        {pending.length === 0 && pendingStatus && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="label-mono px-2 py-1.5 font-normal">Invitations</DropdownMenuLabel>
+            <p role="status" className="px-2 pb-1 text-xs break-words text-muted-foreground">
+              {pendingStatus.checking ? "Checking for invitations…" : pendingStatus.message}
+            </p>
+            <DropdownMenuItem className="text-[13px]" disabled={pendingStatus.checking} onSelect={(event) => { event.preventDefault(); actions.refreshPending?.(); }}>
+              <RefreshCw /> Check again
+            </DropdownMenuItem>
           </>
         )}
         <DropdownMenuSeparator />
@@ -292,7 +315,7 @@ function AccountMenu({ user, actions, menuSide }: Pick<SidebarViewProps, "user" 
  * The dashboard's navigation, as a fixed rail that collapses to icons. Presentational: the container
  * (`AppSidebar`) owns Clerk and Convex, so this renders from plain props and can be driven in tests.
  */
-export function SidebarView({ selectedPage, onNavigate, workspace, membersCount, workspaces, pending, user, recent, actions, ...props }: SidebarViewProps) {
+export function SidebarView({ selectedPage, onNavigate, workspace, membersCount, workspaces, pending, pendingStatus, user, recent, actions, ...props }: SidebarViewProps) {
   const { state, isMobile } = useSidebar();
   const menuSide = state === "collapsed" && !isMobile ? "right" : "top";
   const boards = recent.slice(0, RECENT_LIMIT);
@@ -344,7 +367,7 @@ export function SidebarView({ selectedPage, onNavigate, workspace, membersCount,
       <SidebarFooter className="gap-0.5 border-t p-2">
         <SidebarMenu className="gap-0.5">
           <SidebarMenuItem>
-            <WorkspaceMenu workspace={workspace} membersCount={membersCount} workspaces={workspaces} pending={pending} actions={actions} menuSide={menuSide} />
+            <WorkspaceMenu workspace={workspace} membersCount={membersCount} workspaces={workspaces} pending={pending} pendingStatus={pendingStatus} actions={actions} menuSide={menuSide} />
           </SidebarMenuItem>
           <SidebarMenuItem>
             <AccountMenu user={user} actions={actions} menuSide={menuSide} />

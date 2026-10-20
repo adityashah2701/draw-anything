@@ -27,7 +27,7 @@ export function AppSidebar({
   const { organization } = useOrganization();
   const { userMemberships, setActive } = useOrganizationList({ userMemberships: { infinite: true } });
   const { isMobile, setOpenMobile } = useSidebar();
-  const { items: pending, accept: acceptPendingItem } = usePendingWorkspaces();
+  const { items: pending, accept: acceptPendingItem, refresh: refreshPending, checking, message } = usePendingWorkspaces({ refreshOnFocus: true });
 
   const { data: whiteboards } = useApiQuery(api.whiteboard.getAll, organization?.id ? { orgId: organization.id } : "skip");
   const recent = React.useMemo(
@@ -56,6 +56,7 @@ export function AppSidebar({
       workspace={organization ? { id: organization.id, name: organization.name, imageUrl: organization.imageUrl } : null}
       membersCount={organization?.membersCount}
       workspaces={workspaces}
+      pendingStatus={{ message, checking }}
       pending={pending.map((p) => ({ id: p.id, kind: p.kind, name: p.name, imageUrl: p.imageUrl }))}
       user={{
         name: user?.fullName ?? user?.username ?? "Account",
@@ -82,6 +83,7 @@ export function AppSidebar({
         manageAccount: () => clerk.openUserProfile(),
         signOut: () => clerk.signOut(),
         openBoard: (id) => router.push(`/whiteboard/${id}`),
+        refreshPending: () => void refreshPending(),
         acceptPending: async (item) => {
           const full = pending.find((p) => p.id === item.id && p.kind === item.kind);
           if (!full) return;

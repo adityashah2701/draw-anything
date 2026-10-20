@@ -14,6 +14,8 @@ interface InvitationsNoticeProps {
   items: PendingWorkspace[];
   /** Resolves once Clerk has accepted; rejects with Clerk's error. */
   onAccept: (item: PendingWorkspace) => Promise<void>;
+  /** When given and nothing is pending, say so (and offer to look again) instead of rendering nothing. */
+  empty?: { message: string; checking: boolean; onRefresh: () => void };
   className?: string;
 }
 
@@ -21,9 +23,21 @@ interface InvitationsNoticeProps {
  * Pending invitations (and domain suggestions) for the signed-in person, shown where they land: the dashboard
  * and the "no workspace" screen. Renders nothing when there is nothing to answer.
  */
-export function InvitationsNotice({ items, onAccept, className }: InvitationsNoticeProps) {
+export function InvitationsNotice({ items, onAccept, empty, className }: InvitationsNoticeProps) {
   const [busy, setBusy] = React.useState<string | null>(null);
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    if (!empty) return null;
+    return (
+      <div className={cn("flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-lg border bg-card px-4 py-3", className)}>
+        <p role="status" className="min-w-0 flex-1 text-sm text-muted-foreground">
+          {empty.checking ? "Checking for invitations…" : empty.message}
+        </p>
+        <Button variant="outline" size="sm" onClick={empty.onRefresh} disabled={empty.checking}>
+          Check again
+        </Button>
+      </div>
+    );
+  }
 
   const accept = async (item: PendingWorkspace) => {
     setBusy(item.id);

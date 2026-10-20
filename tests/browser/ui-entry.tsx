@@ -138,6 +138,7 @@ const SidebarHarness = ({ onEvent, withPending }: { onEvent: (event: string) => 
         membersCount={4}
         workspaces={workspaces}
         pending={pending}
+        pendingStatus={{ message: "No pending invitations for aditya@example.com. Not checked, because they are unverified: old@example.com.", checking: false }}
         user={{ name: "Aditya Shah", email: "aditya@example.com" }}
         recent={[
           { id: "b1", title: "Checkout service architecture" },
@@ -154,6 +155,7 @@ const SidebarHarness = ({ onEvent, withPending }: { onEvent: (event: string) => 
           manageAccount: record("account"),
           signOut: record("signout"),
           openBoard: (id) => onEvent(`board:${id}`),
+          refreshPending: () => onEvent("~refresh"),
           acceptPending: (item) => {
             onEvent(`accept:${item.kind}:${item.id}`);
             setPending((prev) => prev.filter((p) => p.id !== item.id));
@@ -288,8 +290,9 @@ export const mountTeam = (fixture: TeamFixture, onEvent: (event: string) => void
 
 // ── the invitations notice (dashboard and "no workspace" screen), driven from fixtures ───────────────
 
-const NoticeHarness = ({ onEvent, failing }: { onEvent: (event: string) => void; failing?: boolean }) => {
-  const [items, setItems] = useState(pendingFixture());
+const NoticeHarness = ({ onEvent, failing, none }: { onEvent: (event: string) => void; failing?: boolean; none?: boolean }) => {
+  const [items, setItems] = useState(none ? [] : pendingFixture());
+  const [checking, setChecking] = useState(false);
   return (
     <>
       <main className="mx-auto w-full max-w-6xl bg-background px-4 py-8 sm:px-8">
@@ -301,6 +304,15 @@ const NoticeHarness = ({ onEvent, failing }: { onEvent: (event: string) => void;
             if (failing) throw { errors: [{ longMessage: "This invitation has expired." }] };
             setItems((prev) => prev.filter((p) => p.id !== item.id));
           }}
+          empty={{
+            message: "No pending invitations for aditya.work@example.com.",
+            checking,
+            onRefresh: () => {
+              onEvent("~refresh");
+              setChecking(true);
+              setTimeout(() => setChecking(false), 300);
+            },
+          }}
         />
         <p className="mt-6 text-sm text-muted-foreground">Dashboard content follows.</p>
       </main>
@@ -311,7 +323,7 @@ const NoticeHarness = ({ onEvent, failing }: { onEvent: (event: string) => void;
 
 let notice: { root: Root; host: HTMLElement } | null = null;
 
-export const mountNotice = (onEvent: (event: string) => void, failing = false) => {
+export const mountNotice = (onEvent: (event: string) => void, failing = false, none = false) => {
   if (notice) {
     notice.root.unmount();
     notice.host.remove();
@@ -320,5 +332,5 @@ export const mountNotice = (onEvent: (event: string) => void, failing = false) =
   document.body.appendChild(host);
   const root = createRoot(host);
   notice = { root, host };
-  root.render(<NoticeHarness onEvent={onEvent} failing={failing} />);
+  root.render(<NoticeHarness onEvent={onEvent} failing={failing} none={none} />);
 };

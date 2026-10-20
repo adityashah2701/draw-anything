@@ -1,15 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { useOrganizationList } from "@clerk/nextjs";
+import { useOrganizationList, useUser } from "@clerk/nextjs";
 
-import { toPendingWorkspaces, type PendingWorkspace } from "./invitations-model";
+import { errorMessage } from "@/features/team/team-model";
+import { noInvitationsMessage, toPendingWorkspaces, type PendingWorkspace } from "./invitations-model";
+
+/** Clerk caches these lists for a minute and revalidates on focus at most every two minutes, so ask again when the tab comes back. */
+const FOCUS_REFRESH_MS = 15_000;
 
 /**
  * Workspaces the signed-in person has been invited to, or that Clerk suggests from their email domain.
  * `accept` joins (or, for a suggestion, asks to join) and, for an invitation, makes that workspace the active one.
  */
-export function usePendingWorkspaces() {
+export function usePendingWorkspaces({ refreshOnFocus = false }: { refreshOnFocus?: boolean } = {}) {
+  const { user } = useUser();
   const { isLoaded, setActive, userMemberships, userInvitations, userSuggestions } = useOrganizationList({
     userMemberships: { infinite: true, keepPreviousData: true },
     userInvitations: { infinite: true, keepPreviousData: true, status: "pending" },
@@ -45,5 +50,43 @@ export function usePendingWorkspaces() {
     [userInvitations, userSuggestions, userMemberships, setActive],
   );
 
-  return { isLoaded, items, accept };
+  const revalidateInvitations = userInvitations.revalidate;
+  const revalidateSuggestions = userSuggestions.revalidate;
+  const refresh = React.useCallback(
+    () => Promise.all([revalidateInvitations?.(), revalidateSuggestions?.()]).then(() => undefined, () => undefined),
+    [revalidateInvitations, revalidateSuggestions],
+  );
+
+  // A new invitation does not announce itself: look again whenever the person returns to the tab.
+  const lastRefresh = React.useRef(0);
+  React.useEffect(() => {
+    if (!refreshOnFocus) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastRefresh.current < FOCUS_REFRESH_MS) return;
+      lastRefresh.current = Date.now();
+      void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [refreshOnFocus, refresh]);
+
+  const emails = (user?.emailAddresses ?? []).map((e) => ({ address: e.emailAddress, verified: e.verification?.status === "verified" }));
+  const failure = userInvitations.error ?? userSuggestions.error;
+  const message = failure ? `Could not check for invitations: ${errorMessage(failure, "try again")}` : noInvitationsMessage(emails);
+
+  return {
+    isLoaded,
+    items,
+    accept,
+    refresh,
+    /** True while Clerk is fetching, so "Check again" can say so. */
+    checking: !!(userInvitations.isFetching || userSuggestions.isFetching),
+    /** The text for the "nothing pending" state. */
+    message,
+    failed: !!failure,
+  };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { invitationCount, toPendingWorkspaces, type InvitationLike, type SuggestionLike } from "./invitations-model";
+import { invitationCount, noInvitationsMessage, toPendingWorkspaces, type InvitationLike, type SuggestionLike } from "./invitations-model";
 
 const org = (id: string, name = id, hasImage = false) => ({ id, name, imageUrl: `https://img/${id}`, hasImage });
 const inv = (id: string, orgId: string, over: Partial<InvitationLike> = {}): InvitationLike => ({
@@ -41,5 +41,20 @@ describe("toPendingWorkspaces", () => {
   });
   it("counts invitations apart from suggestions", () => {
     expect(invitationCount(toPendingWorkspaces([inv("i1", "a")], [sug("s1", "b")]))).toBe(1);
+  });
+});
+
+describe("noInvitationsMessage", () => {
+  it("names the addresses that were checked", () => {
+    expect(noInvitationsMessage([{ address: "a@x.co", verified: true }, { address: "b@x.co", verified: true }])).toBe("No pending invitations for a@x.co, b@x.co.");
+  });
+  it("flags addresses Clerk would not match because they are unverified", () => {
+    expect(noInvitationsMessage([{ address: "a@x.co", verified: true }, { address: "b@x.co", verified: false }])).toBe(
+      "No pending invitations for a@x.co. Not checked, because they are unverified: b@x.co.",
+    );
+  });
+  it("copes with no verified address at all", () => {
+    expect(noInvitationsMessage([{ address: "b@x.co", verified: false }])).toContain("unverified: b@x.co");
+    expect(noInvitationsMessage([])).toBe("No pending invitations.");
   });
 });
