@@ -224,3 +224,15 @@ describe("robustness", () => {
     expect(result.ir.nodes.length).toBe(1_501);
   });
 });
+
+describe("quoted strings", () => {
+  it("reads \\n as a line break, \\\" as a quote and \\\\ as a backslash; other backslashes stay", () => {
+    const { ir } = compile('A [label: "a\\nb \\"q\\" c\\\\d e\\tf"]\nB > C: "x\\ny"');
+    expect(ir.nodes[0].label).toBe('a\nb "q" c\\d e\\tf');
+    expect(ir.edges[0].label).toBe("x\ny");
+  });
+
+  it("does not end a string at an escaped quote, so a // inside it is not a comment", () => {
+    expect(compile('A [label: "he said \\"hi // there\\""]').ir.nodes[0].label).toBe('he said "hi // there"');
+  });
+});

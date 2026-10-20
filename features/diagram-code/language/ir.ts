@@ -117,3 +117,7 @@ export const membersOf = (ir: DiagramIR, container: ContainerRef): string[] => {
   };
   return ir.nodes.filter((node) => inside(node.parent)).map((node) => node.id);
 };
+
+/** The meaning of a diagram as a string: the IR without source positions. Equal fingerprints mean equal diagrams. */
+export const irFingerprint = (ir: DiagramIR): string =>
+  JSON.stringify(ir, (key, value) => (key === "span" || key === "line" ? undefined : value));

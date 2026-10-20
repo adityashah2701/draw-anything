@@ -15,6 +15,7 @@ import type {
   TokenKind,
 } from "./ast";
 import { LineIndex, spanOf, textOf, trimSpan, type Span } from "./source";
+import { quotedInner, unescapeString } from "./strings";
 import { EDGE_PROPERTY_KEYS } from "./vocab";
 
 export const MAX_SOURCE_CHARS = 100_000;
@@ -30,9 +31,8 @@ const EDGE_PROPS_TAIL = /\s*\[([^\]]*)\]\s*$/;
 const isSpace = (ch: string | undefined) => ch !== undefined && /\s/.test(ch);
 
 const unquote = (text: string): { value: string; quoted: boolean } => {
-  const t = text.trim();
-  const quoted = t.length >= 2 && t.startsWith('"') && t.endsWith('"');
-  return { value: quoted ? t.slice(1, -1).replace(/\\"/g, '"') : t, quoted };
+  const inner = quotedInner(text);
+  return inner === null ? { value: text.trim(), quoted: false } : { value: unescapeString(inner), quoted: true };
 };
 
 /**
@@ -334,11 +334,11 @@ export const parseDocument = (source: string): DocumentNode => {
           token("punctuation", spanOf(listEnd, listEnd + 1));
           const text2 = raw.slice(0, tail.index).trim();
           const labelSpan = trimSpan(source, spanOf(edge.label.start, edge.label.start + tail.index));
-          label = { text: text2, span: labelSpan };
-          token("label", labelSpan);
+          label = { text: unquote(text2).value, span: labelSpan };
+          token(unquote(text2).quoted ? "string" : "label", labelSpan);
         } else {
-          label = { text: raw, span: edge.label };
-          token("label", edge.label);
+          label = { text: unquote(raw).value, span: edge.label };
+          token(unquote(raw).quoted ? "string" : "label", edge.label);
           if (/\[\s*(colou?r|from|to)\b/i.test(raw)) {
             const colorLike = /\[\s*colou?r\b/i.test(raw);
             warn(

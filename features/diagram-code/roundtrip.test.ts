@@ -38,9 +38,12 @@ describe("canvas -> code -> canvas keeps every fixture intact", () => {
     });
   }
 
-  it("explicit line breaks in a label become spaces in code (known limitation: the DSL has no multi-line strings)", () => {
+  it("explicit line breaks in a label survive the code view as \\n escapes", () => {
     const code = serializeDiagramCode({ nodes: [{ id: "a", label: "Payments\nand refunds" }, { id: "b", label: "B" }], edges: [{ from: "a", to: "b" }], groups: [] });
-    expect(parseDiagramCode(code).nodes[0].label).toBe("Payments and refunds");
+    expect(code).toContain('label: "Payments\\nand refunds"');
+    expect(parseDiagramCode(code).nodes[0].label).toBe("Payments\nand refunds");
+    const edge = serializeDiagramCode({ nodes: [{ id: "a", label: "A" }, { id: "b", label: "B" }], edges: [{ from: "a", to: "b", label: "first\nsecond" }], groups: [] });
+    expect(parseDiagramCode(edge).edges[0].label).toBe("first\nsecond");
   });
 });
 
