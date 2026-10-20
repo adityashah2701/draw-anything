@@ -1,4 +1,4 @@
-import { normalizeArgs } from "./args";
+import { coerceArgs, normalizeArgs } from "./args";
 import { notEnabledMessage, unknownToolMessage } from "./tool-names";
 import { isEmptyPatch } from "@/core/groups/patch";
 import { createCommandContext } from "@/features/whiteboard/commands/context";
@@ -107,7 +107,8 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       if (previous) return { ...previous, replayed: true };
     }
 
-    const { args: callArgs, read: renamed } = normalizeArgs(tool, call.args ?? {});
+    const { args: named, read: renamed } = normalizeArgs(tool, call.args ?? {});
+    const { args: callArgs, adjusted } = coerceArgs(tool, named);
     const parsed = tool.input.safeParse(callArgs);
     if (!parsed.success) {
       const names = argumentNames(tool);
@@ -140,9 +141,10 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       }
     }
 
-    const readKey = tool.access === "read" ? `${tool.name}|${revision}|${JSON.stringify(parsed.data)}` : undefined;
+    // A read that does not look at the board (an icon search) is the same answer on any revision.
+    const readKey = tool.access === "read" ? `${tool.name}|${tool.boardIndependent ? "any" : revision}|${JSON.stringify(parsed.data)}` : undefined;
     if (readKey && readCache.has(readKey)) {
-      const summary = `Nothing has changed since you asked this before (revision ${revision}); the earlier result still holds: ${readCache.get(readKey)}`;
+      const summary = tool.boardIndependent ? `You asked this before; the earlier result still holds: ${readCache.get(readKey)}` : `Nothing has changed since you asked this before (revision ${revision}); the earlier result still holds: ${readCache.get(readKey)}`;
       session.log?.({ tool: tool.name, callId: call.id, runId: session.runId, ok: true, ms: now() - started, created: 0, updated: 0, removed: 0 });
       return { ok: true, tool: tool.name, summary, data: { repeated: true }, affected: emptyAffected(), revision, warnings: ["Repeated read: use your earlier result instead of asking again."] };
     }
@@ -204,7 +206,15 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       ...(run.data || unchanged ? { data: { ...(run.data ?? {}), ...(unchanged ? { requested: run.summary } : {}) } } : {}),
       affected,
       revision: after,
-      ...(run.warnings || renamed.length > 0 ? { warnings: [...(run.warnings ?? []), ...(renamed.length > 0 ? [`Read ${renamed.join(", ")}: ${tool.name} takes ${argumentNames(tool).join(", ")}.`] : [])] } : {}),
+      ...(run.warnings || renamed.length > 0 || adjusted.length > 0
+        ? {
+            warnings: [
+              ...(run.warnings ?? []),
+              ...(renamed.length > 0 ? [`Read ${renamed.join(", ")}: ${tool.name} takes ${argumentNames(tool).join(", ")}.`] : []),
+              ...(adjusted.length > 0 ? [`Adjusted ${adjusted.slice(0, 4).join(", ")}: send each argument in the type ${tool.name} lists.`] : []),
+            ],
+          }
+        : {}),
       ...(run.skipped && run.skipped.length > 0 ? { skipped: run.skipped } : {}),
     };
     if (call.id && tool.access === "write") session.replay.set(call.id, result);

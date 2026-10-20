@@ -238,6 +238,7 @@ export const searchIconsTool: ToolDefinition<typeof iconSearchInput> = {
   description: "Find icon ids in the editor's icon registry for create_icon, create_semantic_node and update_icon. Accepts technology names (postgres, kafka). Changes nothing.",
   input: iconSearchInput,
   access: "read",
+  boardIndependent: true,
   run: ({ query, limit = 5 }) => {
     const terms = [...new Set(query.split(/[,\n;]/).map((t) => t.trim()).filter(Boolean))].slice(0, 8);
     const results = terms.map((term) => ({ term, icons: searchIcons(term, limit).map((m) => ({ id: m.id, category: m.category, via: m.via })) }));

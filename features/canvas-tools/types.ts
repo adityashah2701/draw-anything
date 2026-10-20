@@ -196,6 +196,8 @@ export interface ToolDefinition<Schema extends z.ZodType = z.ZodType> {
   destructive?: boolean;
   /** The board must not have changed (by anyone else) since the model last looked. */
   strictRevision?: boolean;
+  /** A read whose answer does not depend on the board (an icon search): repeated calls are answered from the run's cache whatever changed meanwhile. */
+  boardIndependent?: boolean;
   needs?: Array<keyof HostCapabilities>;
   /** Also usable while any of these groups is on: a follow-up tool that belongs with the work of other groups (fit_frame after moving things). */
   alsoWith?: ToolGroup[];
