@@ -112,6 +112,11 @@ const asUpdate = (before: StoredElement | undefined, after: DrawingElement): Dra
   return entry as unknown as DrawingElement;
 };
 
+const coords = (el: unknown) => JSON.stringify(((el as { points?: Array<{ x: number; y: number }> }).points ?? []).map(({ x, y }) => [x, y]));
+const rest = (el: unknown) => JSON.stringify({ ...(el as object), points: undefined });
+/** The same element up to the anchor bookkeeping a connector's points may carry: writing it would change nothing anyone can see. */
+const sameElement = (before: StoredElement | undefined, after: DrawingElement) => before !== undefined && coords(before) === coords(after) && rest(before) === rest(after);
+
 export const applyDiagramCodeTool: ToolDefinition<typeof applyInput> = {
   name: "apply_diagram_code",
   group: "code",
@@ -144,14 +149,17 @@ export const applyDiagramCodeTool: ToolDefinition<typeof applyInput> = {
       await env.confirm(`Remove ${shapesGone.length} elements that the code no longer declares?`);
     }
 
-    const patch: DocPatch = { add: plan.patch.add, update: plan.patch.update.map((el) => asUpdate(before.get(el.id), el)), remove: removed };
+    const changed = plan.patch.update.filter((el) => !sameElement(before.get(el.id), el));
+    const patch: DocPatch = { add: plan.patch.add, update: changed.map((el) => asUpdate(before.get(el.id), el)), remove: removed };
     const order = orderFramesBelowContents(applyPatch(ctx.stored, patch));
     if (order) patch.order = order;
-    const { added, updated, removed: gone, unchanged, restored } = plan.summary;
+    const { added, removed: gone, restored } = plan.summary;
+    const updated = changed.length;
+    const unchanged = plan.summary.unchanged + plan.summary.updated - changed.length;
     const changes = [added && `${added} added`, restored && `${restored} restored`, updated && `${updated} changed`, gone && `${gone} removed`].filter(Boolean).join(", ");
     return {
       summary: changes ? `Updated the diagram from code: ${changes}; ${count(unchanged, "element")} untouched.` : "The board already matches the code; nothing changed.",
-      data: { added: plan.patch.add.map((el) => el.id).slice(0, 80), updated: plan.patch.update.map((el) => el.id).slice(0, 80), removed, unchanged },
+      data: { added: plan.patch.add.map((el) => el.id).slice(0, 80), updated: changed.map((el) => el.id).slice(0, 80), removed, unchanged },
       patch,
       warnings: plan.issues.slice(0, 8).map((issue) => `${where(issue)}: ${issue.message}`),
     };

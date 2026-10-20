@@ -9,7 +9,7 @@ const RULES: Array<[ToolGroup[], RegExp]> = [
   [["document"], /\b(undo|redo|clear|empty|export|download|save|load|open|validate|repair|fix)\b/i],
   // New diagrams, and things worth remembering.
   [["generate", "organize"], /\b(draw|diagram|flow ?chart|architecture|topology|mind ?map|sequence|sketch|from scratch|generate|design)\b/i],
-  [["code"], /\b(diagram code|the code|code editor|dsl|syntax|parse[rd]?|format(?:ted|ting)?|reformat|serializ\w*|as code|to code)\b/i],
+  [["code"], /\b(code|dsl|syntax|parse[rd]?|format(?:ted|ting)?|reformat|serializ\w*)\b/i],
   [["memory"], /\b(remember|always|never|from now on|going forward|in future|prefer|keep in mind|don'?t forget|we (decided|agreed))\b/i],
 ];
 

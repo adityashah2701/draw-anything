@@ -14,9 +14,9 @@ import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { planDuplicate } from "@/features/whiteboard/commands/duplicate";
 import { supportsStyle, type StyleKey } from "@/features/whiteboard/commands/style";
 import { buildIconElement, DEFAULT_ICON_SIZE } from "@/features/whiteboard/utils/icon-picker";
-import type { Bounds, DrawingElement, GroupRecord } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, GroupRecord } from "@/features/whiteboard/types/whiteboard.types";
 import { ToolError } from "../errors";
-import { color, coordinate, elementId, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POINTS, newElementId, point, targetIds } from "../schemas";
+import { color, coordinate, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POINTS, newElementId, point, targetIds } from "../schemas";
 import type { ToolDefinition } from "../types";
 import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, snapPlacement } from "./helpers";
 
