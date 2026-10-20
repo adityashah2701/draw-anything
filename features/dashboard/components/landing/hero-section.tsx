@@ -1,405 +1,50 @@
 "use client";
 
-import { LogoMark } from "@/components/shared/logo-mark";
+import { ArrowUpRight } from "lucide-react";
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import type { CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
-import { SignUpButton } from "@clerk/nextjs";
-import { ArrowUpRight, Sparkles } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
-import React from "react";
+import { HeroDemo } from "./hero-demo";
 
-const boardItems = [
-  "Login Validation Flow",
-  "Retry Login Path",
-  "Account Lockout Branch",
-  "Session Start Flow",
-];
+const rise = (delay: number) => ({ "--d": `${delay}ms` }) as CSSProperties;
 
-export const HeroSection = () => {
-  const reduceMotion = useReducedMotion();
-  const ease = [0.22, 1, 0.36, 1] as const;
-  const cycleDuration = 9.5;
-  const hideStart = 0.94;
-  const hideEnd = 0.99;
-
-  const shell = {
-    hidden: { opacity: 0, y: 18, scale: 0.99 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: {
-        duration: reduceMotion ? 0 : 0.55,
-        ease,
-        when: "beforeChildren" as const,
-        staggerChildren: reduceMotion ? 0 : 0.08,
-      },
-    },
-  };
-
-  const panel = {
-    hidden: { opacity: 0, y: 12 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: reduceMotion ? 0 : 0.42,
-        ease,
-      },
-    },
-  };
-
-  const itemStagger = {
-    hidden: {},
-    visible: {
-      transition: {
-        staggerChildren: reduceMotion ? 0 : 0.08,
-      },
-    },
-  };
-
-  const itemReveal = {
-    hidden: { opacity: 0, y: 8 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: reduceMotion ? 0 : 0.32,
-        ease,
-      },
-    },
-  };
-
-  const nodeAnim = (startAt: number) => {
-    const revealAt = Math.min(startAt + 0.06, 0.9);
-    if (reduceMotion) {
-      return {
-        initial: false,
-        animate: { opacity: 1, y: 0, scale: 1 },
-        transition: { duration: 0 },
-      };
-    }
-    return {
-      initial: { opacity: 0, y: 8, scale: 0.97 },
-      animate: {
-        opacity: [0, 0, 1, 1, 0, 0],
-        y: [8, 8, 0, 0, -2, -2],
-        scale: [0.97, 0.97, 1, 1, 1, 1],
-      },
-      transition: {
-        duration: cycleDuration,
-        ease: "linear" as const,
-        repeat: Infinity,
-        times: [0, startAt, revealAt, hideStart, hideEnd, 1],
-      },
-    };
-  };
-
-  const lineYAnim = (startAt: number) => {
-    const revealAt = Math.min(startAt + 0.06, 0.9);
-    if (reduceMotion) {
-      return {
-        initial: false,
-        animate: { opacity: 1, scaleY: 1 },
-        transition: { duration: 0 },
-      };
-    }
-    return {
-      initial: { opacity: 0, scaleY: 0 },
-      animate: {
-        opacity: [0, 0, 1, 1, 0, 0],
-        scaleY: [0, 0, 1, 1, 0, 0],
-      },
-      transition: {
-        duration: cycleDuration,
-        ease: "linear" as const,
-        repeat: Infinity,
-        times: [0, startAt, revealAt, hideStart, hideEnd, 1],
-      },
-    };
-  };
-
-  const lineXAnim = (startAt: number) => {
-    const revealAt = Math.min(startAt + 0.06, 0.9);
-    if (reduceMotion) {
-      return {
-        initial: false,
-        animate: { opacity: 1, scaleX: 1 },
-        transition: { duration: 0 },
-      };
-    }
-    return {
-      initial: { opacity: 0, scaleX: 0 },
-      animate: {
-        opacity: [0, 0, 1, 1, 0, 0],
-        scaleX: [0, 0, 1, 1, 0, 0],
-      },
-      transition: {
-        duration: cycleDuration,
-        ease: "linear" as const,
-        repeat: Infinity,
-        times: [0, startAt, revealAt, hideStart, hideEnd, 1],
-      },
-    };
-  };
-
-  return (
-    <section
-      id="hero"
-      className="scroll-mt-28 px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pb-24 lg:pt-16"
-    >
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-6 lg:grid-cols-12 lg:items-end">
-          <div className="lg:col-span-8">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Diagram intelligence for modern teams
-            </p>
-            <h1 className="max-w-4xl text-[clamp(2.25rem,5.8vw,5rem)] font-black leading-[0.95] tracking-[-0.04em] text-foreground">
-              Architecture that stays aligned.
-            </h1>
-            <p className="mt-1 text-[clamp(1.7rem,4.4vw,3.6rem)] font-semibold leading-[0.96] tracking-[-0.03em] text-muted-foreground">
-              Signals. Intent. Action.
-            </p>
-          </div>
-
-          <div className="lg:col-span-4 lg:flex lg:justify-end">
-            <SignUpButton mode="modal">
-              <Button className="h-12 rounded-md bg-primary px-6 text-base font-semibold text-primary-foreground hover:bg-primary/90">
-                Set up your workspace
-                <ArrowUpRight className="ml-2 h-4 w-4" />
-              </Button>
-            </SignUpButton>
-          </div>
-        </div>
-
-        <motion.div
-          className="mt-10 overflow-hidden rounded-2xl border border-border bg-card shadow-lg"
-          variants={shell}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.25 }}
+export const HeroSection = () => (
+  <section id="hero" className="scroll-mt-16 px-4 pb-20 pt-12 sm:px-6 lg:px-8 lg:pb-28 lg:pt-20">
+    <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-12 lg:items-center lg:gap-10">
+      <div className="lg:col-span-5">
+        <p className="landing-rise label-mono mb-5" style={rise(0)}>
+          AI-assisted diagramming
+        </p>
+        <h1
+          className="landing-rise text-[clamp(2rem,3.2vw,3.25rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-foreground"
+          style={rise(40)}
         >
-          <motion.div
-            className="border-b border-border bg-muted px-4 py-3"
-            variants={panel}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-2.5 w-2.5 rounded-full bg-border" />
-                <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground" />
-                <div className="h-2.5 w-2.5 rounded-full bg-muted" />
-              </div>
-              <p className="text-xs font-medium text-muted-foreground">
-                Draw Anything Workspace
-              </p>
-              <LogoMark className="size-4" />
-            </div>
-          </motion.div>
-
-          <div className="relative bg-background p-4 sm:p-6">
-            <motion.div
-              className="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.14)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.14)_1px,transparent_1px)] bg-[size:22px_22px]"
-              variants={panel}
-            />
-            <motion.div
-              className="relative rounded-xl border border-border bg-card shadow-sm"
-              variants={panel}
-            >
-              <div className="grid min-h-[320px] grid-cols-1 lg:min-h-[380px] lg:grid-cols-[210px_1fr]">
-                <motion.aside
-                  className="border-b border-border bg-background p-4 lg:border-r lg:border-b-0"
-                  variants={panel}
-                >
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Flows
-                  </p>
-                  <motion.div className="space-y-2 text-sm" variants={itemStagger}>
-                    {boardItems.map((item, index) => (
-                      <motion.div
-                        key={item}
-                        variants={itemReveal}
-                        className={
-                          index === 0
-                            ? "rounded-md border border-border bg-surface-secondary px-3 py-2 font-medium text-foreground"
-                            : "rounded-md px-3 py-2 text-muted-foreground"
-                        }
-                      >
-                        {item}
-                      </motion.div>
-                    ))}
-                  </motion.div>
-                </motion.aside>
-
-                <motion.div className="p-4 sm:p-6" variants={panel}>
-                  <motion.div
-                    className="mb-4 flex items-center justify-between gap-3"
-                    variants={panel}
-                  >
-                    <div>
-                      <h3 className="text-xl font-bold tracking-tight text-foreground">
-                        AI Login Flow Generation
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Prompt: Create user login validation flow with retry
-                        branch
-                      </p>
-                    </div>
-                    <motion.div
-                      className="inline-flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"
-                      initial={{ opacity: 0 }}
-                      whileInView={{ opacity: 1 }}
-                      viewport={{ once: true, amount: 0.2 }}
-                      transition={{
-                        duration: reduceMotion ? 0 : 0.3,
-                        delay: reduceMotion ? 0 : 0.1,
-                      }}
-                    >
-                      <motion.span
-                        className="h-2 w-2 rounded-full bg-primary"
-                        animate={
-                          reduceMotion
-                            ? undefined
-                            : { opacity: [1, 0.35, 1], scale: [1, 0.9, 1] }
-                        }
-                        transition={{
-                          repeat: Infinity,
-                          duration: 1.1,
-                          ease: "easeInOut",
-                        }}
-                      />
-                      Generating...
-                    </motion.div>
-                  </motion.div>
-
-                  <div className="relative overflow-hidden rounded-xl border border-border bg-surface p-3 sm:p-5">
-                    <div className="relative hidden h-[500px] md:block">
-                      <motion.div
-                        className="absolute left-1/2 top-[20px] z-10 flex h-[68px] w-[68px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-border bg-warning/20 text-sm font-semibold text-foreground"
-                        {...nodeAnim(0.06)}
-                      >
-                        Start
-                      </motion.div>
-
-                      <motion.div
-                        className="absolute left-1/2 top-[88px] z-0 h-[34px] w-0.5 -translate-x-1/2 origin-top bg-border"
-                        {...lineYAnim(0.12)}
-                      />
-
-                      <motion.div
-                        className="absolute left-1/2 top-[122px] z-10 flex h-[54px] w-[180px] -translate-x-1/2 items-center justify-center rounded-md border-2 border-border bg-card text-base font-semibold text-foreground"
-                        {...nodeAnim(0.18)}
-                      >
-                        Login
-                      </motion.div>
-
-                      <motion.div
-                        className="absolute left-1/2 top-[176px] z-0 h-[44px] w-0.5 -translate-x-1/2 origin-top bg-border"
-                        {...lineYAnim(0.24)}
-                      />
-
-                      <motion.div
-                        className="absolute left-1/2 top-[220px] z-10 h-[64px] w-[64px] -translate-x-1/2 rotate-45 border-2 border-border bg-destructive/20"
-                        {...nodeAnim(0.3)}
-                      >
-                        <div className="flex h-full w-full -rotate-45 items-center justify-center text-sm font-semibold text-foreground">
-                          Valid?
-                        </div>
-                      </motion.div>
-
-                      <motion.div
-                        className="absolute left-1/2 top-[284px] z-0 h-[24px] w-0.5 -translate-x-1/2 origin-top bg-border"
-                        {...lineYAnim(0.36)}
-                      />
-                      <motion.div
-                        className="absolute left-[30%] right-[30%] top-[308px] z-0 h-0.5 origin-left bg-border"
-                        {...lineXAnim(0.42)}
-                      />
-                      <motion.div
-                        className="absolute left-[30%] top-[308px] z-0 h-[12px] w-0.5 origin-top bg-border"
-                        {...lineYAnim(0.48)}
-                      />
-                      <motion.div
-                        className="absolute right-[30%] top-[308px] z-0 h-[12px] w-0.5 origin-top bg-border"
-                        {...lineYAnim(0.48)}
-                      />
-
-                      <motion.div
-                        className="absolute left-[29.2%] top-[288px] text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-                        {...nodeAnim(0.5)}
-                      >
-                        No
-                      </motion.div>
-                      <motion.div
-                        className="absolute right-[29.2%] top-[288px] text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-                        {...nodeAnim(0.52)}
-                      >
-                        Yes
-                      </motion.div>
-
-                      <motion.div
-                        className="absolute left-[18%] top-[320px] z-10 flex h-[50px] w-[170px] items-center justify-center rounded-md border-2 border-border bg-card text-base font-semibold text-foreground"
-                        {...nodeAnim(0.58)}
-                      >
-                        Show Error
-                      </motion.div>
-                      <motion.div
-                        className="absolute right-[18%] top-[320px] z-10 flex h-[50px] w-[170px] items-center justify-center rounded-md border-2 border-border bg-card text-base font-semibold text-foreground"
-                        {...nodeAnim(0.58)}
-                      >
-                        Dashboard
-                      </motion.div>
-
-                      <motion.div
-                        className="absolute left-[30%] top-[370px] z-0 h-[16px] w-0.5 origin-top bg-border"
-                        {...lineYAnim(0.68)}
-                      />
-                      <motion.div
-                        className="absolute right-[30%] top-[370px] z-0 h-[16px] w-0.5 origin-top bg-border"
-                        {...lineYAnim(0.68)}
-                      />
-                      <motion.div
-                        className="absolute left-[30%] right-[30%] top-[386px] z-0 h-0.5 origin-left bg-border"
-                        {...lineXAnim(0.74)}
-                      />
-                      <motion.div
-                        className="absolute left-1/2 top-[386px] z-0 h-[34px] w-0.5 -translate-x-1/2 origin-top bg-border"
-                        {...lineYAnim(0.8)}
-                      />
-
-                      <motion.div
-                        className="absolute left-1/2 top-[420px] z-10 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full border-2 border-border bg-warning/20 text-sm font-semibold text-foreground"
-                        {...nodeAnim(0.86)}
-                      >
-                        End
-                      </motion.div>
-                    </div>
-
-                    <motion.div
-                      className="space-y-2 md:hidden"
-                      variants={itemStagger}
-                      initial="hidden"
-                      whileInView="visible"
-                      viewport={{ once: true, amount: 0.2 }}
-                    >
-                      {["Start", "Login", "Valid? (Decision)", "Show Error / Dashboard", "End"].map(
-                        (step) => (
-                          <motion.div
-                            key={step}
-                            variants={itemReveal}
-                            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground"
-                          >
-                            {step}
-                          </motion.div>
-                        ),
-                      )}
-                    </motion.div>
-                  </div>
-                </motion.div>
-              </div>
-            </motion.div>
-          </div>
-        </motion.div>
+          Describe it.
+          <br />
+          Watch it get drawn.
+        </h1>
+        <p className="landing-rise mt-5 max-w-md text-base leading-relaxed text-text-secondary" style={rise(100)}>
+          Type what the diagram should show. An agent draws it on your canvas, and everything it draws is an ordinary
+          shape you can move, restyle and connect.
+        </p>
+        <div className="landing-rise mt-8 flex flex-wrap items-center gap-2" style={rise(160)}>
+          <SignUpButton mode="modal">
+            <Button size="lg">
+              Start drawing
+              <ArrowUpRight />
+            </Button>
+          </SignUpButton>
+          <SignInButton mode="modal">
+            <Button size="lg" variant="outline">
+              Sign in
+            </Button>
+          </SignInButton>
+        </div>
       </div>
-    </section>
-  );
-};
+
+      <div className="landing-rise lg:col-span-7" style={rise(200)}>
+        <HeroDemo />
+      </div>
+    </div>
+  </section>
+);

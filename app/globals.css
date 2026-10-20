@@ -216,31 +216,209 @@
   }
 }
 
-@keyframes driftY {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
+/*
+ * Landing page motion. One vocabulary for the whole page (docs/design/system.md, "Landing motion"):
+ * enter with --ease-out-strong, move on screen with --ease-in-out-strong, 320ms and 8px for reveals,
+ * 60ms between siblings, and every reveal fires once. Transitions, not keyframes, wherever the user
+ * can interrupt. Reduced motion shows the finished state with no movement.
+ */
+:root {
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+/* First paint of the hero: a short rise, staggered with --d. Runs once on load, so a keyframe is fine. */
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
 
-@keyframes sweepX {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+.landing-rise {
+  animation: landing-rise 360ms var(--ease-out-strong) both;
+  animation-delay: var(--d, 0ms);
 }
 
-@keyframes tickerSlide {
-  0% {
-    transform: translateX(0);
+/* Scroll reveal: armed server-side, released once by IntersectionObserver (see reveal.tsx). */
+.reveal {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 320ms var(--ease-out-strong) var(--reveal-delay, 0ms),
+    transform 320ms var(--ease-out-strong) var(--reveal-delay, 0ms);
+}
+.reveal[data-in="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* A hairline that draws between steps: transform only, so it never reflows. */
+.draw-x {
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 320ms var(--ease-in-out-strong) var(--reveal-delay, 0ms);
+}
+.draw-x[data-in="true"] {
+  transform: scaleX(1);
+}
+
+/* Hero demo. Elements are hidden by default and released by data-shown, one build step at a time.
+   Hiding is fast (the system answering a replay), showing is the deliberate phase. */
+.demo-node,
+.demo-label {
+  opacity: 0;
+  transform: scale(0.95);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    opacity 100ms var(--ease-out-strong),
+    transform 100ms var(--ease-out-strong);
+}
+.demo-node[data-shown="true"],
+.demo-label[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+  transition-duration: 220ms;
+}
+.demo-shape {
+  fill: var(--card);
+  stroke: var(--foreground);
+  stroke-width: 1.5;
+  transition:
+    stroke 240ms ease,
+    stroke-width 120ms ease;
+}
+.demo-node[data-latest="true"] .demo-shape {
+  stroke: var(--agent);
+}
+.demo-node[data-selected="true"] .demo-shape {
+  stroke: var(--primary);
+  stroke-width: 2;
+}
+.demo-node {
+  outline: none;
+}
+.demo-node:focus-visible .demo-shape {
+  stroke: var(--ring);
+  stroke-width: 2.5;
+}
+.demo-edge {
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition:
+    stroke-dashoffset 100ms var(--ease-out-strong),
+    stroke 240ms ease;
+}
+.demo-edge[data-shown="true"] {
+  stroke-dashoffset: 0;
+  transition-duration: 260ms, 240ms;
+}
+.demo-head {
+  fill: var(--muted-foreground);
+  opacity: 0;
+  transition:
+    opacity 100ms var(--ease-out-strong),
+    fill 240ms ease;
+}
+.demo-head[data-shown="true"] {
+  opacity: 1;
+  transition-delay: 160ms, 0ms;
+  transition-duration: 120ms, 240ms;
+}
+.demo-edge[data-latest="true"] {
+  stroke: var(--agent);
+}
+.demo-head[data-latest="true"] {
+  fill: var(--agent);
+}
+.demo-handle {
+  fill: var(--card);
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out-strong);
+}
+.demo-node[data-selected="true"] .demo-handle {
+  opacity: 1;
+}
+
+/* Routing demo: the straight line is the problem, the routed one replaces it. */
+.route-straight {
+  fill: none;
+  stroke: var(--destructive);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  transition: opacity 200ms ease;
+}
+.route-straight[data-on="false"] {
+  opacity: 0;
+}
+.route-path {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 120ms var(--ease-out-strong);
+}
+.route-path[data-on="true"] {
+  stroke-dashoffset: 0;
+  transition-duration: 360ms;
+}
+.route-head {
+  opacity: 0;
+  transition: opacity 100ms var(--ease-out-strong);
+}
+.route-head[data-on="true"] {
+  opacity: 1;
+  transition-delay: 240ms;
+  transition-duration: 120ms;
+}
+
+/* Mobile menu: a popover, so it grows from the button that opened it. */
+.landing-menu {
+  opacity: 0;
+  transform: scale(0.97) translateY(-4px);
+  transform-origin: top right;
+  visibility: hidden;
+  transition:
+    opacity 120ms var(--ease-out-strong),
+    transform 120ms var(--ease-out-strong),
+    visibility 0s linear 120ms;
+}
+.landing-menu[data-open="true"] {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition-duration: 180ms, 180ms, 0s;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-rise {
+    animation: none;
   }
-  100% {
-    transform: translateX(-50%);
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .draw-x {
+    transform: none;
+    transition: none;
+  }
+  .demo-node,
+  .demo-label,
+  .demo-edge,
+  .demo-head,
+  .route-path,
+  .route-head,
+  .route-straight,
+  .landing-menu {
+    transition: none !important;
   }
 }
 

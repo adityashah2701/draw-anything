@@ -1,121 +1,30 @@
-import { Grid3X3, Mail, ShieldCheck } from "lucide-react";
-import React from "react";
+import { LogoMark } from "@/components/shared/logo-mark";
 
-export const FooterSection = () => {
-  const links = {
-    Product: ["Whiteboard", "AI Diagrams", "Flowcharts", "Templates"],
-    Platform: ["Security", "Performance", "Collaboration", "Integrations"],
-    Company: ["About", "Careers", "Contact", "Terms"],
-    Resources: ["Documentation", "Guides", "Support", "Status"],
-  };
+const links = [
+  { label: "How it works", href: "#how" },
+  { label: "Capabilities", href: "#features" },
+  { label: "Start", href: "#cta" },
+];
 
-  return (
-    <footer
-      id="footer"
-      className="scroll-mt-28 relative overflow-hidden bg-surface-secondary px-4 py-20 text-foreground sm:px-6 lg:px-8"
-    >
-      <div className="pointer-events-none absolute -bottom-12 left-4 text-[clamp(4rem,14vw,13rem)] font-black tracking-[-0.05em] text-foreground/5">
-        DRAW ANYTHING
+export const FooterSection = () => (
+  <footer id="footer" className="border-t border-border px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2.5">
+        <LogoMark className="size-5" />
+        <span className="text-sm font-semibold tracking-tight text-foreground">Draw Anything</span>
+        <span className="label-mono ml-2">© 2026</span>
       </div>
-
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-10 lg:grid-cols-12">
-          <div className="lg:col-span-5">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary">
-                <Grid3X3 className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-semibold tracking-tight text-foreground">
-                Draw Anything
-              </span>
-            </div>
-            <p className="max-w-md text-base leading-relaxed text-text-secondary">
-              If your system can&apos;t be seen, it can&apos;t be aligned. Draw
-              Anything helps teams externalize complexity and move with
-              confidence.
-            </p>
-            <div className="mt-8 space-y-2 text-sm text-muted-foreground">
-              <p className="inline-flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                Enterprise security
-              </p>
-              <p className="inline-flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                support@drawanything.app
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-8 lg:col-span-4 lg:translate-y-8">
-            {Object.entries(links)
-              .slice(0, 2)
-              .map(([section, items]) => (
-                <div key={section}>
-                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {section}
-                  </h4>
-                  <ul className="space-y-2 text-sm text-text-secondary">
-                    {items.map((item) => (
-                      <li key={item}>
-                        <a href="#" className="transition-colors hover:text-foreground">
-                          {item}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-8 lg:col-span-3 lg:-translate-y-3">
-            {Object.entries(links)
-              .slice(2)
-              .map(([section, items]) => (
-                <div key={section}>
-                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {section}
-                  </h4>
-                  <ul className="space-y-2 text-sm text-text-secondary">
-                    {items.map((item) => (
-                      <li key={item}>
-                        <a href="#" className="transition-colors hover:text-foreground">
-                          {item}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-          </div>
-        </div>
-
-        <div className="mt-12 border-t border-border pt-6">
-          <div className="flex flex-col gap-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <p>© 2026 Draw Anything. All rights reserved.</p>
-            <div className="flex flex-wrap items-center gap-4">
-              <a href="#" className="hover:text-foreground">
-                Privacy
-              </a>
-              <a href="#" className="hover:text-foreground">
-                Terms
-              </a>
-              <a href="#" className="hover:text-foreground">
-                Cookies
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-10 overflow-hidden border-y border-border bg-surface-muted/40 py-3">
-        <div className="flex w-[200%] gap-6 text-xs uppercase tracking-[0.16em] text-muted-foreground motion-safe:animate-[tickerSlide_24s_linear_infinite]">
-          {Array.from({ length: 16 }).map((_, idx) => (
-            <span key={idx} className="whitespace-nowrap">
-              Architecture clarity at scale
-            </span>
-          ))}
-        </div>
-      </div>
-    </footer>
-  );
-};
+      <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-2">
+        {links.map((link) => (
+          <a
+            key={link.href}
+            href={link.href}
+            className="rounded-sm text-sm text-text-secondary transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {link.label}
+          </a>
+        ))}
+      </nav>
+    </div>
+  </footer>
+);
