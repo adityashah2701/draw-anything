@@ -28,12 +28,11 @@ const fakesPlugin: Plugin = {
   },
 };
 
-const bundles = new Map<boolean, Promise<string>>();
-/** The editor bundle (IIFE), built once per flag setting per test file/worker. `unified` builds it with NEXT_PUBLIC_UNIFIED_AGENT=1. */
-export const editorBundle = (unified = false) => {
-  const cached = bundles.get(unified);
-  if (cached) return cached;
-  const built = build({
+let bundle: Promise<string> | null = null;
+/** The editor bundle (IIFE), built once per test file/worker. */
+export const editorBundle = () => {
+  if (bundle) return bundle;
+  bundle = build({
     entryPoints: [`${here}editor-entry.tsx`],
     bundle: true,
     write: false,
@@ -41,12 +40,11 @@ export const editorBundle = (unified = false) => {
     platform: "browser",
     jsx: "automatic",
     alias: { "@": root.replace(/\/$/, "") },
-    define: { "process.env.NODE_ENV": '"production"', "process.env.NEXT_PUBLIC_UNIFIED_AGENT": unified ? '"1"' : '""' },
+    define: { "process.env.NODE_ENV": '"production"' },
     plugins: [fakesPlugin],
     logLevel: "silent",
   }).then((r) => r.outputFiles[0].text);
-  bundles.set(unified, built);
-  return built;
+  return bundle;
 };
 
 let css: Promise<string> | null = null;

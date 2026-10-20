@@ -6,7 +6,7 @@ import type { AgentUiMessage } from "@/features/canvas-tools/editor/use-canvas-a
 
 const render = (messages: AgentUiMessage[], running = false) =>
   renderToStaticMarkup(
-    React.createElement(CanvasAgentView, { messages, running, confirmation: null, onConfirm: () => {}, onStop: () => {}, onUndoRun: () => {}, canUndoRun: false, onExample: () => {}, disabled: false, shared: true }),
+    React.createElement(CanvasAgentView, { messages, running, confirmation: null, onConfirm: () => {}, onStop: () => {}, onUndoRun: () => {}, canUndoRun: false, onExample: () => {}, disabled: false }),
   );
 
 describe("CanvasAgentView: thinking", () => {

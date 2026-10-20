@@ -175,3 +175,10 @@ Decisions taken (from the project owner): keep `aiFrames` and import it rather t
 - Still to do from the plan: removing the legacy generate path and tables (phase 5, only after the import has been verified in production).
 
 **NVIDIA GLM**: added separately in PR 15 (`z-ai/glm-5.3`, `z-ai/glm-5.3-flash`, verified by the owner); this branch is merged with it. `generate_diagram` still uses the generator's default model for the chosen provider.
+
+## Status: phase 5 (cleanup) done
+
+The legacy path is removed and the unified agent is the only one:
+- The flags `NEXT_PUBLIC_UNIFIED_AGENT` and `AI_UNIFIED_AGENT` no longer exist; the shared conversation, run lease, summary, `generate_diagram` and `remember` are always on.
+- Deleted: the Generate tab and `useAIGeneration` (`use-ai-generation.ts`), `ai-timeline.tsx`, the controller's AI placement code, `convex/aiFrames.ts` and the unused `createMemory`, `listByWhiteboard`, `createDecision`, `listDecisionsByFrame` in `convex/aiMemory.ts`.
+- Kept on purpose: `/api/ai/generate-diagram` and the three pipelines behind `AI_PIPELINE` (they are what `generate_diagram` runs), `importLegacyFrames`, and the tables `aiFrames`, `aiFrameCheckpoints`, `aiDecisions` and the old fields of `aiMemories` (stored data, no code writes them any more; dropping them needs the owner's go-ahead).

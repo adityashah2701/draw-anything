@@ -8,7 +8,6 @@ import { toUserFacingMessage } from "@/features/ai/server/errors";
 import { MAX_BODY_BYTES, type SlidingWindowLimiter } from "@/features/ai/server/request-guard";
 import { buildTools, specsFor } from "../registry";
 import { describeIssues } from "../schemas";
-import { UNIFIED_GROUPS } from "./flags";
 import { TOOL_GROUPS, toolEnabled, type ToolDefinition, type ToolGroup } from "../types";
 import { buildSystemPrompt, type MemoryNote } from "./prompt";
 import type { CanvasTransport, ModelReply } from "./transport";
@@ -34,11 +33,6 @@ export interface CanvasAgentHandlerDeps {
   limiter: SlidingWindowLimiter;
   /** Runs one model turn for the provider; the route wires the real provider abstraction, tests a scripted model. */
   createTransport: (provider: AIModelProvider, specs: ReturnType<typeof specsFor>, model?: string, vision?: boolean) => CanvasTransport;
-  /**
-   * The unified agent (generate and memory tools, board memory in the prompt). Off by default: while it is off
-   * those groups are not offered, enabled or accepted, and the endpoint behaves as it did before.
-   */
-  unifiedAgent?: () => boolean;
   /** The notes saved for this board, read as the signed-in user. A failure only means the prompt carries no memory. */
   loadMemories?: (input: { userId: string; whiteboardId: string }) => Promise<readonly MemoryNote[]>;
   /** The summary of earlier turns of this board's conversation. A failure only means the prompt carries none. */
@@ -107,9 +101,7 @@ let counter = 0;
  */
 export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
   const now = deps.now ?? Date.now;
-  const everyTool = buildTools(() => undefined);
-  const unifiedTools = everyTool;
-  const baseTools = everyTool.filter((tool) => !(UNIFIED_GROUPS as readonly string[]).includes(tool.group));
+  const tools = buildTools(() => undefined);
 
   return async (req: Request): Promise<Response> => {
     const started = now();
@@ -178,14 +170,11 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
       }
     }
 
-    const unified = deps.unifiedAgent?.() === true;
-    const tools = unified ? unifiedTools : baseTools;
-    const available = TOOL_GROUPS.filter((group) => unified || !(UNIFIED_GROUPS as readonly string[]).includes(group));
-    const groups = new Set<ToolGroup>(["inspect", ...(request.enabledGroups ?? [])].filter((group): group is ToolGroup => available.includes(group as ToolGroup)));
+    const groups = new Set<ToolGroup>(["inspect", ...(request.enabledGroups ?? [])].filter((group): group is ToolGroup => TOOL_GROUPS.includes(group as ToolGroup)));
     const specs = specsFor(tools, groups);
 
     let memories: readonly MemoryNote[] = [];
-    if (unified && deps.loadMemories) {
+    if (deps.loadMemories) {
       try {
         memories = await deps.loadMemories({ userId, whiteboardId: request.whiteboardId });
       } catch (error) {
@@ -194,7 +183,7 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
     }
 
     let summary: string | null = null;
-    if (unified && deps.loadSummary) {
+    if (deps.loadSummary) {
       try {
         summary = await deps.loadSummary({ userId, whiteboardId: request.whiteboardId });
       } catch (error) {
@@ -205,7 +194,7 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
     try {
       const transport = deps.createTransport(provider, specs, request.model, images > 0);
       const reply = await transport.complete(
-        (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind, available, memories, summary }),
+        (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind, memories, summary }),
         request.messages,
       );
       const calls = checkModelCalls(reply, tools, groups, () => `call_${now().toString(36)}_${(counter += 1).toString(36)}`);

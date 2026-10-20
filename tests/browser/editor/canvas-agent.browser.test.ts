@@ -35,12 +35,11 @@ const openAgent = async (s: EditorSession) => {
   const panel = s.page.getByRole("complementary", { name: "AI agent" });
   await panel.waitFor();
   await s.page.waitForTimeout(250);
-  await panel.getByTestId("agent-tab-board").click();
   return panel;
 };
 
 const ask = async (s: EditorSession, panel: ReturnType<Page["getByRole"]>, text: string) => {
-  await panel.getByLabel("Describe a change to the board").fill(text);
+  await panel.getByLabel("Describe a diagram or a change to the board").fill(text);
   await panel.getByRole("button", { name: "Send" }).click();
 };
 

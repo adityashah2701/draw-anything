@@ -26,18 +26,6 @@ const viewportCorner = ({ zoom, panOffset }: ViewportLike): Point => ({
   y: -panOffset.y / zoom + VIEWPORT_MARGIN,
 });
 
-/**
- * Offset that puts a streamed diagram's top-left corner just inside the viewport. It must come from the
- * whole diagram: taking it from whichever element arrives first leaves wider rows off the left edge.
- * Null when there is nothing to anchor on.
- */
-export const aiAnchorShift = (elements: readonly DrawingElement[], viewport: ViewportLike): Point | null => {
-  if (elements.every((element) => element.points.length === 0)) return null;
-  const corner = cornerOf(elements);
-  const target = viewportCorner(viewport);
-  return { x: target.x - corner.x, y: target.y - corner.y };
-};
-
 export const shiftElement = <T extends { points: Point[] }>(element: T, shift: Point): T => ({
   ...element,
   points: element.points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y })),

@@ -4,7 +4,6 @@ import { buildSystemPrompt } from "./agent/prompt";
 import { call, reply, scriptedRun } from "./agent/test-support";
 import { buildTools } from "./registry";
 import { find, node, setup } from "./test-helpers";
-import { TOOL_GROUPS } from "./types";
 
 const board = () => [node("start", "Lamp doesn't work", 0, 0), node("plugged", "Lamp plugged in?", 0, 160, { ai: { semanticKind: "decision" } }), node("plug", "Plug in lamp", 300, 160)];
 
@@ -27,7 +26,7 @@ describe("tool names a model guesses", () => {
   });
 
   it("the system prompt lists the real tool names of the groups that are off, and says never to invent one", () => {
-    const text = buildSystemPrompt({ groups: ["inspect"], specs: [], protocol: "native", available: TOOL_GROUPS });
+    const text = buildSystemPrompt({ groups: ["inspect"], specs: [], protocol: "native" });
     expect(text).toMatch(/edit \(.*: update_element, change_shape/);
     expect(text).toMatch(/never invent one/);
   });

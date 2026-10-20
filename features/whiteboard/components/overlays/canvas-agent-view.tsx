@@ -3,10 +3,8 @@
 import * as React from "react";
 import { Check, ChevronRight, Code2, ImageIcon, Maximize, ShieldAlert, Square, Undo2, X } from "lucide-react";
 import type { AgentUiMessage, PendingConfirmation } from "@/features/canvas-tools/editor/use-canvas-agent";
-import { BOARD_EXAMPLES } from "./agent-examples";
+import { UNIFIED_EXAMPLES } from "./agent-examples";
 import { AgentMarkdown } from "./agent-markdown";
-
-export { BOARD_EXAMPLES, UNIFIED_EXAMPLES } from "./agent-examples";
 
 interface StepActions {
   onFit?: () => void;
@@ -97,34 +95,30 @@ interface Props {
   canUndoRun: boolean;
   onExample: (text: string) => void;
   disabled: boolean;
-  /** The unified agent is on: everyone with access to the board shares this conversation. */
-  shared?: boolean;
   /** What the agent is doing right now (a long step such as generating a diagram). */
   activity?: string | null;
-  /** Examples for the empty state; defaults to the edit examples. */
-  examples?: Array<{ tag: string; text: string }>;
-  intro?: string;
   onFit?: () => void;
   onOpenCode?: () => void;
 }
 
-export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmation, onConfirm, onStop, onUndoRun, canUndoRun, onExample, disabled, shared = false, activity = null, examples = BOARD_EXAMPLES, intro, onFit, onOpenCode }) => {
-  const notice = shared ? (
+export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmation, onConfirm, onStop, onUndoRun, canUndoRun, onExample, disabled, activity = null, onFit, onOpenCode }) => {
+  // Everyone with access to the board shares this conversation.
+  const notice = (
     <p data-testid="agent-shared-notice" className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
       This conversation is shared with everyone who can open this board. What you ask here, and the assistant&apos;s answers, thinking and saved notes, are visible to them. Attached images are used for the request only and are not saved.
     </p>
-  ) : null;
+  );
 
   if (messages.length === 0) {
     return (
       <div className="px-5 py-5" data-testid="canvas-agent-empty">
         {notice}
         <p className="max-w-[36ch] text-[13px] leading-relaxed text-muted-foreground">
-          {intro ?? "Ask for a change to this board. The assistant uses the same commands as the editor, so every step can be undone, and it tells you exactly what it did."}
+          Ask for a diagram or a change to this board. The assistant draws new diagrams and edits with the same commands as the editor, so every step can be undone, and it tells you exactly what it did.
         </p>
         <h3 className="mt-7 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Try</h3>
         <ul className="mt-2 divide-y divide-border border-y border-border">
-          {examples.map(({ tag, text }) => (
+          {UNIFIED_EXAMPLES.map(({ tag, text }) => (
             <li key={tag}>
               <button
                 type="button"

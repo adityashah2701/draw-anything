@@ -52,7 +52,7 @@ import { planRemove } from "@/features/whiteboard/commands/remove";
 import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/data/use-whiteboard-auto-save";
 import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whiteboard-ui-state";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import { aiAnchorShift, planDiagramCode, shiftElement } from "./diagram-placement";
+import { planDiagramCode, shiftElement } from "./diagram-placement";
 import { useEditingText } from "./use-editing-text";
 import { coveredByPanels } from "@/features/whiteboard/components/overlays/panel-layout";
 import { useSelectedArrow } from "./use-selected-arrow";
@@ -66,7 +66,6 @@ import { centerOf, rotatePoint } from "@/core/geometry/box";
 import { createGestureHistory } from "@/features/whiteboard/hooks/interaction/gesture-history";
 import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
-import { useAIGeneration } from "./use-ai-generation";
 
 /**
  * LiveObject.update ignores keys whose value is undefined, so a cleared field (an arrow end
@@ -906,75 +905,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     uiState.setShowAIModal(true);
   }, [uiState]);
 
-  const aiShiftRef = useRef<{ x: number; y: number } | null>(null);
-
-  const anchorAIShift = useCallback(
-    (batch: DrawingElement[]) => {
-      if (aiShiftRef.current) return;
-      aiShiftRef.current = aiAnchorShift(batch, canvasViewport);
-    },
-    [canvasViewport],
-  );
-
-  const handleAddAIElement = useCallback(
-    (element: DrawingElement) => {
-      anchorAIShift([element]);
-      if (!aiShiftRef.current) return;
-      addElement(shiftElement(element, aiShiftRef.current) as unknown as DrawingElementJson);
-    },
-    [addElement, anchorAIShift],
-  );
-
-  const getAICanvasContext = useCallback(
-    () => ({
-      elements,
-      selectedElementIds: selectedElements,
-      viewport: {
-        zoom: canvasViewport.zoom,
-        panOffset: canvasViewport.panOffset,
-        width: canvasViewport.canvasSize.width,
-        height: canvasViewport.canvasSize.height,
-      },
-    }),
-    [
-      canvasViewport.canvasSize.height,
-      canvasViewport.canvasSize.width,
-      canvasViewport.panOffset,
-      canvasViewport.zoom,
-      elements,
-      selectedElements,
-    ],
-  );
-
-  const handleUpdateAIElements = useCallback(
-    (batch: DrawingElement[]) => {
-      const shift = aiShiftRef.current;
-      if (!shift || batch.length === 0) return;
-      updateElements(batch.map((element) => shiftElement(element, shift) as unknown as DrawingElementJson));
-    },
-    [updateElements],
-  );
-
-  const fitToScreenRef = useRef(handleFitToScreen);
-  fitToScreenRef.current = handleFitToScreen;
-
-  const aiState = useAIGeneration({
-    onAddElement: handleAddAIElement,
-    onUpdateElements: handleUpdateAIElements,
-    onRemoveElements: deleteElementsLive,
-    onBeforeBatch: anchorAIShift,
-    onGenerationStart: () => {
-      aiShiftRef.current = null;
-    },
-    // Once it is drawn, bring it into the part of the canvas the panels leave free. A moment later, so the
-    // board holds the finished diagram, and through a ref, since this callback is from when the run began.
-    onGenerationEnd: () => {
-      setTimeout(() => fitToScreenRef.current(), 300);
-    },
-    whiteboardId,
-    getCanvasContext: getAICanvasContext,
-  });
-
   /**
    * Draw diagram code on the canvas as one undo step. When updating, the
    * diagram it was loaded from is removed and the new one takes its place, so
@@ -1083,8 +1013,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     propertiesBar,
     updateArrowBendsAtPoint,
     applyDiagramCode,
-    handleAddAIElement,
-    ...aiState,
     handleEditingTextChange,
     handleEditingTextCommit,
     handleEditingTextMove,

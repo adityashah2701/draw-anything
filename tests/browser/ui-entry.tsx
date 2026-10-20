@@ -62,7 +62,6 @@ const AgentPanelHarness = ({ initial, running }: { initial: AgentUiMessage[]; ru
   const [messages, setMessages] = useState<AgentUiMessage[]>(initial);
   const agent = {
     messages,
-    shared: true,
     lockedBy: null,
     activity: null,
     running,
@@ -82,11 +81,6 @@ const AgentPanelHarness = ({ initial, running }: { initial: AgentUiMessage[]; ru
       <AIPanel
         isOpen
         onClose={() => {}}
-        triggerAIGeneration={() => {}}
-        isGenerating={false}
-        messages={[]}
-        workingLabel={null}
-        onClear={() => {}}
         onOpenCode={() => {}}
         onFitToScreen={() => {}}
         canvasAgent={agent as never}

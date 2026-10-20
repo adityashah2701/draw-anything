@@ -47,8 +47,6 @@ export interface RunAgentOptions {
   budget?: Partial<RunBudget>;
   /** Called with the current time in ms; tests pass a fake clock. */
   now?: () => number;
-  /** The unified agent is on: the generate and memory groups can be suggested from the request. */
-  unified?: boolean;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
 }
@@ -116,7 +114,7 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
   let wroteSinceCheck = false;
   const messages: CanvasMessage[] = [...(options.history ?? []), { role: "user", content: options.prompt, ...(options.images?.length ? { images: options.images } : {}) }];
   const results: ToolResult[] = [];
-  executor.enable(suggestGroups(options.prompt, { unified: options.unified }));
+  executor.enable(suggestGroups(options.prompt));
 
   let remaining: string[] = [];
   let limit: AgentRun["limit"];

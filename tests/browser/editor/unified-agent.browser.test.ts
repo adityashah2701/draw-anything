@@ -13,9 +13,9 @@ const DIAGRAM = () => [node("g-api", "Gateway", 0, 0, { ai: { semanticId: "api",
 
 const sse = (events: unknown[]) => events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
 
-/** The real server handler (flag on) with a scripted model, plus the diagram generator answering with a fixed stream. */
+/** The real server handler with a scripted model, plus the diagram generator answering with a fixed stream. */
 const serve = async (page: Page, script: ScriptStep[], opts: { generator?: () => { status: number; body: string; contentType?: string } } = {}) => {
-  const scripted = createScriptedHandler({ script, mem: createMemoryHost(), unified: true });
+  const scripted = createScriptedHandler({ script, mem: createMemoryHost() });
   const hits = { generate: 0 };
   await page.route("**/api/ai/generate-diagram", (route) => {
     if (route.request().method() === "GET") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ providers: ["groq"] }) });
@@ -44,10 +44,10 @@ const ask = async (panel: ReturnType<Page["getByRole"]>, text: string) => {
 const finished = (panel: ReturnType<Page["getByRole"]>, count = 1) => panel.getByTestId("agent-status").nth(count - 1).waitFor({ timeout: 20_000 });
 const backend = (s: EditorSession) => s.page.evaluate(() => ({ conversation: window.__editor.backend.conversation(), memories: window.__editor.backend.memories(), log: window.__editor.backend.mutationLog() }));
 
-suite("the unified agent (flag on) in the real editor", () => {
+suite("the unified agent in the real editor", () => {
   let s: EditorSession;
   beforeEach(async () => {
-    s = await openEditor({ unifiedAgent: true, elements: [node("old", "Existing", 100, 100)] as never });
+    s = await openEditor({ elements: [node("old", "Existing", 100, 100)] as never });
   });
   afterEach(async () => {
     await s?.close();

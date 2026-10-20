@@ -353,13 +353,7 @@ export const WhiteboardEditingOverlays = ({
       <AIPanel
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
-        triggerAIGeneration={controller.triggerAIGeneration}
-        canEdit={controller.elements.some((e) => e.ai?.role === "node")}
-        isGenerating={controller.isAIGenerating}
-        messages={controller.aiMessages}
-        workingLabel={controller.aiThoughtPhase}
         disabled={!whiteboardAccess.hasEditAccess}
-        onClear={controller.clearAIMessages}
         onOpenCode={controller.openCodePanel}
         onFitToScreen={controller.handleFitToScreen}
         canvasAgent={canvasAgent}

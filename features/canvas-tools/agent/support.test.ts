@@ -101,14 +101,11 @@ describe("turn client", () => {
   });
 });
 
-describe("suggestGroups with the unified agent", () => {
-  it("adds generate and memory only when the flag is on", async () => {
-    const { suggestGroups } = await import("./groups");
-    expect(suggestGroups("Draw an architecture diagram of a web shop")).not.toContain("generate");
-    expect(suggestGroups("Draw an architecture diagram of a web shop", { unified: true })).toContain("generate");
-    expect(suggestGroups("Always draw databases in blue, remember that", { unified: true })).toContain("memory");
-    expect(suggestGroups("Always draw databases in blue, remember that")).not.toContain("memory");
-    expect(suggestGroups("Rename the API node", { unified: true })).not.toContain("generate");
+describe("suggestGroups: generate and memory", () => {
+  it("adds generate and memory from the words of the request", () => {
+    expect(suggestGroups("Draw an architecture diagram of a web shop")).toContain("generate");
+    expect(suggestGroups("Always draw databases in blue, remember that")).toContain("memory");
+    expect(suggestGroups("Rename the API node")).not.toContain("generate");
   });
 });
 
@@ -117,6 +114,6 @@ describe("the unified panel's draw examples", () => {
     const { UNIFIED_EXAMPLES } = await import("@/features/whiteboard/components/overlays/agent-examples");
     const drawing = UNIFIED_EXAMPLES.filter((e) => /^Draw /.test(e.text));
     expect(drawing).toHaveLength(3);
-    for (const example of drawing) expect(suggestGroups(example.text, { unified: true }), example.text).toContain("generate");
+    for (const example of drawing) expect(suggestGroups(example.text), example.text).toContain("generate");
   });
 });

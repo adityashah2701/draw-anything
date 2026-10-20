@@ -43,6 +43,8 @@ export default defineSchema({
     .index("by_whiteboardId", ["whiteboardId"])
     .index("by_parentId", ["parentId"]),
 
+  // aiFrames, aiFrameCheckpoints and aiDecisions are from the retired "Generate" tab: nothing writes them any more.
+  // They stay so stored history is not lost (aiConversation.importLegacyFrames still reads aiFrames).
   aiFrames: defineTable({
     frameId: v.string(),
     whiteboardId: v.optional(v.string()),
