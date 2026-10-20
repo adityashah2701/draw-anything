@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ConvexClientProvider from "@/providers/convex-client-provider";
-import { MemberProvider } from "@/features/dashboard/components/member/utility.function";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -40,7 +39,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ConvexClientProvider>
-            <MemberProvider>{children}</MemberProvider>
+            {children}
           </ConvexClientProvider>
           <Toaster position="bottom-left" offset={{ left: 68, bottom: 24 }} />
         </ThemeProvider>

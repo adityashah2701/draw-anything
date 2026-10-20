@@ -79,6 +79,18 @@ Concepts weighed: a 48px icon-only rail (most canvas, but four destinations plus
 - **Logo** is the original silhouette in ink at four strengths (`components/shared/logo-mark.tsx`, `public/logo.svg`). Orange is reserved for the agent, so the mark no longer uses it.
 - **Motion**: 150-200ms, `--ease-out-strong`, width and colour only; rows scale to 0.98 on press; everything stops under `prefers-reduced-motion`. The collapsed rail mounts tooltips only while collapsed.
 
+## Team page
+
+`features/team/` (`team-model.ts` pure helpers, `components/team-view.tsx` presentational, `components/team-page.tsx` Clerk wiring). Reached from Organization > Members, the dashboard's "Invite people" (opens the invite dialog) and the workspace menu's "Manage workspace".
+
+Clerk's `<OrganizationProfile>` was replaced rather than restyled. Its card-in-card shell, purple default avatar and "Secured by Clerk" / "Development mode" footer are Clerk-controlled and cannot be themed away, and the product wanted one list, one invite flow and its own dialogs. The page is built on the Clerk hooks and resource methods in the installed version (`@clerk/nextjs` 6.39): `useOrganization` memberships and invitations, `inviteMembers`, `updateMember`, `removeMember`, invitation `revoke`, `update`, `setLogo`, `user.leaveOrganization`, `destroy`.
+
+- **Header** is the workspace name, a mono summary (`3 members · 2 pending`) and one primary action, Invite people. Non-admins see the list and Leave only.
+- **Invite** takes several addresses (comma, space or newline separated), validates before sending, skips people already invited, and picks a role from the workspace's roles.
+- **Lists** are hairline rows in one bordered surface: role is a menu on the row for admins, remove asks for confirmation, revoke is one step.
+- **Workspace** holds name and logo, Leave, and Delete (only where Clerk allows admins to delete, typed confirmation).
+- Verified domains and join requests are not rebuilt; a link opens Clerk's own settings for them.
+
 ## Landing motion
 
 The public landing page (`features/dashboard/components/landing/`) is the one place motion explains the product rather than acknowledging input. Rules, from emilkowalski/skill (`emil-design-eng`, `animate`, `review-animations`):
