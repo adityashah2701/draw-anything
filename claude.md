@@ -25,10 +25,6 @@ npx convex deploy
 
 Tests live next to source (`*.test.ts`) under `core`, `features`, `lib`. The real-editor browser tests (`tests/browser/editor/*`) need a Chrome: set `CHROME_PATH` (e.g. Playwright's `/opt/pw-browsers/chromium-*/chrome-linux/chrome`); without one they skip silently. `editor/groups`, `editor/inspector` and `editor/guides` cover groups, precision editing and guides; `rotation-export` checks rotated shapes in export. The editor harness cannot open a read-only board (React #185 in the fake room, also on the commit before groups). Browser tests (`tests/browser`) bundle real modules via `harness.ts` (`openPage({ secure, ui })`: `secure` serves from localhost so the Clipboard API exists, `ui` adds real React components on `window.U`). `vitest.config.ts` maps the `@/` alias. They are pure-logic tests (no DOM or React renderer is installed): hooks and components are covered through the pure modules they delegate to, so browser behaviour still needs a manual check. `package-lock.json` matches `package.json` again (`npm ci` works). `npm run lint` is clean; `next build` needs `NEXT_PUBLIC_CONVEX_URL` and Clerk keys set to prerender.
 
-## SEO
-
-`lib/seo/site.ts` is the single source for the site URL, public routes and private path prefixes. Set `NEXT_PUBLIC_SITE_URL` (or deploy on Vercel with a production domain) in production: without it canonical URLs, OG image URLs and the sitemap are omitted rather than guessed, and the build logs a warning. Public pages use `publicPageMetadata`, private ones `privatePageMetadata`; new private path prefixes go in `PRIVATE_PATH_PREFIXES` (robots.txt and `X-Robots-Tag` follow). The landing page (`Landing`) is server-rendered inside `HomeShell` so crawlers get its HTML.
-
 ## Architecture
 
 ### Directory layout

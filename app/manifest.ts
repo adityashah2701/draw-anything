@@ -1,12 +1,10 @@
 import type { MetadataRoute } from "next";
 import { BRAND_COLORS } from "@/lib/brand";
-import { SITE_DESCRIPTION } from "@/lib/seo/site";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Draw Anything",
     short_name: "Draw Anything",
-    description: SITE_DESCRIPTION,
     start_url: "/",
     display: "standalone",
     background_color: BRAND_COLORS.paper,

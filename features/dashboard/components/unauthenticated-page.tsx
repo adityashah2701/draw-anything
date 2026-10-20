@@ -1,3 +1,6 @@
+"use client";
+
+import React from "react";
 import { CtaSection } from "./landing/cta-section";
 import { FeaturesSection } from "./landing/features-section";
 import { FooterSection } from "./landing/footer-section";
@@ -5,8 +8,7 @@ import { HeroSection } from "./landing/hero-section";
 import { HowSection } from "./landing/how-section";
 import { LandingNav } from "./landing/landing-nav";
 
-/** The public landing page. Rendered on the server so its content is in the HTML crawlers fetch. */
-export const Landing = () => (
+const Page = () => (
   <main className="relative min-h-screen w-full overflow-x-clip bg-background text-foreground">
     <LandingNav />
     <HeroSection />
@@ -16,3 +18,5 @@ export const Landing = () => (
     <FooterSection />
   </main>
 );
+
+export default Page;

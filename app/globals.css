@@ -449,8 +449,3 @@
   height: 0 !important;
   overflow: hidden !important;
 }
-
-/* A returning signed-in visitor (see AUTH_HINT_SCRIPT in app/(main-page)/page.tsx) never sees the landing page flash. */
-html[data-auth="in"] [data-landing] {
-  display: none;
-}

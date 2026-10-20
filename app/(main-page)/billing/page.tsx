@@ -1,8 +1,4 @@
-import type { Metadata } from "next";
-import { privatePageMetadata } from "@/lib/seo/metadata";
 import { PricingModal } from "@/features/billing/components/pricing-modal";
-
-export const metadata: Metadata = privatePageMetadata("Billing");
 
 export default function BillingPage() {
   return (

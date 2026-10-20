@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 import { buildContentSecurityPolicy } from "./lib/security/csp";
-import { getSiteUrl, PRIVATE_PATH_PREFIXES } from "./lib/seo/site";
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -16,23 +15,10 @@ const securityHeaders = [
   },
 ];
 
-if (process.env.NODE_ENV === "production" && !getSiteUrl()) {
-  console.warn(
-    "[seo] NEXT_PUBLIC_SITE_URL is not set: canonical URLs, social images and the sitemap are omitted until it is.",
-  );
-}
-
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
-    return [
-      { source: "/:path*", headers: securityHeaders },
-      // Private surfaces are never indexed, even if a link to one leaks.
-      ...PRIVATE_PATH_PREFIXES.map((prefix) => ({
-        source: `${prefix}/:path*`,
-        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }],
-      })),
-    ];
+    return [{ source: "/:path*", headers: securityHeaders }];
   },
 };
 
