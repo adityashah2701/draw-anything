@@ -67,7 +67,7 @@ export const aiSemanticNodeKindSchema = z.enum([
 const semanticNodeKindValues = new Set<string>(aiSemanticNodeKindSchema.options);
 
 // Words models commonly use for kinds the schema spells differently.
-const KIND_ALIASES: Record<string, AISemanticNodeKind> = {
+export const KIND_ALIASES: Record<string, AISemanticNodeKind> = {
   auth: "authentication",
   authn: "authentication",
   authz: "authentication",
@@ -125,7 +125,7 @@ export const aiDiagramTypeSchema = z.enum([
 
 const diagramTypeValues = new Set<string>(aiDiagramTypeSchema.options);
 
-const DIAGRAM_TYPE_ALIASES: Record<string, AIDiagramType> = {
+export const DIAGRAM_TYPE_ALIASES: Record<string, AIDiagramType> = {
   erd: "entity-relationship",
   mindmap: "mind-map",
   "flow-chart": "flowchart",

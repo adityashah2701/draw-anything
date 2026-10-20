@@ -6,6 +6,16 @@ export interface DiagramCodeIssue {
   line: number;
   severity: "error" | "warning";
   message: string;
+  /** Stable code (`property/unknown`, ...); match on this, not on the message. */
+  code?: string;
+  /** 1-based start column and the end of the range. */
+  column?: number;
+  endLine?: number;
+  endColumn?: number;
+  /** Offsets into the source. */
+  span?: { start: number; end: number };
+  /** A likely fix: the word that was probably meant. */
+  suggestion?: string;
 }
 
 export interface ParsedNode {
@@ -57,6 +67,21 @@ export interface ParsedGroup {
   parentId?: string;
 }
 
+export interface ParsedFrame {
+  id: string;
+  title: string;
+  /** The enclosing frame, when there is one. */
+  parentId?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  padding?: number;
+  color?: string;
+  /** Every node inside the frame, including those of nested frames and groups. */
+  nodeIds: string[];
+}
+
 export interface ParsedDiagramCode {
   title?: string;
   diagramType?: AIDiagramType;
@@ -64,6 +89,7 @@ export interface ParsedDiagramCode {
   nodes: ParsedNode[];
   edges: ParsedEdge[];
   groups: ParsedGroup[];
+  frames: ParsedFrame[];
   issues: DiagramCodeIssue[];
 }
 

@@ -383,3 +383,24 @@ Orders > Orders DB: SQL`);
     }
   });
 });
+
+describe("frames in code before the canvas can draw them", () => {
+  it("still draws the nodes and says plainly that the frame is not drawn", () => {
+    const result = elementsFromDiagramCode("frame Edge {\n  API\n  Web\n}\nWeb > API", { generationId: "g", frameId: "f" });
+    expect(result.elements.filter((e) => e.ai?.role === "node")).toHaveLength(2);
+    expect(result.issues).toEqual([expect.objectContaining({ severity: "warning", code: "frame/not-drawn" })]);
+  });
+});
+
+describe("multi-line labels", () => {
+  it("draw as one node whose label keeps its line break, and come back out of the canvas the same way", () => {
+    const code = 'Orders [label: "Order\\nservice", kind: service]\nOrders > Billing: "retry\\nlater"';
+    const result = elementsFromDiagramCode(code, { generationId: "g", frameId: "f" });
+    expect(result.issues).toEqual([]);
+    const node = result.elements.find((e) => e.ai?.role === "node" && e.ai.semanticId === "orders");
+    expect(node?.label).toBe("Order\nservice");
+    expect(result.elements.find((e) => e.ai?.role === "edge-label")?.text).toBe("retry\nlater");
+    const again = serializeDiagramCode(graphFromElements(result.elements).graph);
+    expect(parseDiagramCode(again).nodes.find((n) => n.name.startsWith("Order"))?.label).toBe("Order\nservice");
+  });
+});
