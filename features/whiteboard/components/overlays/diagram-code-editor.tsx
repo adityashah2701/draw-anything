@@ -2,10 +2,8 @@
 
 import * as React from "react";
 import { Check, ChevronRight, Copy, Download, Play, RefreshCw } from "lucide-react";
-import { elementsFromDiagramCode, graphFromElements } from "@/features/diagram-code/canvas";
+import { canvasDrift, loadFromCanvas, planApply, type Conflict, type SyncState } from "@/features/diagram-code/apply";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
-import { serializeDiagramCode } from "@/features/diagram-code/serialize";
-import { findMovedNodes } from "@/features/diagram-code/pins";
 import type { ApplyDiagramCodePayload, DiagramCodeIssue } from "@/features/diagram-code/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
@@ -123,9 +121,12 @@ const CodeArea: React.FC<{
 
 export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, selectedElementIds, onApply, disabled = false, loadToken = 0 }) => {
   const [code, setCode] = React.useState("");
-  // Elements the current code was loaded from; "Update" replaces exactly these.
-  const [sourceIds, setSourceIds] = React.useState<string[]>([]);
+  // What the code was last synchronised with: which elements it owns and what it produced. "Update"
+  // changes exactly these, keeping their ids; see features/diagram-code/apply.ts.
+  const [sync, setSync] = React.useState<SyncState | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [conflicts, setConflicts] = React.useState<Conflict[] | null>(null);
+  const [confirmReload, setConfirmReload] = React.useState(false);
   const [includeLayout, setIncludeLayout] = React.useState(true);
   const [copied, setCopied] = React.useState(false);
   const [referenceOpen, setReferenceOpen] = React.useState(false);
@@ -139,18 +140,22 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
   const latest = React.useRef({ elements, selectedElementIds, includeLayout });
   latest.current = { elements, selectedElementIds, includeLayout };
 
-  const loadFromCanvas = React.useCallback(() => {
+  const drift = React.useMemo(() => (sync ? canvasDrift(elements, sync) : null), [elements, sync]);
+  const drifted = drift ? drift.edited.length + drift.missing.length : 0;
+
+  const loadFromBoard = React.useCallback(() => {
     const { elements: all, selectedElementIds: selected, includeLayout: layout } = latest.current;
-    const scope = selected.length > 0 ? all.filter((el) => selected.includes(el.id)) : all;
-    const { graph, consumedIds } = graphFromElements(scope, { layout });
-    if (graph.nodes.length === 0) {
+    const loaded = loadFromCanvas(all, { selectedIds: selected, layout, generationId: newGenerationId() });
+    if (!loaded) {
       setNotice("No shapes to convert. Draw some labelled shapes, or select a diagram.");
       return;
     }
-    setCode(serializeDiagramCode(graph));
-    setSourceIds(consumedIds);
+    setCode(loaded.code);
+    setSync(loaded.sync);
+    setConflicts(null);
+    setConfirmReload(false);
     setNotice(
-      `Loaded ${graph.nodes.length} node${graph.nodes.length === 1 ? "" : "s"} and ${graph.edges.length} connection${graph.edges.length === 1 ? "" : "s"}` +
+      `Loaded ${loaded.nodeCount} node${loaded.nodeCount === 1 ? "" : "s"} and ${loaded.edgeCount} connection${loaded.edgeCount === 1 ? "" : "s"}` +
         (selected.length > 0 ? " from your selection" : " from the canvas") +
         (layout ? ", with position, size and sides." : "."),
     );
@@ -160,38 +165,56 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
   React.useEffect(() => {
     if (loadToken === lastToken.current) return;
     lastToken.current = loadToken;
-    loadFromCanvas();
-  }, [loadToken, loadFromCanvas]);
+    loadFromBoard();
+  }, [loadToken, loadFromBoard]);
 
-  const run = (mode: "add" | "update") => {
-    // Updating keeps nodes where the user dragged them. Read at apply time, from the elements as
-    // they are now, so moves made after the code was loaded count.
-    const pins = mode === "update" && sourceIds.length > 0 ? findMovedNodes(elements.filter((el) => sourceIds.includes(el.id))) : undefined;
-    const result = elementsFromDiagramCode(code, { generationId: newGenerationId(), frameId: "diagram-code", pins });
-    if (result.elements.length === 0) {
-      setNotice("Nothing was drawn. Fix the errors first.");
+  /** Plan the change against the board as it is now; nothing is written unless the code is valid and unambiguous. */
+  const run = (mode: "add" | "update", resolve?: "code" | "canvas") => {
+    const outcome = planApply({
+      code,
+      canvas: elements,
+      sync: mode === "update" ? sync : null,
+      resolve,
+      generationId: newGenerationId(),
+    });
+    if (outcome.status === "invalid") {
+      setConflicts(null);
+      setNotice(`Nothing was drawn, the canvas is unchanged: ${outcome.diagnostics[0]?.message ?? "fix the errors first."}`);
       return;
     }
-    // Every node placed by x and y is already where it belongs: do not slide the diagram to the viewport.
-    const allPlaced = parseDiagramCode(code).nodes.every((n) => n.x !== undefined && n.y !== undefined);
-    onApply({
-      elements: result.elements,
-      replaceIds: mode === "update" ? sourceIds : [],
-      anchored: allPlaced || Boolean(pins && pins.size > 0),
-    });
-    // Later updates replace what was just drawn.
-    setSourceIds(result.elements.map((el) => el.id));
-    setNotice(mode === "update" ? "Diagram updated." : "Added to the canvas.");
+    if (outcome.status === "conflict") {
+      setConflicts(outcome.conflicts);
+      setNotice("The canvas and the code both changed the same thing. Choose which to keep; nothing was changed yet.");
+      return;
+    }
+    const { plan } = outcome;
+    setConflicts(null);
+    setConfirmReload(false);
+    if (mode === "update" && sync) {
+      onApply({ elements: [], replaceIds: [], anchored: true, patch: plan.patch });
+    } else {
+      // A new diagram: placed at the viewport, unless every node was positioned in code.
+      onApply({ elements: plan.patch.add, replaceIds: [], anchored: plan.anchored });
+    }
+    setSync(plan.sync);
+    const { added, updated, removed, restored } = plan.summary;
+    setNotice(
+      mode === "add" || !sync
+        ? "Added to the canvas."
+        : added + updated + removed + restored === 0
+          ? "Already up to date."
+          : `Updated: ${[added && `${added} added`, updated && `${updated} changed`, removed && `${removed} removed`, restored && `${restored} restored`].filter(Boolean).join(", ")}.`,
+    );
   };
 
-  const primary = sourceIds.length > 0 ? "update" : "add";
+  const primary = sync ? "update" : "add";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <button
           type="button"
-          onClick={loadFromCanvas}
+          onClick={loadFromBoard}
           disabled={disabled}
           className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
@@ -207,7 +230,8 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
           type="button"
           onClick={() => {
             setCode(EXAMPLE);
-            setSourceIds([]);
+            setSync(null);
+            setConflicts(null);
             setNotice(null);
           }}
           disabled={disabled}
@@ -236,6 +260,7 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
         onChange={(value) => {
           setCode(value);
           setNotice(null);
+          setConflicts(null);
         }}
         onSubmit={() => canRun && run(primary)}
         issues={issues}
@@ -248,6 +273,44 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
         </span>
         {notice && <span className="truncate pl-3 text-muted-foreground">{notice}</span>}
       </div>
+
+      {conflicts && (
+        <div role="alert" className="shrink-0 space-y-2 rounded-md border border-warning/50 bg-warning/10 p-2 text-[12px]">
+          <p className="font-medium text-foreground">Changed in both places</p>
+          <ul className="max-h-24 space-y-1 overflow-y-auto">
+            {conflicts.slice(0, 6).map((c) => (
+              <li key={`${c.elementId}-${c.field}`} className="leading-snug text-foreground/85">
+                <span className="font-mono text-[11px]">{c.key.replace(/^[a-z-]+:/, "")}.{c.field}</span>: canvas has <q>{String(c.canvas ?? "none")}</q>, code says <q>{String(c.code ?? "none")}</q>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => run("update", "code")} className="inline-flex h-7 items-center rounded-md border border-border bg-background px-2.5 font-medium transition-colors hover:bg-muted">
+              Use the code
+            </button>
+            <button type="button" onClick={() => run("update", "canvas")} className="inline-flex h-7 items-center rounded-md border border-border bg-background px-2.5 font-medium transition-colors hover:bg-muted">
+              Keep the canvas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {drifted > 0 && !conflicts && (
+        <div className="flex shrink-0 items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[12px]" aria-live="polite">
+          <span className="text-foreground/85">
+            The canvas has {drifted} change{drifted === 1 ? "" : "s"} the code does not show.
+          </span>
+          {confirmReload || code === sync?.code ? (
+            <button type="button" onClick={loadFromBoard} className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline">
+              {code === sync?.code ? "Reload from canvas" : "Replace my code edits"}
+            </button>
+          ) : (
+            <button type="button" onClick={() => setConfirmReload(true)} className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline">
+              Reload from canvas
+            </button>
+          )}
+        </div>
+      )}
 
       {issues.length > 0 && (
         <ul className="max-h-28 shrink-0 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 text-[12px]">

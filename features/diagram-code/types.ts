@@ -45,6 +45,8 @@ export interface ParsedNode {
 export type EdgeSide = "top" | "right" | "bottom" | "left";
 
 export interface ParsedEdge {
+  /** Stable edge id (see `IREdge.id`); lets an updated diagram keep the connectors it already has. */
+  id?: string;
   from: string;
   to: string;
   label?: string;
@@ -103,4 +105,9 @@ export interface ApplyDiagramCodePayload {
    * put them), so the canvas must not shift them to line up with the diagram they replace.
    */
   anchored?: boolean;
+  /**
+   * An in-place update planned against the board (see `apply.ts`): written as one undo step, element
+   * ids kept. When present, `elements` is ignored and `replaceIds` is empty.
+   */
+  patch?: { add: DrawingElement[]; update: DrawingElement[]; remove: string[] };
 }
