@@ -25,9 +25,9 @@ export const MemberProvider = ({ children }: { children: ReactNode }) => {
   const getRoleColor = (role: string) => {
     switch (role) {
       case "org:admin":
-        return "bg-purple-100 text-purple-700 border-purple-200";
+        return "bg-primary/10 text-primary border-primary/20";
       case "org:member":
-        return "bg-green-100 text-green-700 border-green-200";
+        return "bg-muted text-foreground border-border";
       default:
         return "bg-muted text-foreground border-border";
     }

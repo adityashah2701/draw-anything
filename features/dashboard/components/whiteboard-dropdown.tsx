@@ -1,4 +1,7 @@
 import React from "react";
+import Link from "next/link";
+import { Copy, ImageIcon, MoreHorizontal, Pencil, SquareArrowOutUpRight, Trash2 } from "lucide-react";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,93 +10,55 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Copy, Eye, MoreVertical, Pencil, Trash, Upload } from "lucide-react";
-import Link from "next/link";
 
 interface Props {
-  whiteboard: any;
-  handleCopyLink: any;
-  setIsImageUploadOpen: any;
+  whiteboard: { _id: string; title: string };
+  handleCopyLink: (e: React.SyntheticEvent, id: string) => void;
+  setIsImageUploadOpen: (open: boolean) => void;
   openRenameDialog: () => void;
   openDeleteDialog: () => void;
+  /** Replaces the default "more" button. Must be a single element. */
+  trigger?: React.ReactElement;
 }
 
-const WhiteboardDropdown = ({
+/** The actions on a whiteboard, shared by the dashboard and the whiteboards list. */
+const WhiteboardMenu = ({
   whiteboard,
   handleCopyLink,
   openDeleteDialog,
   openRenameDialog,
   setIsImageUploadOpen,
-}: Props) => {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-border shadow-sm cursor-pointer"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MoreVertical className="w-4 h-4" />
+  trigger,
+}: Props) => (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      {trigger ?? (
+        <Button variant="ghost" size="icon" className="size-7" aria-label={`Actions for ${whiteboard.title}`}>
+          <MoreHorizontal />
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem asChild>
-          <Link
-            href={`/whiteboard/${whiteboard._id}`}
-            className="cursor-pointer"
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            Open
-          </Link>
-        </DropdownMenuItem>
+      )}
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuItem asChild>
+        <Link href={`/whiteboard/${whiteboard._id}`}>
+          <SquareArrowOutUpRight /> Open
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={(e) => handleCopyLink(e as unknown as React.SyntheticEvent, whiteboard._id)}>
+        <Copy /> Copy link
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={openRenameDialog}>
+        <Pencil /> Rename
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setIsImageUploadOpen(true)}>
+        <ImageIcon /> Change preview
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem variant="destructive" onSelect={openDeleteDialog}>
+        <Trash2 /> Delete
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
 
-        <DropdownMenuItem asChild>
-          <button
-            onClick={(e) => {
-              handleCopyLink(e, whiteboard._id);
-            }}
-            className="w-full cursor-pointer justify-start border-none outline-none p-0"
-          >
-            <Copy className="w-4 h-4 mr-2" />
-            Copy Link
-          </button>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <button
-            onClick={() => setIsImageUploadOpen(true)}
-            className="w-full cursor-pointer justify-start border-none outline-none p-0"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Edit Image
-          </button>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <button
-            onClick={(e) => {
-              openRenameDialog();
-            }}
-            className="w-full cursor-pointer justify-start border-none outline-none p-0"
-          >
-            <Pencil className="w-4 h-4 mr-2" />
-            Rename
-          </button>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild variant="destructive">
-          <button
-            onClick={() => {
-              openDeleteDialog();
-            }}
-            className="w-full cursor-pointer justify-start border-none outline-none p-0"
-          >
-            <Trash className="w-4 h-4 mr-2" />
-            Delete
-          </button>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-};
-
-export default WhiteboardDropdown;
+export default WhiteboardMenu;

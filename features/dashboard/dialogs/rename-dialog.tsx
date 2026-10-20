@@ -34,35 +34,32 @@ const RenameDialog = ({
     <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Rename Whiteboard</DialogTitle>
+          <DialogTitle>Rename whiteboard</DialogTitle>
           <DialogDescription>
-            Enter a new name for your whiteboard. This will be visible to all
-            collaborators.
+            Everyone with access sees the new name.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
+        <div className="grid gap-2">
+            <Label htmlFor="name" className="label-mono">
               Name
             </Label>
             <Input
               id="name"
+              autoFocus
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="col-span-3"
-              placeholder="Enter whiteboard name..."
+              placeholder="Whiteboard name"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   handleRename();
                 }
               }}
             />
-          </div>
         </div>
         <DialogFooter>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={() => setIsRenameDialogOpen(false)}
           >
             Cancel

@@ -28,7 +28,7 @@ type NavigationItem =
 const LandingPage = () => {
   const { isLoaded, isSignedIn, user } = useUser();
   const [selectedPage, setSelectedPage] = useState<NavigationItem>("Dashboard");
-  const { organization, membership } = useOrganization();
+  const { organization } = useOrganization();
   if (!isLoaded) {
     return <CustomLoader />;
   }
@@ -38,48 +38,34 @@ const LandingPage = () => {
     return <Page />;
   }
 
+  const goTo = (page: string) => setSelectedPage(page as NavigationItem);
+
   // Render the appropriate authenticated page component
   const renderSelectedPage = () => {
-    const commonProps = {
-      selectedPage,
-      setSelectedPage,
-      user,
-      organization,
-      membership,
-    };
-
     switch (selectedPage) {
-      case "Dashboard":
-        return <Dashboard {...commonProps} />;
       case "Whiteboards":
-        return <Whiteboards {...commonProps} />;
+        return <Whiteboards />;
       case "Members":
-        return <Members {...commonProps} />;
+        return <Members user={user} organization={organization} />;
       case "Billing":
         return <BillingPage />;
       default:
-        return <Dashboard {...commonProps} />;
+        return <Dashboard user={user} selectedPage={selectedPage} setSelectedPage={goTo} />;
     }
   };
 
   return (
     <SidebarProvider>
-      <AppSidebar
-        selectedPage={selectedPage}
-        setSelectedPage={(page: string) =>
-          setSelectedPage(page as NavigationItem)
-        }
-      />
+      <AppSidebar selectedPage={selectedPage} setSelectedPage={goTo} />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-card px-4 sticky top-0 z-50">
+        <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3">
           <SidebarTrigger className="-ml-1" />
+          <span className="label-mono sr-only md:not-sr-only">{selectedPage}</span>
           <div className="flex-1">
             <CleanNavbar isSidebarIntegrated={true} />
           </div>
         </header>
-        <main className="flex-1 overflow-auto bg-background">
-          {renderSelectedPage()}
-        </main>
+        <main className="flex-1 overflow-auto bg-background">{renderSelectedPage()}</main>
       </SidebarInset>
     </SidebarProvider>
   );
