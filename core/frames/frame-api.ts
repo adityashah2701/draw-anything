@@ -613,8 +613,12 @@ const stepEach = (stored: readonly StoredElement[], ids: readonly string[], step
 /** `updateFrame` for several frames at once (the properties bar): one patch, locked and unchanged frames skipped and reported. */
 export const updateFrames = (stored: readonly StoredElement[], ids: readonly string[], changes: FrameChanges): FrameResult<ManyResult> => stepEach(stored, ids, (current, id) => updateFrame(current, id, changes));
 
-/** `fitFrameToContent` for several frames at once. */
-export const fitFrames = (stored: readonly StoredElement[], ids: readonly string[]): FrameResult<ManyResult> => stepEach(stored, ids, (current, id) => fitFrameToContent(current, id));
+/** `fitFrameToContent` for several frames at once. Inner frames are fitted first, so an outer one wraps their new size whatever order `ids` came in. */
+export const fitFrames = (stored: readonly StoredElement[], ids: readonly string[]): FrameResult<ManyResult> => {
+  const depth = buildFrameIndex(stored).depthOf;
+  const innermostFirst = [...new Set(ids)].sort((a, b) => (depth.get(b) ?? 0) - (depth.get(a) ?? 0));
+  return stepEach(stored, innermostFirst, (current, id) => fitFrameToContent(current, id));
+};
 
 /** Puts frame `childId` inside `parentId`, or on the canvas when `parentId` is null. */
 export const nestFrame = (stored: readonly StoredElement[], childId: string, parentId: string | null): FrameResult<OwnershipResult> => {

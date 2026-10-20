@@ -50,7 +50,7 @@ export const TextField = ({ label, value, onCommit, disabled, maxLength }: TextF
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            commit(draft ?? shown);
+            if (draft !== null) commit(draft); // an untouched mixed field must not write its empty text
             e.currentTarget.select();
           } else if (e.key === "Escape") {
             e.preventDefault();

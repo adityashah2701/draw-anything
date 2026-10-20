@@ -535,6 +535,16 @@ describe("editing several frames at once", () => {
     expect("title" in byId(applyPatch(stored, result.patch), "G")).toBe(false);
   });
 
+  it("fits an outer frame around its inner frame's new size even when the outer id comes first", () => {
+    const stored = [frame("O", 0, 0, 900, 700), frame("I", 20, 40, 800, 600, { frameId: "O" }), rect("a", 100, 150, 100, 60, { frameId: "I" })];
+    const parentFirst = applyPatch(stored, must(fitFrames(stored, ["O", "I"])).patch);
+    const childFirst = applyPatch(stored, must(fitFrames(stored, ["I", "O"])).patch);
+    expect(frameBox(byId(parentFirst, "O") as FrameShape)).toEqual(frameBox(byId(childFirst, "O") as FrameShape));
+    const inner = frameBox(byId(parentFirst, "I") as FrameShape)!;
+    expect(frameBox(byId(parentFirst, "O") as FrameShape)!.maxX).toBeLessThan(900);
+    expect(frameBox(byId(parentFirst, "O") as FrameShape)!.minX).toBeLessThanOrEqual(inner.minX);
+  });
+
   it("fits frames to what they hold, nested ones included, in one patch", () => {
     const stored = [frame("O", 0, 0, 900, 700), frame("I", 20, 40, 800, 600, { frameId: "O" }), rect("a", 100, 150, 100, 60, { frameId: "I" })];
     const result = must(fitFrames(stored, ["I", "O"]));
