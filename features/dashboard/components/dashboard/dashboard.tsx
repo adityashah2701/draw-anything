@@ -9,6 +9,7 @@ import { useApiQuery } from "@/hooks/use-api-query";
 import OrganizationLoading from "./organization-loading";
 import NoOrganizationState from "./no-organization";
 import { DashboardHome, DashboardSkeleton } from "./dashboard-home";
+import { PendingWorkspaces } from "@/features/invitations/components/pending-workspaces";
 
 interface DashboardProps {
   user?: unknown;
@@ -45,15 +46,18 @@ const Dashboard = ({ setSelectedPage, onInvite }: DashboardProps) => {
   };
 
   return (
-    <DashboardHome
-      organizationName={organization.name}
-      membersCount={organization.membersCount}
-      boards={boards}
-      isCreating={isPending}
-      onCreate={handleCreateWhiteboard}
-      onInvite={onInvite}
-      onShowAll={() => setSelectedPage("Whiteboards")}
-    />
+    <>
+      <PendingWorkspaces className="mx-auto w-full max-w-6xl px-4 pt-8 sm:px-8 sm:pt-10" />
+      <DashboardHome
+        organizationName={organization.name}
+        membersCount={organization.membersCount}
+        boards={boards}
+        isCreating={isPending}
+        onCreate={handleCreateWhiteboard}
+        onInvite={onInvite}
+        onShowAll={() => setSelectedPage("Whiteboards")}
+      />
+    </>
   );
 };
 
