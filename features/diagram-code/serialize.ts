@@ -1,4 +1,5 @@
 import type { AIDiagramType } from "@/features/ai/types";
+import { escapeString } from "./language/strings";
 
 export interface SerializableGraph {
   diagramType?: AIDiagramType;
@@ -27,6 +28,14 @@ const IMPLIED_SHAPE: Record<string, string> = { decision: "diamond", start: "pil
 
 const clean = (text: string) => text.replace(/\s+/g, " ").replace(/"/g, "'").trim();
 
+/** A label that may span lines: whitespace is tidied within each line, line breaks are kept. */
+const cleanMultiline = (text: string) =>
+  text
+    .split(/\r?\n/)
+    .map((line) => clean(line))
+    .filter((line) => line !== "")
+    .join("\n");
+
 /** Quote a name only when the parser would otherwise misread it. */
 const writeName = (name: string): string =>
   name === "" ||
@@ -35,7 +44,7 @@ const writeName = (name: string): string =>
   DIRECTIVE_LOOKALIKE.test(name) ||
   BLOCK_KEYWORD_LOOKALIKE.test(name) ||
   CONNECTOR_IN_NAME.test(name)
-    ? `"${name}"`
+    ? `"${escapeString(name)}"`
     : name;
 
 const connectorFor = (edge: { dashed?: boolean; bidirectional?: boolean; plain?: boolean }) =>
@@ -71,7 +80,8 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
     if (node.y !== undefined) props.push(`y: ${Math.round(node.y)}`);
     if (node.width !== undefined) props.push(`w: ${Math.round(node.width)}`);
     if (node.height !== undefined) props.push(`h: ${Math.round(node.height)}`);
-    if (clean(node.label) !== name) props.push(`label: "${clean(node.label)}"`);
+    const label = cleanMultiline(node.label);
+    if (label !== name) props.push(`label: "${escapeString(label)}"`);
     return props.length > 0 ? `${writeName(name)} [${props.join(", ")}]` : writeName(name);
   };
 
@@ -140,7 +150,10 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
         ...(edge.toSide ? [`to: ${edge.toSide}`] : []),
       ];
       const props = edgeProps.length > 0 ? ` [${edgeProps.join(", ")}]` : "";
-      const label = edge.label ? `: ${clean(edge.label)}${props}` : props ? `:${props}` : "";
+      const text = edge.label ? cleanMultiline(edge.label) : "";
+      // A label with a line break must be quoted to say so.
+      const shown = text.includes("\n") ? `"${escapeString(text)}"` : text;
+      const label = shown ? `: ${shown}${props}` : props ? `:${props}` : "";
       return `${writeName(nameOf.get(edge.from)!)} ${connectorFor(edge)} ${writeName(nameOf.get(edge.to)!)}${label}`;
     });
   if (edgeLines.length > 0) {
