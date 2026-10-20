@@ -40,6 +40,15 @@ const PAIRS: Array<[string, string, number]> = [
   ["ring", "card", 3],
   ["sidebar-foreground", "sidebar", 4.5],
   ["sidebar-primary-foreground", "sidebar-primary", 4.5],
+  // The two roles that carry meaning: ink (primary) and markup (agent).
+  ["agent", "background", 3],
+  ["agent", "card", 3],
+  ["agent-foreground", "agent", 4.5],
+  ["success", "background", 3],
+  ["warning", "background", 3],
+  ["muted-foreground", "sidebar", 4.5],
+  ["primary", "background", 4.5],
+  ["input", "background", 1.3],
 ];
 
 describe.each(Object.entries(themes))("%s theme contrast", (_name, theme) => {
