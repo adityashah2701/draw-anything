@@ -2,7 +2,7 @@ import { createMemoryHost, type MemoryHostOptions } from "./memory-host";
 import { createCanvasTools } from "./runtime";
 import type { ToolGroup, ToolResult } from "./types";
 
-export const ALL_GROUPS: ToolGroup[] = ["create", "edit", "connect", "arrange", "organize", "document"];
+export const ALL_GROUPS: ToolGroup[] = ["create", "edit", "connect", "arrange", "organize", "document", "code"];
 
 /** A board in memory with every tool group on; `run` calls a tool exactly as the agent loop would. */
 export const setup = (options: MemoryHostOptions & { groups?: ToolGroup[]; autoApprove?: boolean } = {}) => {

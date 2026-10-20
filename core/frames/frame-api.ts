@@ -560,7 +560,7 @@ export const removeFromFrame = (stored: readonly StoredElement[], ids: readonly 
 };
 
 /** Sequential patches (each made against the result of the one before) as a single patch against `stored`. */
-const combine = (stored: readonly StoredElement[], patches: readonly DocPatch[]): DocPatch => {
+export const combine = (stored: readonly StoredElement[], patches: readonly DocPatch[]): DocPatch => {
   let list = stored;
   for (const patch of patches) list = applyPatch(list, patch);
   const before = new Map(stored.map((item) => [item.id, item]));

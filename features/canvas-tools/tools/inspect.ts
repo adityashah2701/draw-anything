@@ -5,6 +5,8 @@ import { isHiddenByFlag } from "@/core/groups/visibility";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { iconForNode, listIcons, searchIcons } from "@/core/icons/registry";
 import { normalizeNodeStyle } from "@/core/shapes/semantic-node/style";
+import { buildFrameIndex } from "@/core/frames/frame-index";
+import { resolveFrame } from "@/core/frames/frame-model";
 import { graphFromElements } from "@/features/diagram-code/canvas";
 import { serializeDiagramCode } from "@/features/diagram-code/serialize";
 import { connectorsOf, labelOf } from "@/features/whiteboard/commands/connectors";
@@ -48,9 +50,18 @@ export const getDocumentState: ToolDefinition<typeof stateInput> = {
       ...(record.locked ? { locked: true } : {}),
       ...(record.hidden ? { hidden: true } : {}),
     }));
+    const frameIndex = buildFrameIndex(ctx.stored);
+    const frames = [...frameIndex.frames.values()].slice(0, 60).map((frame) => ({
+      id: frame.id,
+      title: resolveFrame(frame).title,
+      ...(frameIndex.parentOf.get(frame.id) ? { parent: frameIndex.parentOf.get(frame.id) } : {}),
+      members: (frameIndex.childrenOf.get(frame.id) ?? []).slice(0, 40),
+      ...(resolveFrame(frame).autoFit ? { autoFit: true } : {}),
+      ...(frame.locked ? { locked: true } : {}),
+    }));
     const truncated = nodes.length > listed.length || connectors.length > listedConnectors.length;
     return {
-      summary: `Board "${document.title ?? document.id}": ${count(nodes.length, "element")}, ${count(connectors.length, "connector")}, ${count(groups.length, "group")}; revision ${revision}.`,
+      summary: `Board "${document.title ?? document.id}": ${count(nodes.length, "element")}, ${count(connectors.length, "connector")}, ${count(groups.length, "group")}${frames.length > 0 ? `, ${count(frameIndex.frames.size, "frame")}` : ""}; revision ${revision}.`,
       data: {
         revision,
         board: { id: document.id, title: document.title, canEdit: document.canEdit },
@@ -61,6 +72,7 @@ export const getDocumentState: ToolDefinition<typeof stateInput> = {
         elements: listed.map((shape) => summarize(ctx, shape)),
         connectors: listedConnectors.map((shape) => summarize(ctx, shape)),
         groups,
+        ...(frames.length > 0 ? { frames } : {}),
         truncated,
       },
     };
@@ -238,6 +250,7 @@ export const searchIconsTool: ToolDefinition<typeof iconSearchInput> = {
   description: "Find icon ids in the editor's icon registry for create_icon, create_semantic_node and update_icon. Accepts technology names (postgres, kafka). Changes nothing.",
   input: iconSearchInput,
   access: "read",
+  boardIndependent: true,
   run: ({ query, limit = 5 }) => {
     const terms = [...new Set(query.split(/[,\n;]/).map((t) => t.trim()).filter(Boolean))].slice(0, 8);
     const results = terms.map((term) => ({ term, icons: searchIcons(term, limit).map((m) => ({ id: m.id, category: m.category, via: m.via })) }));
@@ -318,14 +331,15 @@ const enableInput = z.object({ groups: z.array(z.enum(TOOL_GROUPS)).min(1).max(T
 
 /** Groups and what they hold, shown to the model by `enable_tools` and in the prompt. */
 export const GROUP_DESCRIPTIONS: Record<ToolGroup, string> = {
-  inspect: "read the board, find and select elements, validate, serialise (always on)",
-  create: "create shapes, text, icons, semantic nodes, groups, frames, duplicates, import diagram code",
-  edit: "change text, icons, styles, shapes, position, size, rotation, lock, hide, order; delete",
-  connect: "create, edit, re-route, label, disconnect and delete connectors",
-  arrange: "align, distribute, space, auto layout, tidy, layout presets",
-  organize: "group, ungroup, rename groups",
-  document: "undo, redo, clear, export, save, load, repair",
+  inspect: "read, find, select, validate, serialise (always on)",
+  create: "create shapes, text, icons, semantic nodes, groups, duplicates, import diagram code",
+  edit: "change text, icons, styles, shapes, position, size, rotation, lock, hide, order, delete",
+  connect: "create, edit, re-route, label, delete connectors",
+  arrange: "align, distribute, space, layout, tidy",
+  organize: "group, ungroup, frames (create, fit, resize, delete)",
+  document: "undo, redo, clear, export, save, load",
   generate: "draw a new diagram from a description",
+  code: "check, format, apply diagram code",
   memory: "remember a preference or decision",
 };
 

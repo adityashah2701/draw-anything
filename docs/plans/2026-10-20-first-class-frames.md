@@ -178,3 +178,11 @@ Frame-only edits go through `updateFrames` / `fitFrames` (one patch, one undo st
 shared chips use the style command, which now accepts `cornerRadius` for frames. In the inspector, X and Y move
 a frame together with everything it owns (like dragging it), while W and H resize only the frame, never
 rescaling its contents (like dragging a handle).
+
+## Title editing
+
+Double-click on a frame's header or tab, or Enter with one frame selected, opens a single-line input over
+the title (`FrameTitleEditor`); it is the frame's own `title` field, never a text element. The canvas draws the
+frame without its title text while the input is open (`withHiddenTitle`). Enter or a click elsewhere commits
+through `renameFrame` (one undo step; an empty title clears the field and the default "Frame" shows), Escape
+discards. A frame whose header is hidden has no title to edit here (the properties UI will cover it).

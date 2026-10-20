@@ -115,7 +115,7 @@ describe("icons and groups on a plain request", () => {
       ],
     });
     expect(turns[0].system).toContain("use judgment, the person should not have to ask");
-    expect(turns[0].system).toContain("group each cluster");
+    expect(turns[0].system).toContain("Group, frame or plain shape");
     expect(turns[0].specs).toEqual(expect.arrayContaining(["generate_diagram", "group_elements", "create_icon"]));
     expect(run.status).toBe("done");
     expect(run.totals.failed).toBe(0);

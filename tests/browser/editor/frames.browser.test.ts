@@ -261,6 +261,57 @@ suite("editor frames: moving, owning and deleting", () => {
     await s.click({ x: 700, y: 500 });
     expect((await s.elements()).filter((e) => e.type === "frame")).toHaveLength(2);
   });
+
+  it("double-clicking the header edits the title in place; Enter keeps it, and it is one undo step", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    const before = await s.elements();
+    await s.dblclick({ x: 300, y: 76 });
+    const input = s.page.getByLabel("Frame title");
+    await input.waitFor();
+    expect(await input.inputValue()).toBe("Billing");
+    await s.screenshot("frame-title-editing");
+    await s.type("Payments");
+    await s.press("Enter");
+    await s.waitForIdle();
+    const after = await s.elements();
+    expect(byId(after, "F").title).toBe("Payments");
+    expect(after.some((e) => e.type === "text")).toBe(false); // a field of the frame, not a text element
+    expect(after).toHaveLength(before.length);
+    expect(await input.count()).toBe(0);
+    await s.press("Control+z");
+    expect(byId(await s.elements(), "F").title).toBe("Billing");
+  });
+
+  it("Escape throws the edit away; a selected frame opens its title with Enter; a tab title edits too", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 300, y: 76 });
+    await s.press("Enter");
+    const input = s.page.getByLabel("Frame title");
+    await input.waitFor();
+    await s.type("Discarded");
+    await s.press("Escape");
+    expect(byId(await s.elements(), "F").title).toBe("Billing");
+    await s.dblclick({ x: 100, y: 508 }); // the tab above Tab's box
+    await input.waitFor();
+    await s.type("Renamed");
+    await s.press("Enter");
+    expect(byId(await s.elements(), "G").title).toBe("Renamed");
+  });
+
+  it("clearing the title falls back to the default, and a frame without a header has nothing to edit", async () => {
+    const stored = scene();
+    stored.push(frame("H", 700, 400, 200, 140, { headerVisible: false }));
+    s = await openEditor({ elements: stored as never, dark: false });
+    await s.dblclick({ x: 300, y: 76 });
+    await s.page.getByLabel("Frame title").waitFor();
+    await s.press("Control+a");
+    await s.press("Backspace");
+    await s.press("Enter");
+    expect(byId(await s.elements(), "F").title).toBeUndefined();
+    await s.click({ x: 700, y: 470 }); // H's left border
+    await s.press("Enter");
+    expect(await s.page.getByLabel("Frame title").count()).toBe(0);
+  });
 });
 
 suite("editor frames: properties", () => {
