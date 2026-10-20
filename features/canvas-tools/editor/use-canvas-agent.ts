@@ -332,7 +332,10 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         summaryRef.current = compact.summary;
         const tone = run.status === "done" && run.totals.failed === 0 ? "ok" : run.status === "done" ? "warn" : run.status === "aborted" ? "warn" : "error";
         const lead = run.status === "done" ? "" : run.status === "aborted" ? "Stopped. " : `${run.error ?? "The run did not finish."} `;
-        setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone, text: `${lead}${describeRun(run)}` }]);
+        // Into the ref too, now: the transcript is saved right below, before React has necessarily re-rendered.
+        const closing: AgentUiMessage = { id: nextId(), kind: "status", tone, text: `${lead}${describeRun(run)}` };
+        messagesRef.current = [...messagesRef.current, closing];
+        setMessages((prev) => (prev.some((m) => m.id === closing.id) ? prev : [...prev, closing]));
         const endRevision = revisionOf(host.getStored());
         const writes = run.results.filter((r) => r.ok && (r.affected.created.length + r.affected.updated.length + r.affected.removed.length > 0)).length;
         if (writes > 0 && endRevision !== startRevision) setLastRun({ steps: writes, revision: endRevision });

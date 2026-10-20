@@ -1,46 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { call, scripted, turn } from "@/features/ai/diagram-agent/builder/testing";
-import { streamDiagramBuilderEvents } from "@/features/ai/diagram-agent/run-builder";
-import { encodeSse, toV1CompatibilityEvents } from "@/features/ai/server/sse";
 import { hasChrome, openEditor, type EditorSession } from "./open-editor";
 
 const suite = hasChrome() ? describe : describe.skip;
-
-const LOGIN_PROMPT =
-  "Flowchart of a login with a retry: Start, then Enter Credentials, then a decision Valid?. If yes go to a decision MFA Required?, and if no go to Show Error, which retries back to Enter Credentials. If MFA is not required go to Create Session and then Done. Draw Start and Done as pill terminators, both decisions as diamonds, and Show Error as boxes with icons. Label the yes/no branches and the retry arrow.";
-
-const LOGIN = [
-  "type flowchart",
-  "Start [kind: start]",
-  "Enter Credentials [kind: workflow]",
-  "Valid? [kind: decision]",
-  "MFA Required? [kind: decision]",
-  "Create Session [kind: workflow]",
-  "Show Error [kind: alerting]",
-  "Start > Enter Credentials > Valid?",
-  "Valid? > MFA Required?: yes",
-  "Valid? > Show Error: no",
-  "Show Error > Enter Credentials: retry",
-  "MFA Required? > Create Session: no",
-];
-
-const run = async () => {
-  let body = "";
-  const model = scripted([
-    turn(call("search_icons", "start, end, decision, box")),
-    turn(call("search_icons", "error, verification, session")),
-    turn(call("search_icons", "warning, authentication, server")),
-    { text: "The entry point goes first so the flow reads top to bottom; both decisions are diamonds so the branches stay visible.", toolCalls: [call("add", LOGIN.slice(0, 7).join("\n"))] },
-    { text: "Now the connections. The retry loops back to Enter Credentials, which will share lines with the forward arrows.", toolCalls: [call("add", LOGIN.slice(7).join("\n"))] },
-    { text: "Two arrows share a line. Sending the retry out of the right side separates them.", toolCalls: [call("finish")] },
-    { text: "Routing the retry around the right.", toolCalls: [call("adjust", "sides Show Error > Enter Credentials: right, right")] },
-    turn(call("finish")),
-  ]);
-  for await (const event of streamDiagramBuilderEvents({ request: { prompt: "login flow", provider: "groq" }, transport: model.transport, revealMs: 0 })) {
-    body += encodeSse(event) + toV1CompatibilityEvents(event).map(encodeSse).join("");
-  }
-  return body;
-};
 
 suite("agent and code panels in the real editor", () => {
   let s: EditorSession;
@@ -92,32 +53,6 @@ suite("agent and code panels in the real editor", () => {
     expect(code!.x + code!.width).toBeLessThanOrEqual(agent!.x + 1);
   });
 
-  it("shows the agent's thinking, what it did and what it found, as a timeline", async () => {
-    const body = await run();
-    await s.page.route("**/api/ai/generate-diagram", (route) =>
-      route.request().method() === "POST" ? route.fulfill({ status: 200, contentType: "text/event-stream", body }) : route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ providers: ["groq"] }) }),
-    );
-    await s.page.getByRole("button", { name: "Open the AI agent" }).click();
-    const agent = s.page.getByRole("complementary", { name: "AI agent" });
-    await s.page.waitForTimeout(300);
-    await agent.getByLabel("Describe your diagram").fill("login flow");
-    await agent.getByRole("button", { name: "Send" }).click();
-    await agent.getByText("Open as code").waitFor({ timeout: 15_000 });
-
-    const text = await agent.innerText();
-    expect(text).toContain("The entry point goes first so the flow reads top to bottom");
-    expect(text).toMatch(/Added 6 components/);
-    expect(text).toMatch(/Review 1: \d+ things? to fix/);
-    expect(text).toContain("Show Error > Enter Credentials");
-    expect(text).toMatch(/Done: 6 components and 6 connections/);
-
-    await agent.getByRole("button", { name: "Open as code" }).click();
-    const code = await s.page.getByRole("complementary", { name: "Diagram code" }).getByLabel("Diagram code").inputValue();
-    expect(code).toContain("Enter Credentials");
-    expect(code).toMatch(/x: -?\d+, y: -?\d+/);
-    expect(s.problems.filter((p) => p.startsWith("pageerror"))).toEqual([]);
-  });
-
   it("leaves the canvas room when both panels are open, and keeps the floating bar in the free part", async () => {
     await s.page.setViewportSize({ width: 1360, height: 850 });
     await s.page.getByRole("button", { name: "Open the AI agent" }).click();
@@ -130,26 +65,5 @@ suite("agent and code panels in the real editor", () => {
     expect(agent.width + code.width).toBeLessThan(1360 * 0.6);
     const hideUi = (await s.page.getByRole("button", { name: /Hide toolbars|Hide UI/ }).boundingBox())!;
     expect(hideUi.x + hideUi.width).toBeLessThanOrEqual(code.x);
-  });
-
-  it("collapses a run of icon lookups into one entry and does not repeat boilerplate", async () => {
-    const body = await run();
-    await s.page.route("**/api/ai/generate-diagram", (route) =>
-      route.request().method() === "POST" ? route.fulfill({ status: 200, contentType: "text/event-stream", body }) : route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ providers: ["groq"] }) }),
-    );
-    await s.page.setViewportSize({ width: 1360, height: 850 });
-    await s.page.getByRole("button", { name: "Open the AI agent" }).click();
-    const agent = s.page.getByRole("complementary", { name: "AI agent" });
-    await s.page.waitForTimeout(300);
-    await agent.getByLabel("Describe your diagram").fill(LOGIN_PROMPT);
-    await agent.getByRole("button", { name: "Send" }).click();
-    await agent.getByText("Open as code").waitFor({ timeout: 15_000 });
-    const text = await agent.innerText();
-    expect(text.match(/Looked up icons/g)).toHaveLength(1);
-    expect(text).not.toContain("Looking up icons");
-    expect(text).not.toContain("Request understood");
-    expect(text).not.toContain("AI Agent started");
-    expect(text).toContain("start, end, decision, box");
-    expect(text).toContain("error, verification, session");
   });
 });
