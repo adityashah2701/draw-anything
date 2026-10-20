@@ -1,3 +1,4 @@
+import { brokenFrameLinks } from "@/core/frames/frame-index";
 import { isGroupRecord } from "@/core/groups/group-index";
 import type { DocPatch } from "@/core/groups/patch";
 import { isHiddenByFlag } from "@/core/groups/visibility";
@@ -16,6 +17,7 @@ export const ISSUE_CODES = [
   "bad_anchor",
   "stale_connector",
   "dangling_group_ref",
+  "dangling_frame_ref",
   "empty_group",
   "orphan_edge_label",
   "overlap",
@@ -30,7 +32,7 @@ export const ISSUE_CODES = [
 export type IssueCode = (typeof ISSUE_CODES)[number];
 
 /** Problems the repair tool may fix when asked by code. The rest are reported only. */
-export const REPAIRABLE: ReadonlySet<IssueCode> = new Set(["dangling_connector", "bad_anchor", "stale_connector", "dangling_group_ref", "empty_group", "orphan_edge_label", "invalid_geometry", "connector_through_node"]);
+export const REPAIRABLE: ReadonlySet<IssueCode> = new Set(["dangling_connector", "bad_anchor", "stale_connector", "dangling_group_ref", "dangling_frame_ref", "empty_group", "orphan_edge_label", "invalid_geometry", "connector_through_node"]);
 
 export interface Issue {
   code: IssueCode;
@@ -105,6 +107,9 @@ export const validateBoard = (ctx: CommandContext): Issue[] => {
   const recordIds = new Set(records.map((record) => record.id));
   const danglingRefs = ctx.stored.filter((item) => item.groupId !== undefined && !recordIds.has(item.groupId)).map((item) => item.id);
   if (danglingRefs.length > 0) issues.push(issue("dangling_group_ref", "warning", "These elements say they are in a group that does not exist.", danglingRefs));
+
+  const danglingFrames = brokenFrameLinks(ctx.stored);
+  if (danglingFrames.length > 0) issues.push(issue("dangling_frame_ref", "warning", "These elements say they are in a frame that is not there (or that would make a loop, or nest too deep).", danglingFrames));
 
   const connectorKeys = new Set(shapes.filter(isArrowElement).map(labelKeyOf));
   const orphans = shapes.filter((shape) => shape.ai?.role === "edge-label" && !connectorKeys.has(shape.ai.semanticId ?? "")).map((s) => s.id);
@@ -227,6 +232,12 @@ export const repairBoard = (ctx: CommandContext, codes: readonly IssueCode[], { 
         for (const id of entry.ids) {
           const element = ctx.stored.find((item) => item.id === id);
           if (element) updated.set(id, { ...element, groupId: undefined } as DrawingElement);
+        }
+        break;
+      case "dangling_frame_ref":
+        for (const id of entry.ids) {
+          const element = ctx.stored.find((item) => item.id === id);
+          if (element) updated.set(id, { ...element, frameId: undefined } as DrawingElement);
         }
         break;
       case "empty_group":

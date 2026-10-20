@@ -1,3 +1,4 @@
+import { brokenFrameLinks } from "@/core/frames/frame-index";
 import { isGroupRecord } from "@/core/groups/group-index";
 import { applyPatch, mergeStored, type DocPatch } from "@/core/groups/patch";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
@@ -42,6 +43,7 @@ export const checkPatch = (before: readonly StoredElement[], patch: DocPatch): s
   const groups = new Set(after.filter(isGroupRecord).map((record) => record.id));
   const shapes = new Set(after.filter((item) => !isGroupRecord(item)).map((item) => item.id));
   const touched = new Set([...patch.add.map((e) => e.id), ...patch.update.map((e) => e.id)]);
+  const brokenFrames = new Set(brokenFrameLinks(after));
 
   for (const item of after) {
     if (!touched.has(item.id)) continue;
@@ -53,6 +55,9 @@ export const checkPatch = (before: readonly StoredElement[], patch: DocPatch): s
     if (!getShapeDefinition(shape.type)) problems.push(`"${shape.id}" has an unknown type "${String(shape.type)}"`);
     if (!finitePoints(shape.points) || shape.points.length === 0) problems.push(`"${shape.id}" has invalid points`);
     if (shape.groupId !== undefined && (shape.groupId === shape.id || !groups.has(shape.groupId))) problems.push(`"${shape.id}" is in group "${shape.groupId}", which does not exist`);
+    if (shape.frameId !== undefined && brokenFrames.has(shape.id)) {
+      problems.push(`"${shape.id}" is in frame "${shape.frameId}", which is not a frame on the board, is the element itself or something inside it, or is nested too deep`);
+    }
     if (shape.type === "arrow" || shape.type === "arrow-bidirectional") {
       for (const end of [(shape as Connected).startConnection?.elementId, (shape as Connected).endConnection?.elementId]) {
         if (end !== undefined && !shapes.has(end)) problems.push(`connector "${shape.id}" is attached to "${end}", which is not on the board`);

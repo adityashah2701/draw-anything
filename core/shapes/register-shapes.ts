@@ -11,6 +11,7 @@ import { bidirectionalArrowDefinition } from "@/core/shapes/bidirectional-arrow/
 import { lineDefinition } from "@/core/shapes/line/definition";
 import { freehandDefinition } from "@/core/shapes/freehand/definition";
 import { textDefinition } from "@/core/shapes/text/definition";
+import { frameDefinition } from "@/core/shapes/frame/definition";
 import { semanticNodeDefinition } from "@/core/shapes/semantic-node/definition";
 
 let initialized = false;
@@ -26,6 +27,7 @@ export const initializeShapeRegistry = () => {
   shapeRegistry.register(iconDefinition);
   shapeRegistry.register(triangleDefinition);
   shapeRegistry.register(semanticNodeDefinition);
+  shapeRegistry.register(frameDefinition);
   shapeRegistry.register(lineDefinition);
   shapeRegistry.register(textDefinition);
   shapeRegistry.register(arrowDefinition);
