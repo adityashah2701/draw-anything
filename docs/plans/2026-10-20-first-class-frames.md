@@ -162,3 +162,10 @@ where Chrome is available.
 Skills available in this environment were checked: Ponytail, Compound Engineering and Brainstorming are not
 installed, so none was used. `reverse-engineer-anything` targets shipped binaries, not a source repository, and
 was not used. The audit was done by reading and tracing the code.
+
+## Frame tool
+
+Toolbar button, `O` (F is already "zoom to fit") and the command palette pick the tool. Dragging draws a box;
+on release `createFrame({ adopt: true })` takes over every shape whose centre is inside (connectors with both
+ends adopted), nests the frame in the frame its centre falls in, places it below its contents, selects it and
+returns to the select tool. That is one patch, hence one undo step. A click without a drag draws nothing.

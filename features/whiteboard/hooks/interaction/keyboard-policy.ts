@@ -64,6 +64,7 @@ const TOOL_KEYS: Record<string, { tool: Tool; edit: boolean }> = {
   r: { tool: "rectangle", edit: true },
   c: { tool: "ellipse", edit: true },
   d: { tool: "diamond", edit: true },
+  o: { tool: "frame", edit: true },
   l: { tool: "line", edit: true },
   a: { tool: "arrow", edit: true },
   b: { tool: "arrow-bidirectional", edit: true },
