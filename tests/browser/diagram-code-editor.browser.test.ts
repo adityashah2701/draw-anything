@@ -113,6 +113,21 @@ suite("Diagram code editor in real Chrome (real component on a fake board; Clerk
     expect(selected).toBe("wibble");
   });
 
+  it("keeps typing where the caret is after a clicked problem, and the Format button keeps the caret", async () => {
+    await type("A > B\nC [wibble: 1]");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: /Unknown property "wibble"/ }).click();
+    await page.keyboard.type("xy");
+    expect(await value()).toBe("A > B\nC [xy: 1]");
+
+    await area().fill("A   >   B");
+    await area().focus();
+    await page.keyboard.press("End");
+    await page.getByRole("button", { name: "Format" }).click();
+    expect(await value()).toBe("A > B\n");
+    expect(await area().evaluate((el: HTMLTextAreaElement) => el.selectionStart)).toBe(5);
+  });
+
   it("shows documentation under the caret for keyboard users and on hover for the mouse", async () => {
     await type("API [kind: api]");
     await page.keyboard.press("Escape");

@@ -170,7 +170,7 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
       setNotice("Already formatted.");
       return;
     }
-    const caret = mapCaret(code, document.activeElement instanceof HTMLTextAreaElement ? document.activeElement.selectionStart : 0, result.text);
+    const caret = mapCaret(code, fieldRef.current?.selectionStart() ?? 0, result.text);
     setCode(result.text);
     setNotice("Formatted.");
     fieldRef.current?.select(caret, caret);
