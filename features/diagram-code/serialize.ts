@@ -17,6 +17,23 @@ export interface SerializableGraph {
     toSide?: "top" | "right" | "bottom" | "left";
   }>;
   groups: Array<{ id: string; label: string; nodeIds: string[] }>;
+  /** Frames that hold at least one node. `nodeIds` includes the nodes of the frames inside it. */
+  frames?: SerializableFrame[];
+}
+
+export interface SerializableFrame {
+  id: string;
+  title: string;
+  parentId?: string;
+  nodeIds: string[];
+  /** The box, written only when the graph carries geometry. */
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  padding?: number;
+  /** Written only when it is not the frame default. */
+  color?: string;
 }
 
 const CONNECTOR_IN_NAME = /(^|\s)(<-->|-->|<>|--|-|>|<)(\s|$)/;
@@ -60,6 +77,8 @@ export interface SerializedDiagramCode {
   code: string;
   /** The name each node was written under (graph node id to name); connections in the code refer to these. */
   names: Map<string, string>;
+  /** The name each frame was written under (graph frame id to name). */
+  frameNames: Map<string, string>;
 }
 
 export const serializeDiagramCodeDetailed = (graph: SerializableGraph): SerializedDiagramCode => {
@@ -74,6 +93,34 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
     nameOf.set(node.id, name);
   });
   const known = new Set(nameOf.keys());
+
+  // Frames: only ones that hold known nodes, named uniquely (frame names share the node namespace).
+  const frames = (graph.frames ?? [])
+    .map((frame) => ({ ...frame, nodeIds: Array.from(new Set(frame.nodeIds.filter((id) => known.has(id)))) }))
+    .filter((frame) => frame.nodeIds.length > 0);
+  const frameIds = new Set(frames.map((frame) => frame.id));
+  const frameNameOf = new Map<string, string>();
+  for (const frame of frames) {
+    const base = clean(frame.title) || "Frame";
+    let name = base;
+    for (let n = 2; used.has(name); n += 1) name = `${base} ${n}`;
+    used.add(name);
+    frameNameOf.set(frame.id, name);
+  }
+  const frameParent = (frame: (typeof frames)[number]) => (frame.parentId && frameIds.has(frame.parentId) ? frame.parentId : undefined);
+  const depthOfFrame = (frame: (typeof frames)[number]): number => {
+    let depth = 0;
+    for (let at = frameParent(frame), guard = 0; at && guard < 100; guard += 1) {
+      depth += 1;
+      at = frameParent(frames.find((f) => f.id === at)!);
+    }
+    return depth;
+  };
+  // Each node's innermost frame: the deepest one that holds it.
+  const innermostFrame = new Map<string, string>();
+  for (const frame of [...frames].sort((a, b) => depthOfFrame(a) - depthOfFrame(b))) {
+    for (const id of frame.nodeIds) innermostFrame.set(id, frame.id);
+  }
 
   const declaration = (node: SerializableGraph["nodes"][number]) => {
     const name = nameOf.get(node.id)!;
@@ -103,6 +150,8 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
     }))
     .filter((group) => {
       if (group.nodeIds.length === 0) return false;
+      // A group cannot span frames (frames cannot be inside groups); one that does is left out.
+      if (new Set(group.nodeIds.map((id) => innermostFrame.get(id))).size > 1) return false;
       const key = [...group.nodeIds].sort().join("|");
       if (seen.has(key)) return false;
       seen.add(key);
@@ -127,6 +176,8 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
   const innermost = new Map<string, string>();
   groups.forEach((group) => group.nodeIds.forEach((id) => innermost.set(id, group.id)));
 
+  const frameOfGroup = (group: (typeof groups)[number]) => innermostFrame.get(group.nodeIds[0]);
+
   const lines: string[] = [];
   const emitGroup = (group: (typeof groups)[number], depth: number) => {
     const pad = "  ".repeat(depth);
@@ -144,9 +195,33 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
   if (graph.title) lines.push(`title ${clean(graph.title)}`);
   if (lines.length > 0) lines.push("");
 
-  groups.filter((group) => !parentOf.has(group.id)).forEach((group) => emitGroup(group, 0));
+  const emitFrame = (frame: (typeof frames)[number], depth: number) => {
+    const pad = "  ".repeat(depth);
+    const name = frameNameOf.get(frame.id)!;
+    const props: string[] = [];
+    if (frame.color) props.push(`color: ${frame.color}`);
+    if (frame.x !== undefined) props.push(`x: ${Math.round(frame.x)}`);
+    if (frame.y !== undefined) props.push(`y: ${Math.round(frame.y)}`);
+    if (frame.width !== undefined) props.push(`w: ${Math.round(frame.width)}`);
+    if (frame.height !== undefined) props.push(`h: ${Math.round(frame.height)}`);
+    if (frame.padding !== undefined) props.push(`padding: ${Math.round(frame.padding)}`);
+    const title = clean(frame.title) || "Frame";
+    if (title !== name) props.push(`label: "${escapeString(title)}"`);
+    lines.push(`${pad}frame ${writeName(name)}${props.length > 0 ? ` [${props.join(", ")}]` : ""} {`);
+    graph.nodes
+      .filter((node) => innermostFrame.get(node.id) === frame.id && !innermost.has(node.id))
+      .forEach((node) => lines.push(`${pad}  ${declaration(node)}`));
+    groups
+      .filter((group) => !parentOf.has(group.id) && frameOfGroup(group) === frame.id)
+      .forEach((group) => emitGroup(group, depth + 1));
+    frames.filter((child) => frameParent(child) === frame.id).forEach((child) => emitFrame(child, depth + 1));
+    lines.push(`${pad}}`);
+  };
+
+  frames.filter((frame) => !frameParent(frame)).forEach((frame) => emitFrame(frame, 0));
+  groups.filter((group) => !parentOf.has(group.id) && frameOfGroup(group) === undefined).forEach((group) => emitGroup(group, 0));
   graph.nodes
-    .filter((node) => !innermost.has(node.id))
+    .filter((node) => !innermost.has(node.id) && !innermostFrame.has(node.id))
     .forEach((node) => lines.push(declaration(node)));
 
   const edgeLines = graph.edges
@@ -168,5 +243,5 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
     if (lines.length > 0) lines.push("");
     lines.push(...edgeLines);
   }
-  return { code: lines.length > 0 ? `${lines.join("\n")}\n` : "", names: nameOf };
+  return { code: lines.length > 0 ? `${lines.join("\n")}\n` : "", names: nameOf, frameNames: frameNameOf };
 };

@@ -36,6 +36,8 @@ export interface DiagramCodeFieldHandle {
   /** Select a range and bring it into view (used to jump to a diagnostic). */
   select: (from: number, to: number) => void;
   focus: () => void;
+  /** Where the caret is; kept by the textarea after it loses focus (the Format button takes it). */
+  selectionStart: () => number;
 }
 
 interface DiagramCodeFieldProps {
@@ -108,6 +110,7 @@ export const DiagramCodeField = React.forwardRef<DiagramCodeFieldHandle, Diagram
       if (top < el.scrollTop || top > el.scrollTop + el.clientHeight - LINE_HEIGHT * 2) el.scrollTop = Math.max(0, top - LINE_HEIGHT * 3);
     },
     focus: () => areaRef.current?.focus(),
+    selectionStart: () => areaRef.current?.selectionStart ?? 0,
   }));
 
   React.useLayoutEffect(() => {
@@ -278,6 +281,8 @@ export const DiagramCodeField = React.forwardRef<DiagramCodeFieldHandle, Diagram
           ref={areaRef}
           value={value}
           onChange={(e) => {
+            // The person is typing: a selection queued by place() (a clicked diagnostic, a refused format) is stale.
+            pendingSelection.current = null;
             onChange(e.target.value);
             const caret = e.target.selectionStart;
             const typed = (e.nativeEvent as InputEvent).inputType?.startsWith("insert");
@@ -308,7 +313,7 @@ export const DiagramCodeField = React.forwardRef<DiagramCodeFieldHandle, Diagram
           aria-haspopup="listbox"
           aria-expanded={completion !== null}
           aria-controls={completion ? listId : undefined}
-          aria-activedescendant={completion ? `${listId}-${active}` : undefined}
+          aria-activedescendant={completion && active >= 0 ? `${listId}-${active}` : undefined}
           role="combobox"
           placeholder={"Web App > API: HTTPS\nAPI > Database"}
           className="relative block h-full w-full min-w-0 resize-none overflow-auto whitespace-pre bg-transparent font-mono text-[12.5px] text-transparent caret-foreground outline-none selection:bg-primary/25 placeholder:text-muted-foreground disabled:opacity-60"
