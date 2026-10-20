@@ -1,35 +1,17 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
-import {
-  LayoutDashboard,
-  FileText,
-  Users,
-  CreditCard,
-  ChevronsUpDown,
-} from "lucide-react";
-import {
-  UserButton,
-  OrganizationSwitcher,
-  useUser,
-  useOrganization,
-} from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
+import { useClerk, useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
+import { toast } from "sonner";
 
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarGroupContent,
-} from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { api } from "@/convex/_generated/api";
+import type { Doc } from "@/convex/_generated/dataModel";
+import { useApiQuery } from "@/hooks/use-api-query";
+import { useSidebar } from "@/components/ui/sidebar";
+import { SidebarView } from "./sidebar-view";
 
+/** Connects the sidebar to Clerk (user, workspaces) and Convex (recent boards). Layout lives in `SidebarView`. */
 export function AppSidebar({
   selectedPage,
   setSelectedPage,
@@ -37,160 +19,64 @@ export function AppSidebar({
 }: {
   selectedPage: string;
   setSelectedPage: (page: string) => void;
-} & React.ComponentProps<typeof Sidebar>) {
+} & Omit<React.ComponentProps<typeof SidebarView>, "workspace" | "workspaces" | "user" | "recent" | "actions" | "onNavigate" | "selectedPage" | "membersCount">) {
+  const router = useRouter();
+  const clerk = useClerk();
   const { user } = useUser();
   const { organization } = useOrganization();
+  const { userMemberships, setActive } = useOrganizationList({ userMemberships: { infinite: true } });
+  const { isMobile, setOpenMobile } = useSidebar();
 
-  const primaryNavItems = [
-    { icon: LayoutDashboard, label: "Dashboard" },
-    { icon: FileText, label: "Whiteboards" },
-  ];
+  const { data: whiteboards } = useApiQuery(api.whiteboard.getAll, organization?.id ? { orgId: organization.id } : "skip");
+  const recent = React.useMemo(
+    () =>
+      [...((whiteboards ?? []) as Doc<"whiteboards">[])]
+        .sort((a, b) => b._creationTime - a._creationTime)
+        .map((board) => ({ id: board._id, title: board.title })),
+    [whiteboards],
+  );
 
-  const organizationItems = [
-    { icon: Users, label: "Members" },
-    { icon: CreditCard, label: "Billing" },
-  ];
+  // On a phone the navigation is a sheet: choosing something should reveal it.
+  const dismissOnMobile = () => {
+    if (isMobile) setOpenMobile(false);
+  };
+
+  const workspaces = (userMemberships.data ?? []).map(({ organization: org }) => ({ id: org.id, name: org.name, imageUrl: org.imageUrl }));
 
   return (
-    <Sidebar variant="inset" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <div className="flex items-center cursor-pointer">
-                <Image src="/logo.svg" alt="" width={20} height={20} className="size-5" />
-                <span className="pl-2 text-sm font-semibold tracking-tight">Draw Anything</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="label-mono h-6">Workspace</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {primaryNavItems.map((item) => (
-                <SidebarMenuItem key={item.label}>
-                  <SidebarMenuButton
-                    isActive={selectedPage === item.label}
-                    onClick={() => setSelectedPage(item.label)}
-                    tooltip={item.label}
-                  >
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel className="label-mono h-6">Team</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {organizationItems.map((item) => (
-                <SidebarMenuItem key={item.label}>
-                  <SidebarMenuButton
-                    isActive={selectedPage === item.label}
-                    onClick={() => setSelectedPage(item.label)}
-                    tooltip={item.label}
-                  >
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu className="gap-2">
-          {/* Custom Styled Organization Switcher */}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              className="relative cursor-pointer w-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border"
-            >
-              <div className="flex items-center gap-2 w-full">
-                <Avatar className="h-8 w-8 rounded-md border">
-                  <AvatarImage
-                    src={organization?.imageUrl}
-                    alt={organization?.name || "Workspace"}
-                  />
-                  <AvatarFallback className="rounded-md bg-muted text-xs font-medium">
-                    {organization?.name?.charAt(0) || "W"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight z-0">
-                  <span className="truncate font-semibold">
-                    {organization?.name || "Select Workspace"}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {organization ? "Workspace" : "Personal"}
-                  </span>
-                </div>
-                <ChevronsUpDown className="ml-auto size-4 z-0 text-muted-foreground" />
-              </div>
-              <div className="absolute inset-0 opacity-0 z-10 w-full h-full">
-                <OrganizationSwitcher
-                  hidePersonal={true}
-                  createOrganizationUrl="/create-org"
-                  afterCreateOrganizationUrl="/"
-                  afterSelectOrganizationUrl="/"
-                  afterLeaveOrganizationUrl="/"
-                  appearance={{
-                    elements: {
-                      rootBox: "w-full h-full flex items-center justify-center",
-                      organizationSwitcherTrigger: "w-full h-full opacity-0",
-                    },
-                  }}
-                />
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          {/* Custom Styled User Button */}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              className="relative cursor-pointer w-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              <div className="flex items-center gap-2 w-full">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage
-                    src={user?.imageUrl}
-                    alt={user?.fullName || "User"}
-                  />
-                  <AvatarFallback className="rounded-lg">
-                    {user?.firstName?.charAt(0) || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight z-0">
-                  <span className="truncate font-semibold">
-                    {user?.fullName || "User"}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user?.primaryEmailAddress?.emailAddress}
-                  </span>
-                </div>
-                <ChevronsUpDown className="ml-auto size-4 z-0 text-muted-foreground" />
-              </div>
-              <div className="absolute inset-0 opacity-0 z-10 w-full h-full">
-                <UserButton
-                  appearance={{
-                    elements: {
-                      rootBox: "w-full h-full flex items-center justify-center",
-                      userButtonTrigger: "w-full h-full opacity-0",
-                    },
-                  }}
-                />
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-    </Sidebar>
+    <SidebarView
+      {...props}
+      selectedPage={selectedPage}
+      onNavigate={(page) => {
+        setSelectedPage(page);
+        dismissOnMobile();
+      }}
+      workspace={organization ? { id: organization.id, name: organization.name, imageUrl: organization.imageUrl } : null}
+      membersCount={organization?.membersCount}
+      workspaces={workspaces}
+      user={{
+        name: user?.fullName ?? user?.username ?? "Account",
+        email: user?.primaryEmailAddress?.emailAddress,
+        imageUrl: user?.imageUrl,
+      }}
+      recent={recent}
+      actions={{
+        switchWorkspace: async (id) => {
+          try {
+            await setActive?.({ organization: id });
+            setSelectedPage("Dashboard");
+            router.push("/");
+            dismissOnMobile();
+          } catch {
+            toast.error("Could not switch workspace");
+          }
+        },
+        createWorkspace: () => router.push("/create-org"),
+        manageWorkspace: () => clerk.openOrganizationProfile(),
+        manageAccount: () => clerk.openUserProfile(),
+        signOut: () => clerk.signOut(),
+        openBoard: (id) => router.push(`/whiteboard/${id}`),
+      }}
+    />
   );
 }

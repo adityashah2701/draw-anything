@@ -1,10 +1,10 @@
 "use client";
 
+import { LogoMark } from "@/components/shared/logo-mark";
 import { Button } from "@/components/ui/button";
 import { SignUpButton } from "@clerk/nextjs";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import Image from "next/image";
 import React from "react";
 
 const boardItems = [
@@ -192,7 +192,7 @@ export const HeroSection = () => {
               <p className="text-xs font-medium text-muted-foreground">
                 Draw Anything Workspace
               </p>
-              <Image src="/logo.svg" alt="Logo" width={16} height={16} className="dark:invert" />
+              <LogoMark className="size-4" />
             </div>
           </motion.div>
 

@@ -66,6 +66,19 @@ Light and dark differ in hue as well as lightness: paper is warm (hue 85), graph
 
 `Button` (default = ink, `secondary`, `outline`, `ghost`, `destructive`, and `markup` for agent actions), `Input`, `Dialog` (left-aligned, 8px, popover shadow), `Tooltip` (inverted, no arrow, shortcut slot), `Kbd`, `DropdownMenu`, `ContextMenu`, `Sheet`, `Toaster` all read from the tokens above. Add new UI by composing these, not by adding colours or shadows locally.
 
+## Sidebar
+
+`components/layout/sidebar/sidebar-view.tsx` (presentational) and `app-sidebar.tsx` (Clerk and Convex wiring).
+
+Concepts weighed: a 48px icon-only rail (most canvas, but four destinations plus a workspace need labels to scan), a fixed 16rem sidebar (readable, costs width on every screen), a workspace-first sidebar with the switcher on top (the workspace is a setting you change rarely, not the thing you scan). **Chosen: a fixed sidebar that collapses to the icon rail** (Ctrl+B or the top-bar button), so labels are there by default and the canvas width is one key away.
+
+- **Brand strip** is 48px with the same hairline as the top bar, so one rule runs across the page. The mark sits on the same vertical axis as the nav icons in both states.
+- **Active page** carries an ink bar on the leading edge, the quiet fill, an ink icon and medium weight. Four cues, none of them a colour block.
+- **Groups**: primary pages unlabelled, then `Organization` (member count in mono), then `Recent` (newest five boards, hidden when collapsed).
+- **Footer** is a title block: workspace and account rows sit flush under a hairline, no cards. Both open the shared `DropdownMenu` (above the trigger when expanded, beside it when collapsed).
+- **Logo** is the original silhouette in ink at four strengths (`components/shared/logo-mark.tsx`, `public/logo.svg`). Orange is reserved for the agent, so the mark no longer uses it.
+- **Motion**: 150-200ms, `--ease-out-strong`, width and colour only; rows scale to 0.98 on press; everything stops under `prefers-reduced-motion`. The collapsed rail mounts tooltips only while collapsed.
+
 ## Known gaps
 
 - Boards store `_creationTime` but no updated-at. The dashboard can only say "created", not "last edited". Adding an `updatedAt` field is a schema change and is left for a decision.
