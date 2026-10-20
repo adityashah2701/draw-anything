@@ -221,7 +221,9 @@ suite("editor groups", () => {
           for (let dy = -3; dy <= 3; dy += 1)
             for (let dx = -3; dx <= 3; dx += 1) {
               const i = (Math.round((py - rect.top) * d) - y0 + dy) * w * 4 + (Math.round((px - rect.left) * d) - x0 + dx) * 4;
-              if (data[i + 2] > 200 && data[i] < 60 && data[i + 3] > 200) return true;
+              // The ink blue: #1d54c1 on the light theme, #7daafd on the dark one.
+              const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+              if (a > 200 && ((r < 60 && g < 110 && b > 170) || (r > 100 && r < 150 && g > 150 && b > 240))) return true;
             }
           return false;
         };

@@ -37,7 +37,7 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
       >
         <button
           onClick={() => setHideCanvasUi((prev: boolean) => !prev)}
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-popover/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur hover:bg-popover cursor-pointer"
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-popover px-3 py-1.5 text-xs font-medium text-foreground shadow-float hover:bg-popover cursor-pointer"
           title={hideCanvasUi ? "Show toolbars" : "Hide toolbars"}
         >
           {hideCanvasUi ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -81,7 +81,7 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
           type="button"
           data-testid="hidden-chip"
           onClick={() => controller.organizeCommands.showAll()}
-          className="pointer-events-auto absolute bottom-6 left-[68px] z-50 inline-flex items-center gap-2 rounded-lg border border-border bg-popover/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur hover:bg-popover"
+          className="pointer-events-auto absolute bottom-6 left-[68px] z-50 inline-flex items-center gap-2 rounded-lg border border-border bg-popover px-3 py-1.5 text-xs font-medium text-foreground shadow-float hover:bg-popover"
           title="Show every hidden element again"
         >
           <EyeOff size={14} aria-hidden />

@@ -97,7 +97,7 @@ const FloatingPropertiesPanel = ({
       data-overlaps={overlaps}
       onKeyDown={onKeyDown}
       style={{ left: `calc((100vw - ${rightInset}px) / 2)`, maxWidth: `calc(100vw - ${rightInset}px - 76px)` }}
-      className={`pointer-events-auto fixed bottom-4 z-50 -translate-x-1/2 overflow-x-auto rounded-2xl border border-border bg-popover/95 p-1 text-foreground shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2 duration-150 transition-opacity sm:bottom-6 ${
+      className={`pointer-events-auto fixed bottom-4 z-50 -translate-x-1/2 overflow-x-auto rounded-lg border border-border bg-popover p-1 text-foreground shadow-popover-xl animate-in fade-in slide-in-from-bottom-2 duration-150 transition-opacity sm:bottom-6 ${
         overlaps ? "opacity-50 hover:opacity-100 focus-within:opacity-100" : ""
       }`}
     >
@@ -165,7 +165,7 @@ const FloatingPropertiesPanel = ({
                   aria-label="Fill: none"
                   title="No fill"
                   onClick={() => style({ fill: null }, fill.ids)}
-                  className={`grid h-7 w-full place-items-center rounded-md outline-none ring-1 ring-inset focus-visible:ring-2 focus-visible:ring-sky-500 ${fill.value === "transparent" ? "ring-2 ring-sky-500" : "ring-foreground/20 hover:ring-foreground/50"}`}
+                  className={`grid h-7 w-full place-items-center rounded-md outline-none ring-1 ring-inset focus-visible:ring-2 focus-visible:ring-ring ${fill.value === "transparent" ? "ring-2 ring-sky-500" : "ring-foreground/20 hover:ring-foreground/50"}`}
                 >
                   <Swatch color="none" size={18} ring={false} />
                 </button>

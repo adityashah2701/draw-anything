@@ -9,7 +9,7 @@ interface CanvasEmptyStateProps {
 /** Shown on an empty, loaded board: says what to do next instead of a blank grid. */
 export const CanvasEmptyState = ({ canEdit, onGenerate, onOpenCode }: CanvasEmptyStateProps) => (
   <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-    <div className="max-w-sm rounded-xl border border-dashed border-border bg-card/80 px-6 py-5 text-center shadow-sm backdrop-blur">
+    <div className="max-w-sm rounded-lg border border-dashed border-border bg-card/80 px-6 py-5 text-center shadow-sm">
       <h2 className="text-base font-semibold text-foreground">{canEdit ? "Nothing here yet" : "This board is empty"}</h2>
       {canEdit && (
         <>

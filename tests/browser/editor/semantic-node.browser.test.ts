@@ -391,9 +391,9 @@ suite("semantic node: selection chrome and resizing", () => {
       const read = (x: number, y: number) => Array.from(ctx.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data);
       return { top: read(rect.left + 150, rect.top + 100 - 3), corner: read(rect.left + 100, rect.top + 100) };
     });
-    // The outline colour (#007bff) is present just outside the top edge for a run of pixels, i.e. it is solid.
-    expect(hit.top[2]).toBeGreaterThan(200);
-    expect(hit.top[0]).toBeLessThan(120);
+    // The outline colour (the ink blue, #1d54c1) is present just outside the top edge for a run of pixels, i.e. it is solid.
+    expect(hit.top[2]).toBeGreaterThan(150);
+    expect(hit.top[0]).toBeLessThan(80);
   });
 
   it("looks right (screenshots for review)", async () => {

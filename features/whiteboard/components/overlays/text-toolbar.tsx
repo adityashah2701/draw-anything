@@ -69,11 +69,10 @@ export function TextToolbar({
         alignItems: "center",
         gap: 2,
         padding: "4px 6px",
-        background: "rgba(24,24,27,0.85)",
-        backdropFilter: "blur(20px) saturate(180%)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "var(--popover)",
+        border: "1px solid var(--border)",
         borderRadius: 8,
-        boxShadow: "0 4px 20px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2)",
+        boxShadow: "var(--shadow-popover)",
         userSelect: "none",
         animation: "ctb-bar 0.12s cubic-bezier(.16,1,.3,1) forwards",
         // Prevent accidental text selection dragging
@@ -105,7 +104,7 @@ export function TextToolbar({
       </Btn>
       <span
         style={{
-          color: "rgba(255,255,255,0.4)",
+          color: "var(--muted-foreground)",
           fontSize: 10,
           width: 22,
           textAlign: "center",
@@ -145,7 +144,7 @@ function Btn({
         onClick();
       }}
       style={{
-        background: active ? "rgba(255,255,255,0.2)" : "transparent",
+        background: active ? "color-mix(in oklab, var(--primary) 15%, transparent)" : "transparent",
         border: "none",
         borderRadius: 6,
         cursor: "pointer",
@@ -158,7 +157,7 @@ function Btn({
         fontFamily: "system-ui,sans-serif",
         fontWeight: fw,
         fontStyle: fi,
-        color: active ? "#fff" : "rgba(255,255,255,0.65)",
+        color: active ? "var(--primary)" : "var(--muted-foreground)",
         transition: "background 0.1s, color 0.1s",
       }}
     >
@@ -173,7 +172,7 @@ function Sep() {
       style={{
         width: 1,
         height: 18,
-        background: "rgba(255,255,255,0.13)",
+        background: "var(--border)",
         margin: "0 4px",
       }}
     />

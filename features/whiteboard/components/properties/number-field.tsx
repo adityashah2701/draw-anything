@@ -51,7 +51,7 @@ export const NumberField = ({ label, value, onCommit, disabled, step = 1, min, m
   };
 
   return (
-    <label className={`flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs ${disabled ? "opacity-50" : "focus-within:border-sky-500"} ${className ?? ""}`}>
+    <label className={`flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs ${disabled ? "opacity-50" : "focus-within:border-primary"} ${className ?? ""}`}>
       {prefix && <span className="w-3 shrink-0 select-none text-[10px] font-semibold text-muted-foreground">{prefix}</span>}
       <input
         ref={inputRef}

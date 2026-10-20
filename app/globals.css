@@ -77,8 +77,8 @@
   --text: oklch(0.2 0.012 262);
   --text-secondary: oklch(0.47 0.01 262);
 
-  --success: oklch(0.52 0.12 155);
-  --warning: oklch(0.6 0.13 85);
+  --success: oklch(0.5 0.12 155);
+  --warning: oklch(0.52 0.11 80);
 
   --card: oklch(0.998 0.002 85);
   --card-foreground: oklch(0.2 0.012 262);
@@ -106,7 +106,7 @@
 
   --chart-1: oklch(0.48 0.18 262);
   --chart-2: oklch(0.55 0.16 50);
-  --chart-3: oklch(0.52 0.12 155);
+  --chart-3: oklch(0.5 0.12 155);
   --chart-4: oklch(0.6 0.13 85);
   --chart-5: oklch(0.47 0.01 262);
   --sidebar: oklch(0.96 0.005 85);

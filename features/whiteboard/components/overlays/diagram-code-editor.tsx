@@ -82,7 +82,7 @@ const CodeArea: React.FC<{
         {Array.from({ length: lines }, (_, i) => {
           const severity = worst.get(i + 1);
           return (
-            <div key={i} className={severity === "error" ? "text-destructive" : severity === "warning" ? "text-amber-600 dark:text-amber-400" : undefined}>
+            <div key={i} className={severity === "error" ? "text-destructive" : severity === "warning" ? "text-warning" : undefined}>
               {i + 1}
             </div>
           );
@@ -243,7 +243,7 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
       />
 
       <div className="flex items-center justify-between font-mono text-[11px]" aria-live="polite">
-        <span className={errors > 0 ? "text-destructive" : warnings > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
+        <span className={errors > 0 ? "text-destructive" : warnings > 0 ? "text-warning" : "text-muted-foreground"}>
           {code.trim() === "" ? "Empty" : errors > 0 ? `${errors} error${errors === 1 ? "" : "s"}` : warnings > 0 ? `${warnings} warning${warnings === 1 ? "" : "s"}` : "Valid"}
         </span>
         {notice && <span className="truncate pl-3 text-muted-foreground">{notice}</span>}
@@ -253,7 +253,7 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
         <ul className="max-h-28 shrink-0 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 text-[12px]">
           {issues.slice(0, 20).map((issue, i) => (
             <li key={i} className="flex gap-2 leading-snug">
-              <span className={`shrink-0 font-mono text-[11px] ${issue.severity === "error" ? "text-destructive" : "text-amber-600 dark:text-amber-400"}`}>L{issue.line}</span>
+              <span className={`shrink-0 font-mono text-[11px] ${issue.severity === "error" ? "text-destructive" : "text-warning"}`}>L{issue.line}</span>
               <span className="text-foreground/85">{issue.message}</span>
             </li>
           ))}

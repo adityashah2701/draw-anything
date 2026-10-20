@@ -31,7 +31,7 @@ export const DiagramCodePanel: React.FC<DiagramCodePanelProps> = ({ isOpen, onCl
       aria-label="Diagram code"
       aria-hidden={!isOpen}
       hidden={!isOpen}
-      className={`fixed bottom-0 top-0 z-50 ${isOpen ? "flex" : "hidden"} max-w-[100vw] flex-col border-l border-border bg-card text-card-foreground shadow-xl animate-in slide-in-from-right duration-150`}
+      className={`fixed bottom-0 top-0 z-50 ${isOpen ? "flex" : "hidden"} max-w-[100vw] flex-col border-l border-border bg-card text-card-foreground shadow-popover animate-in slide-in-from-right duration-150`}
       style={{ right: agentOpen ? AGENT_WIDTH_CSS : 0, width: CODE_WIDTH_CSS }}
     >
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border pl-5 pr-2">

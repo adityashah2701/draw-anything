@@ -1,3 +1,4 @@
+import { selectionInk } from "@/core/theme/selection-ink";
 import { getAdaptiveColor } from "@/core/color/adaptive-color";
 import { isDarkRender } from "@/core/theme/render-theme";
 import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -154,13 +155,13 @@ export const drawElement = (
       ctx.save();
 
       // Selection box
-      ctx.strokeStyle = "#007bff";
+      ctx.strokeStyle = selectionInk();
       ctx.lineWidth = 1;
 
       if (element.type === "text") {
         // Text selection: Solid, ultra-thin, low-opacity (Eraser-style)
         ctx.setLineDash([]);
-        ctx.strokeStyle = "rgba(0, 123, 255, 0.25)";
+        ctx.strokeStyle = selectionInk(0.25);
         ctx.lineWidth = 1;
         const pad = 1;
         ctx.strokeRect(
@@ -176,7 +177,7 @@ export const drawElement = (
       ) {
         const padding = (element.strokeWidth || 2) / 2;
         ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = "#007bff";
+        ctx.strokeStyle = selectionInk();
         const rotation = getShapeRotation(element);
         const local = rotation ? getShapeLocalBounds(element) : null;
         if (rotation && local) {
@@ -224,14 +225,14 @@ export const drawElement = (
           );
         }
         ctx.lineWidth = (element.strokeWidth || 2) + 4;
-        ctx.strokeStyle = "rgba(0, 123, 255, 0.3)";
+        ctx.strokeStyle = selectionInk(0.3);
         ctx.stroke();
       }
 
       // Resize handles
       ctx.setLineDash([]); // Reset line dash
       ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = "#007bff";
+      ctx.strokeStyle = selectionInk();
       ctx.lineWidth = 1.5;
 
       const handleSize = 8;
@@ -265,8 +266,8 @@ export const drawElement = (
             ctx.rotate(Math.PI / 4);
             ctx.beginPath();
             ctx.rect(-4, -4, 8, 8);
-            ctx.fillStyle = "#dbeafe";
-            ctx.strokeStyle = "#3b82f6";
+            ctx.fillStyle = selectionInk(0.18);
+            ctx.strokeStyle = selectionInk();
             ctx.fill();
             ctx.stroke();
             ctx.restore();
@@ -277,7 +278,7 @@ export const drawElement = (
             ctx.beginPath();
             ctx.rect(x - 4, y - 4, 8, 8);
             ctx.fillStyle = "#ffffff";
-            ctx.strokeStyle = "#2563eb";
+            ctx.strokeStyle = selectionInk();
             ctx.fill();
             ctx.stroke();
             return;
@@ -339,12 +340,12 @@ export const drawElement = (
       // Outer glow ring
       ctx.beginPath();
       ctx.arc(sx, sy, 9, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(56, 189, 248, 0.2)";
+      ctx.fillStyle = selectionInk(0.2);
       ctx.fill();
       // Inner handle
       ctx.beginPath();
       ctx.arc(sx, sy, 6, 0, Math.PI * 2);
-      ctx.fillStyle = "#38bdf8";
+      ctx.fillStyle = selectionInk();
       ctx.fill();
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2;

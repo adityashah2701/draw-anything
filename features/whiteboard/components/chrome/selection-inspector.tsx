@@ -50,7 +50,7 @@ const IconButton = ({
     disabled={disabled}
     onClick={onClick}
     className={`grid h-7 w-7 place-items-center rounded-md border text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-      pressed ? "border-sky-500 bg-sky-500/15" : "border-transparent hover:border-border hover:bg-muted"
+      pressed ? "border-primary bg-primary/15" : "border-transparent hover:border-border hover:bg-muted"
     }`}
   >
     {children}
@@ -134,7 +134,7 @@ const TextCommitField = ({
       }
     },
     className:
-      "w-full min-w-0 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-sky-500 disabled:opacity-50",
+      "w-full min-w-0 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-primary disabled:opacity-50",
   };
   return multiline ? <textarea rows={2} {...props} className={`${props.className} resize-none py-1`} /> : <input {...props} className={`${props.className} h-8 font-medium`} />;
 };
@@ -165,7 +165,7 @@ function Segmented<T extends string | number | null>({
           disabled={disabled}
           onClick={() => onChange(option.value)}
           className={`h-7 min-w-0 flex-1 px-1 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-            value === option.value ? "bg-sky-500/20 font-semibold text-foreground" : "text-muted-foreground hover:bg-muted"
+            value === option.value ? "bg-primary/15 font-semibold text-foreground" : "text-muted-foreground hover:bg-muted"
           }`}
         >
           {option.text}
@@ -229,7 +229,7 @@ export const SelectionInspector = ({ controller }: { controller: WhiteboardPageC
       aria-label="Selection properties"
       data-testid="selection-inspector"
       style={{ right: panelInset + 16 }}
-      className="pointer-events-auto absolute top-[112px] z-40 max-h-[calc(100vh-136px)] w-[236px] overflow-y-auto rounded-xl border border-border bg-popover/95 text-foreground shadow-2xl backdrop-blur-xl"
+      className="pointer-events-auto absolute top-[112px] z-40 max-h-[calc(100vh-136px)] w-[236px] overflow-y-auto rounded-lg border border-border bg-popover text-foreground shadow-popover-xl"
     >
       <div className="flex items-center gap-1 px-2 py-1.5">
         <button
@@ -354,7 +354,7 @@ export const SelectionInspector = ({ controller }: { controller: WhiteboardPageC
                   title="Automatic"
                   disabled={nodeOff}
                   onClick={() => sn.setStyle({ iconColor: undefined })}
-                  className={`h-6 rounded-md border px-1.5 text-[11px] disabled:opacity-40 ${node.iconColor === null ? "border-sky-500 bg-sky-500/15" : "border-border hover:bg-muted"}`}
+                  className={`h-6 rounded-md border px-1.5 text-[11px] disabled:opacity-40 ${node.iconColor === null ? "border-primary bg-primary/15" : "border-border hover:bg-muted"}`}
                 >
                   Auto
                 </button>
@@ -392,7 +392,7 @@ export const SelectionInspector = ({ controller }: { controller: WhiteboardPageC
                   aria-pressed={node.italic === true}
                   disabled={nodeOff}
                   onClick={() => sn.setTypography({ italic: node.italic !== true })}
-                  className={`h-7 rounded-md border px-3 text-xs italic disabled:opacity-40 ${node.italic === true ? "border-sky-500 bg-sky-500/15" : "border-border hover:bg-muted"}`}
+                  className={`h-7 rounded-md border px-3 text-xs italic disabled:opacity-40 ${node.italic === true ? "border-primary bg-primary/15" : "border-border hover:bg-muted"}`}
                 >
                   Italic
                 </button>

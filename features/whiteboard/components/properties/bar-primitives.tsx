@@ -135,8 +135,8 @@ export const PropertyChip = ({
           if (event.key === "Enter" || event.key === " " || event.key === "ArrowUp") viaKeyboardRef.current = true;
         }}
         onClick={() => setOpen((value) => !value)}
-        className={`flex h-12 min-w-[52px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 text-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-40 ${
-          open ? "bg-sky-500/20" : "hover:bg-muted"
+        className={`flex h-12 min-w-[52px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 text-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 ${
+          open ? "bg-primary/15" : "hover:bg-muted"
         }`}
       >
         <span className="flex h-5 items-center justify-center text-sm font-semibold leading-none">{preview}</span>
@@ -152,7 +152,7 @@ export const PropertyChip = ({
             aria-label={label}
             onKeyDown={onPopoverKeyDown}
             style={{ position: "fixed", left: place.left, bottom: place.bottom, width, zIndex: 60 }}
-            className="rounded-xl border border-border bg-popover p-3 text-foreground shadow-2xl animate-in fade-in slide-in-from-bottom-1 duration-100"
+            className="rounded-lg border border-border bg-popover p-3 text-foreground shadow-popover animate-in fade-in slide-in-from-bottom-1 duration-100"
           >
             {children}
           </div>,
@@ -196,8 +196,8 @@ export function ChoiceRow<T extends string | number | boolean>({
             aria-label={`${label}: ${option.title}`}
             title={option.title}
             onClick={() => onChange(option.value)}
-            className={`grid h-9 place-items-center rounded-md border px-1 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 ${
-              pressed ? "border-sky-500 bg-sky-500/20 font-semibold" : "border-border bg-background hover:bg-muted"
+            className={`grid h-9 place-items-center rounded-md border px-1 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
+              pressed ? "border-primary bg-primary/15 font-semibold" : "border-border bg-background hover:bg-muted"
             }`}
           >
             {option.content}
@@ -249,7 +249,7 @@ export const ColorGrid = ({
               aria-label={`${label} ${color}`}
               title={color}
               onClick={() => onPick(color)}
-              className={`relative grid h-7 w-full place-items-center rounded-md outline-none ring-1 ring-inset ring-foreground/20 focus-visible:ring-2 focus-visible:ring-sky-500 ${pressed ? "ring-2 ring-sky-500" : "hover:ring-foreground/50"}`}
+              className={`relative grid h-7 w-full place-items-center rounded-md outline-none ring-1 ring-inset ring-foreground/20 focus-visible:ring-2 focus-visible:ring-ring ${pressed ? "ring-2 ring-sky-500" : "hover:ring-foreground/50"}`}
               style={{ backgroundColor: color }}
             >
               {pressed && <Check size={14} aria-hidden className={isLight(color) ? "text-black" : "text-white"} />}
@@ -257,7 +257,7 @@ export const ColorGrid = ({
           );
         })}
       </div>
-      <label className="mt-2 flex h-8 items-center gap-2 rounded-md border border-border bg-background px-2 text-xs focus-within:border-sky-500">
+      <label className="mt-2 flex h-8 items-center gap-2 rounded-md border border-border bg-background px-2 text-xs focus-within:border-primary">
         <input
           ref={custom}
           type="color"

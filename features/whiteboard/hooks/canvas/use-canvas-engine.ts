@@ -1,3 +1,4 @@
+import { selectionInk } from "@/core/theme/selection-ink";
 import { useCallback, useEffect, useRef } from "react";
 import {
   drawGrid,
@@ -202,8 +203,8 @@ const useCanvasEngine = ({
       const maxY = Math.max(start.y, end.y);
 
       ctx.save();
-      ctx.fillStyle = "rgba(0, 123, 255, 0.1)";
-      ctx.strokeStyle = "rgba(0, 123, 255, 0.5)";
+      ctx.fillStyle = selectionInk(0.1);
+      ctx.strokeStyle = selectionInk(0.5);
       ctx.lineWidth = 1;
       ctx.fillRect(
         minX * zoom + panOffset.x,
@@ -243,7 +244,7 @@ const useCanvasEngine = ({
 
           ctx.save();
           ctx.setLineDash([6, 4]);
-          ctx.strokeStyle = "#38bdf8";
+          ctx.strokeStyle = selectionInk();
           ctx.lineWidth = 2;
           ctx.lineCap = "round";
           const previewPath = [
@@ -271,7 +272,7 @@ const useCanvasEngine = ({
           );
           const arrowLen = 12;
           ctx.setLineDash([]);
-          ctx.fillStyle = "#38bdf8";
+          ctx.fillStyle = selectionInk();
           ctx.beginPath();
           ctx.moveTo(ex, ey);
           ctx.lineTo(
@@ -298,7 +299,7 @@ const useCanvasEngine = ({
 
       ctx.save();
       ctx.setLineDash([5, 4]);
-      ctx.strokeStyle = "rgba(56, 189, 248, 0.8)";
+      ctx.strokeStyle = selectionInk(0.8);
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(pointerX, pointerY);
@@ -308,12 +309,12 @@ const useCanvasEngine = ({
 
       ctx.beginPath();
       ctx.arc(anchorX, anchorY, 10 * pulse, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(14, 165, 233, 0.2)";
+      ctx.fillStyle = selectionInk(0.2);
       ctx.fill();
 
       ctx.beginPath();
       ctx.arc(anchorX, anchorY, 6 * pulse, 0, Math.PI * 2);
-      ctx.fillStyle = "#0ea5e9";
+      ctx.fillStyle = selectionInk();
       ctx.fill();
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2;
