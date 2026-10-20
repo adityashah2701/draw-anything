@@ -169,3 +169,12 @@ Toolbar button, `O` (F is already "zoom to fit") and the command palette pick th
 on release `createFrame({ adopt: true })` takes over every shape whose centre is inside (connectors with both
 ends adopted), nests the frame in the frame its centre falls in, places it below its contents, selects it and
 returns to the select tool. That is one patch, hence one undo step. A click without a drag draws nothing.
+
+## Properties
+
+A selected frame shows a **Frame** chip first in the bottom bar (title, header inside / tab / none, padding,
+manual or auto-fit, and a "Fit to content" button), then the shared Stroke, Fill, Corners and Opacity chips.
+Frame-only edits go through `updateFrames` / `fitFrames` (one patch, one undo step; locked frames skipped). The
+shared chips use the style command, which now accepts `cornerRadius` for frames. In the inspector, X and Y move
+a frame together with everything it owns (like dragging it), while W and H resize only the frame, never
+rescaling its contents (like dragging a handle).

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import type { GroupIndex } from "@/core/groups/group-index";
+import { withFrameContents } from "@/core/frames/payload";
+import { isEffectivelyLocked, type GroupIndex } from "@/core/groups/group-index";
 import type { Bounds, DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import type { DrawingElementJson } from "@/liveblocks.config";
 import { planFrameEdit, planRotateBy, planSetRotation, type FrameEdit } from "@/features/whiteboard/utils/inspector-edit";
@@ -46,6 +47,20 @@ export const useSelectionInspector = ({
     [groupIndex, model],
   );
 
+  /**
+   * What an X/Y edit moves: a frame travels with everything it owns. A width or height edit stays on the
+   * frame alone, as it does when dragging a frame's handle, so typing a size never rescales the contents.
+   */
+  const targetsFor = useCallback(
+    (edit: FrameEdit) => {
+      const own = targets();
+      if (edit.width !== undefined || edit.height !== undefined) return own;
+      const ids = withFrameContents([...groupIndex.shapes.values()], own.map((shape) => shape.id));
+      return ids.flatMap((id) => (isEffectivelyLocked(groupIndex, id) ? [] : (groupIndex.shapes.get(id) ?? [])));
+    },
+    [groupIndex, targets],
+  );
+
   const write = useCallback(
     (changed: DrawingElement[]) => {
       if (changed.length > 0) updateElements(changed as unknown as DrawingElementJson[]);
@@ -58,7 +73,7 @@ export const useSelectionInspector = ({
       if (!hasEditAccess || !model || model.locked || !model.frame) return;
       write(
         planFrameEdit({
-          targets: targets(),
+          targets: targetsFor(edit),
           frame: model.frame,
           frameIsLocal: model.frameIsLocal,
           edit,
@@ -68,7 +83,7 @@ export const useSelectionInspector = ({
         }),
       );
     },
-    [getElementBounds, hasEditAccess, keepRatio, model, rerouteConnectedArrows, targets, write],
+    [getElementBounds, hasEditAccess, keepRatio, model, rerouteConnectedArrows, targetsFor, write],
   );
 
   /** One shape's own angle. */

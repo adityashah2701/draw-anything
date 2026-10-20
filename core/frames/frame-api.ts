@@ -579,6 +579,43 @@ const combine = (stored: readonly StoredElement[], patches: readonly DocPatch[])
   return out;
 };
 
+export interface ManyResult {
+  /** Frames that changed. */
+  changed: string[];
+  /** Frames left alone, with why (locked, not a frame, nothing to change). */
+  skipped: Skipped[];
+}
+
+const SKIP_BY_CODE: Partial<Record<FrameErrorCode, SkipReason>> = { not_found: "not_found", not_a_frame: "not_found", locked: "locked" };
+
+/** Runs `step` for each id against the board as the earlier steps left it, and returns one combined patch. */
+const stepEach = (stored: readonly StoredElement[], ids: readonly string[], step: (current: readonly StoredElement[], id: string) => FrameResult<{ changed: boolean }>): FrameResult<ManyResult> => {
+  const patches: DocPatch[] = [];
+  const changed: string[] = [];
+  const skipped: Skipped[] = [];
+  let current = stored;
+  for (const id of [...new Set(ids)]) {
+    const result = step(current, id);
+    if (!result.ok) {
+      const reason = SKIP_BY_CODE[result.code];
+      if (!reason) return result;
+      skipped.push({ id, reason });
+    } else if (!result.changed) skipped.push({ id, reason: "unchanged" });
+    else {
+      patches.push(result.patch);
+      current = applyPatch(current, result.patch);
+      changed.push(id);
+    }
+  }
+  return { ok: true, patch: combine(stored, patches), changed, skipped };
+};
+
+/** `updateFrame` for several frames at once (the properties bar): one patch, locked and unchanged frames skipped and reported. */
+export const updateFrames = (stored: readonly StoredElement[], ids: readonly string[], changes: FrameChanges): FrameResult<ManyResult> => stepEach(stored, ids, (current, id) => updateFrame(current, id, changes));
+
+/** `fitFrameToContent` for several frames at once. */
+export const fitFrames = (stored: readonly StoredElement[], ids: readonly string[]): FrameResult<ManyResult> => stepEach(stored, ids, (current, id) => fitFrameToContent(current, id));
+
 /** Puts frame `childId` inside `parentId`, or on the canvas when `parentId` is null. */
 export const nestFrame = (stored: readonly StoredElement[], childId: string, parentId: string | null): FrameResult<OwnershipResult> => {
   const index = buildFrameIndex(stored);
