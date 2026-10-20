@@ -36,6 +36,7 @@ const ConvexClientProvider = ({ children }: ConvexClientProviderProps) => {
       publishableKey={publishableKey}
       appearance={{
         baseTheme: resolvedTheme === "dark" ? dark : undefined,
+        layout: { logoImageUrl: resolvedTheme === "dark" ? "/brand/mark-dark.svg" : "/brand/mark-light.svg" },
       }}
     >
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>

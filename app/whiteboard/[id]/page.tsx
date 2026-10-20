@@ -9,6 +9,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { RoomProvider } from "@/liveblocks.config";
 import { WhiteboardCanvasRoom } from "@/features/whiteboard/components/canvas/whiteboard-canvas-room";
 import { resolveWhiteboardAccess } from "@/features/whiteboard/hooks/access/whiteboard-access";
+import { LogoLoader } from "@/components/shared/logo-mark";
 import { isPlausibleWhiteboardId } from "@/lib/whiteboard-id";
 
 const Centered = ({ children }: { children: React.ReactNode }) => (
@@ -37,10 +38,7 @@ export default function WhiteboardCanvasRoomPage() {
   if (status === "loading") {
     return (
       <Centered>
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-indigo-500"></div>
-        <p className="text-sm font-medium text-muted-foreground">
-          Checking access…
-        </p>
+        <LogoLoader label="Checking access" />
       </Centered>
     );
   }

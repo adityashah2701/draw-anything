@@ -7,6 +7,7 @@ import { CanvasEmptyState } from "@/features/whiteboard/components/canvas/canvas
 import { Minimap } from "@/features/whiteboard/components/canvas/minimap";
 import { Cursors } from "@/features/whiteboard/components/canvas/cursors";
 import { CommentLayer } from "@/features/whiteboard/components/canvas/comment-layer";
+import { LogoLoader } from "@/components/shared/logo-mark";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
 import type { Pair } from "@/features/whiteboard/utils/viewport-math";
@@ -136,11 +137,8 @@ export const WhiteboardCanvasStage = ({
         <Cursors />
 
         {whiteboardAccess.status === "loading" && whiteboardId && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-background bg-opacity-75">
-            <div className="text-center">
-              <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
-              <p className="text-muted-foreground">Loading whiteboard...</p>
-            </div>
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/75">
+            <LogoLoader label="Loading whiteboard" />
           </div>
         )}
 
