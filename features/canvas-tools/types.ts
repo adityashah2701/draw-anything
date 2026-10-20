@@ -9,7 +9,7 @@ import type { ToolErrorInfo } from "./errors";
  * (or the server, from the request) enables the rest. A call to a tool outside the enabled groups is
  * refused by the executor, whatever the model wrote.
  */
-export const TOOL_GROUPS = ["inspect", "create", "edit", "connect", "arrange", "organize", "document", "generate", "memory"] as const;
+export const TOOL_GROUPS = ["inspect", "create", "edit", "connect", "arrange", "organize", "document", "generate", "code", "memory"] as const;
 export type ToolGroup = (typeof TOOL_GROUPS)[number];
 
 /** What the editor behind a host can do. A tool that needs a capability the host lacks is refused with `unavailable`. */

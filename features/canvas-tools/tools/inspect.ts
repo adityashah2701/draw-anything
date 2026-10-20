@@ -331,14 +331,15 @@ const enableInput = z.object({ groups: z.array(z.enum(TOOL_GROUPS)).min(1).max(T
 
 /** Groups and what they hold, shown to the model by `enable_tools` and in the prompt. */
 export const GROUP_DESCRIPTIONS: Record<ToolGroup, string> = {
-  inspect: "read the board, find and select elements, validate, serialise (always on)",
+  inspect: "read, find, select, validate, serialise (always on)",
   create: "create shapes, text, icons, semantic nodes, groups, duplicates, import diagram code",
-  edit: "change text, icons, styles, shapes, position, size, rotation, lock, hide, order; delete",
+  edit: "change text, icons, styles, shapes, position, size, rotation, lock, hide, order, delete",
   connect: "create, edit, re-route, label, disconnect and delete connectors",
   arrange: "align, distribute, space, auto layout, tidy, layout presets",
   organize: "group, ungroup, frames (create, fit, resize, delete)",
   document: "undo, redo, clear, export, save, load, repair",
   generate: "draw a new diagram from a description",
+  code: "check, format, apply diagram code",
   memory: "remember a preference or decision",
 };
 
