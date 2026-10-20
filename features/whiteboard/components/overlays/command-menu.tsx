@@ -239,6 +239,19 @@ export function CommandMenu({
           <CommandItem onSelect={() => runCommand(() => onAction?.("frame"))}>
             <Frame className="mr-2 h-4 w-4" />
             <span>Frame selection</span>
+            <CommandShortcut>⌥⌘G</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("frame-remove-from"))}>
+            <Frame className="mr-2 h-4 w-4" />
+            <span>Remove from frame</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("frame-fit"))}>
+            <Frame className="mr-2 h-4 w-4" />
+            <span>Fit frame to contents</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("frame-release"))}>
+            <Frame className="mr-2 h-4 w-4" />
+            <span>Remove frame, keep contents</span>
           </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onAction?.("auto-layout"))}>
             <Network className="mr-2 h-4 w-4" />

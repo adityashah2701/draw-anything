@@ -313,3 +313,78 @@ suite("editor frames: moving, owning and deleting", () => {
     expect(await s.page.getByLabel("Frame title").count()).toBe(0);
   });
 });
+
+suite("editor frames: commands", () => {
+  let s: EditorSession | undefined;
+  afterEach(async () => {
+    if (s) {
+      expect(s.problems.filter((p) => !/favicon|404|willReadFrequently/i.test(p))).toEqual([]);
+      await s.close();
+    }
+    s = undefined;
+  });
+
+  const palette = async (session: EditorSession, name: string) => {
+    await session.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await session.page.keyboard.press("Control+k");
+    await session.page.getByRole("option", { name }).click();
+    await session.waitForIdle();
+  };
+  const contextMenu = async (session: EditorSession, at: Point, name: string) => {
+    const screen = await session.toScreen(at);
+    await session.page.mouse.click(screen.x, screen.y, { button: "right" });
+    await session.page.getByRole("menuitem", { name }).click();
+    await session.waitForIdle();
+  };
+
+  it("Ctrl+Alt+G frames the selection; one undo step takes the frame away again", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 760, y: 150 }); // C
+    await s.page.keyboard.down("Shift");
+    await s.click({ x: 160, y: 150 }); // A, inside Billing
+    await s.page.keyboard.up("Shift");
+    await s.page.keyboard.press("Control+Alt+g");
+    await s.waitForIdle();
+    const els = await s.elements();
+    const added = els.filter((e) => e.type === "frame" && e.id !== "F" && e.id !== "G");
+    expect(added).toHaveLength(1);
+    expect(byId(els, "C").frameId).toBe(added[0].id);
+    expect(byId(els, "A").frameId).toBe(added[0].id);
+    expect(await s.selected()).toEqual([added[0].id]);
+    await s.press("Control+z");
+    expect((await s.elements()).filter((e) => e.type === "frame")).toHaveLength(2);
+    expect(byId(await s.elements(), "A").frameId).toBe("F");
+  });
+
+  it("the context menu removes a shape from its frame, fits a frame, and removes a frame but keeps its contents", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 160, y: 150 }); // A
+    await contextMenu(s, { x: 160, y: 150 }, "Remove from frame");
+    expect(byId(await s.elements(), "A").frameId).toBeUndefined();
+    expect(byId(await s.elements(), "B").frameId).toBe("F");
+    await s.press("Control+z");
+    expect(byId(await s.elements(), "A").frameId).toBe("F");
+
+    await s.click({ x: 300, y: 76 });
+    await contextMenu(s, { x: 300, y: 76 }, "Fit frame to contents");
+    expect(Math.round(byId(await s.elements(), "F").points[1].x)).toBe(460 + 24);
+
+    await s.click({ x: 300, y: 76 });
+    await contextMenu(s, { x: 300, y: 76 }, "Remove frame, keep contents");
+    const els = await s.elements();
+    expect(els.some((e) => e.id === "F")).toBe(false);
+    expect(["A", "B", "ab"].every((id) => els.some((e) => e.id === id && e.frameId === undefined))).toBe(true);
+    expect((await s.selected()).sort()).toEqual(["A", "B", "ab"]);
+  });
+
+  it("the palette runs the same commands, and a command with nothing to do says so instead of changing the board", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 760, y: 150 }); // C: loose, in no frame
+    const before = await s.elements();
+    await palette(s, "Remove from frame");
+    expect(await s.elements()).toEqual(before);
+    await s.page.getByText("Nothing selected is in a frame.").waitFor();
+    await palette(s, "Frame selection");
+    expect((await s.elements()).filter((e) => e.type === "frame")).toHaveLength(3);
+  });
+});

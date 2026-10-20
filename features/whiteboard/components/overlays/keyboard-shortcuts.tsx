@@ -40,6 +40,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
         { key: "Delete / Backspace", description: "Delete selected" },
         { key: "Arrow keys", description: "Nudge selection (Shift = 10x)" },
         { key: "Ctrl+G / Ctrl+Shift+G", description: "Group / ungroup" },
+        { key: "Ctrl+Alt+G", description: "Frame the selection" },
         { key: "Ctrl+Shift+L", description: "Lock / unlock selection" },
         { key: "Alt+A / D / W / S", description: "Align left / right / top / bottom" },
         { key: "Alt+H / V", description: "Align horizontal / vertical centres" },
