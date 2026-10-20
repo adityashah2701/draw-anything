@@ -83,7 +83,7 @@ export const Minimap = ({ elements, getElementBounds, zoom, panOffset, canvasSiz
   };
 
   return (
-    <div className="absolute bottom-4 right-4 z-30 overflow-hidden rounded-lg border border-border bg-popover/90 shadow-lg backdrop-blur">
+    <div className="absolute bottom-4 right-4 z-30 overflow-hidden rounded-lg border border-border bg-popover shadow-float">
       <canvas
         ref={ref}
         aria-label="Minimap: click or drag to move the view"

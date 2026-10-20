@@ -4,7 +4,6 @@ import {
   Redo2,
   Undo2,
   Trash2,
-  Users,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -17,6 +16,41 @@ import { useRouter } from "next/navigation";
 import { SnapSettingsMenu } from "@/features/whiteboard/components/chrome/snap-settings-menu";
 import type { SnapSettings } from "@/features/whiteboard/utils/snap-settings";
 import { useTheme } from "next-themes";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Kbd } from "@/components/ui/kbd";
+
+const ICON_BUTTON =
+  "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent";
+
+/** An icon button with a tooltip that names it and, where there is one, its shortcut. */
+const ToolbarButton = ({
+  label,
+  shortcut,
+  pressed,
+  className = "",
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; shortcut?: string; pressed?: boolean }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        className={`${ICON_BUTTON} ${pressed ? "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary" : ""} ${className}`}
+        {...props}
+      >
+        {children}
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="bottom" className="flex items-center gap-2">
+      <span>{label}</span>
+      {shortcut && <Kbd className="border-background/25 bg-transparent text-background/70">{shortcut}</Kbd>}
+    </TooltipContent>
+  </Tooltip>
+);
+
+const Divider = () => <div className="mx-1 h-4 w-px bg-border" aria-hidden />;
 
 interface TopToolbarProps {
   canUndo: boolean;
@@ -84,26 +118,23 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   };
 
   return (
-    <div className="h-12 w-full bg-card border-b border-border flex items-center justify-between px-4 select-none text-foreground pointer-events-auto">
-      {/* Left Section - Back, Title, Undo/Redo */}
-      <div className="flex items-center space-x-3 flex-shrink-0 min-w-0">
-        <button
-          onClick={handleBackClick}
-          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          title="Go Back"
-        >
+    <div className="pointer-events-auto flex h-12 w-full select-none items-center justify-between border-b border-border bg-card px-3 text-foreground">
+      {/* Left: back, title, history */}
+      <div className="flex min-w-0 flex-shrink-0 items-center gap-1">
+        <ToolbarButton label="Back" onClick={handleBackClick}>
           <ArrowLeft size={16} />
-        </button>
+        </ToolbarButton>
 
-        <div className="w-px h-4 bg-muted" />
+        <Divider />
 
-        <div className="min-w-0 max-w-[200px] sm:max-w-[300px]">
+        <div className="min-w-0 max-w-[110px] sm:max-w-[300px]">
           {isLoading ? (
-            <div className="w-24 h-4 bg-muted rounded animate-pulse" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
           ) : isEditingTitle ? (
             <input
               autoFocus
-              className="text-sm font-medium text-foreground bg-transparent border-none outline-none focus:ring-1 focus:ring-violet-500 rounded px-1 w-full"
+              aria-label="Whiteboard name"
+              className="w-full rounded-sm border border-primary bg-transparent px-1.5 py-0.5 text-sm font-medium text-foreground outline-none"
               value={editedTitle}
               onChange={(e) => setEditedTitle(e.target.value)}
               onBlur={handleTitleSubmit}
@@ -116,118 +147,65 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
               }}
             />
           ) : (
-            <h1
-              className="text-sm font-medium text-foreground truncate cursor-pointer hover:bg-muted rounded px-1 transition-colors"
-              onClick={() => !disabled && setIsEditingTitle(true)}
-              title={disabled ? "" : "Click to Rename"}
+            <button
+              type="button"
+              className="block max-w-full cursor-pointer truncate rounded-sm px-1.5 py-0.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
+              onClick={() => setIsEditingTitle(true)}
+              disabled={disabled}
+              title={disabled ? undefined : "Rename"}
             >
-              {whiteboardTitle || "Untitled Whiteboard"}
-            </h1>
+              {whiteboardTitle || "Untitled whiteboard"}
+            </button>
           )}
         </div>
 
-        <div className="w-px h-4 bg-muted" />
+        <Divider />
 
-        <div className="flex items-center space-x-0.5">
-          <button
-            onClick={onUndo}
-            disabled={!canUndo || disabled}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
-            title="Undo (⌘Z)"
-          >
-            <Undo2 size={16} />
-          </button>
-          <button
-            onClick={onRedo}
-            disabled={!canRedo || disabled}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
-            title="Redo (⌘Y)"
-          >
-            <Redo2 size={16} />
-          </button>
-          <button
-            onClick={onClear}
-            disabled={disabled}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
-            title="Clear Canvas"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
+        <ToolbarButton label="Undo" shortcut="⌘Z" onClick={onUndo} disabled={!canUndo || disabled}>
+          <Undo2 size={16} />
+        </ToolbarButton>
+        <ToolbarButton label="Redo" shortcut="⌘⇧Z" onClick={onRedo} disabled={!canRedo || disabled}>
+          <Redo2 size={16} />
+        </ToolbarButton>
+        <ToolbarButton label="Clear canvas" onClick={onClear} disabled={disabled} className="hover:text-destructive">
+          <Trash2 size={16} />
+        </ToolbarButton>
       </div>
 
-      {/* Center Section - Zoom and Grid */}
-      <div className="flex items-center space-x-1 flex-shrink-0">
-        <button
-          onClick={onZoomOut}
-          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-          title="Zoom Out"
-        >
+      {/* Centre: view. On a phone only "fit" stays (pinch zooms), so the bar never overflows. */}
+      <div className="hidden flex-shrink-0 items-center gap-0.5 md:flex">
+        <ToolbarButton label="Zoom out" onClick={onZoomOut}>
           <ZoomOut size={16} />
-        </button>
-        <span className="text-xs text-muted-foreground w-12 text-center font-mono">
+        </ToolbarButton>
+        <span className="tnum w-12 text-center font-mono text-xs text-muted-foreground" aria-live="polite">
           {Math.round(zoom * 100)}%
         </span>
-        <button
-          onClick={onZoomIn}
-          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-          title="Zoom In"
-        >
+        <ToolbarButton label="Zoom in" onClick={onZoomIn}>
           <ZoomIn size={16} />
-        </button>
-        <button
-          onClick={onResetZoom}
-          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-          title="Reset Zoom"
-        >
+        </ToolbarButton>
+        <ToolbarButton label="Reset zoom" onClick={onResetZoom}>
           <RotateCcw size={15} />
-        </button>
-        <button
-          onClick={onFitToScreen}
-          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-          title="Fit to Screen"
-        >
+        </ToolbarButton>
+        <ToolbarButton label="Fit to screen" onClick={onFitToScreen}>
           <Maximize size={15} />
-        </button>
-        
-        <div className="w-px h-4 bg-muted mx-1" />
+        </ToolbarButton>
 
-        <button
-          onClick={onToggleGrid}
-          className={`p-1.5 rounded transition-colors cursor-pointer ${
-            showGrid
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"
-          }`}
-          title="Toggle Grid"
-        >
+        <Divider />
+
+        <ToolbarButton label="Show grid" pressed={showGrid} onClick={onToggleGrid}>
           <Grid3X3 size={16} />
-        </button>
+        </ToolbarButton>
         {snapSettings && onSnapSettingsChange && <SnapSettingsMenu settings={snapSettings} onChange={onSnapSettingsChange} />}
       </div>
 
-      {/* Right Section - Status, AI Generate, Collaborators */}
-      <div className="flex items-center space-x-3 flex-shrink-0">
-        {/* Saved status indicator */}
-        <span className="text-[11px] text-muted-foreground opacity-40 hidden sm:inline font-mono">
-          Saved
-        </span>
-
-        <button
-          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-          title="Collaborators"
-        >
-          <Users size={16} />
-        </button>
-
-        <div className="w-px h-4 bg-muted" />
-        <button
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-          title="Toggle Theme"
-        >
+      {/* Right: theme */}
+      <div className="flex flex-shrink-0 items-center gap-1">
+        <ToolbarButton label="Fit to screen" onClick={onFitToScreen} className="md:hidden">
+          <Maximize size={15} />
+        </ToolbarButton>
+        <ToolbarButton label={theme === "dark" ? "Light theme" : "Dark theme"} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
           {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
+        </ToolbarButton>
       </div>
     </div>
   );

@@ -15,19 +15,19 @@ interface StepActions {
 
 const Step: React.FC<{ message: Extract<AgentUiMessage, { kind: "tool" }>; actions?: StepActions }> = ({ message, actions }) => (
   <li className="flex gap-2.5 py-1.5" data-testid="agent-step" data-ok={message.ok ? "true" : "false"} data-tool={message.tool}>
-    <span aria-hidden className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${message.ok ? "bg-emerald-500/15 text-emerald-600" : "bg-red-500/15 text-red-600"}`}>
+    <span aria-hidden className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${message.ok ? "bg-success/15 text-success" : "bg-red-500/15 text-destructive"}`}>
       {message.ok ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3} />}
     </span>
     <div className="min-w-0">
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className="font-mono text-[11px] text-foreground">{message.tool}</span>
         {message.ok && message.changed > 0 && <span className="font-mono text-[10px] text-muted-foreground">{message.changed} changed</span>}
-        {!message.ok && message.code && <span className="font-mono text-[10px] text-red-600">{message.code}</span>}
+        {!message.ok && message.code && <span className="font-mono text-[10px] text-destructive">{message.code}</span>}
       </div>
       <p className="mt-0.5 break-words text-[12px] leading-snug text-muted-foreground">{message.summary}</p>
-      {message.skipped > 0 && <p className="mt-0.5 text-[11px] text-amber-600">{message.skipped} left alone</p>}
+      {message.skipped > 0 && <p className="mt-0.5 text-[11px] text-warning">{message.skipped} left alone</p>}
       {message.warnings.slice(0, 2).map((warning) => (
-        <p key={warning} className="mt-0.5 text-[11px] text-amber-600">
+        <p key={warning} className="mt-0.5 text-[11px] text-warning">
           {warning}
         </p>
       ))}
@@ -183,7 +183,7 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
                 key={message.id}
                 data-testid="agent-status"
                 data-tone={message.tone}
-                className={`border-t border-border pt-2 font-mono text-[11px] ${message.tone === "ok" ? "text-muted-foreground" : message.tone === "warn" ? "text-amber-600" : "text-red-600"}`}
+                className={`border-t border-border pt-2 font-mono text-[11px] ${message.tone === "ok" ? "text-muted-foreground" : message.tone === "warn" ? "text-warning" : "text-destructive"}`}
               >
                 {message.text}
               </li>
@@ -207,9 +207,9 @@ export const CanvasAgentView: React.FC<Props> = ({ messages, running, confirmati
       </ol>
 
       {confirmation && (
-        <div role="alertdialog" aria-label="Confirm" data-testid="agent-confirm" className="mt-4 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
+        <div role="alertdialog" aria-label="Confirm" data-testid="agent-confirm" className="mt-4 rounded-md border border-warning/50 bg-warning/10 p-3">
           <div className="flex items-start gap-2">
-            <ShieldAlert size={15} className="mt-0.5 shrink-0 text-amber-600" aria-hidden />
+            <ShieldAlert size={15} className="mt-0.5 shrink-0 text-warning" aria-hidden />
             <div>
               <p className="text-[13px] font-medium text-foreground">{confirmation.message}</p>
               <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{confirmation.tool} · you can undo this afterwards</p>

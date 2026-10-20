@@ -1,7 +1,7 @@
+import { selectionInk } from "@/core/theme/selection-ink";
 import type { Bounds } from "@/features/whiteboard/types/whiteboard.types";
 import { FRAME_PAD_PX, frameHandlePoints, type SelectionOverlay } from "./selection-overlay";
 
-const BLUE = "#007bff";
 const TAG_FONT = "600 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
 /** Screen pixels between the shapes and the dashed box drawn around them. */
 const PAD = 5;
@@ -63,10 +63,10 @@ export const drawSelectionOverlay = (
   if (overlay.entered) {
     const r = toScreen(overlay.entered.bounds, zoom, pan);
     ctx.setLineDash([2, 4]);
-    ctx.strokeStyle = "rgba(0, 123, 255, 0.55)";
+    ctx.strokeStyle = selectionInk(0.55);
     ctx.lineWidth = 1.5;
     ctx.strokeRect(r.x - PAD - 4, r.y - PAD - 4, r.w + 2 * (PAD + 4), r.h + 2 * (PAD + 4));
-    drawTag(ctx, r.x - PAD - 4, r.y - PAD - 4, `${overlay.entered.label} ▸ editing`, false, "rgba(0, 123, 255, 0.75)");
+    drawTag(ctx, r.x - PAD - 4, r.y - PAD - 4, `${overlay.entered.label} ▸ editing`, false, selectionInk(0.75));
   }
 
   const single = overlay.units.length === 1 ? overlay.units[0] : null;
@@ -76,10 +76,10 @@ export const drawSelectionOverlay = (
     for (const unit of overlay.units) {
       const r = toScreen(unit.bounds, zoom, pan);
       ctx.setLineDash(unit.isGroup ? [] : [5, 4]);
-      ctx.strokeStyle = unit.locked ? "#94a3b8" : BLUE;
+      ctx.strokeStyle = unit.locked ? "#94a3b8" : selectionInk();
       ctx.lineWidth = unit.isGroup ? 1.5 : 1;
       ctx.strokeRect(r.x - PAD, r.y - PAD, r.w + 2 * PAD, r.h + 2 * PAD);
-      if (unit.isGroup && unit.label) drawTag(ctx, r.x - PAD, r.y - PAD, unit.label, unit.locked, unit.locked ? "#64748b" : BLUE);
+      if (unit.isGroup && unit.label) drawTag(ctx, r.x - PAD, r.y - PAD, unit.label, unit.locked, unit.locked ? "#64748b" : selectionInk());
     }
   }
 
@@ -88,13 +88,13 @@ export const drawSelectionOverlay = (
     const r = toScreen(bounds, zoom, pan);
     const grow = FRAME_PAD_PX;
     ctx.setLineDash([]);
-    ctx.strokeStyle = locked ? "#94a3b8" : BLUE;
+    ctx.strokeStyle = locked ? "#94a3b8" : selectionInk();
     ctx.lineWidth = single ? 1.5 : 1.25;
     ctx.strokeRect(r.x - grow, r.y - grow, r.w + 2 * grow, r.h + 2 * grow);
-    if (single?.isGroup && single.label) drawTag(ctx, r.x - grow, r.y - grow, single.label, single.locked, single.locked ? "#64748b" : BLUE);
+    if (single?.isGroup && single.label) drawTag(ctx, r.x - grow, r.y - grow, single.label, single.locked, single.locked ? "#64748b" : selectionInk());
     if (!locked) {
       ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = BLUE;
+      ctx.strokeStyle = selectionInk();
       ctx.lineWidth = 1.5;
       for (const h of frameHandlePoints(bounds, zoom)) {
         ctx.beginPath();

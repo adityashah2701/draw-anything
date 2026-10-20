@@ -194,11 +194,14 @@ export const AIPanel: React.FC<AIPanelProps> = ({
       role="complementary"
       aria-label="AI agent"
       style={{ width: AGENT_WIDTH_CSS }}
-      className="fixed bottom-0 right-0 top-0 z-50 flex max-w-[100vw] flex-col border-l border-border bg-card text-card-foreground shadow-xl animate-in slide-in-from-right duration-150"
+      className="fixed bottom-0 right-0 top-0 z-50 flex max-w-[100vw] flex-col border-l border-border bg-card text-card-foreground shadow-popover animate-in slide-in-from-right duration-150"
     >
       <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border pl-5 pr-2">
         <div className="min-w-0">
-          <h2 className="text-[13px] font-semibold leading-none">Agent</h2>
+          <h2 className="flex items-center gap-1.5 text-[13px] font-semibold leading-none">
+            <span aria-hidden className="size-1.5 rounded-full bg-agent" />
+            Agent
+          </h2>
           <label className="sr-only" htmlFor="agent-model">
             Model
           </label>
@@ -372,7 +375,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
             </ul>
           )}
           {attachHint && attachments.items.length > 0 && (
-            <p data-testid="agent-attach-hint" className="px-3 pt-1.5 font-mono text-[10px] leading-snug text-amber-600">
+            <p data-testid="agent-attach-hint" className="px-3 pt-1.5 font-mono text-[10px] leading-snug text-warning">
               {attachHint}
             </p>
           )}
@@ -442,7 +445,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
               type="submit"
               aria-label="Send"
               disabled={(!input.trim() && attachments.items.length === 0) || disabled || busy || attachments.busy}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-30"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-agent text-agent-foreground transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-agent focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-30"
             >
               <ArrowUp size={15} strokeWidth={2.25} />
             </button>

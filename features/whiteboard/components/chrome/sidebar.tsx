@@ -5,7 +5,8 @@ import {
   MousePointer,
   Eraser,
   Hand,
-  Bot,
+  Eye,
+  Sparkles,
   Code2,
   Shapes,
   RectangleHorizontal,
@@ -21,6 +22,7 @@ import {
   Type,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Kbd } from "@/components/ui/kbd";
 
 interface SidebarProps {
   currentTool: Tool;
@@ -105,11 +107,11 @@ const Sidebar: React.FC<SidebarProps> = ({
               }
             }}
             disabled={isToolDisabled}
-            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer ${
+            className={`w-9 h-9 rounded-md flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               isActive && !isToolDisabled
-                ? "bg-muted text-foreground ring-1 ring-border"
+                ? "bg-primary/15 text-primary"
                 : isToolDisabled
-                  ? "text-muted-foreground opacity-40 cursor-not-allowed opacity-40"
+                  ? "text-muted-foreground opacity-40 cursor-not-allowed"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
             }`}
             aria-label={tool.label}
@@ -117,10 +119,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             <Icon size={18} />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={12} className="bg-popover border border-border text-foreground flex items-center gap-2">
+        <TooltipContent side="right" sideOffset={10} className="flex items-center gap-2">
           <span>{tool.label}</span>
           {tool.shortcut && (
-            <kbd className="bg-muted px-1 rounded text-[10px] font-mono">{tool.shortcut}</kbd>
+            <Kbd className="border-background/25 bg-transparent text-background/70">{tool.shortcut}</Kbd>
           )}
         </TooltipContent>
       </Tooltip>
@@ -128,7 +130,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div className="absolute left-0 top-0 bottom-0 w-[52px] bg-card border-r border-border flex flex-col items-center py-3 justify-between z-50 pointer-events-auto shadow-2xl">
+    <div className="absolute left-0 top-0 bottom-0 w-[52px] bg-card border-r border-border flex flex-col items-center py-3 justify-between z-50 pointer-events-auto shadow-popover">
       {/* Top tools section */}
       <div className="flex flex-col items-center gap-3 w-full px-2">
         {/* The two ways to make a diagram without drawing it: describe it, or write it. */}
@@ -137,15 +139,15 @@ const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={onOpenAIPanel}
               disabled={disabled}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors bg-primary text-primary-foreground hover:opacity-85 cursor-pointer ${
+              className={`w-9 h-9 rounded-md flex items-center justify-center transition-colors bg-agent-muted text-agent hover:bg-agent/20 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-agent ${
                 disabled ? "opacity-50 cursor-not-allowed" : ""
               }`}
               aria-label="Open the AI agent"
             >
-              <Bot size={18} />
+              <Sparkles size={18} />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="bg-popover border border-border text-foreground">
+          <TooltipContent side="right" sideOffset={12}>
             AI agent
           </TooltipContent>
         </Tooltip>
@@ -153,37 +155,37 @@ const Sidebar: React.FC<SidebarProps> = ({
           <TooltipTrigger asChild>
             <button
               onClick={onOpenCodePanel}
-              className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+              className="w-9 h-9 rounded-md flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Open the diagram code editor"
             >
               <Code2 size={18} />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="bg-popover border border-border text-foreground">
+          <TooltipContent side="right" sideOffset={12}>
             Diagram code
           </TooltipContent>
         </Tooltip>
 
-        <div className="h-px w-6 bg-muted my-1" />
+        <div className="h-px w-6 bg-border my-1" />
 
         {/* Select Tool */}
         {selectTool && renderToolButton(selectTool)}
 
-        <div className="h-px w-6 bg-muted my-1" />
+        <div className="h-px w-6 bg-border my-1" />
 
         {/* Shapes Group */}
         <div className="flex flex-col gap-1.5 w-full items-center">
           {shapeTools.map(renderToolButton)}
         </div>
 
-        <div className="h-px w-6 bg-muted my-1" />
+        <div className="h-px w-6 bg-border my-1" />
 
         {/* Connectors Group */}
         <div className="flex flex-col gap-1.5 w-full items-center">
           {connectorTools.map(renderToolButton)}
         </div>
 
-        <div className="h-px w-6 bg-muted my-1" />
+        <div className="h-px w-6 bg-border my-1" />
 
         {/* Drawing & Text Group */}
         <div className="flex flex-col gap-1.5 w-full items-center">
@@ -194,15 +196,15 @@ const Sidebar: React.FC<SidebarProps> = ({
               <button
                 onClick={onOpenIconPicker}
                 disabled={disabled}
-                className="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-9 h-9 rounded-md flex items-center justify-center transition-colors cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Insert icon"
               >
                 <Shapes size={18} />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={12} className="bg-popover border border-border text-foreground flex items-center gap-2">
+            <TooltipContent side="right" sideOffset={10} className="flex items-center gap-2">
               <span>Insert icon</span>
-              <kbd className="bg-muted px-1 rounded text-[10px] font-mono">I</kbd>
+              <Kbd className="border-background/25 bg-transparent text-background/70">I</Kbd>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -210,12 +212,12 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom section tools */}
       <div className="flex flex-col items-center gap-1.5 w-full px-2">
-        <div className="h-px w-6 bg-muted my-1" />
+        <div className="h-px w-6 bg-border my-1" />
         {bottomTools.map(renderToolButton)}
 
         {disabled && (
-          <div className="mt-2" title="Read-only mode">
-            <div className="w-2.5 h-2.5 bg-yellow-500 rounded-full animate-pulse" />
+          <div className="mt-2 text-warning" title="View only" role="img" aria-label="View only">
+            <Eye size={16} />
           </div>
         )}
       </div>

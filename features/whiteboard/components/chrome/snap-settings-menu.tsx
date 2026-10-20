@@ -50,8 +50,8 @@ export const SnapSettingsMenu = ({ settings, onChange }: SnapSettingsMenuProps) 
         aria-pressed={settings.enabled}
         title={settings.enabled ? "Snapping and guides (on)" : "Snapping and guides (off)"}
         onClick={() => setOpen((v) => !v)}
-        className={`cursor-pointer rounded p-1.5 transition-colors ${
-          settings.enabled ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        className={`inline-flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          settings.enabled ? "bg-primary/15 text-primary hover:bg-primary/20" : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
         <Magnet size={16} />
@@ -60,7 +60,7 @@ export const SnapSettingsMenu = ({ settings, onChange }: SnapSettingsMenuProps) 
         <div
           role="dialog"
           aria-label="Snapping settings"
-          className="absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-xl border border-border bg-popover p-3 text-foreground shadow-2xl"
+          className="absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-foreground shadow-popover"
         >
           <Check label="Snap to other shapes" checked={settings.enabled} onChange={(enabled) => onChange({ enabled })} hint="Edges, centres and text baselines. Hold Alt to drag freely." />
           <div className="my-1.5 flex items-center justify-between gap-2 text-xs">

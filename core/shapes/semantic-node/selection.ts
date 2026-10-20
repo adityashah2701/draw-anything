@@ -1,5 +1,5 @@
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
-import { SELECTION_ACCENT } from "@/core/shapes/base/selection-style";
+import { selectionInk } from "@/core/theme/selection-ink";
 import { getSemanticNodeBounds } from "@/core/shapes/semantic-node/geometry";
 import { layoutSemanticNode } from "@/core/shapes/semantic-node/layout";
 import { getSemanticNodeResizeHandles } from "@/core/shapes/semantic-node/interaction";
@@ -48,12 +48,12 @@ export const renderSemanticNodeSelection = (shape: SemanticNodeShape, context: S
     height + outset * 2,
     Math.min(layout.radius * zoom, width / 2, height / 2) + outset,
   );
-  ctx.strokeStyle = SELECTION_ACCENT;
+  ctx.strokeStyle = selectionInk();
   ctx.lineWidth = OUTLINE_WIDTH;
   ctx.stroke();
 
   ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = SELECTION_ACCENT;
+  ctx.strokeStyle = selectionInk();
   ctx.lineWidth = 1.25;
   for (const handle of getSemanticNodeResizeHandles(shape, bounds)) {
     if (handle.visible === false) continue;

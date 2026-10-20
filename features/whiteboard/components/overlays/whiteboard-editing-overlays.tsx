@@ -173,7 +173,7 @@ function ShapeLabelEditor({
           transform: "translate(-50%, -50%)",
           zIndex: 111,
         }}
-        className="inline-flex items-center gap-1 rounded-md border border-border bg-surface/90 px-1 py-1 shadow-sm backdrop-blur"
+        className="inline-flex items-center gap-1 rounded-md border border-border bg-surface/90 px-1 py-1 shadow-sm"
       >
         <button
           onMouseDown={(ev) => ev.preventDefault()}

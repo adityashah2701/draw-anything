@@ -138,7 +138,7 @@ export const WhiteboardCanvasStage = ({
         {whiteboardAccess.status === "loading" && whiteboardId && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-background bg-opacity-75">
             <div className="text-center">
-              <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500"></div>
+              <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
               <p className="text-muted-foreground">Loading whiteboard...</p>
             </div>
           </div>

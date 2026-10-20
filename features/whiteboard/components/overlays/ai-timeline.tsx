@@ -34,15 +34,15 @@ const NOTE_LABELS: Record<NonNullable<AIChatMessage["noteKind"]>, { label: strin
 
 const TONE_TEXT: Record<Tone, string> = {
   neutral: "text-muted-foreground",
-  success: "text-emerald-600 dark:text-emerald-400",
-  warning: "text-amber-600 dark:text-amber-400",
+  success: "text-success",
+  warning: "text-warning",
   danger: "text-destructive",
 };
 
 const TONE_MARKER: Record<Tone, string> = {
   neutral: "bg-foreground/70",
-  success: "bg-emerald-500",
-  warning: "bg-amber-500",
+  success: "bg-success",
+  warning: "bg-warning",
   danger: "bg-destructive",
 };
 

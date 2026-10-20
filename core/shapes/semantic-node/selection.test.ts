@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SELECTION_ACCENT } from "@/core/shapes/base/selection-style";
+import { selectionInk } from "@/core/theme/selection-ink";
 import { getShapeDefinition, renderShapeSelection } from "@/core/shapes/shape-runtime";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { getSemanticNodeResizeHandles } from "./interaction";
@@ -28,7 +28,7 @@ describe("semantic node selection chrome", () => {
     expect(renderShapeSelection(node(), context(ctx))).toBe(true);
     expect(calls.some((c) => c.name === "setLineDash" && (c.args[0] as number[]).length === 0)).toBe(true);
     expect(calls.some((c) => c.name === "setLineDash" && (c.args[0] as number[]).length > 0)).toBe(false); // never dashed
-    expect(calls.some((c) => c.name === "set:strokeStyle" && c.args[0] === SELECTION_ACCENT)).toBe(true);
+    expect(calls.some((c) => c.name === "set:strokeStyle" && c.args[0] === selectionInk())).toBe(true);
   });
 
   it("other shapes keep the generic chrome (the hook is opt-in)", () => {
