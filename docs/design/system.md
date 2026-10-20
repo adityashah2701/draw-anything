@@ -91,6 +91,10 @@ Clerk's `<OrganizationProfile>` was replaced rather than restyled. Its card-in-c
 - **Workspace** holds name and logo, Leave, and Delete (only where Clerk allows admins to delete, typed confirmation).
 - Verified domains and join requests are not rebuilt; a link opens Clerk's own settings for them.
 
+## Invitations
+
+`features/invitations/` (`invitations-model.ts` pure mapping, `use-pending-workspaces.ts` Clerk hook, `components/invitations-notice.tsx` presentational). An invited person sees pending invitations in three places: a dot and "1 invitation" on the sidebar workspace switcher, an Invitations section inside its menu, and a notice at the top of the dashboard (and on the "no workspace" screen). Accepting an invitation makes that workspace active. Clerk email-domain suggestions appear in the same places as "Request to join". Admins answer requests under "Requests to join" on the Team page. The list is re-requested when the workspace menu opens and when the tab regains focus (Clerk caches it for a minute), and an empty state names the verified addresses being checked and offers "Check again". Clerk has no decline for invitations in `@clerk/nextjs` 6.39, so there is no Decline.
+
 ## Landing motion
 
 The public landing page (`features/dashboard/components/landing/`) is the one place motion explains the product rather than acknowledging input. Rules, from emilkowalski/skill (`emil-design-eng`, `animate`, `review-animations`):

@@ -27,7 +27,8 @@ suite("dashboard sidebar in real Chrome (real component, fixture data)", () => {
     });
     await page.waitForSelector('[data-slot="sidebar-wrapper"]');
   };
-  const events = () => page.evaluate(() => window.__events);
+  // "~refresh" (a look-for-invitations request when the workspace menu opens) is covered in invitations.browser.test.ts.
+  const events = () => page.evaluate(() => window.__events.filter((e) => e !== "~refresh"));
   const sidebar = () => page.locator('[data-slot="sidebar-container"]');
   const shot = async (name: string) => {
     if (shots) await page.screenshot({ path: `${shots}/${name}.png` });
