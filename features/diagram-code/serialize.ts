@@ -20,6 +20,8 @@ export interface SerializableGraph {
 
 const CONNECTOR_IN_NAME = /(^|\s)(<-->|-->|<>|--|-|>|<)(\s|$)/;
 const DIRECTIVE_LOOKALIKE = /^(title|type|direction)\s/i;
+/** `frame Name {` and `group Name {` are block keywords, so a name that starts like one is quoted. */
+const BLOCK_KEYWORD_LOOKALIKE = /^(frame|group)\s+\S/;
 
 const IMPLIED_SHAPE: Record<string, string> = { decision: "diamond", start: "pill", end: "pill" };
 
@@ -31,6 +33,7 @@ const writeName = (name: string): string =>
   /[\[\]{}",:]/.test(name) ||
   /^(\/\/|#)/.test(name) ||
   DIRECTIVE_LOOKALIKE.test(name) ||
+  BLOCK_KEYWORD_LOOKALIKE.test(name) ||
   CONNECTOR_IN_NAME.test(name)
     ? `"${name}"`
     : name;
