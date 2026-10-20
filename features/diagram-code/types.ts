@@ -31,7 +31,7 @@ export interface ParsedNode {
   icon?: string;
   dashed?: boolean;
   /** `diamond` or `pill` (`oval`/`ellipse` read as pill); other Eraser shapes are reported and ignored. */
-  shape?: "diamond" | "pill" | "icon";
+  shape?: string;
   /** #rrggbb */
   color?: string;
   /** Top-left corner and size in canvas units; when given, the node is drawn exactly there. */

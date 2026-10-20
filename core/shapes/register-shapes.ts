@@ -6,6 +6,7 @@ import { pillDefinition } from "@/core/shapes/pill/definition";
 import { ellipseDefinition } from "@/core/shapes/ellipse/definition";
 import { iconDefinition } from "@/core/shapes/icon/definition";
 import { triangleDefinition } from "@/core/shapes/triangle/definition";
+import { outlineDefinition } from "@/core/shapes/outline/definition";
 import { arrowDefinition } from "@/core/shapes/arrow/definition";
 import { bidirectionalArrowDefinition } from "@/core/shapes/bidirectional-arrow/definition";
 import { lineDefinition } from "@/core/shapes/line/definition";
@@ -26,6 +27,7 @@ export const initializeShapeRegistry = () => {
   shapeRegistry.register(ellipseDefinition);
   shapeRegistry.register(iconDefinition);
   shapeRegistry.register(triangleDefinition);
+  shapeRegistry.register(outlineDefinition);
   shapeRegistry.register(semanticNodeDefinition);
   shapeRegistry.register(frameDefinition);
   shapeRegistry.register(lineDefinition);

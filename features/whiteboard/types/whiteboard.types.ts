@@ -143,6 +143,16 @@ export interface TriangleShape extends BaseDrawingElement {
   type: "triangle";
 }
 
+/**
+ * One element type for every outline-drawn shape (cylinder, cloud, ...). `variant` names an entry of the
+ * outline variant registry (core/shapes/outline/variants.ts); an id the registry does not know draws as a
+ * plain rectangle. Typed as a string so data written by a newer version still loads.
+ */
+export interface OutlineShape extends BaseDrawingElement {
+  type: "outline";
+  variant: string;
+}
+
 export interface LineShape extends BaseDrawingElement {
   type: "line";
 }
@@ -245,6 +255,7 @@ export type DrawingElement =
   | EllipseShape
   | IconShape
   | TriangleShape
+  | OutlineShape
   | LineShape
   | TextShape
   | SemanticNodeShape

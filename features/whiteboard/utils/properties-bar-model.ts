@@ -1,5 +1,6 @@
 import { expandUnits, isEffectivelyLocked, selectionUnits, type GroupIndex } from "@/core/groups/group-index";
 import { CORNER_RADIUS } from "@/core/shapes/base/geometry-tokens";
+import { getOutlineVariant, listOutlineVariants } from "@/core/shapes/outline/variants";
 import { getArrowHeadVisibility, isArrowElement, type ArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { normalizeNodeStyle } from "@/core/shapes/semantic-node/style";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
@@ -27,6 +28,8 @@ export interface PropertiesBarModel {
   fill: { value: Mixed<string>; ids: string[] } | null;
   border: { radius: Mixed<number>; ids: string[] } | null;
   text: { size: Mixed<number>; ids: string[] } | null;
+  /** Outline shapes: which variant they are, and the others they can become. */
+  variant: { value: Mixed<string>; ids: string[]; options: Array<{ id: string; label: string }> } | null;
   opacity: Mixed<number>;
   connector: {
     ids: string[];
@@ -69,7 +72,9 @@ const radiusOf = (shape: DrawingElement): number | null => {
 const titleOf = (units: number, isGroup: boolean, targets: readonly DrawingElement[]): string => {
   if (isGroup) return "Group";
   if (units > 1) return `${units} objects`;
-  return TITLES[targets[0]?.type] ?? "Object";
+  const first = targets[0];
+  if (first?.type === "outline") return getOutlineVariant(first.variant)?.label ?? "Shape";
+  return TITLES[first?.type] ?? "Object";
 };
 
 export const readPropertiesBar = (index: GroupIndex, selected: readonly string[]): PropertiesBarModel | null => {
@@ -82,13 +87,14 @@ export const readPropertiesBar = (index: GroupIndex, selected: readonly string[]
   const title = titleOf(units.length, units.length === 1 && index.groups.has(units[0]), targets.length > 0 ? targets : expandUnits(index, units).flatMap((id) => index.shapes.get(id) ?? []));
 
   const base = { title, locked: editableUnits.length === 0, partlyLocked: editableUnits.length > 0 && editableUnits.length < units.length, targetIds };
-  if (targets.length === 0) return { ...base, stroke: null, fill: null, border: null, text: null, opacity: 1, connector: null };
+  if (targets.length === 0) return { ...base, stroke: null, fill: null, border: null, text: null, opacity: 1, variant: null, connector: null };
 
   const idsOf = (shapes: readonly DrawingElement[]) => shapes.map((shape) => shape.id);
   const strokable = targets.filter((shape) => supports(shape, "supportsStrokeWidth"));
   const fillable = targets.filter((shape) => supports(shape, "supportsFill"));
   const rounded = targets.filter((shape) => radiusOf(shape) !== null);
   const texty = targets.filter(hasLabelText);
+  const outlines = targets.filter((shape): shape is Extract<DrawingElement, { type: "outline" }> => shape.type === "outline");
   const connectors = targets.filter(isArrowElement) as ArrowElement[];
   const onlyText = targets.every((shape) => shape.type === "text");
 
@@ -104,6 +110,7 @@ export const readPropertiesBar = (index: GroupIndex, selected: readonly string[]
     fill: fillable.length > 0 ? { value: same(fillable.map((shape) => (shape.fill && shape.fill !== "#transparent" ? shape.fill.toLowerCase() : "transparent"))), ids: idsOf(fillable) } : null,
     border: rounded.length > 0 ? { radius: same(rounded.map((shape) => radiusOf(shape) ?? 0)), ids: idsOf(rounded) } : null,
     text: texty.length > 0 ? { size: same(texty.map((shape) => shape.fontSize ?? DEFAULT_LABEL_FONT_SIZE)), ids: idsOf(texty) } : null,
+    variant: outlines.length > 0 ? { value: same(outlines.map((shape) => shape.variant)), ids: idsOf(outlines), options: listOutlineVariants().map(({ id, label }) => ({ id, label })) } : null,
     opacity: same(targets.map((shape) => shape.opacity ?? 1)),
     connector:
       connectors.length > 0

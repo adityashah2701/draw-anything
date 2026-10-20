@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Tool } from "@/features/whiteboard/types/whiteboard.types";
 import { getToolDefinitions, ToolDefinition } from "@/core/shapes/shape-tool-registry";
 import {
@@ -20,6 +20,7 @@ import {
   Minus,
   Pencil,
   Type,
+  Hexagon,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/ui/kbd";
@@ -42,6 +43,20 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOpenIconPicker,
 }) => {
   const allTools = getToolDefinitions();
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const outlineRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!outlineOpen) return;
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !outlineRef.current?.contains(event.target as Node)) setOutlineOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [outlineOpen]);
 
   // Helper to map fallback icons for built-in tools
   const getToolIcon = (tool: ToolDefinition) => {
@@ -85,12 +100,70 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Group tools for structured layout
   const selectTool = allTools.find((t) => t.name === "select");
   const shapeTools = allTools.filter((t) => t.group === "shapes");
+  const outlineTools = allTools.filter((t) => t.group === "outline");
   const connectorTools = allTools.filter((t) => t.group === "connectors");
   const drawingTools = allTools.filter((t) => t.group === "drawing");
   const textTool = allTools.find((t) => t.name === "text");
   const bottomTools = allTools.filter(
     (t) => (t.name === "comment" || t.name === "eraser" || t.name === "hand")
   );
+
+  /** One button for every outline variant: it opens the list, and shows the variant in use. */
+  const renderOutlinePicker = () => {
+    if (outlineTools.length === 0) return null;
+    const active = outlineTools.find((tool) => tool.name === currentTool);
+    const Icon = (active?.icon ?? Hexagon) as React.ElementType;
+    const isToolDisabled = disabled;
+    return (
+      <div ref={outlineRef} className="relative">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => !isToolDisabled && setOutlineOpen((open) => !open)}
+              disabled={isToolDisabled}
+              aria-haspopup="menu"
+              aria-expanded={outlineOpen}
+              aria-label="More shapes"
+              className={`w-9 h-9 rounded-md flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                active && !isToolDisabled ? "bg-primary/15 text-primary" : isToolDisabled ? "text-muted-foreground opacity-40 cursor-not-allowed" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              <Icon size={18} />
+            </button>
+          </TooltipTrigger>
+          {!outlineOpen && (
+            <TooltipContent side="right" sideOffset={10}>
+              {active ? active.label : "More shapes"}
+            </TooltipContent>
+          )}
+        </Tooltip>
+        {outlineOpen && (
+          <div role="menu" aria-label="More shapes" className="absolute left-full top-0 ml-3 grid w-max grid-cols-3 gap-1 rounded-lg border border-border bg-popover p-1.5 shadow-popover-xl">
+            {outlineTools.map((tool) => {
+              const ToolIcon = tool.icon as React.ElementType;
+              return (
+                <button
+                  key={tool.name}
+                  role="menuitem"
+                  title={tool.label}
+                  aria-label={tool.label}
+                  onClick={() => {
+                    onToolChange(tool.name);
+                    setOutlineOpen(false);
+                  }}
+                  className={`w-9 h-9 rounded-md flex items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    currentTool === tool.name ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  <ToolIcon size={18} />
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderToolButton = (tool: ToolDefinition) => {
     const Icon = getToolIcon(tool);
@@ -176,6 +249,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Shapes Group */}
         <div className="flex flex-col gap-1.5 w-full items-center">
           {shapeTools.map(renderToolButton)}
+          {renderOutlinePicker()}
         </div>
 
         <div className="h-px w-6 bg-border my-1" />

@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardE
 import { Lock } from "lucide-react";
 import type { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import { ChoiceRow, ColorGrid, PopoverLabel, PropertyChip, Swatch } from "@/features/whiteboard/components/properties/bar-primitives";
+import { OutlineVariantIcon } from "@/core/shapes/outline/icon";
 import { NumberField } from "@/features/whiteboard/components/properties/number-field";
 import type { Mixed } from "@/features/whiteboard/utils/inspector-model";
 import { formatNumber } from "@/features/whiteboard/utils/inspector-model";
@@ -85,7 +86,7 @@ const FloatingPropertiesPanel = ({
     triggers[next]?.focus();
   };
 
-  const { stroke, fill, border, text, connector } = m;
+  const { stroke, fill, border, text, connector, variant } = m;
 
   return (
     <div
@@ -170,6 +171,24 @@ const FloatingPropertiesPanel = ({
                   <Swatch color="none" size={18} ring={false} />
                 </button>
               }
+            />
+          </PropertyChip>
+        )}
+
+        {variant && (
+          <PropertyChip
+            label="Shape"
+            summary={words(variant.value, (id) => variant.options.find((option) => option.id === id)?.label ?? "Unknown")}
+            preview={variant.value === "mixed" ? <span aria-hidden>…</span> : <OutlineVariantIcon variant={variant.value} size={16} />}
+            disabled={off}
+            resetKey={resetKey}
+          >
+            <PopoverLabel>Shape</PopoverLabel>
+            <ChoiceRow
+              label="Shape"
+              value={variant.value}
+              onChange={(id) => style({ variant: id }, variant.ids)}
+              options={variant.options.map((option) => ({ value: option.id, title: option.label, content: <OutlineVariantIcon variant={option.id} size={18} /> }))}
             />
           </PropertyChip>
         )}
