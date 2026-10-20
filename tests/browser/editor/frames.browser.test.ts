@@ -125,3 +125,111 @@ suite("editor frames: drawing and picking", () => {
     expect(byId(els, "G").titlePlacement).toBe("above");
   });
 });
+
+suite("editor frames: moving, owning and deleting", () => {
+  let s: EditorSession | undefined;
+  afterEach(async () => {
+    if (s) {
+      expect(s.problems.filter((p) => !/favicon|404|willReadFrequently/i.test(p))).toEqual([]);
+      await s.close();
+    }
+    s = undefined;
+  });
+
+  /** The scene plus a connector from B (inside Billing) to C (outside). */
+  const withBoundary = (): El[] => [...scene(), connector("bc", "B", "C", { points: [{ x: 460, y: 170 }, { x: 700, y: 170 }], startConnection: { elementId: "B", anchorId: "B-anchor-right" }, endConnection: { elementId: "C", anchorId: "C-anchor-left" } })];
+
+  it("dragging a frame by its header moves everything it owns, keeps connectors attached, and is one undo step", async () => {
+    s = await openEditor({ elements: withBoundary() as never, dark: false });
+    const before = await s.elements();
+    await s.drag({ x: 300, y: 76 }, { x: 360, y: 116 });
+    const after = await s.elements();
+    expect(byId(after, "F").points[0]).toEqual({ x: 140, y: 100 });
+    expect(byId(after, "A").points[0]).toEqual({ x: 180, y: 170 });
+    expect(byId(after, "B").points[0]).toEqual({ x: 400, y: 170 });
+    expect(byId(after, "ab").points[0]).toMatchObject({ x: 300, y: 210 }); // travelled with its ends
+    expect(byId(after, "C").points[0]).toEqual({ x: 700, y: 130 }); // outside: untouched
+    expect(byId(after, "D").points[0]).toEqual({ x: 120, y: 570 }); // another frame: untouched
+    const bc = byId(after, "bc");
+    expect(bc.points[0]).toMatchObject({ x: 520, y: 210 }); // still leaves B's right side
+    expect(bc.points.at(-1)).toMatchObject({ x: 700, y: 170 }); // and still reaches C
+    expect(bc.startConnection.elementId).toBe("B");
+    expect(await s.selected()).toEqual(["F"]);
+    await s.press("Control+z");
+    expect(await s.elements()).toEqual(before);
+  });
+
+  it("arrow keys nudge a selected frame together with its contents", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 300, y: 76 });
+    await s.press("ArrowRight");
+    await s.press("ArrowDown");
+    const els = await s.elements();
+    expect(byId(els, "F").points[0]).toEqual({ x: 81, y: 61 });
+    expect(byId(els, "A").points[0]).toEqual({ x: 121, y: 131 });
+    expect(byId(els, "D").points[0]).toEqual({ x: 120, y: 570 });
+  });
+
+  it("dropping a shape into a frame makes the frame its owner; dragging it out releases it; both are one undo step", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.drag({ x: 760, y: 170 }, { x: 260, y: 330 }); // C into Billing
+    expect(byId(await s.elements(), "C").frameId).toBe("F");
+    await s.press("Control+z");
+    expect(byId(await s.elements(), "C").frameId).toBeUndefined();
+    expect(byId(await s.elements(), "C").points[0]).toEqual({ x: 700, y: 130 }); // the move and the owner change undo together
+    await s.press("Control+Shift+z");
+    await s.drag({ x: 160, y: 150 }, { x: 960, y: 650 }); // A out to empty canvas
+    expect(byId(await s.elements(), "A").frameId).toBeUndefined();
+    expect(byId(await s.elements(), "B").frameId).toBe("F");
+  });
+
+  it("a plain click on a shape does not change who owns it", async () => {
+    const stored = scene();
+    delete (stored[1] as El).frameId; // A sits inside Billing but was never assigned
+    s = await openEditor({ elements: stored as never, dark: false });
+    const before = await s.elements();
+    await s.click({ x: 180, y: 170 });
+    await s.waitForIdle();
+    expect(await s.elements()).toEqual(before);
+  });
+
+  it("an auto-fit frame follows its contents after a drag", async () => {
+    const stored = scene();
+    stored[0] = { ...stored[0], autoFit: true, padding: 20, minWidth: 10, minHeight: 10 };
+    s = await openEditor({ elements: stored as never, dark: false });
+    await s.drag({ x: 400, y: 170 }, { x: 560, y: 170 }); // B moves right by 160
+    const f = byId(await s.elements(), "F").points;
+    expect(f[1].x).toBeGreaterThan(600); // grew to wrap B plus padding: B's right edge is 620
+    expect(Math.round(f[1].x)).toBe(640);
+  });
+
+  it("Delete on a selected frame removes it and everything inside, and nothing else", async () => {
+    s = await openEditor({ elements: withBoundary() as never, dark: false });
+    await s.click({ x: 300, y: 76 });
+    await s.press("Delete");
+    const left = (await s.elements()).map((e) => e.id).sort();
+    expect(left).toEqual(["C", "D", "G"]); // bc went with B
+    await s.press("Control+z");
+    expect((await s.elements()).map((e) => e.id).sort()).toEqual(["A", "B", "C", "D", "F", "G", "ab", "bc"]);
+  });
+
+  it("the eraser passes over a frame without deleting it", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.pickTool("e");
+    await s.drag({ x: 200, y: 76 }, { x: 400, y: 76 });
+    expect((await s.elements()).some((e) => e.id === "F")).toBe(true);
+  });
+
+  it("Ctrl+D duplicates a frame with its contents; the copies belong to the copy", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 300, y: 76 });
+    await s.press("Control+d");
+    await s.waitForIdle();
+    const els = await s.elements();
+    const frames = els.filter((e) => e.type === "frame" && e.title === "Billing");
+    expect(frames).toHaveLength(2);
+    const copy = frames.find((f) => f.id !== "F")!;
+    expect(els.filter((e) => e.frameId === copy.id)).toHaveLength(3);
+    expect(els.filter((e) => e.frameId === "F")).toHaveLength(3);
+  });
+});

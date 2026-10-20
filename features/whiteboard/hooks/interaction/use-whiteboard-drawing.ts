@@ -1,3 +1,4 @@
+import { withFrameContents } from "@/core/frames/payload";
 import { classifyDraftCommit, growDraftElement, straightArrowPreview } from "./draft-element";
 import { createScratch } from "./gesture-scratch";
 import { useCallback, useRef, useState } from "react";
@@ -133,6 +134,8 @@ interface UseWhiteboardDrawingProps {
   addElementDirect?: (element: DrawingElement) => void;
   /** A shape, line or connector was just drawn: the editor selects it and returns to the select tool. */
   onElementCreated?: (id: string) => void;
+  /** A drag just ended: these shapes were moved (inside the same undo step). The editor re-homes them in frames. */
+  onDragCommit?: (movedIds: string[]) => void;
   // Viewport
   startPanning: (point: Point) => void;
   handlePan: (point: Point) => void;
@@ -176,6 +179,7 @@ export const useWhiteboardDrawing = ({
   onArrowSnapPreviewChange,
   addElementDirect,
   onElementCreated,
+  onDragCommit,
   startPanning,
   handlePan,
   stopPanning,
@@ -349,7 +353,8 @@ export const useWhiteboardDrawing = ({
           : null;
 
         // Locked shapes can be selected but never dragged; the rest of a mixed selection still moves.
-        const movable = outcome.selected.filter((id) => !selection.isLocked(id));
+        // A frame moves with everything it owns, though only the frame is selected.
+        const movable = withFrameContents(elements, outcome.selected).filter((id) => !selection.isLocked(id));
         if (outcome.startDrag && hasEditAccess && movable.length > 0) {
           beginGesture?.();
           scratchRef.current.dragSession = startDragSession(movable, elements, point, getElementBounds, {
@@ -368,7 +373,8 @@ export const useWhiteboardDrawing = ({
 
       if (currentTool === "eraser") {
         if (!hasEditAccess) return;
-        const elementsToDelete = getElementsAtPoint(point, eraserSize / 2);
+        // The eraser leaves frames alone (they hold other shapes); a frame is deleted by selecting it.
+        const elementsToDelete = getElementsAtPoint(point, eraserSize / 2).filter((el) => el.type !== "frame");
         beginGesture?.();
         if (elementsToDelete.length > 0) {
           deleteElements(elementsToDelete.map((el) => el.id));
@@ -643,6 +649,7 @@ export const useWhiteboardDrawing = ({
                 snap: snapSettings.enabled && !isSnapSuppressed(e),
                 options: { spacing: snapSettings.spacing, measures: snapSettings.distances },
               });
+              if (dx !== 0 || dy !== 0) scratchRef.current.dragMoved = true;
               moveElements(session.origin, dx, dy);
               setAlignmentGuides(guides);
               setAlignmentSpans(spans);
@@ -659,7 +666,7 @@ export const useWhiteboardDrawing = ({
             scratchRef.current.lastPoint,
             point,
             eraserSize / 2,
-          );
+          ).filter((el) => el.type !== "frame");
           if (elementsToDelete.length > 0) {
             deleteElements(elementsToDelete.map((el) => el.id));
           }
@@ -787,6 +794,7 @@ export const useWhiteboardDrawing = ({
     }
 
     const { collapseOnRelease: collapseTo, pendingArrowReroute } = scratchRef.current;
+    const dragged = scratchRef.current.dragMoved ? scratchRef.current.dragSession : null;
     resetScratch();
     if (collapseTo) setSelectedElements(collapseTo.ids);
 
@@ -830,6 +838,8 @@ export const useWhiteboardDrawing = ({
       }
     }
 
+    if (dragged && hasEditAccess) onDragCommit?.(dragged.origin.map((element) => element.id));
+
     // Everything the gesture wrote (including the final arrow reroute above) is
     // now one undo step.
     endGesture?.();
@@ -853,6 +863,7 @@ export const useWhiteboardDrawing = ({
     getElementsInBounds,
     hasEditAccess,
     endGesture,
+    onDragCommit,
     setCurrentElement,
     setSelectedElements,
     stopPanning,

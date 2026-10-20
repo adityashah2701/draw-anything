@@ -1,4 +1,5 @@
 import { attachableGroupIds, collectCopyGroups, regroupClones } from "@/core/groups/clone";
+import { withFrameContents } from "@/core/frames/payload";
 import type { DocPatch } from "@/core/groups/patch";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { cloneElements, collectCopySet } from "@/features/whiteboard/utils/arrange";
@@ -29,6 +30,15 @@ export const planInsertCopies = (
   const offset = { dx: PASTE_STEP * step, dy: PASTE_STEP * step };
   const clones = cloneElements([...source], offset, ctx.newId);
   const regrouped = regroupClones([...source], clones, groups, ctx.newId, attachableGroupIds(ctx.index));
+  // A copy lives in the copy of its frame when that was copied too, else stays in its own frame (if that
+  // still exists and is unlocked); a frame link is never carried over blindly.
+  const copiedFrame = new Map(source.map((shape, i) => [shape.id, regrouped.shapes[i]?.id ?? clones[i].id]));
+  regrouped.shapes = regrouped.shapes.map((copy, i) => {
+    const original = source[i].frameId;
+    if (original === undefined) return copy;
+    const target = copiedFrame.get(original) ?? (ctx.index.shapes.get(original)?.type === "frame" && !ctx.index.shapes.get(original)?.locked ? original : undefined);
+    return { ...copy, frameId: target } as DrawingElement;
+  });
   const idMap = new Map(source.map((shape, i) => [shape.id, regrouped.shapes[i]?.id ?? clones[i].id]));
   return {
     patch: { add: [...regrouped.groups, ...regrouped.shapes], update: [], remove: [] },
@@ -39,7 +49,7 @@ export const planInsertCopies = (
 
 /** The shapes `selected` stands for, with the connectors and labels that belong to them, as a copy source. */
 export const copySourceOf = (ctx: CommandContext, selected: ReadonlySet<string>) => {
-  const shapes = collectCopySet([...ctx.shapes], selected);
+  const shapes = collectCopySet([...ctx.shapes], new Set(withFrameContents(ctx.shapes, [...selected])));
   return { shapes, groups: collectCopyGroups(ctx.stored, new Set(shapes.map((shape) => shape.id))) };
 };
 

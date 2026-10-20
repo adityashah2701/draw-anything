@@ -111,6 +111,20 @@ re-route) · `resizeFrame` · `fitFrameToContent` · `planAutoFit` · `addToFram
 
 Locked elements are never moved, deleted or re-owned; a locked frame refuses changes.
 
+## Behaviour in the editor
+
+- **Selection is the frame alone**; its contents are implied. Move (drag, arrow keys, align/distribute), copy,
+  duplicate, delete and restack act on the frame *and everything it owns* (`withFrameContents`). Locked contents
+  are skipped by a move, as locked shapes are everywhere.
+- **Drop re-homes** (`reparentMoved`, centre rule) inside the drag's own undo step; a click that moves nothing
+  writes nothing. Auto-fit frames, including the one a shape left, re-fit in the same step.
+- **Delete** removes the frame and its contents (and attached connectors). The **eraser skips frames**.
+- **Duplicate/paste**: copies of a copied frame belong to the copy; a copied child stays in its own frame if it is
+  unlocked, otherwise it lands at top level.
+- **Z-order**: a frame moves with its contents; a child can never be sent below its frame.
+- **Connectors**: ones with every end inside travel rigidly; ones that leave the frame are re-routed from the new
+  position, never detached.
+
 ## Migration and compatibility
 
 - Boards without frames load unchanged: no field is required, `frameId` is optional, and the index of such a

@@ -1,3 +1,6 @@
+import { buildFrameIndex } from "@/core/frames/frame-index";
+import { planAutoFit, reparentMoved } from "@/core/frames/frame-api";
+import { applyPatch as applyStoredPatch } from "@/core/groups/patch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { DEFAULT_LABEL_FONT_SIZE, defaultLabelWeight } from "@/core/text/label-layout";
@@ -181,6 +184,28 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
    * so it is not an undo step.
    */
   const readLiveStored = useLiveblocksM(({ storage }) => storage.get("elements").toImmutable() as unknown as StoredElement[], []);
+
+  /**
+   * After a drag: shapes dropped into (or out of) a frame change owner, and auto-fit frames follow what
+   * they now hold. Runs inside the drag's undo step, so it is never a step of its own.
+   */
+  const commitFrameOwnership = useCallback(
+    (movedIds: string[]) => {
+      const stored = readLiveStored();
+      if (!stored.some((item) => item.type === "frame")) return;
+      const before = buildFrameIndex(stored);
+      const leftFrames = movedIds.flatMap((id) => before.parentOf.get(id) ?? []);
+      let working = stored;
+      const reparent = reparentMoved(stored, movedIds);
+      if (reparent?.ok) {
+        applyDocPatch(reparent.patch);
+        working = applyStoredPatch(stored, reparent.patch);
+      }
+      const fit = planAutoFit(working, movedIds, leftFrames);
+      if (fit) applyDocPatch(fit);
+    },
+    [applyDocPatch, readLiveStored],
+  );
 
   const seedElements = useLiveblocksM(
     ({ storage }, initial: DrawingElementJson[]) => {
@@ -398,6 +423,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     },
     onArrowSnapPreviewChange: uiState.handleArrowSnapPreviewChange,
     addElementDirect: (el) => addElement(el as unknown as DrawingElementJson),
+    onDragCommit: commitFrameOwnership,
     onElementCreated: (id) => {
       setSelectedElements([id]);
       uiState.setCurrentTool("select");
