@@ -11,7 +11,7 @@ export interface GenerateClientOptions {
   fetchImpl?: typeof fetch;
   /** What the generator is doing now, for the panel: a phase, a note, how many elements have been drawn. */
   onProgress?: (text: string) => void;
-  /** The generator's own reasoning notes, as they arrive (what the old Generate tab showed as "Thinking"). */
+  /** The generator's own reasoning notes, as they arrive. */
   onThinking?: (text: string) => void;
   /** Longest wait with nothing at all from the generator (ms). */
   idleMs?: number;

@@ -5,7 +5,6 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { createCanvasAgentHandler } from "@/features/canvas-tools/agent/handler";
 import { createCanvasTransport } from "@/features/canvas-tools/agent/transport";
 import { createSlidingWindowLimiter, getEnabledProviders } from "@/features/ai/server/request-guard";
-import { unifiedAgentServerEnabled } from "@/features/canvas-tools/agent/flags";
 import { InvalidRoomError, decideRoomAccess } from "@/lib/authz/room-access";
 
 export const runtime = "nodejs";
@@ -44,7 +43,6 @@ const handler = createCanvasAgentHandler({
     return decision.ok ? { ok: true } : { ok: false, status: decision.status, message: decision.message };
   },
   enabledProviders: () => getEnabledProviders(),
-  unifiedAgent: () => unifiedAgentServerEnabled(),
   // Board memory is read as the signed-in user, so Convex applies the board's own access rule again.
   loadMemories: async ({ whiteboardId }) => {
     const token = await (await auth()).getToken({ template: "convex" });

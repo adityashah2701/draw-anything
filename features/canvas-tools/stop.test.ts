@@ -31,7 +31,6 @@ describe("pressing Stop during generate_diagram", () => {
     const controller = new AbortController();
     const { run } = await scriptedRun({
       prompt: "Draw a mind map for planning a product launch",
-      unified: true,
       signal: controller.signal,
       board: { generate: async () => { controller.abort(aborted()); throw aborted(); } },
       script: [reply("", [call("enable_tools", { groups: ["generate"] })]), reply("", [call("generate_diagram", { description: "a mind map for planning a product launch" })]), reply("Done.")],

@@ -24,15 +24,12 @@ export const buildSystemPrompt = ({
   groups,
   specs,
   protocol,
-  available = TOOL_GROUPS,
   memories = [],
   summary = null,
 }: {
   groups: readonly ToolGroup[];
   specs: readonly ToolSpec[];
   protocol: "native" | "text";
-  /** Groups this server offers at all (the unified agent's groups are absent while it is off). */
-  available?: readonly ToolGroup[];
   /** Notes people saved for this board with the remember tool. */
   memories?: readonly MemoryNote[];
   /** What earlier turns of this conversation, no longer sent in full, were about. */
@@ -74,20 +71,14 @@ export const buildSystemPrompt = ({
     "- To add a node to an existing group, ungroup_elements it, then group_elements all members again with the same name.",
     "- Finish with validate_diagram; fix overlaps with tidy_diagram or move_elements, fix connectors that cross shapes or float with reroute_connector, and report any issue or failed call that remains. Never call a diagram tidy or connected while a result warned about connectors or a call failed.",
     "",
-    `Tools are grouped. Enabled now: ${groups.join(", ")}. Turn on more with enable_tools: ${available.filter((g) => !groups.includes(g)).map((g) => `${g} (${GROUP_DESCRIPTIONS[g]}: ${toolNames(g).join(", ")})`).join("; ") || "all are enabled"}. Only these tool names exist; never invent one. A tool named here whose group is off is switched on when you call it.`,
+    `Tools are grouped. Enabled now: ${groups.join(", ")}. Turn on more with enable_tools: ${TOOL_GROUPS.filter((g) => !groups.includes(g)).map((g) => `${g} (${GROUP_DESCRIPTIONS[g]}: ${toolNames(g).join(", ")})`).join("; ") || "all are enabled"}. Only these tool names exist; never invent one. A tool named here whose group is off is switched on when you call it.`,
   ];
-  if (available.includes("generate")) {
-    lines.push(
-      "",
-      "Drawing: to draw a whole NEW diagram from a description, enable the generate group and call generate_diagram once with the description (it plans, lays out and checks the diagram, and adds it beside what is on the board). Do not rebuild a diagram shape by shape. For changes to what is already on the board, use the edit tools, not generate_diagram. After it returns, if it shows clear clusters (services, data stores, clients, layers), enable organize and group each cluster with a short name using the node ids in its result; skip grouping when nothing belongs together. Then report what was added.",
-    );
-  }
-  if (available.includes("memory")) {
-    lines.push(
-      "",
-      "Memory: use remember only when the person explicitly asks you to remember something, states a lasting preference, corrects you, or settles a design decision for this board. Save one short sentence. Never save board contents, credentials or personal data.",
-    );
-  }
+  lines.push(
+    "",
+    "Drawing: to draw a whole NEW diagram from a description, enable the generate group and call generate_diagram once with the description (it plans, lays out and checks the diagram, and adds it beside what is on the board). Do not rebuild a diagram shape by shape. For changes to what is already on the board, use the edit tools, not generate_diagram. After it returns, if it shows clear clusters (services, data stores, clients, layers), enable organize and group each cluster with a short name using the node ids in its result; skip grouping when nothing belongs together. Then report what was added.",
+    "",
+    "Memory: use remember only when the person explicitly asks you to remember something, states a lasting preference, corrects you, or settles a design decision for this board. Save one short sentence. Never save board contents, credentials or personal data.",
+  );
   const notes = memories.slice(0, MAX_NOTES).map(cleanNote).filter((line): line is string => line !== null);
   if (notes.length > 0) {
     lines.push(

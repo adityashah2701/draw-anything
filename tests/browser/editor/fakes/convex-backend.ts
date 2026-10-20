@@ -235,7 +235,6 @@ export const backend = {
       return null;
     }
     if (name.startsWith("comments:")) return mutateComments(name, args ?? {});
-    if (name === "aiFrames:create") return "fake-ai-frame";
     if (name.startsWith("aiConversation:") || name === "aiMemory:remember") return mutateConversation(name, args ?? {});
     return null;
   },

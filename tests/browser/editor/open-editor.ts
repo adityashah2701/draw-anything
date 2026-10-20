@@ -16,8 +16,6 @@ export interface OpenEditorOptions {
   dark?: boolean;
   viewport?: { width: number; height: number };
   boardId?: string;
-  /** Build the editor with the unified agent flag on (shared conversation, generate and memory tools). */
-  unifiedAgent?: boolean;
 }
 export interface Gesture {
   /** Mouse moves between the two ends (default 8). */
@@ -77,7 +75,7 @@ export const openEditor = async (options: OpenEditorOptions = {}): Promise<Edito
     roomElements: readOnly ? elements : [],
   };
 
-  const [bundle, css] = await Promise.all([editorBundle(options.unifiedAgent), editorCss()]);
+  const [bundle, css] = await Promise.all([editorBundle(), editorCss()]);
   const browser = await chromium.launch({ executablePath, headless: true });
   const context = await browser.newContext({ viewport: options.viewport ?? { width: 1280, height: 800 }, acceptDownloads: true });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://localhost" });
