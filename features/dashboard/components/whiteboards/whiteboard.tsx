@@ -1,235 +1,134 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
-import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
-import WhiteboardEmptyState from "./whiteboard-empty-state";
-import { api } from "@/convex/_generated/api";
+import React, { useMemo, useState } from "react";
 import { CreateOrganization, useOrganization, useUser } from "@clerk/nextjs";
-import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Loader, Plus, Building, Users, ArrowRight } from "lucide-react";
+import { Plus, Search } from "lucide-react";
+import { toast } from "sonner";
+
+import { api } from "@/convex/_generated/api";
+import { Doc } from "@/convex/_generated/dataModel";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { EmptySheet } from "@/components/shared/empty-sheet";
 import { useApiMutation } from "@/hooks/use-api-mutation";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { ClerkDialog } from "../../dialogs/custom-dialog";
-import WhiteboardCard from "./whiteboard-card";
-import {Doc} from "@/convex/_generated/dataModel"
+import { BoardTile } from "../board-tile";
+import { DashboardSkeleton } from "../dashboard/dashboard-home";
+import WhiteboardEmptyState from "./whiteboard-empty-state";
 
-const Whiteboard = (props: any) => {
+const Whiteboard = () => {
   const router = useRouter();
   const { organization, isLoaded: orgLoaded } = useOrganization();
   const { user, isLoaded: userLoaded } = useUser();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  // Only fetch whiteboards if we have an organization
+  const [search, setSearch] = useState("");
+
   const { data: whiteboards = [], isPending: queryPending } = useApiQuery(
     api.whiteboard.getAll,
-    organization?.id ? { orgId: organization.id } : "skip"
+    organization?.id ? { orgId: organization.id } : "skip",
   );
+  const { mutate, isPending: creating } = useApiMutation(api.whiteboard.create);
 
-  const { mutate, isPending: mutationPending } = useApiMutation(
-    api.whiteboard.create
-  );
+  const boards = useMemo(() => {
+    const all = [...(whiteboards as Doc<"whiteboards">[])].sort((a, b) => b._creationTime - a._creationTime);
+    const needle = search.trim().toLowerCase();
+    return needle ? all.filter((b) => b.title.toLowerCase().includes(needle)) : all;
+  }, [whiteboards, search]);
 
   const handleCreate = async () => {
-    if (!organization) {
-      toast.error("Please select an organization first.");
-      return;
-    }
+    if (!organization) return toast.error("Please select a workspace first.");
     try {
-      await mutate({
-        title: "Untitled",
-        orgId: organization.id,
-      });
-      toast.success("Whiteboard created successfully.");
-      //  router.push(`/whiteboard/${whiteboard}`);
-    } catch (error) {
-      toast.error("Failed to create whiteboard.");
-      console.log(error)
+      await mutate({ title: "Untitled", orgId: organization.id });
+    } catch {
+      toast.error("Could not create the whiteboard");
     }
   };
 
-  // Loading state while checking user and organization status
+  const frame = (children: React.ReactNode) => (
+    <div className="mx-auto w-full max-w-6xl space-y-8 px-4 py-8 sm:px-8 sm:py-10">{children}</div>
+  );
+
   if (!orgLoaded || !userLoaded) {
-    return (
-      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center h-64">
-            <Loader className="w-8 h-8 animate-spin text-muted-foreground" />
-            <span className="ml-3 text-muted-foreground">Loading...</span>
-          </div>
-        </div>
-      </div>
-    );
+    return frame(<p className="label-mono" role="status">Loading…</p>);
   }
 
-  // User is not authenticated
   if (!user) {
-    return (
-      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-16">
-            <div className="max-w-md mx-auto">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Users className="w-8 h-8 text-blue-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground mb-4">
-                Sign in Required
-              </h2>
-              <p className="text-muted-foreground mb-6">
-                Please sign in to access your whiteboards and start
-                collaborating.
-              </p>
-              <Button onClick={() => router.push("/sign-in")} size="lg">
-                Sign In
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+    return frame(
+      <EmptySheet title="Sign in to see your whiteboards" description="Whiteboards belong to a workspace, so you need an account to open them.">
+        <Button onClick={() => router.push("/sign-in")}>Sign in</Button>
+      </EmptySheet>,
     );
   }
 
-  // No organization selected
   if (!organization) {
-    return (
-      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-16">
-            <div className="max-w-md mx-auto">
-              <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Building className="w-8 h-8 text-orange-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground mb-4">
-                No Organization Selected
-              </h2>
-              <p className="text-muted-foreground mb-8">
-                You need to select or create an organization to manage
-                whiteboards. Organizations help you collaborate with your team
-                and organize your work.
-              </p>
-              <div className="space-y-4 flex gap-4 justify-center">
-                <ClerkDialog
-                  isOpen={isDialogOpen}
-                  onOpenChange={setIsDialogOpen}
-                  trigger={
-                    <Button>
-                      <Plus className="w-full h-4 mr-2" />
-                      Create Organization
-                    </Button>
-                  }
-                >
-                  <CreateOrganization
-                    appearance={{
-                      elements: {
-                        cardBox: {
-                          height: "100%",
-                          width: "100%",
-                          overflow: "hidden",
-                        },
-                        rootBox: {
-                          height: "100%",
-                          width: "100%",
-                        },
-                      },
-                    }}
-                  />
-                </ClerkDialog>
-                <Button onClick={() => {}} variant="outline" size="lg">
-                  <Building className="w-4 h-4 mr-2" />
-                  Manage Organizations
-                </Button>
-              </div>
-              <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <strong>Tip:</strong> You can switch between organizations
-                  using the organization selector in the top navigation.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Loading whiteboards
-  if (queryPending) {
-    return (
-      <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">
-                Whiteboards
-              </h1>
-              <p className="text-muted-foreground">
-                Create and collaborate on visual ideas
-              </p>
-            </div>
-            <Button disabled>
-              <Plus className="w-4 h-4 mr-2" />
-              New Whiteboard
+    return frame(
+      <EmptySheet
+        title="Pick a workspace"
+        description="Whiteboards live in a workspace so your team can share them. Create one, or join an existing one from the switcher in the sidebar."
+      >
+        <ClerkDialog
+          isOpen={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          trigger={
+            <Button>
+              <Plus /> Create workspace
             </Button>
-          </div>
-
-          <div className="flex items-center justify-center h-64">
-            <Loader className="w-8 h-8 animate-spin text-muted-foreground" />
-            <span className="ml-3 text-muted-foreground">Loading whiteboards...</span>
-          </div>
-        </div>
-      </div>
+          }
+        >
+          <CreateOrganization
+            appearance={{ elements: { cardBox: { height: "100%", width: "100%", overflow: "hidden" }, rootBox: { height: "100%", width: "100%" } } }}
+          />
+        </ClerkDialog>
+      </EmptySheet>,
     );
   }
 
-  // Main content - organization exists and user is authenticated
-  return (
-    <div className="flex-1 ml-20 lg:ml-0 p-8 overflow-y-auto bg-background">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              Whiteboards
-            </h1>
-            <p className="text-muted-foreground">
-              Create and collaborate on visual ideas
-            </p>
-            {organization && (
-              <div className="mt-6 border-b border-border pb-3">
-                <h2 className="flex items-center text-2xl font-semibold text-foreground">
-                  <Building className="w-5 h-5 mr-2 text-muted-foreground" />
-                  {organization.name}
-                </h2>
-              </div>
-            )}
-          </div>
+  if (queryPending) return <DashboardSkeleton />;
 
-          <Button onClick={handleCreate} disabled={mutationPending}>
-            {mutationPending ? (
-              <Loader className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4 mr-2" />
-            )}
-            New Whiteboard
+  const total = (whiteboards as Doc<"whiteboards">[]).length;
+
+  return frame(
+    <>
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0 space-y-2">
+          <h1 className="text-xl font-semibold tracking-tight">Whiteboards</h1>
+          <p className="label-mono">{organization.name} · {total}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {total > 0 && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name"
+                aria-label="Search whiteboards"
+                className="h-9 w-48 pl-8 sm:w-56"
+              />
+            </div>
+          )}
+          <Button onClick={handleCreate} disabled={creating}>
+            <Plus /> {creating ? "Creating…" : "New whiteboard"}
           </Button>
         </div>
+      </header>
 
-        {/* Whiteboards or Empty State */}
-        {whiteboards.length === 0 ? (
-          <WhiteboardEmptyState
-            type="no-whiteboards"
-            onCreateNew={handleCreate}
-          />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {whiteboards.map((board: Doc<"whiteboards">) => (
-              <WhiteboardCard key={board._id} board={board} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+      {total === 0 ? (
+        <WhiteboardEmptyState type="no-whiteboards" onCreateNew={handleCreate} />
+      ) : boards.length === 0 ? (
+        <WhiteboardEmptyState type="no-results" searchQuery={search.trim()} onClearFilters={() => setSearch("")} />
+      ) : (
+        <ul className="grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-3 xl:grid-cols-4">
+          {boards.map((board) => (
+            <li key={board._id}>
+              <BoardTile board={board} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </>,
   );
 };
 

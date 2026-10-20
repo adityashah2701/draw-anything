@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import {
   LayoutDashboard,
   FileText,
   Users,
   CreditCard,
-  GalleryVerticalEnd,
   ChevronsUpDown,
 } from "lucide-react";
 import {
@@ -58,12 +58,8 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <div className="flex items-center cursor-pointer">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-                  <GalleryVerticalEnd className="size-4" />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none pl-2">
-                  <span className="font-semibold text-base">Draw Anything</span>
-                </div>
+                <Image src="/logo.svg" alt="" width={20} height={20} className="size-5" />
+                <span className="pl-2 text-sm font-semibold tracking-tight">Draw Anything</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -71,7 +67,7 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
+          <SidebarGroupLabel className="label-mono h-6">Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {primaryNavItems.map((item) => (
@@ -90,7 +86,7 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>Organization</SidebarGroupLabel>
+          <SidebarGroupLabel className="label-mono h-6">Team</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {organizationItems.map((item) => (
@@ -115,7 +111,7 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              className="relative cursor-pointer w-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border shadow-sm"
+              className="relative cursor-pointer w-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border"
             >
               <div className="flex items-center gap-2 w-full">
                 <Avatar className="h-8 w-8 rounded-md border">
@@ -123,7 +119,7 @@ export function AppSidebar({
                     src={organization?.imageUrl}
                     alt={organization?.name || "Workspace"}
                   />
-                  <AvatarFallback className="rounded-md bg-transparent">
+                  <AvatarFallback className="rounded-md bg-muted text-xs font-medium">
                     {organization?.name?.charAt(0) || "W"}
                   </AvatarFallback>
                 </Avatar>

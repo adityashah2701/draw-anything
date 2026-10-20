@@ -21,15 +21,15 @@ const DeleteDialog = ({isDeleteDialogOpen,setIsDeleteDialogOpen,handleDelete,isD
      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Are you sure ? </DialogTitle>
+            <DialogTitle>Delete this whiteboard?</DialogTitle>
             <DialogDescription>
-              This will delete the whiteboard permanently. Changes can't be reverted back. 
+              “{whiteboard.title}” and its comments are removed for everyone in the workspace. This can’t be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               onClick={() => setIsDeleteDialogOpen(false)}
             >
               Cancel
@@ -46,7 +46,7 @@ const DeleteDialog = ({isDeleteDialogOpen,setIsDeleteDialogOpen,handleDelete,isD
                   Deleting...
                 </>
               ) : (
-                "Delete"
+                "Delete whiteboard"
               )}
             </Button>
           </DialogFooter>
