@@ -175,12 +175,30 @@ suite("Diagram code editor in real Chrome (real component on a fake board; Clerk
     await page.keyboard.press("Control+End");
     await page.keyboard.type("\nB > C");
     await page.keyboard.press("Escape");
-    console.log("DBG", JSON.stringify(await value()), await page.locator("#diagram-code-status").innerText());
     await page.getByRole("button", { name: /Update diagram/ }).click({ timeout: 3000 });
     const after = await board();
     expect((await state()).nodes).toBe(3);
     for (const el of before.filter((e) => e.role === "node")) expect(after.some((a) => a.id === el.id)).toBe(true);
     expect(await page.locator("#diagram-code-status").innerText()).toMatch(/Updated: .*added/);
+  });
+
+  it("draws a frame through the frame API and keeps it when the code is updated", async () => {
+    await area().fill("frame Edge {\n  Web\n  API\n}\nWeb > API\n");
+    await page.getByRole("button", { name: /Add to canvas/ }).click();
+    const read = () =>
+      page.evaluate(() => {
+        const els = window.U.codeEditorState().elements;
+        const frame = els.find((e) => e.type === "frame");
+        return { frame: frame?.id, title: (frame as { title?: string } | undefined)?.title, framed: els.filter((e) => e.ai?.role === "node" && e.frameId === frame?.id).length };
+      });
+    const first = await read();
+    expect(first.title).toBe("Edge");
+    expect(first.framed).toBe(2);
+    await area().fill("frame Edge [label: Public edge] {\n  Web\n  API\n}\nWeb > API\n");
+    await page.getByRole("button", { name: /Update diagram/ }).click({ timeout: 3000 });
+    const second = await read();
+    expect(second).toEqual({ frame: first.frame, title: "Public edge", framed: 2 });
+    expect(errors).toEqual([]);
   });
 
   it("with Live on, valid edits reach the board by themselves and invalid ones never do", async () => {

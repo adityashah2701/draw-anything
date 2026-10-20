@@ -2,6 +2,8 @@ import { parseAnchorSide, buildAnchorId } from "@/core/anchors/generate-anchors"
 import type { NodePin } from "@/features/ai/server/layout/pins";
 import type { DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
 import { elementsFromDiagramCode, graphFromElements } from "./canvas";
+import { FRAME_DEFAULTS } from "@/core/frames/frame-model";
+import { isCodeFrame } from "./frames";
 import { compileDiagramCode } from "./language/compile";
 import type { Diagnostic } from "./language/diagnostics";
 import { membersOf } from "./language/ir";
@@ -101,6 +103,7 @@ const keysOfFresh = (elements: readonly DrawingElement[]): Map<string, string> =
       nodeKey.set(el.id, el.ai!.semanticId!);
     } else if (role === "group") keys.set(el.id, `group:${el.ai!.semanticId}`);
     else if (role === "group-label") keys.set(el.id, `group-label:${el.ai!.semanticId}`);
+    else if (isCodeFrame(el)) keys.set(el.id, `frame:${el.ai!.semanticId}`);
   }
   const seen = new Map<string, number>();
   const arrowKey = new Map<string, string>();
@@ -147,6 +150,13 @@ const fieldsOf = (el: DrawingElement | undefined): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   if (!el) return out;
   for (const [key, value] of Object.entries(el as unknown as Record<string, unknown>)) {
+    if (key === "points" && el.type === "frame") {
+      // The box is whole canvas units, as the code writes it, so a rounded-off position is not a change.
+      const xs = el.points.map((p) => p.x);
+      const ys = el.points.map((p) => p.y);
+      out.box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map(Math.round);
+      continue;
+    }
     if (DERIVED.has(key)) continue;
     if (key === "ai" && value && typeof value === "object") {
       for (const [sub, v] of Object.entries(value as Record<string, unknown>)) out[`ai.${sub}`] = v;
@@ -155,8 +165,10 @@ const fieldsOf = (el: DrawingElement | undefined): Record<string, unknown> => {
   return out;
 };
 
-const setField = (target: Record<string, unknown>, field: string, value: unknown) => {
-  if (field.startsWith("ai.")) {
+const setField = (target: Record<string, unknown>, field: string, value: unknown, fresh?: DrawingElement) => {
+  if (field === "box") {
+    if (fresh) target.points = fresh.points;
+  } else if (field.startsWith("ai.")) {
     const ai = { ...((target.ai as Record<string, unknown>) ?? {}) };
     if (value === undefined) delete ai[field.slice(3)];
     else ai[field.slice(3)] = value;
@@ -177,6 +189,8 @@ const mergeElement = (
   fresh: DrawingElement,
   base: DrawingElement | undefined,
   resolve: ApplyInput["resolve"],
+  /** A frame the code gives no box: its box is the person's, and only grows (see `growAutoFrames`). */
+  autoBox = false,
 ): Merged => {
   const cur = fieldsOf(current);
   const next = fieldsOf(fresh);
@@ -186,6 +200,7 @@ const mergeElement = (
   let changed = false;
 
   for (const field of new Set([...Object.keys(next), ...Object.keys(was)])) {
+    if (autoBox && field === "box") continue;
     const n = next[field];
     const c = cur[field];
     if (same(n, c)) continue;
@@ -200,12 +215,13 @@ const mergeElement = (
       continue;
     }
     if (take === "canvas") continue;
-    setField(out, field, n);
+    setField(out, field, n, fresh);
     changed = true;
   }
 
   // Derived geometry follows the new compile. A connector the user routed by hand keeps its path.
-  const manual = isArrow(current) && (current as { isManuallyRouted?: boolean }).isManuallyRouted === true;
+  // A frame's box was merged field by field above, like its title.
+  const manual = current.type === "frame" || (isArrow(current) && (current as { isManuallyRouted?: boolean }).isManuallyRouted === true);
   const nextPoints = manual ? current.points : fresh.points;
   if (!same(nextPoints, current.points)) {
     out.points = nextPoints;
@@ -281,6 +297,53 @@ const asIssues = (diagnostics: readonly Diagnostic[]): DiagramCodeIssue[] => dia
 
 // ── code to canvas ──────────────────────────────────────────────────────────
 
+/**
+ * A frame without a box in the code keeps the box the person gave it, but must still hold its
+ * contents: when members were added, moved or pinned outside it, the box grows to take them in.
+ */
+const growAutoFrames = (canvas: readonly DrawingElement[], patch: ApplyPatch, autoKeys: ReadonlySet<string>, owned: Readonly<Record<string, string>>) => {
+  const after = new Map(canvas.map((el) => [el.id, el]));
+  for (const id of patch.remove) after.delete(id);
+  for (const el of patch.add) after.set(el.id, el);
+  for (const el of patch.update) after.set(el.id, el);
+  const members = new Map<string, DrawingElement[]>();
+  for (const el of after.values()) if (el.frameId && !isArrow(el)) members.set(el.frameId, [...(members.get(el.frameId) ?? []), el]);
+  // Innermost frames first, so a frame also holds the grown boxes of the frames inside it.
+  const depth = (id: string) => {
+    let n = 0;
+    for (let at = after.get(id)?.frameId; at && n < 100; at = after.get(at)?.frameId) n += 1;
+    return n;
+  };
+  const frameIds = Object.entries(owned).filter(([id, key]) => autoKeys.has(key) && after.get(id)?.type === "frame").map(([id]) => id).sort((a, b) => depth(b) - depth(a));
+  for (const id of frameIds) {
+    const frame = after.get(id)!;
+    const held = members.get(id) ?? [];
+    if (held.length === 0) continue;
+    const box = boundsOf(frame.points);
+    const padding = (frame as { padding?: number }).padding ?? FRAME_DEFAULTS.padding;
+    let [minX, minY, maxX, maxY] = [box.minX, box.minY, box.maxX, box.maxY];
+    for (const el of held) {
+      const b = boundsOf(el.points);
+      minX = Math.min(minX, b.minX - padding);
+      minY = Math.min(minY, b.minY - padding - FRAME_DEFAULTS.headerHeight);
+      maxX = Math.max(maxX, b.maxX + padding);
+      maxY = Math.max(maxY, b.maxY + padding);
+    }
+    // Only grow when something really sticks out of the box, not merely into its padding.
+    const sticksOut = held.some((el) => {
+      const b = boundsOf(el.points);
+      return b.minX < box.minX || b.minY < box.minY || b.maxX > box.maxX || b.maxY > box.maxY;
+    });
+    if (!sticksOut) continue;
+    const grown = { ...frame, points: [{ x: minX, y: minY }, { x: maxX, y: maxY }] } as DrawingElement;
+    after.set(id, grown);
+    const at = patch.update.findIndex((el) => el.id === id);
+    if (at >= 0) patch.update[at] = grown;
+    else if (patch.add.some((el) => el.id === id)) patch.add = patch.add.map((el) => (el.id === id ? grown : el));
+    else patch.update.push(grown);
+  }
+};
+
 const generationOf = (sync: SyncState | null | undefined, fallback: string): string => {
   const first = sync ? Object.values(sync.baseline).find((el) => el.ai?.generationId) : undefined;
   return first?.ai?.generationId ?? fallback;
@@ -340,6 +403,7 @@ export const planApply = (input: ApplyInput): ApplyOutcome => {
   }
   const remap = (el: DrawingElement): DrawingElement => {
     const copy = { ...el, id: idMap.get(el.id) ?? el.id } as Connected;
+    if (copy.frameId) copy.frameId = idMap.get(copy.frameId) ?? copy.frameId;
     for (const link of ["startConnection", "endConnection"] as const) {
       const c = copy[link];
       if (!c) continue;
@@ -349,6 +413,9 @@ export const planApply = (input: ApplyInput): ApplyOutcome => {
     }
     return copy as DrawingElement;
   };
+
+  // Frames the code gives no x/y/w/h wrap their contents; their box is not compared with the code.
+  const autoBoxKeys = new Set(compiled.ir.frames.filter((f) => f.x === undefined && f.y === undefined && f.width === undefined && f.height === undefined).map((f) => `frame:${f.id}`));
 
   const patch: ApplyPatch = { add: [], update: [], remove: [] };
   const conflicts: Conflict[] = [];
@@ -369,7 +436,7 @@ export const planApply = (input: ApplyInput): ApplyOutcome => {
       continue;
     }
     newOwned[current.id] = key;
-    const merged = mergeElement(key, current, wanted, sync?.baseline[key], resolve);
+    const merged = mergeElement(key, current, wanted, sync?.baseline[key], resolve, autoBoxKeys.has(key));
     conflicts.push(...merged.conflicts);
     if (merged.changed) patch.update.push(merged.element);
     else unchanged += 1;
@@ -379,6 +446,8 @@ export const planApply = (input: ApplyInput): ApplyOutcome => {
   for (const el of owned.values()) if (!(el.id in newOwned)) patch.remove.push(el.id);
 
   if (conflicts.length > 0) return { status: "conflict", conflicts };
+
+  growAutoFrames(canvas, patch, autoBoxKeys, newOwned);
 
   return {
     status: "ready",
@@ -414,14 +483,28 @@ export const loadFromCanvas = (
   const { graph, consumedIds, provenance } = graphFromElements(scope, { layout });
   if (graph.nodes.length === 0) return null;
 
-  const { code, names } = serializeDiagramCodeDetailed(graph);
+  const { code, names, frameNames } = serializeDiagramCodeDetailed(graph);
   const compiled = compileDiagramCode(code);
   const baselineDraw = elementsFromDiagramCode(code, { generationId, frameId: "diagram-code" });
   const baselineKeys = keysOfFresh(baselineDraw.elements);
+  // The baseline is drawn with ids of its own; a member's `frameId` must name the frame element that is really on the board.
+  const boardFrameOfKey = new Map<string, string>();
+  for (const [graphId, name] of frameNames) {
+    const irFrame = compiled.ir.frames.find((f) => f.name === name);
+    const elementId = provenance.frames.get(graphId);
+    if (irFrame && elementId) boardFrameOfKey.set(`frame:${irFrame.id}`, elementId);
+  }
+  const drawnFrameId = new Map<string, string>(); // baseline frame element id -> board frame element id
+  for (const el of baselineDraw.elements) {
+    const key = baselineKeys.get(el.id);
+    const board = key ? boardFrameOfKey.get(key) : undefined;
+    if (board) drawnFrameId.set(el.id, board);
+  }
   const baseline: Record<string, DrawingElement> = {};
   for (const el of baselineDraw.elements) {
     const key = baselineKeys.get(el.id);
-    if (key) baseline[key] = el;
+    if (!key) continue;
+    baseline[key] = el.frameId && drawnFrameId.has(el.frameId) ? ({ ...el, frameId: drawnFrameId.get(el.frameId) } as DrawingElement) : el;
   }
 
   const owned: Record<string, string> = {};
@@ -460,6 +543,8 @@ export const loadFromCanvas = (
     owned[source.frameId] = `group:${irId}`;
     if (source.titleId) owned[source.titleId] = `group-label:${irId}`;
   });
+
+  for (const [key, elementId] of boardFrameOfKey) owned[elementId] = key;
 
   // Anything the diagram consumed that no declaration claims is removed on the next update, as before.
   for (const id of consumedIds) if (!(id in owned)) owned[id] = `orphan:${id}`;
