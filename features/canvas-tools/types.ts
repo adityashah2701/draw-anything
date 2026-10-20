@@ -9,7 +9,7 @@ import type { ToolErrorInfo } from "./errors";
  * (or the server, from the request) enables the rest. A call to a tool outside the enabled groups is
  * refused by the executor, whatever the model wrote.
  */
-export const TOOL_GROUPS = ["inspect", "create", "edit", "connect", "arrange", "organize", "document", "generate", "memory"] as const;
+export const TOOL_GROUPS = ["inspect", "create", "edit", "connect", "arrange", "organize", "document", "generate", "code", "memory"] as const;
 export type ToolGroup = (typeof TOOL_GROUPS)[number];
 
 /** What the editor behind a host can do. A tool that needs a capability the host lacks is refused with `unavailable`. */
@@ -196,6 +196,8 @@ export interface ToolDefinition<Schema extends z.ZodType = z.ZodType> {
   destructive?: boolean;
   /** The board must not have changed (by anyone else) since the model last looked. */
   strictRevision?: boolean;
+  /** A read whose answer does not depend on the board (an icon search): repeated calls are answered from the run's cache whatever changed meanwhile. */
+  boardIndependent?: boolean;
   needs?: Array<keyof HostCapabilities>;
   /** Also usable while any of these groups is on: a follow-up tool that belongs with the work of other groups (fit_frame after moving things). */
   alsoWith?: ToolGroup[];

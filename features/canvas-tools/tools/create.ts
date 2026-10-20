@@ -12,12 +12,11 @@ import { kindColors } from "@/features/ai/server/canvas-compiler";
 import { elementsFromDiagramCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { planDuplicate } from "@/features/whiteboard/commands/duplicate";
-import { frameHeadingPosition, planFrame } from "@/features/whiteboard/commands/frame";
 import { supportsStyle, type StyleKey } from "@/features/whiteboard/commands/style";
 import { buildIconElement, DEFAULT_ICON_SIZE } from "@/features/whiteboard/utils/icon-picker";
-import type { Bounds, DrawingElement, GroupRecord } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, GroupRecord } from "@/features/whiteboard/types/whiteboard.types";
 import { ToolError } from "../errors";
-import { color, coordinate, elementId, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POINTS, newElementId, point, targetIds } from "../schemas";
+import { color, coordinate, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POINTS, newElementId, point, targetIds } from "../schemas";
 import type { ToolDefinition } from "../types";
 import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, snapPlacement } from "./helpers";
 
@@ -360,99 +359,6 @@ export const createGroupTool: ToolDefinition<typeof groupInput> = {
   },
 };
 
-// ── create_frame_or_section ──────────────────────────────────────────────────
-
-const frameInput = z
-  .object({
-    title: z.string().min(1).max(120).describe("Heading shown on the frame."),
-    ids: targetIds.optional().describe("Wrap these elements. Nothing inside moves."),
-    bounds: z.object({ x: coordinate, y: coordinate, width: length, height: length }).strict().optional().describe("An empty frame of this size (when no ids are given)."),
-    padding: z.number().finite().min(0).max(400).optional(),
-    id: newElementId.optional(),
-  })
-  .strict();
-
-export const createFrameTool: ToolDefinition<typeof frameInput> = {
-  name: "create_frame_or_section",
-  group: "create",
-  description: "Draw a titled frame (section) around elements, or at a given size: an outline plus heading behind the content, not a group; it does not follow its contents (see fit_frame). Adds two elements.",
-  input: frameInput,
-  access: "write",
-  run: ({ title, ids, bounds, padding, id }, env) => {
-    if (!ids && !bounds) throw new ToolError("invalid_arguments", "Give `ids` to wrap or `bounds` for an empty frame.");
-    const { ctx } = env;
-    const frameId = claimId(env, id);
-    if (ctx.index.shapes.has(`${frameId}-label`)) throw new ToolError("conflict", `"${frameId}-label" already exists.`);
-    const shapeIds = ids ? resolveTargets(env, ids).shapeIds : [];
-    const box: Bounds | undefined = bounds
-      ? { minX: bounds.x, minY: bounds.y, maxX: bounds.x + bounds.width, maxY: bounds.y + bounds.height, width: bounds.width, height: bounds.height }
-      : undefined;
-    const plan = planFrame(ctx, shapeIds, { title: normalizeText(title).trim(), id: frameId, padding, bounds: box });
-    if (!plan) throw new ToolError("invalid_state", "The frame has nothing to surround (the elements have no size).");
-    const warnings = looseFrameWarning(env, plan.bounds, shapeIds);
-    // Frames are outlines: they sit behind the content, as in diagrams the AI draws.
-    const order = [plan.ids.frame, plan.ids.label, ...ctx.stored.map((item) => item.id)];
-    return {
-      summary: `Created frame "${title}" (${frameId})${shapeIds.length > 0 ? ` around ${count(shapeIds.length, "element")}` : ""}.`,
-      data: { id: frameId, labelId: plan.ids.label, x: Math.round(plan.bounds.minX), y: Math.round(plan.bounds.minY), width: Math.round(plan.bounds.width), height: Math.round(plan.bounds.height) },
-      patch: { ...plan.patch, order },
-      warnings,
-    };
-  },
-};
-
-/** A frame much larger than what it holds reads as empty space and swallows the connectors beside it. */
-const looseFrameWarning = (env: Parameters<ToolDefinition["run"]>[1], frame: Bounds, members: readonly string[]): string[] => {
-  const boxes = members.flatMap((id) => {
-    const shape = env.ctx.index.shapes.get(id);
-    return shape ? (env.ctx.getBounds(shape) ?? []) : [];
-  });
-  if (boxes.length < 2) return [];
-  const used = boxes.reduce((sum, b) => sum + b.width * b.height, 0);
-  if (frame.width * frame.height <= used * 4) return [];
-  return ["The frame is much larger than its members: they sit far apart, so it also covers empty space and the connectors between them. Bring the members together (move_elements or auto_layout on them) and call fit_frame."];
-};
-
-// ── fit_frame ────────────────────────────────────────────────────────────────
-
-const fitFrameInput = z
-  .object({
-    frame: elementId.describe("The frame."),
-    ids: targetIds.describe("All its members now."),
-  })
-  .strict();
-
-export const fitFrameTool: ToolDefinition<typeof fitFrameInput> = {
-  name: "fit_frame",
-  group: "create",
-  alsoWith: ["edit", "arrange", "connect", "organize"],
-  description: "Re-fit a frame around its members (heading included). Frames do not follow their contents: call after moving, adding or removing members.",
-  input: fitFrameInput,
-  access: "write",
-  run: ({ frame, ids }, env) => {
-    const { ctx } = env;
-    const frameId = frame.endsWith("-label") && ctx.index.shapes.has(frame.slice(0, -"-label".length)) ? frame.slice(0, -"-label".length) : frame;
-    const rect = ctx.index.shapes.get(frameId);
-    const label = ctx.index.shapes.get(`${frameId}-label`);
-    if (!rect) throw new ToolError("not_found", `No frame with id ${frameId}.`);
-    if (rect.ai?.role !== "group" || rect.type !== "rectangle") throw new ToolError("invalid_state", `${frameId} is not a frame made by create_frame_or_section.`);
-    if (rect.locked || label?.locked) throw new ToolError("locked", `The frame ${frameId} is locked. Unlock it first (unlock_elements).`);
-    const members = resolveTargets(env, ids).shapeIds.filter((id) => id !== frameId && id !== `${frameId}-label`);
-    const plan = planFrame(ctx, members, { title: "", id: "fit-probe" });
-    if (!plan) throw new ToolError("invalid_state", "The elements have no size to surround.");
-    const { minX, minY, maxX, maxY } = plan.bounds;
-    const moved = [{ ...rect, points: [{ x: minX, y: minY }, { x: maxX, y: maxY }] } as DrawingElement];
-    if (label) moved.push({ ...label, points: [frameHeadingPosition(ctx, plan.bounds, label.text ?? "")] } as DrawingElement);
-    const warnings = looseFrameWarning(env, plan.bounds, members);
-    return {
-      warnings,
-      summary: `Fitted ${frameId} around ${count(members.length, "element")}.`,
-      data: { id: frameId, x: Math.round(minX), y: Math.round(minY), width: Math.round(maxX - minX), height: Math.round(maxY - minY) },
-      patch: { add: [], update: moved, remove: [] },
-    };
-  },
-};
-
 // ── duplicate_elements ───────────────────────────────────────────────────────
 
 const duplicateInput = z
@@ -530,5 +436,5 @@ export const importDiagramTool: ToolDefinition<typeof importInput> = {
   },
 };
 
-export const CREATE_TOOLS = [createShapeTool, createTextTool, createIconTool, createSemanticNodeTool, createGroupTool, createFrameTool, fitFrameTool, duplicateElementsTool, importDiagramTool] as const;
+export const CREATE_TOOLS = [createShapeTool, createTextTool, createIconTool, createSemanticNodeTool, createGroupTool, duplicateElementsTool, importDiagramTool] as const;
 

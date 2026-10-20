@@ -1,5 +1,5 @@
 import { pickDefaultProvider } from "@/features/ai/default-provider";
-import { normalizeArgs } from "../args";
+import { coerceArgs, normalizeArgs } from "../args";
 import { unknownToolMessage } from "../tool-names";
 import { isSelectableNvidiaModel, modelSupportsVision } from "@/features/ai/nvidia-models";
 import { getAIModelProviderConfig } from "@/features/ai/server/model-providers";
@@ -84,7 +84,7 @@ export const checkModelCalls = (reply: ModelReply, tools: readonly ToolDefinitio
       return { id, name: tool.name, args: call.args, problem: { code: "tool_not_enabled" as const, message: `"${tool.name}" belongs to the "${tool.group}" tools, which are not enabled. Call enable_tools with {"groups":["${tool.group}"]} first.` } };
     }
     const args = asArgs(call.args);
-    const parsed = tool.input.safeParse(normalizeArgs(tool, args).args);
+    const parsed = tool.input.safeParse(coerceArgs(tool, normalizeArgs(tool, args).args).args);
     if (!parsed.success) return { id, name: tool.name, args, problem: { code: "invalid_arguments" as const, message: `Invalid arguments for ${tool.name}: ${describeIssues(parsed.error)}.` } };
     if (tool.name === "enable_tools") for (const group of (parsed.data as { groups: ToolGroup[] }).groups) if (offered.has(group)) on.add(group);
     return { id, name: tool.name, args };

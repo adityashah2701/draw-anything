@@ -59,6 +59,7 @@ export const renameGroup: ToolDefinition<typeof renameInput> = {
   input: renameInput,
   access: "write",
   run: ({ id, name }, env) => {
+    if (env.ctx.index.shapes.get(id)?.type === "frame") throw new ToolError("invalid_state", `"${id}" is a frame, not a group. Rename it with update_frame {id, title}.`, { ids: [id] });
     if (!env.ctx.index.groups.has(id)) throw new ToolError(env.ctx.index.shapes.has(id) ? "invalid_state" : "not_found", env.ctx.index.shapes.has(id) ? `"${id}" is a shape, not a group.` : `No group with id "${id}".`, { ids: [id] });
     const patch = planRenameGroup(env.ctx.stored, id, name);
     return { summary: patch ? `Renamed ${id} to "${name.trim() || "Group"}".` : "The group already has that name; nothing changed.", data: { id, name: name.trim().slice(0, 80) || "Group" }, patch };

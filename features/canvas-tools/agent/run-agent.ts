@@ -70,6 +70,11 @@ const STALL_LIMIT = 3;
 const NO_PROGRESS_LIMIT = 4;
 /** This many steps in a row where every call named a tool that does not exist ends the run. */
 const UNKNOWN_TOOL_LIMIT = 3;
+/** Steps in a row that only read the board: the model is told to act or answer, then the run ends. Looking again is not progress, however the questions are worded. */
+const READ_ONLY_NUDGE = 6;
+const READ_ONLY_LIMIT = 10;
+/** Steps in a row where every answer was one the model already had. */
+const REPEAT_LIMIT = 3;
 
 const callKey = (call: CanvasToolCall) => `${call.name}:${JSON.stringify(call.args ?? {})}`;
 
@@ -130,6 +135,8 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
   let unknownStreak = 0;
   let lastSignature = "";
   let sameCalls = 0;
+  let readOnlySteps = 0;
+  let repeatedSteps = 0;
 
   /** Ends the run when a budget is spent, with the work kept and the way to carry on. */
   const exhausted = (kind: NonNullable<AgentRun["limit"]>, steps: number): AgentRun => {
@@ -184,11 +191,15 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
 
     onEvent?.({ type: "calling", step, calls });
     const stepResults = await executor.executeAll(calls.map((call) => ({ id: call.id, name: call.name, args: call.args })));
+    readOnlySteps = calls.every((call) => executor.tools.get(call.name)?.access === "read") ? readOnlySteps + 1 : 0;
+    repeatedSteps = stepResults.every((r) => r.ok && (r.data as { repeated?: boolean } | undefined)?.repeated === true) ? repeatedSteps + 1 : 0;
+    const nudge =
+      repeatedSteps > 0 ? "You already have these answers and the board has not changed. Use what you have: make the change, or tell the person what you found." : readOnlySteps === READ_ONLY_NUDGE ? `${readOnlySteps} steps in a row only looked at the board. Make the change now, or answer the person with what you found.` : undefined;
     calls.forEach((call, index) => {
-      const result = stepResults[index];
-      results.push(result);
+      const result = index === calls.length - 1 && nudge ? { ...stepResults[index], warnings: [...(stepResults[index].warnings ?? []), nudge] } : stepResults[index];
+      results.push(stepResults[index]);
       messages.push({ role: "tool", callId: call.id, name: call.name, content: formatResultForModel(result) });
-      onEvent?.({ type: "tool", step, call, result });
+      onEvent?.({ type: "tool", step, call, result: stepResults[index] });
     });
 
     if (stepResults.some((r, index) => r.ok && executor.tools.get(calls[index].name)?.access === "write")) {
@@ -201,6 +212,9 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
     lastSignature = signatureOfStep;
     if (sameCalls >= NO_PROGRESS_LIMIT) return finish("stalled", turn.text, "The assistant kept asking the same thing without changing the board, so it was stopped. Say what to do next, or \"continue\" to try again.", step);
 
+    if (readOnlySteps >= READ_ONLY_LIMIT || repeatedSteps >= REPEAT_LIMIT) {
+      return finish("stalled", turn.text, "The assistant kept looking at the board without changing anything, so it was stopped. Say what to do next, or \"continue\" to try again.", step);
+    }
     const failures = stepResults.filter((r) => !r.ok);
     // Guessing names of tools that do not exist, step after step, is a loop the result messages did not break.
     const guessed = failures.filter((r) => r.error?.code === "unknown_tool");

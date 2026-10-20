@@ -192,17 +192,19 @@ describe("create_group", () => {
 });
 
 describe("create_frame_or_section", () => {
-  it("wraps elements in a titled frame behind them without moving anything", async () => {
+  it("wraps elements in a real frame behind them without moving anything", async () => {
     const s = setup({ elements: [node("a", "A", 100, 100), node("b", "B", 400, 100)] });
     const result = await s.ok("create_frame_or_section", { id: "fr", title: "Services", ids: ["a", "b"] });
-    expect(result.affected.created).toEqual(["fr", "fr-label"]);
-    expect(idsOf(s.mem.stored).slice(0, 2)).toEqual(["fr", "fr-label"]);
+    expect(result.affected.created).toEqual(["fr"]);
+    expect(idsOf(s.mem.stored)[0]).toBe("fr");
     const frame = boxOf(find(s.mem.stored, "fr"));
     expect(frame.x).toBeLessThan(100);
     expect(frame.x + frame.w).toBeGreaterThan(568);
-    expect(find(s.mem.stored, "fr")).toMatchObject({ isGuide: true, ai: { role: "group" } });
-    expect(find(s.mem.stored, "fr-label")).toMatchObject({ text: "Services", ai: { role: "group-label" } });
+    expect(find(s.mem.stored, "fr")).toMatchObject({ type: "frame", title: "Services" });
+    expect(find(s.mem.stored, "a")).toMatchObject({ frameId: "fr" });
+    expect(find(s.mem.stored, "b")).toMatchObject({ frameId: "fr" });
     expect(boxOf(find(s.mem.stored, "a"))).toMatchObject({ x: 100, y: 100 });
+    expect(result.data).toMatchObject({ id: "fr", members: ["a", "b"] });
   });
 
   it("makes an empty frame from bounds and needs ids or bounds", async () => {
