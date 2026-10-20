@@ -1,3 +1,6 @@
+import { orderFramesBelowContents } from "@/core/frames/containment";
+import { buildFrameIndex, frameDescendants } from "@/core/frames/frame-index";
+import { withFrameContents } from "@/core/frames/payload";
 import type { DocPatch } from "@/core/groups/patch";
 import { storedOrderFromShapes } from "@/core/groups/order";
 import { expandOffsets, unitBoxes, type Offset } from "@/core/groups/units";
@@ -28,6 +31,14 @@ export const updatePatch = (changed: readonly DrawingElement[]): DocPatch | null
 export const planMoveByOffsets = (ctx: CommandContext, offsets: ReadonlyMap<string, Offset>): DocPatch | null => {
   const movable = new Set(editableIds(ctx, [...offsets.keys()]));
   const wanted = new Map([...offsets].filter(([id]) => movable.has(id)));
+  // A frame carries what it owns by the same offset (a shape with an offset of its own keeps it).
+  if (ctx.shapes.some((shape) => shape.type === "frame")) {
+    const frames = buildFrameIndex(ctx.shapes);
+    for (const [id, offset] of [...wanted]) {
+      if (!frames.frames.has(id)) continue;
+      for (const owned of editableIds(ctx, frameDescendants(frames, id))) if (!wanted.has(owned)) wanted.set(owned, offset);
+    }
+  }
   const moving = ctx.shapes.filter((shape) => wanted.has(shape.id));
   const origin = withInternalConnectors(moving, ctx.shapes);
   // A connector between two shapes that move by the same amount moves by that amount too, and so does its label.
@@ -79,9 +90,13 @@ export const planSpacing = (ctx: CommandContext, selected: readonly string[], ax
 
 /** Restack the unlocked selection (front, forward, backward, back). Group records keep their slots. */
 export const planZOrder = (ctx: CommandContext, selected: readonly string[], move: ZMove): DocPatch | null => {
-  const ids = editableIds(ctx, selected);
+  const ids = editableIds(ctx, withFrameContents(ctx.shapes, editableIds(ctx, selected)));
   if (ids.length === 0) return null;
-  const order = storedOrderFromShapes(ctx.stored, reorder(ctx.shapes.map((shape) => shape.id), new Set(ids), move));
+  let order = storedOrderFromShapes(ctx.stored, reorder(ctx.shapes.map((shape) => shape.id), new Set(ids), move));
+  // A frame stays under what it owns: sending a shape to the back stops at its frame.
+  const reordered = new Map(ctx.stored.map((item) => [item.id, item]));
+  const fixed = orderFramesBelowContents(order.flatMap((id) => reordered.get(id) ?? []));
+  if (fixed) order = fixed;
   const unchanged = order.every((id, i) => id === ctx.stored[i].id);
   return unchanged ? null : { add: [], update: [], remove: [], order };
 };

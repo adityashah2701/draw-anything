@@ -1,3 +1,4 @@
+import { withFrameContents } from "@/core/frames/payload";
 import { isEffectivelyLocked } from "@/core/groups/group-index";
 import { planDelete, withPrunedGroups } from "@/core/groups/group-commands";
 import type { DocPatch } from "@/core/groups/patch";
@@ -7,11 +8,12 @@ import type { CommandContext } from "./context";
 
 /**
  * Delete shapes (the Delete key, the eraser, cut and the AI's `delete_elements`): the connectors attached
- * to them go too, so do the labels of every connector that goes, and every group left empty. Locked
+ * to them go too, as does everything inside a deleted frame, so do the labels of every connector that goes, and every group left empty. Locked
  * shapes are never removed. Null when nothing can be deleted.
  */
 export const planRemove = (ctx: CommandContext, ids: readonly string[]): DocPatch | null => {
-  const base = planDelete(ctx.stored, ids);
+  // Deleting a frame deletes what it owns; release the contents first (core/frames deleteFrame) to keep them.
+  const base = planDelete(ctx.stored, withFrameContents(ctx.shapes, ids));
   if (!base) return null;
   const gone = new Set(base.remove);
   const labels: string[] = [];

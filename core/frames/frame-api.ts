@@ -430,13 +430,13 @@ export const fitFrameToContent = (stored: readonly StoredElement[], id: string):
 
 /**
  * Re-fits every auto-fit frame that `changed` elements affect (the editor calls this after a move or
- * resize has been applied). Returns null when nothing needs to change.
+ * resize has been applied) and the frames in `alsoFrames` (an element that left them). Returns null when nothing needs to change.
  */
-export const planAutoFit = (stored: readonly StoredElement[], changed: readonly string[]): DocPatch | null => {
+export const planAutoFit = (stored: readonly StoredElement[], changed: readonly string[], alsoFrames: readonly string[] = []): DocPatch | null => {
   const index = buildFrameIndex(stored);
   if (index.frames.size === 0) return null;
   const work = new Working(stored, index);
-  refit(work, framesAbove(index, changed));
+  refit(work, [...framesAbove(index, changed), ...alsoFrames.filter((id) => index.frames.has(id))]);
   const patch = work.patch();
   return isEmptyPatch(patch) ? null : patch;
 };

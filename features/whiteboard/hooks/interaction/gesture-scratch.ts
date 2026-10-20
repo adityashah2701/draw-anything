@@ -13,6 +13,8 @@ interface EndSnaps {
  */
 export interface GestureScratch {
   dragSession: DragSession | null;
+  /** The drag actually moved something (a plain click on a shape starts a drag session too). */
+  dragMoved: boolean;
   /** A plain click on one member (a shape or a whole group) of a multi-selection: collapse to its shapes on release unless the pointer moved. */
   collapseOnRelease: { ids: string[]; origin: Point } | null;
   lastPoint: Point | null;
@@ -37,6 +39,7 @@ export interface GestureScratch {
 
 export const createScratch = (): GestureScratch => ({
   dragSession: null,
+  dragMoved: false,
   collapseOnRelease: null,
   lastPoint: null,
   resizeInitialBounds: null,
