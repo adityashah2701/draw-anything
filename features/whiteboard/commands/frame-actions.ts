@@ -71,7 +71,9 @@ export const planFitSelectedFrames = (stored: readonly StoredElement[], selected
   const patches: DocPatch[] = [];
   let working = stored;
   let locked = false;
-  for (const id of frames) {
+  const depth = buildFrameIndex(stored).depthOf;
+  const innermostFirst = [...frames].sort((a, b) => (depth.get(b) ?? 0) - (depth.get(a) ?? 0));
+  for (const id of innermostFirst) {
     const result = fitFrameToContent(working, id);
     if (!result.ok) {
       if (result.code === "locked") locked = true;

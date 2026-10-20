@@ -101,6 +101,17 @@ describe("planFitSelectedFrames", () => {
     expect(planFitSelectedFrames(after, ["I"])).toEqual({ ok: false, message: "The frame already fits its contents." });
   });
 
+  it("fits the inner frame before the outer one, whatever order they were selected in", () => {
+    const stored = board();
+    const run = (ids: string[]) => {
+      const result = planFitSelectedFrames(stored, ids);
+      if (!result.ok) throw new Error(result.message);
+      return frameBox(at(applyPatch(stored, result.patch), "O") as FrameShape)!;
+    };
+    expect(run(["O", "I"])).toEqual(run(["I", "O"]));
+    expect(run(["O", "I"]).maxX).toBe(800 + 24);
+  });
+
   it("names a locked frame instead of silently doing nothing", () => {
     const stored = board();
     stored[1] = { ...stored[1], locked: true } as StoredElement;
