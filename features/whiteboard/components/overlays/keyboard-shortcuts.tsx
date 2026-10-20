@@ -18,6 +18,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
         { key: "R", description: "Rectangle tool" },
         { key: "C", description: "Ellipse tool" },
         { key: "D", description: "Decision (diamond) tool" },
+        { key: "O", description: "Frame tool (draw a frame around shapes)" },
         { key: "L", description: "Line tool" },
         { key: "A", description: "Arrow tool" },
         { key: "B", description: "Bidirectional arrow tool" },

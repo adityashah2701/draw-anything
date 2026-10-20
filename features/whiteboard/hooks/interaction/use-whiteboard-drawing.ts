@@ -134,6 +134,8 @@ interface UseWhiteboardDrawingProps {
   addElementDirect?: (element: DrawingElement) => void;
   /** A shape, line or connector was just drawn: the editor selects it and returns to the select tool. */
   onElementCreated?: (id: string) => void;
+  /** A frame was drawn out. The frame tool hands over its box instead of adding the draft, so the host can adopt what it covers. */
+  onFrameDrawn?: (frame: DrawingElement) => void;
   /** A drag just ended: these shapes were moved (inside the same undo step). The editor re-homes them in frames. */
   onDragCommit?: (movedIds: string[]) => void;
   // Viewport
@@ -179,6 +181,7 @@ export const useWhiteboardDrawing = ({
   onArrowSnapPreviewChange,
   addElementDirect,
   onElementCreated,
+  onFrameDrawn,
   onDragCommit,
   startPanning,
   handlePan,
@@ -822,7 +825,9 @@ export const useWhiteboardDrawing = ({
     ) {
       const commit = classifyDraftCommit(currentElement);
       if (commit !== "click") {
-        if (commit === "connected-arrow" && routeConnectedArrow && addElementDirect) {
+        if (currentElement.type === "frame" && onFrameDrawn) {
+          onFrameDrawn(currentElement);
+        } else if (commit === "connected-arrow" && routeConnectedArrow && addElementDirect) {
           addElementDirect(routeConnectedArrow(currentElement));
         } else {
           completeCurrentElement();
@@ -878,6 +883,7 @@ export const useWhiteboardDrawing = ({
     routeConnectedArrow,
     updateElement,
     onElementCreated,
+    onFrameDrawn,
     resetScratch,
     selection,
   ]);

@@ -232,4 +232,33 @@ suite("editor frames: moving, owning and deleting", () => {
     expect(els.filter((e) => e.frameId === copy.id)).toHaveLength(3);
     expect(els.filter((e) => e.frameId === "F")).toHaveLength(3);
   });
+
+  it("the frame tool (O) draws a frame that adopts what it covers, as one undo step, and goes back to select", async () => {
+    s = await openEditor({ elements: [rect("A", 120, 130, 120, 80), rect("B", 340, 130, 120, 80), rect("C", 700, 130)] as never, dark: false });
+    await s.press("o");
+    await s.drag({ x: 80, y: 90 }, { x: 520, y: 300 });
+    await s.waitForIdle();
+    const els = await s.elements();
+    const drawn = els.filter((e) => e.type === "frame");
+    expect(drawn).toHaveLength(1);
+    expect(byId(els, "A").frameId).toBe(drawn[0].id);
+    expect(byId(els, "B").frameId).toBe(drawn[0].id);
+    expect(byId(els, "C").frameId).toBeUndefined();
+    expect(els.findIndex((e) => e.id === drawn[0].id)).toBeLessThan(els.findIndex((e) => e.id === "A")); // below its contents
+    expect(await s.selected()).toEqual([drawn[0].id]);
+    await s.press("Control+z");
+    expect((await s.elements()).some((e) => e.type === "frame")).toBe(false);
+    expect(byId(await s.elements(), "A").frameId).toBeUndefined();
+  });
+
+  it("a frame drawn inside another frame is nested in it; a click with the tool draws nothing", async () => {
+    s = await openEditor({ elements: [frame("F", 80, 60, 520, 360)] as never, dark: false });
+    await s.press("o");
+    await s.drag({ x: 140, y: 140 }, { x: 300, y: 260 });
+    const inner = (await s.elements()).find((e) => e.type === "frame" && e.id !== "F")!;
+    expect(inner.frameId).toBe("F");
+    await s.press("o");
+    await s.click({ x: 700, y: 500 });
+    expect((await s.elements()).filter((e) => e.type === "frame")).toHaveLength(2);
+  });
 });

@@ -38,6 +38,11 @@ describe("canvas shortcuts", () => {
     expect(resolveShortcut(ev("d", { metaKey: true }), ctx())).toEqual({ type: "duplicate" });
   });
 
+  it("O picks the frame tool, and not for a viewer", () => {
+    expect(resolveShortcut(ev("o"), ctx())).toEqual({ type: "tool", tool: "frame" });
+    expect(resolveShortcut(ev("o"), ctx({ hasEditAccess: false }))).toBeNull();
+  });
+
   it("nudges by 1, or 10 with Shift, only when something is selected", () => {
     expect(resolveShortcut(ev("ArrowRight"), ctx())).toEqual({ type: "nudge", dx: 1, dy: 0 });
     expect(resolveShortcut(ev("ArrowUp", { shiftKey: true }), ctx())).toEqual({ type: "nudge", dx: 0, dy: -10 });

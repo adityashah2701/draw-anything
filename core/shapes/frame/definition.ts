@@ -1,3 +1,4 @@
+import { Frame } from "lucide-react";
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { resizable } from "@/core/shapes/capabilities/resizable";
@@ -40,5 +41,6 @@ export const frameDefinition = createShapeDefinition<FrameShape>({
   containsPoint: (shape, point, options) => containsPointInFrame(shape, point, options?.radius ?? 0),
   getResizeHandles: (shape, options) => getFrameResizeHandles(shape, options?.bounds),
   validate: (shape) => hasValidBox(shape),
+  toolbarConfig: { icon: Frame, label: "Frame", shortcut: "O", group: "shapes", order: 6 },
   propertiesConfig: { supportsColor: true, supportsFill: true, supportsStrokeWidth: true, supportsFontSize: false },
 });

@@ -1,5 +1,7 @@
 import { buildFrameIndex } from "@/core/frames/frame-index";
-import { planAutoFit, reparentMoved } from "@/core/frames/frame-api";
+import { makeBounds } from "@/core/geometry/box";
+import { frameForBounds } from "@/core/frames/containment";
+import { createFrame, planAutoFit, reparentMoved } from "@/core/frames/frame-api";
 import { applyPatch as applyStoredPatch } from "@/core/groups/patch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
@@ -359,6 +361,26 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [allShapes, groupIndex, enteredGroupId, selectionOverlay],
   );
 
+  /**
+   * The frame tool: the drawn box becomes a frame that takes over what its box covers and sits inside
+   * the frame it was drawn in. One patch, so one undo step.
+   */
+  const commitDrawnFrame = useCallback(
+    (draft: DrawingElement) => {
+      const [a, b] = draft.points;
+      if (!a || !b) return;
+      const box = makeBounds(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y));
+      const stored = readLiveStored();
+      const parent = frameForBounds(buildFrameIndex(stored), box);
+      const created = createFrame(stored, { id: draft.id, box, parent, adopt: true });
+      if (!created.ok) return;
+      applyDocPatch(created.patch);
+      setSelectedElements([created.frameId]);
+      uiState.setCurrentTool("select");
+    },
+    [applyDocPatch, readLiveStored, setSelectedElements, uiState],
+  );
+
   const completeCurrentElement = useCallback(() => {
     if (currentElement) {
       addElement(currentElement as unknown as DrawingElementJson);
@@ -424,6 +446,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     onArrowSnapPreviewChange: uiState.handleArrowSnapPreviewChange,
     addElementDirect: (el) => addElement(el as unknown as DrawingElementJson),
     onDragCommit: commitFrameOwnership,
+    onFrameDrawn: commitDrawnFrame,
     onElementCreated: (id) => {
       setSelectedElements([id]);
       uiState.setCurrentTool("select");

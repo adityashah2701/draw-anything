@@ -18,8 +18,8 @@ describe("the frame shape definition", () => {
     expect(getShapeAnchors(frame("f", 0, 0, 100, 100))).toEqual([]);
   });
 
-  it("is not on the toolbar until the frame tool lands", () => {
-    expect(def().toolbarConfig).toBeUndefined();
+  it("is a toolbar tool in the shapes group with the O shortcut", () => {
+    expect(def().toolbarConfig).toMatchObject({ label: "Frame", shortcut: "O", group: "shapes" });
   });
 
   it("rejects a frame with no usable box", () => {

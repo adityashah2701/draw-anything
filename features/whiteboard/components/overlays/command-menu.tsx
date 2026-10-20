@@ -126,6 +126,11 @@ export function CommandMenu({
             <span>Decision</span>
             <CommandShortcut>D</CommandShortcut>
           </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onToolChange("frame"))}>
+            <Frame className="mr-2 h-4 w-4" />
+            <span>Frame</span>
+            <CommandShortcut>O</CommandShortcut>
+          </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onToolChange("line"))}>
             <Minus className="mr-2 h-4 w-4" />
             <span>Line</span>
