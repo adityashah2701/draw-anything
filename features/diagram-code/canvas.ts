@@ -28,6 +28,7 @@ export const documentFromParsedCode = (
   const { graph, warnings } = normalizeModelGraphDraftDetailed({
     nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon, shape: node.shape, color: node.color, x: node.x, y: node.y, width: node.width, height: node.height })),
     edges: parsed.edges.map((edge) => ({
+      id: edge.id,
       from: edge.from,
       to: edge.to,
       label: edge.label,
@@ -142,10 +143,21 @@ const customColorOf = (el: DrawingElement): string | undefined => {
   return byKind && byKind.stroke.toLowerCase() === el.color.toLowerCase() ? undefined : el.color.toLowerCase();
 };
 
+/** Which canvas elements each part of the graph came from, so a later update can keep them. */
+export interface GraphProvenance {
+  /** Graph node id to the element drawn for it. */
+  nodes: Map<string, string>;
+  /** Aligned with `graph.edges`: the arrow, and its label element when it has one. */
+  edges: Array<{ arrowId: string; labelId?: string }>;
+  /** Aligned with `graph.groups`: the frame rectangle and its title. */
+  groups: Array<{ frameId: string; titleId?: string }>;
+}
+
 export interface GraphFromElements {
   graph: SerializableGraph;
   /** Elements the graph was built from; replacing them replaces the diagram. */
   consumedIds: string[];
+  provenance: GraphProvenance;
 }
 
 /**
@@ -193,6 +205,7 @@ export const graphFromElements = (
     elements.find((el) => el.ai?.role === "edge-label" && el.ai.semanticId === `${suffixOf}-label`);
 
   const edges: SerializableGraph["edges"] = [];
+  const edgeSources: GraphProvenance["edges"] = [];
   for (const el of elements) {
     if (el.type !== "arrow" && el.type !== "arrow-bidirectional") continue;
     const arrow = el as DrawingElement & {
@@ -219,11 +232,13 @@ export const graphFromElements = (
       color: customEdgeColor(el),
       ...(layout ? sidesOf(arrow, Boolean(reversed)) : {}),
     });
+    edgeSources.push({ arrowId: el.id, labelId: label?.id });
     consumed.add(el.id);
     if (label) consumed.add(label.id);
   }
 
   const groups: SerializableGraph["groups"] = [];
+  const groupSources: GraphProvenance["groups"] = [];
   for (const frame of elements.filter((el) => el.ai?.role === "group" && el.points.length >= 2)) {
     const box = boundsOf(frame);
     const members = nodeElements
@@ -241,6 +256,7 @@ export const graphFromElements = (
       label: title?.text?.trim() || "Group",
       nodeIds: members,
     });
+    groupSources.push({ frameId: frame.id, titleId: title?.id });
     consumed.add(frame.id);
     if (title) consumed.add(title.id);
   }
@@ -250,5 +266,12 @@ export const graphFromElements = (
     .filter((type): type is string => Boolean(type));
   const diagramType = types.length > 0 ? (types[0] as AIDiagramType) : undefined;
 
-  return { graph: { diagramType, nodes, edges, groups }, consumedIds: [...consumed] };
+  const nodeSources = new Map<string, string>();
+  for (const el of nodeElements) nodeSources.set(idOfElement.get(el.id)!, el.id);
+
+  return {
+    graph: { diagramType, nodes, edges, groups },
+    consumedIds: [...consumed],
+    provenance: { nodes: nodeSources, edges: edgeSources, groups: groupSources },
+  };
 };

@@ -54,7 +54,15 @@ const connectorFor = (edge: { dashed?: boolean; bidirectional?: boolean; plain?:
  * Write a graph as diagram code. The output parses back to the same nodes,
  * kinds, connections, labels, flags and nested groups.
  */
-export const serializeDiagramCode = (graph: SerializableGraph): string => {
+export const serializeDiagramCode = (graph: SerializableGraph): string => serializeDiagramCodeDetailed(graph).code;
+
+export interface SerializedDiagramCode {
+  code: string;
+  /** The name each node was written under (graph node id to name); connections in the code refer to these. */
+  names: Map<string, string>;
+}
+
+export const serializeDiagramCodeDetailed = (graph: SerializableGraph): SerializedDiagramCode => {
   // Unique display names; the real label goes in a property when they differ.
   const nameOf = new Map<string, string>();
   const used = new Set<string>();
@@ -160,5 +168,5 @@ export const serializeDiagramCode = (graph: SerializableGraph): string => {
     if (lines.length > 0) lines.push("");
     lines.push(...edgeLines);
   }
-  return lines.length > 0 ? `${lines.join("\n")}\n` : "";
+  return { code: lines.length > 0 ? `${lines.join("\n")}\n` : "", names: nameOf };
 };
