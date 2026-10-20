@@ -170,27 +170,6 @@ suite("Team page in real Chrome (real components, fixture data; Clerk does not r
     expect(await page.getByLabel("Name", { exact: true }).getAttribute("readonly")).not.toBeNull();
   });
 
-  it("lets an admin approve or decline a request to join", async () => {
-    const requests = [
-      { id: "r1", name: "Katherine Johnson", email: "katherine@example.com", createdAt: new Date(Date.now() - 3_600_000) },
-      { id: "r2", name: "Dorothy Vaughan", email: "dorothy@example.com", createdAt: new Date(Date.now() - 86_400_000) },
-    ];
-    await mount({ requests });
-    expect(await page.getByRole("heading", { name: "Requests to join" }).count()).toBe(1);
-    expect(await page.getByText("3 members · 4 pending").isVisible()).toBe(true);
-    await shot("requests-light");
-    await page.locator("li", { hasText: "Katherine Johnson" }).getByRole("button", { name: "Approve" }).click();
-    await expect.poll(() => events()).toEqual(["approve:r1"]);
-    await page.locator("li", { hasText: "Dorothy Vaughan" }).getByRole("button", { name: "Decline" }).click();
-    await expect.poll(() => events()).toEqual(["approve:r1", "reject:r2"]);
-    await expect.poll(() => page.getByRole("heading", { name: "Requests to join" }).count()).toBe(0);
-  });
-
-  it("hides requests from a plain member", async () => {
-    await mount({ canManage: false, requests: [{ id: "r1", name: "Katherine Johnson", email: "k@example.com", createdAt: new Date() }] });
-    expect(await page.getByText("Requests to join").count()).toBe(0);
-  });
-
   it("invites from an empty workspace", async () => {
     await mount({ members: [teamOne()], invites: [] });
     await page.getByText("Just you for now").waitFor();

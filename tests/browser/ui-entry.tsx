@@ -6,10 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { SidebarView } from "@/components/layout/sidebar/sidebar-view";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import type { AgentUiMessage } from "@/features/canvas-tools/editor/use-canvas-agent";
-import { InvitationsNotice } from "@/features/invitations/components/invitations-notice";
-import type { PendingWorkspace } from "@/features/invitations/invitations-model";
 import { TeamView } from "@/features/team/components/team-view";
-import type { TeamInvite, TeamMember, TeamRequest } from "@/features/team/team-model";
+import type { TeamInvite, TeamMember } from "@/features/team/team-model";
 import { ExportDialog } from "@/features/whiteboard/components/overlays/export-dialog";
 import { useBoardExport } from "@/features/whiteboard/hooks/export/use-board-export";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -112,13 +110,7 @@ export const mountAgentPanel = (initial: AgentUiMessage[] = [], running = false)
 
 // ── the dashboard sidebar, driven from fixtures (Clerk and Convex do not run in a test page) ─────────
 
-const pendingFixture = (): PendingWorkspace[] => [
-  { id: "inv_1", kind: "invitation", orgId: "org_9", name: "Name Change", role: "org:member", createdAt: new Date(Date.now() - 2 * 3_600_000) },
-  { id: "sug_1", kind: "suggestion", orgId: "org_8", name: "Acme Design", createdAt: new Date(Date.now() - 86_400_000) },
-];
-
-const SidebarHarness = ({ onEvent, withPending }: { onEvent: (event: string) => void; withPending?: boolean }) => {
-  const [pending, setPending] = useState<PendingWorkspace[]>(withPending ? pendingFixture() : []);
+const SidebarHarness = ({ onEvent }: { onEvent: (event: string) => void }) => {
   const [page, setPage] = useState("Dashboard");
   const [workspaceId, setWorkspaceId] = useState("org_1");
   const workspaces = [
@@ -137,7 +129,6 @@ const SidebarHarness = ({ onEvent, withPending }: { onEvent: (event: string) => 
         workspace={workspaces.find((w) => w.id === workspaceId) ?? null}
         membersCount={4}
         workspaces={workspaces}
-        pending={pending}
         user={{ name: "Aditya Shah", email: "aditya@example.com" }}
         recent={[
           { id: "b1", title: "Checkout service architecture" },
@@ -154,10 +145,6 @@ const SidebarHarness = ({ onEvent, withPending }: { onEvent: (event: string) => 
           manageAccount: record("account"),
           signOut: record("signout"),
           openBoard: (id) => onEvent(`board:${id}`),
-          acceptPending: (item) => {
-            onEvent(`accept:${item.kind}:${item.id}`);
-            setPending((prev) => prev.filter((p) => p.id !== item.id));
-          },
         }}
       />
       <SidebarInset>
@@ -173,7 +160,7 @@ const SidebarHarness = ({ onEvent, withPending }: { onEvent: (event: string) => 
 
 let sidebar: { root: Root; host: HTMLElement } | null = null;
 
-export const mountSidebar = (onEvent: (event: string) => void, withPending = false) => {
+export const mountSidebar = (onEvent: (event: string) => void) => {
   if (sidebar) {
     sidebar.root.unmount();
     sidebar.host.remove();
@@ -182,7 +169,7 @@ export const mountSidebar = (onEvent: (event: string) => void, withPending = fal
   document.body.appendChild(host);
   const root = createRoot(host);
   sidebar = { root, host };
-  root.render(<SidebarHarness onEvent={onEvent} withPending={withPending} />);
+  root.render(<SidebarHarness onEvent={onEvent} />);
 };
 
 // ── the Team page, driven from fixtures (Clerk does not run in a test page) ───────────────────────────
@@ -190,7 +177,6 @@ export const mountSidebar = (onEvent: (event: string) => void, withPending = fal
 interface TeamFixture {
   members?: TeamMember[];
   invites?: TeamInvite[];
-  requests?: TeamRequest[];
   canManage?: boolean;
   loading?: boolean;
   startInviting?: boolean;
@@ -212,7 +198,6 @@ const teamInvites = (): TeamInvite[] => [
 const TeamHarness = ({ fixture, onEvent }: { fixture: TeamFixture; onEvent: (event: string) => void }) => {
   const [members, setMembers] = useState(fixture.members ?? teamMembers());
   const [invites, setInvites] = useState(fixture.invites ?? teamInvites());
-  const [requests, setRequests] = useState(fixture.requests ?? []);
   const [name, setName] = useState("Northwind Studio");
   const [hasImage, setHasImage] = useState(false);
   const attempt = async (action: string, run: () => void) => {
@@ -231,7 +216,7 @@ const TeamHarness = ({ fixture, onEvent }: { fixture: TeamFixture; onEvent: (eve
         workspaces={[{ id: "org_1", name }]}
         user={{ name: "Aditya Shah", email: "aditya@example.com" }}
         recent={[]}
-        actions={{ switchWorkspace: () => {}, createWorkspace: () => {}, manageWorkspace: () => {}, manageAccount: () => {}, signOut: () => {}, openBoard: () => {}, acceptPending: () => {} }}
+        actions={{ switchWorkspace: () => {}, createWorkspace: () => {}, manageWorkspace: () => {}, manageAccount: () => {}, signOut: () => {}, openBoard: () => {} }}
       />
       <SidebarInset>
         <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3">
@@ -243,7 +228,6 @@ const TeamHarness = ({ fixture, onEvent }: { fixture: TeamFixture; onEvent: (eve
             workspace={{ name, hasImage, imageUrl: hasImage ? "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='%23345'/></svg>" : undefined }}
             members={members}
             invites={invites}
-            requests={requests}
             currentUserId="u1"
             canManage={fixture.canManage ?? true}
             loading={fixture.loading}
@@ -256,8 +240,6 @@ const TeamHarness = ({ fixture, onEvent }: { fixture: TeamFixture; onEvent: (eve
               changeRole: (member, role) => attempt(`role:${member.userId}:${role}`, () => setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role } : m)))),
               removeMember: (member) => attempt(`remove:${member.userId}`, () => setMembers((prev) => prev.filter((m) => m.id !== member.id))),
               revokeInvite: (invite) => attempt(`revoke:${invite.id}`, () => setInvites((prev) => prev.filter((i) => i.id !== invite.id))),
-              approveRequest: (request) => attempt(`approve:${request.id}`, () => setRequests((prev) => prev.filter((r) => r.id !== request.id))),
-              rejectRequest: (request) => attempt(`reject:${request.id}`, () => setRequests((prev) => prev.filter((r) => r.id !== request.id))),
               rename: (next) => attempt(`rename:${next}`, () => setName(next)),
               setLogo: (file) => attempt(`logo:${file ? file.name : "none"}`, () => setHasImage(!!file)),
               leave: () => attempt("leave", () => {}),
@@ -284,41 +266,4 @@ export const mountTeam = (fixture: TeamFixture, onEvent: (event: string) => void
   const root = createRoot(host);
   team = { root, host };
   root.render(<TeamHarness fixture={fixture} onEvent={onEvent} />);
-};
-
-// ── the invitations notice (dashboard and "no workspace" screen), driven from fixtures ───────────────
-
-const NoticeHarness = ({ onEvent, failing }: { onEvent: (event: string) => void; failing?: boolean }) => {
-  const [items, setItems] = useState(pendingFixture());
-  return (
-    <>
-      <main className="mx-auto w-full max-w-6xl bg-background px-4 py-8 sm:px-8">
-        <InvitationsNotice
-          items={items}
-          onAccept={async (item) => {
-            onEvent(`accept:${item.kind}:${item.id}`);
-            await new Promise((r) => setTimeout(r, 60));
-            if (failing) throw { errors: [{ longMessage: "This invitation has expired." }] };
-            setItems((prev) => prev.filter((p) => p.id !== item.id));
-          }}
-        />
-        <p className="mt-6 text-sm text-muted-foreground">Dashboard content follows.</p>
-      </main>
-      <Toaster />
-    </>
-  );
-};
-
-let notice: { root: Root; host: HTMLElement } | null = null;
-
-export const mountNotice = (onEvent: (event: string) => void, failing = false) => {
-  if (notice) {
-    notice.root.unmount();
-    notice.host.remove();
-  }
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  notice = { root, host };
-  root.render(<NoticeHarness onEvent={onEvent} failing={failing} />);
 };

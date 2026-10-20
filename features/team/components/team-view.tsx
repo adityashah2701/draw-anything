@@ -41,7 +41,6 @@ import {
   timeAgo,
   type TeamInvite,
   type TeamMember,
-  type TeamRequest,
   type TeamRole,
 } from "../team-model";
 
@@ -57,8 +56,6 @@ export interface TeamActions {
   changeRole: (member: TeamMember, role: string) => Promise<void>;
   removeMember: (member: TeamMember) => Promise<void>;
   revokeInvite: (invite: TeamInvite) => Promise<void>;
-  approveRequest?: (request: TeamRequest) => Promise<void>;
-  rejectRequest?: (request: TeamRequest) => Promise<void>;
   rename: (name: string) => Promise<void>;
   setLogo: (file: File | null) => Promise<void>;
   leave: () => Promise<void>;
@@ -73,8 +70,6 @@ export interface TeamViewProps {
   workspace: TeamWorkspace;
   members: TeamMember[];
   invites: TeamInvite[];
-  /** People waiting for an admin to let them in. */
-  requests?: TeamRequest[];
   roles?: TeamRole[];
   currentUserId?: string;
   /** Can invite, change roles, remove people and edit the workspace. */
@@ -97,7 +92,6 @@ export function TeamView({
   workspace,
   members,
   invites,
-  requests = [],
   roles = DEFAULT_ROLES,
   currentUserId,
   canManage,
@@ -118,7 +112,7 @@ export function TeamView({
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="min-w-0 space-y-2">
           <h1 className="truncate text-xl font-semibold tracking-tight">{workspace.name}</h1>
-          <p className="label-mono">{loading ? "Loading members" : summary(members.length, invites.length + requests.length)}</p>
+          <p className="label-mono">{loading ? "Loading members" : summary(members.length, invites.length)}</p>
         </div>
         {canManage ? (
           <Button onClick={() => setInviteOpen(true)}>
@@ -173,17 +167,6 @@ export function TeamView({
           </>
         )}
       </section>
-
-      {canManage && requests.length > 0 && actions.approveRequest && actions.rejectRequest && (
-        <section aria-labelledby="requests-heading" className="space-y-4">
-          <SectionLabel title={<span id="requests-heading">Requests to join</span>} />
-          <ul className="divide-y overflow-hidden rounded-lg border border-primary/40 bg-card">
-            {requests.map((request) => (
-              <RequestRow key={request.id} request={request} onApprove={actions.approveRequest!} onReject={actions.rejectRequest!} />
-            ))}
-          </ul>
-        </section>
-      )}
 
       {canManage && invites.length > 0 && (
         <section aria-labelledby="pending-heading" className="space-y-4">
@@ -362,45 +345,6 @@ function InviteRow({ invite, roles, onRevoke }: { invite: TeamInvite; roles: Tea
       </div>
       <Button variant="ghost" size="sm" onClick={revoke} disabled={busy} className="-mr-1 shrink-0 text-muted-foreground hover:text-destructive">
         {busy ? "Revoking…" : "Revoke"}
-      </Button>
-    </li>
-  );
-}
-
-function RequestRow({
-  request,
-  onApprove,
-  onReject,
-}: {
-  request: TeamRequest;
-  onApprove: (request: TeamRequest) => Promise<void>;
-  onReject: (request: TeamRequest) => Promise<void>;
-}) {
-  const [busy, setBusy] = React.useState(false);
-  const answer = async (action: (request: TeamRequest) => Promise<void>, done: string, failed: string) => {
-    setBusy(true);
-    try {
-      await action(request);
-      toast.success(done);
-    } catch (error) {
-      toast.error(errorMessage(error, failed));
-      setBusy(false);
-    }
-  };
-  return (
-    <li className="flex items-center gap-3 px-3 py-3 sm:px-4">
-      <PersonAvatar name={request.name} imageUrl={request.imageUrl} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm leading-tight font-medium">{request.name}</p>
-        <p className="label-mono mt-1.5 truncate">
-          {request.email} · Asked {timeAgo(request.createdAt)}
-        </p>
-      </div>
-      <Button variant="ghost" size="sm" disabled={busy} className="shrink-0 text-muted-foreground" onClick={() => answer(onReject, "Request declined", "Could not decline the request")}>
-        Decline
-      </Button>
-      <Button size="sm" disabled={busy} className="shrink-0" onClick={() => answer(onApprove, `${request.name} joined`, "Could not approve the request")}>
-        Approve
       </Button>
     </li>
   );
