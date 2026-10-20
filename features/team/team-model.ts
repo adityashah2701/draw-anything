@@ -26,6 +26,15 @@ export interface TeamInvite {
   createdAt: Date;
 }
 
+/** Someone who asked to join (for example from a verified email domain) and waits for an admin. */
+export interface TeamRequest {
+  id: string;
+  name: string;
+  email: string;
+  imageUrl?: string;
+  createdAt: Date;
+}
+
 export const ADMIN_ROLE = "org:admin";
 
 /** Used when Clerk cannot list roles (or while they load): the two built-in ones. */
