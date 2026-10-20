@@ -1,6 +1,6 @@
 # Diagram-as-code language: audit, design and plan
 
-Status: in progress (2026-10-20). Slices ship as stacked PRs; this file is updated by each one.
+Status: in progress (2026-10-20). Slices ship as PRs on main; this file is updated by each one.
 
 ## 1. Audit
 
@@ -90,7 +90,7 @@ comment    = "//" ... | whole line starting with "#"
 2. **Formatter.** Deterministic, idempotent, keeps comments, never drops unknown properties; parse-format-parse yields an equal IR on every fixture and example.
 3. **Canvas apply.** Identity matching of declarations to existing elements, localised updates, last-valid-state preserved on invalid code, explicit conflict handling; no feedback loop.
 4. **Editor tooling.** Syntax highlighting, completion, hover, live diagnostics, format command, keyboard access; built on the existing textarea (no new dependency, see below).
-5. **Docs and examples.** Reference plus templates that only use diagram types that work end to end.
+5. **Docs and examples.** `docs/diagram-code/README.md`: reference plus templates (flowchart, entity-relationship, cloud/backend, network, component, frames and groups, icon-rich). Every example is compiled, format-checked and drawn by `docs.test.ts`. Sequence, mind-map and class layouts are documented as not supported, and `direction` as having no effect.
 6. **Frames on canvas.** Frames are drawn through the canvas frame API (`core/frames/frame-api.ts`); see "How frames are drawn" below.
 
 ### Editor dependency decision
