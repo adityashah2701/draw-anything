@@ -41,6 +41,14 @@ Status: in progress (2026-10-20). Slices ship as stacked PRs; this file is updat
 - `canvasDrift` tells the editor when the board changed since the sync (edited or deleted elements) so it can offer an explicit reload instead of silently diverging.
 - Known limits: resizing a node on the canvas is not preserved by an update (only its position is); renaming a node is a delete plus an add (the code has no way to say "same node"); an element deleted on the canvas but still declared in the code is restored, and the summary says so.
 
+### How frames are drawn (`features/diagram-code/frames.ts`)
+
+- The layout engine places nodes as before. `drawFrames` then wraps them: each frame gets a box around its contents (padding plus the header band), or the `x/y/w/h` the code gives; frames are made with `createFrame` (outermost first) and their members handed over with `assignToFrame`, so a frame is exactly what the frame thread's API makes. A frame the API refuses (too deep) is reported as `frame/not-drawn` and its contents stay where they are.
+- A node, group (and its label) belongs to the innermost frame that encloses it in the code; an arrow and its label belong to the innermost frame holding both ends, and stay at the top level when it leaves one.
+- Match key `frame:<id>`. A member's `frameId` is an ordinary three-way-merged field, so moving a node into or out of a frame on the canvas is kept unless the code changed the same node.
+- The box: with `x/y/w/h` in the code it is merged field by field (rounded to whole units, like the code). Without them the box is the person's and only **grows**, when a member would stick out; it is never shrunk or reset.
+- Canvas to code: frames on the board that hold at least one node are written as `frame` blocks (with the box when positions are written, `padding` and a non-default `color`). A frame with nothing in it, and a group whose nodes sit in different frames (a group cannot hold frames), are left on the board untouched rather than dropped from it.
+
 ## 3. Language design
 
 Line-oriented, brace-delimited, and a strict superset of the existing syntax: every program that parsed before parses to the same nodes, edges and groups.
@@ -83,7 +91,7 @@ comment    = "//" ... | whole line starting with "#"
 3. **Canvas apply.** Identity matching of declarations to existing elements, localised updates, last-valid-state preserved on invalid code, explicit conflict handling; no feedback loop.
 4. **Editor tooling.** Syntax highlighting, completion, hover, live diagnostics, format command, keyboard access; built on the existing textarea (no new dependency, see below).
 5. **Docs and examples.** Reference plus templates that only use diagram types that work end to end.
-6. **Frames on canvas.** Waits for the frame API from the "First-class canvas frames" thread.
+6. **Frames on canvas.** Frames are drawn through the canvas frame API (`core/frames/frame-api.ts`); see "How frames are drawn" below.
 
 ### Editor dependency decision
 
