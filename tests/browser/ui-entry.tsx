@@ -10,6 +10,8 @@ import { InvitationsNotice } from "@/features/invitations/components/invitations
 import type { PendingWorkspace } from "@/features/invitations/invitations-model";
 import { TeamView } from "@/features/team/components/team-view";
 import type { TeamInvite, TeamMember, TeamRequest } from "@/features/team/team-model";
+import { DiagramCodeEditor } from "@/features/whiteboard/components/overlays/diagram-code-editor";
+import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
 import { ExportDialog } from "@/features/whiteboard/components/overlays/export-dialog";
 import { useBoardExport } from "@/features/whiteboard/hooks/export/use-board-export";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -327,4 +329,54 @@ export const mountNotice = (onEvent: (event: string) => void, failing = false, n
   const root = createRoot(host);
   notice = { root, host };
   root.render(<NoticeHarness onEvent={onEvent} failing={failing} none={none} />);
+};
+
+// ── the diagram code editor, on a fake board that applies what the editor sends the way the page does ──
+
+let codeBoard: DrawingElement[] = [];
+let editCodeBoard: ((label: string) => void) | null = null;
+/** A change made on the canvas rather than in the code: relabel the first node. */
+export const editBoardLabel = (label: string) => editCodeBoard?.(label);
+let codeApplied: ApplyDiagramCodePayload[] = [];
+export const codeEditorState = () => ({ elements: codeBoard, applied: codeApplied });
+
+const CodeEditorHarness = ({ initial }: { initial: DrawingElement[] }) => {
+  const [elements, setElements] = useState(initial);
+  codeBoard = elements;
+  editCodeBoard = (label) => setElements((prev) => prev.map((el) => (el.ai?.role === "node" ? { ...el, label } : el)));
+  return (
+    <div style={{ width: 420, height: 640, display: "flex", flexDirection: "column" }} className="bg-card text-card-foreground">
+      <DiagramCodeEditor
+        elements={elements}
+        selectedElementIds={[]}
+        loadToken={0}
+        onApply={(payload) => {
+          codeApplied = [...codeApplied, payload];
+          setElements((prev) => {
+            if (payload.patch) {
+              const gone = new Set(payload.patch.remove);
+              const updates = new Map(payload.patch.update.map((el) => [el.id, el]));
+              return [...prev.filter((el) => !gone.has(el.id)).map((el) => updates.get(el.id) ?? el), ...payload.patch.add];
+            }
+            const replaced = new Set(payload.replaceIds);
+            return [...prev.filter((el) => !replaced.has(el.id)), ...payload.elements];
+          });
+        }}
+      />
+    </div>
+  );
+};
+
+let codeMount: { root: Root; host: HTMLElement } | null = null;
+export const mountCodeEditor = (initial: DrawingElement[] = []) => {
+  if (codeMount) {
+    codeMount.root.unmount();
+    codeMount.host.remove();
+  }
+  codeApplied = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  codeMount = { root, host };
+  root.render(<CodeEditorHarness initial={initial} />);
 };

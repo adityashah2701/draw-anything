@@ -13,6 +13,8 @@ const NAMED: Record<string, string> = {
   black: "#111827",
 };
 
+export const COLOR_NAMES: string[] = Object.keys(NAMED);
+
 /** A colour name or #rgb / #rrggbb as lowercase #rrggbb; anything else (including CSS functions) is rejected. */
 export const normalizeColor = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;

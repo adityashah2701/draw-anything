@@ -1,10 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronRight, Copy, Download, Play, RefreshCw } from "lucide-react";
+import { AlignLeft, Check, ChevronRight, Copy, Download, Play, RefreshCw } from "lucide-react";
 import { canvasDrift, loadFromCanvas, planApply, type Conflict, type SyncState } from "@/features/diagram-code/apply";
-import { parseDiagramCode } from "@/features/diagram-code/parse";
-import type { ApplyDiagramCodePayload, DiagramCodeIssue } from "@/features/diagram-code/types";
+import { listIcons } from "@/core/icons/registry";
+import { compileDiagramCode } from "@/features/diagram-code/language/compile";
+import { formatDiagramCode } from "@/features/diagram-code/language/format";
+import { mapCaret } from "@/features/diagram-code/language/tooling/caret";
+import type { Hover } from "@/features/diagram-code/language/tooling/hover";
+import { iconCandidates } from "@/features/diagram-code/language/vocab";
+import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
+import { DiagramCodeField, type DiagramCodeFieldHandle } from "@/features/whiteboard/components/overlays/diagram-code-field";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
 interface DiagramCodeEditorProps {
@@ -44,80 +50,17 @@ const REFERENCE: Array<[string, string]> = [
   ["A > B: [from: right, to: left]", "which side it leaves and enters"],
   ["A > B: label [color: red, from: top]", "label, colour and sides together"],
   ["type architecture · title … ", "header lines, first in the file"],
+  ['Name [label: "Line 1\\nLine 2"]', "a label over several lines (\\n, \\\" and \\\\ inside quotes)"],
   ["// comment", "ignored"],
 ];
 
 const newGenerationId = () => `code_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const LINE_HEIGHT = 20;
+/** Icon ids and aliases offered by completion: what is loaded plus the on-demand library's names. */
+let iconIdCache: string[] | null = null;
+const iconIds = (): string[] => (iconIdCache ??= iconCandidates(listIcons().map((icon) => icon.id)));
 
-/** Line numbers beside a textarea, kept in step with its scroll; lines with a problem are marked. */
-const CodeArea: React.FC<{
-  value: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
-  issues: DiagramCodeIssue[];
-  disabled?: boolean;
-}> = ({ value, onChange, onSubmit, issues, disabled }) => {
-  const gutterRef = React.useRef<HTMLDivElement>(null);
-  const lines = Math.max(1, value.split("\n").length);
-  const worst = React.useMemo(() => {
-    const byLine = new Map<number, DiagramCodeIssue["severity"]>();
-    for (const issue of issues) {
-      if (byLine.get(issue.line) !== "error") byLine.set(issue.line, issue.severity);
-    }
-    return byLine;
-  }, [issues]);
-
-  return (
-    <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border border-input bg-background focus-within:border-foreground/40">
-      <div
-        ref={gutterRef}
-        aria-hidden
-        className="select-none overflow-hidden border-r border-border bg-muted/40 py-2 pl-2 pr-2 text-right font-mono text-[11px] text-muted-foreground"
-        style={{ lineHeight: `${LINE_HEIGHT}px`, minWidth: `${String(lines).length * 8 + 22}px` }}
-      >
-        {Array.from({ length: lines }, (_, i) => {
-          const severity = worst.get(i + 1);
-          return (
-            <div key={i} className={severity === "error" ? "text-destructive" : severity === "warning" ? "text-warning" : undefined}>
-              {i + 1}
-            </div>
-          );
-        })}
-      </div>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onScroll={(e) => {
-          if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop;
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            onSubmit();
-          } else if (e.key === "Escape") {
-            e.currentTarget.blur();
-          } else if (e.key === "Tab" && !e.shiftKey) {
-            // Indent like an editor; Escape leaves the field for keyboard users.
-            e.preventDefault();
-            const el = e.currentTarget;
-            const { selectionStart: from, selectionEnd: to } = el;
-            onChange(`${value.slice(0, from)}  ${value.slice(to)}`);
-            requestAnimationFrame(() => el.setSelectionRange(from + 2, from + 2));
-          }
-        }}
-        spellCheck={false}
-        wrap="off"
-        disabled={disabled}
-        aria-label="Diagram code"
-        placeholder={"Web App > API: HTTPS\nAPI > Database"}
-        className="min-w-0 flex-1 resize-none overflow-auto whitespace-pre bg-transparent px-3 py-2 font-mono text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
-        style={{ lineHeight: `${LINE_HEIGHT}px`, tabSize: 2 }}
-      />
-    </div>
-  );
-};
+const LIVE_DELAY_MS = 700;
 
 export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, selectedElementIds, onApply, disabled = false, loadToken = 0 }) => {
   const [code, setCode] = React.useState("");
@@ -130,8 +73,12 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
   const [includeLayout, setIncludeLayout] = React.useState(true);
   const [copied, setCopied] = React.useState(false);
   const [referenceOpen, setReferenceOpen] = React.useState(false);
+  const [live, setLive] = React.useState(false);
+  const [caretInfo, setCaretInfo] = React.useState<Hover | null>(null);
+  const fieldRef = React.useRef<DiagramCodeFieldHandle>(null);
 
-  const issues = React.useMemo(() => parseDiagramCode(code).issues, [code]);
+  const compiled = React.useMemo(() => compileDiagramCode(code), [code]);
+  const issues = compiled.diagnostics;
   const errors = issues.filter((i) => i.severity === "error").length;
   const warnings = issues.length - errors;
   const canRun = !disabled && code.trim() !== "" && errors === 0;
@@ -209,6 +156,38 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
 
   const primary = sync ? "update" : "add";
 
+  const format = () => {
+    const result = formatDiagramCode(code);
+    if (result.refused) {
+      setNotice(result.refused.reason);
+      const first = result.refused.diagnostics[0];
+      if (first) fieldRef.current?.select(first.span.start, first.span.end);
+      return;
+    }
+    if (!result.changed) {
+      setNotice("Already formatted.");
+      return;
+    }
+    const caret = mapCaret(code, document.activeElement instanceof HTMLTextAreaElement ? document.activeElement.selectionStart : 0, result.text);
+    setCode(result.text);
+    setNotice("Formatted.");
+    fieldRef.current?.select(caret, caret);
+  };
+
+  // Live preview: once a diagram is on the canvas, valid code updates it a moment after typing stops.
+  // Invalid code never reaches the canvas, so it keeps the last valid picture; a conflict pauses live
+  // updates until the person has chosen a side.
+  const runRef = React.useRef(run);
+  runRef.current = run;
+  React.useEffect(() => {
+    if (!live || !sync || disabled || !canRun || conflicts || code === sync.code) return;
+    const timer = setTimeout(() => runRef.current("update"), LIVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [live, sync, disabled, canRun, conflicts, code]);
+  React.useEffect(() => {
+    if (conflicts) setLive(false);
+  }, [conflicts]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -224,6 +203,20 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
         <label className="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-muted-foreground">
           <input type="checkbox" checked={includeLayout} onChange={(e) => setIncludeLayout(e.target.checked)} className="h-3.5 w-3.5 accent-foreground" />
           Position, size and sides
+        </label>
+        <button
+          type="button"
+          onClick={format}
+          disabled={disabled || code.trim() === ""}
+          title="Format the code (Shift+Alt+F)"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        >
+          <AlignLeft size={13} />
+          Format
+        </button>
+        <label className={`inline-flex items-center gap-1.5 text-[12px] ${sync ? "cursor-pointer text-muted-foreground" : "cursor-not-allowed text-muted-foreground/50"}`} title={sync ? "Update the canvas a moment after you stop typing" : "Add the diagram to the canvas first"}>
+          <input type="checkbox" checked={live} disabled={!sync} onChange={(e) => setLive(e.target.checked)} className="h-3.5 w-3.5 accent-foreground" />
+          Live
         </label>
         <span className="flex-1" />
         <button
@@ -255,7 +248,8 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
         </button>
       </div>
 
-      <CodeArea
+      <DiagramCodeField
+        ref={fieldRef}
         value={code}
         onChange={(value) => {
           setCode(value);
@@ -263,16 +257,30 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
           setConflicts(null);
         }}
         onSubmit={() => canRun && run(primary)}
-        issues={issues}
+        onFormat={format}
+        compiled={compiled}
+        iconIds={iconIds()}
+        onCaretInfo={setCaretInfo}
         disabled={disabled}
+        describedBy="diagram-code-status diagram-code-hint"
       />
 
-      <div className="flex items-center justify-between font-mono text-[11px]" aria-live="polite">
+      <div id="diagram-code-status" className="flex items-center justify-between font-mono text-[11px]" aria-live="polite">
         <span className={errors > 0 ? "text-destructive" : warnings > 0 ? "text-warning" : "text-muted-foreground"}>
           {code.trim() === "" ? "Empty" : errors > 0 ? `${errors} error${errors === 1 ? "" : "s"}` : warnings > 0 ? `${warnings} warning${warnings === 1 ? "" : "s"}` : "Valid"}
         </span>
         {notice && <span className="truncate pl-3 text-muted-foreground">{notice}</span>}
       </div>
+
+      <p id="diagram-code-hint" className="min-h-[1.25rem] shrink-0 text-[11.5px] leading-snug text-muted-foreground">
+        {caretInfo && (caretInfo.lines.length > 0 || caretInfo.diagnostics.length > 0) ? (
+          <>
+            <span className="font-mono text-foreground">{caretInfo.title}</span> {caretInfo.diagnostics[0]?.message ?? caretInfo.lines[0]}
+          </>
+        ) : (
+          "Ctrl+Space suggests, Shift+Alt+F formats, Tab indents, Esc leaves the field."
+        )}
+      </p>
 
       {conflicts && (
         <div role="alert" className="shrink-0 space-y-2 rounded-md border border-warning/50 bg-warning/10 p-2 text-[12px]">
@@ -313,11 +321,22 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
       )}
 
       {issues.length > 0 && (
-        <ul className="max-h-28 shrink-0 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 text-[12px]">
+        <ul className="max-h-28 shrink-0 space-y-0.5 overflow-y-auto rounded-md border border-border bg-muted/30 p-1 text-[12px]">
           {issues.slice(0, 20).map((issue, i) => (
-            <li key={i} className="flex gap-2 leading-snug">
-              <span className={`shrink-0 font-mono text-[11px] ${issue.severity === "error" ? "text-destructive" : "text-warning"}`}>L{issue.line}</span>
-              <span className="text-foreground/85">{issue.message}</span>
+            <li key={i}>
+              <button
+                type="button"
+                onClick={() => fieldRef.current?.select(issue.span.start, issue.span.end)}
+                className="flex w-full gap-2 rounded-sm px-1 py-0.5 text-left leading-snug transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className={`shrink-0 font-mono text-[11px] ${issue.severity === "error" ? "text-destructive" : "text-warning"}`}>
+                  {issue.line}:{issue.column}
+                </span>
+                <span className="text-foreground/85">
+                  {issue.message}
+                  {issue.suggestion && !issue.message.includes(issue.suggestion) ? ` (${issue.suggestion}?)` : ""}
+                </span>
+              </button>
             </li>
           ))}
         </ul>
