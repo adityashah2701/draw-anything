@@ -31,6 +31,16 @@ Status: in progress (2026-10-20). Slices ship as stacked PRs; this file is updat
 - Canvas to code: `graphFromElements` then the formatter. Loading is explicit.
 - The editor remembers a *baseline*: the canvas revision the code was last synchronised with. If the canvas changed since, applying shows an explicit conflict choice instead of overwriting (slice 3).
 
+### How the sync works (`features/diagram-code/apply.ts`)
+
+- `loadFromCanvas` reads the board into code and records, for every element it consumed, a **match key** from the language's own identities (`node:<id>`, `edge:<from>><to>#<n>`, `group:<id>`, labels as `<key>~label`), plus a **baseline**: what compiling that code produces.
+- `planApply` compiles the edited code, matches the result to the board by those keys, and returns a patch: elements to add, whole elements to update (same id), ids to remove. Unchanged declarations produce no write at all. The patch is applied with the existing `applyDocPatch`, so it is one undo step.
+- Positions: nodes the person moved since the last sync (centre differs from the baseline, with the whole-diagram shift removed) keep their place; an updated diagram stays where it is.
+- Conflicts are per field, three-way (canvas, baseline, new code). Only the canvas changed: kept. Only the code changed: updated. Both changed differently: reported, nothing written until the person picks "Use the code" or "Keep the canvas". Fields the code never sets (opacity, locked, ...) are never touched.
+- Invalid code (any error, or no nodes) yields `invalid` and the canvas is not touched, so the last valid state stays on the board.
+- `canvasDrift` tells the editor when the board changed since the sync (edited or deleted elements) so it can offer an explicit reload instead of silently diverging.
+- Known limits: resizing a node on the canvas is not preserved by an update (only its position is); renaming a node is a delete plus an add (the code has no way to say "same node"); an element deleted on the canvas but still declared in the code is restored, and the summary says so.
+
 ## 3. Language design
 
 Line-oriented, brace-delimited, and a strict superset of the existing syntax: every program that parsed before parses to the same nodes, edges and groups.

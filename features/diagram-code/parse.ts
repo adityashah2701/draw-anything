@@ -22,6 +22,7 @@ export const parsedFromIR = (ir: DiagramIR, issues: ParsedDiagramCode["issues"])
     height: node.height,
   }));
   const edges: ParsedEdge[] = ir.edges.map((edge) => ({
+    id: edge.id,
     from: edge.from,
     to: edge.to,
     label: edge.label,

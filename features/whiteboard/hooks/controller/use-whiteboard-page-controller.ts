@@ -911,8 +911,23 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
    * editing code feels like editing the diagram.
    */
   const applyDiagramCode = useCallback(
-    ({ elements: next, replaceIds, anchored }: ApplyDiagramCodePayload) => {
-      if (!whiteboardAccess.hasEditAccess || next.length === 0) return;
+    ({ elements: next, replaceIds, anchored, patch }: ApplyDiagramCodePayload) => {
+      if (!whiteboardAccess.hasEditAccess) return;
+
+      // An update planned against the board: same elements, only what changed, one undo step.
+      if (patch) {
+        if (patch.add.length === 0 && patch.update.length === 0 && patch.remove.length === 0) return;
+        gestureHistory.begin();
+        try {
+          applyDocPatch({ add: patch.add, update: patch.update, remove: patch.remove } as unknown as DocPatch);
+        } finally {
+          gestureHistory.end();
+        }
+        if (patch.remove.length > 0) setSelectedElements((prev) => prev.filter((id) => !patch.remove.includes(id)));
+        return;
+      }
+
+      if (next.length === 0) return;
 
       const replaced = elements.filter((element) => replaceIds.includes(element.id));
       const { shift, fit } = planDiagramCode({ next, replaced, anchored: Boolean(anchored), viewport: canvasViewport });
@@ -935,6 +950,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     },
     [
       addElement,
+      applyDocPatch,
       canvasViewport,
       deleteElementsLive,
       elements,

@@ -77,6 +77,7 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
   const containerOf = new Map<string, OpenContainer | undefined>(); // node id -> container it was created in
   const usedNodeIds = new Set<string>();
   const usedContainerIds = new Set<string>();
+  const usedEdgeIds = new Set<string>();
   const stack: OpenContainer[] = [];
 
   const uniqueId = (base: string, used: Set<string>) => {
@@ -257,6 +258,7 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
             continue;
           }
           const edge: IREdge = {
+            id: uniqueId(`${from.id}-to-${to.id}`, usedEdgeIds),
             from: from.id,
             to: to.id,
             label,

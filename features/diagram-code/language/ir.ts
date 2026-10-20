@@ -41,6 +41,8 @@ export interface IRNode {
 }
 
 export interface IREdge {
+  /** Stable across edits that leave its two ends alone: `from-to-to`, numbered when the same pair repeats. */
+  id: string;
   from: string;
   to: string;
   label?: string;
