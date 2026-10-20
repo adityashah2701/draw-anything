@@ -1,4 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
+import { FrameTitleEditor } from "@/features/whiteboard/components/overlays/frame-title-editor";
+import { MAX_FRAME_TITLE_LENGTH } from "@/core/frames/frame-model";
+import { renameFrame } from "@/core/frames/frame-api";
 import { IconPicker } from "@/features/whiteboard/components/overlays/icon-picker";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text-block";
@@ -424,6 +427,25 @@ export const WhiteboardEditingOverlays = ({
             (el: DrawingElement) => el.id === editingShapeLabelId,
           );
           if (!shape) return null;
+          if (shape.type === "frame") {
+            return (
+              <FrameTitleEditor
+                key={editingShapeLabelId}
+                frame={shape}
+                zoom={canvasViewport.zoom}
+                panOffset={canvasViewport.panOffset}
+                onDone={(title) => {
+                  const current = shape.title ?? "";
+                  const next = title === null ? null : title.trim().slice(0, MAX_FRAME_TITLE_LENGTH);
+                  if (next !== null && next !== current.trim()) {
+                    const renamed = renameFrame(controller.readLiveStored(), shape.id, next);
+                    if (renamed.ok) controller.applyDocPatch(renamed.patch);
+                  }
+                  setEditingShapeLabelId(null);
+                }}
+              />
+            );
+          }
           // The shape's own box (before any rotation); the region is turned about its centre below.
           const bounds = getShapeLocalBounds(shape) ?? getElementBounds(shape);
           if (!bounds) return null;
