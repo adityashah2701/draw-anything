@@ -397,8 +397,23 @@
   transition-delay: 0s;
 }
 
+/* Loading mark: the two nodes of the logo take turns dimming. Opacity only. */
+@keyframes brand-node {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.brand-node {
+  animation: brand-node 1.2s var(--ease-in-out-strong) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .landing-rise {
+  .landing-rise,
+  .brand-node {
     animation: none;
   }
   .reveal {

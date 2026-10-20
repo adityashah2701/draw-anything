@@ -76,7 +76,7 @@ Concepts weighed: a 48px icon-only rail (most canvas, but four destinations plus
 - **Active page** carries an ink bar on the leading edge, the quiet fill, an ink icon and medium weight. Four cues, none of them a colour block.
 - **Groups**: primary pages unlabelled, then `Organization` (member count in mono), then `Recent` (newest five boards, hidden when collapsed).
 - **Footer** is a title block: workspace and account rows sit flush under a hairline, no cards. Both open the shared `DropdownMenu` (above the trigger when expanded, beside it when collapsed).
-- **Logo** is the original silhouette in ink at four strengths (`components/shared/logo-mark.tsx`, `public/logo.svg`). Orange is reserved for the agent, so the mark no longer uses it.
+- **Logo** is the D-from-nodes mark (`components/shared/logo-mark.tsx`, geometry in `lib/brand.ts`), one colour: ink. Orange is reserved for the agent. Rationale, rules and asset list: `brand.md`.
 - **Motion**: 150-200ms, `--ease-out-strong`, width and colour only; rows scale to 0.98 on press; everything stops under `prefers-reduced-motion`. The collapsed rail mounts tooltips only while collapsed.
 
 ## Team page
