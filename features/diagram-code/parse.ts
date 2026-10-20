@@ -1,429 +1,61 @@
-import { normalizeColor } from "@/core/color/named-colors";
-import { parseDiagramType } from "@/features/ai/schemas";
-import { slugId } from "@/features/ai/server/validation";
-import type {
-  DiagramCodeIssue,
-  ParsedDiagramCode,
-  ParsedEdge,
-  ParsedGroup,
-  ParsedNode,
-} from "./types";
-
-const MAX_SOURCE_CHARS = 100_000;
-const MAX_SOURCE_LINES = 2_000;
-
-type Connector = "<-->" | "-->" | "<>" | "--" | ">" | "<" | "-";
-// Longest first so "<-->" is not read as "<" followed by "-->", and "-->" not as "--".
-const CONNECTORS: Connector[] = ["<-->", "-->", "<>", "--", ">", "<", "-"];
-
-const UNSUPPORTED_PROPS = new Set(["colormode", "stylemode", "typeface", "icon-color"]);
-/** A trailing `[color: x, from: right, to: left]` on a connection, after its optional label. */
-const EDGE_PROPS_TAIL = /\s*\[([^\]]*)\]\s*$/;
-const EDGE_PROP_KEYS = new Set(["color", "colour", "from", "to"]);
-const SIDE_NAMES = new Set(["top", "right", "bottom", "left"]);
-/** Layout numbers a node may carry: where it is and how big (canvas units). */
-const NUMBER_PROPS: Record<string, "x" | "y" | "width" | "height"> = { x: "x", y: "y", w: "width", width: "width", h: "height", height: "height" };
-const MAX_COORDINATE = 100_000;
-const MIN_SIZE = 24;
-const MAX_SIZE = 4_000;
-const DIRECTIVE = /^(title|type|direction)\s+(.+)$/i;
-
-/** Remove `//` comments (not inside quotes) and whole-line `#` comments. */
-const stripComment = (raw: string): string => {
-  if (raw.trimStart().startsWith("#")) return "";
-  let quote = false;
-  for (let i = 0; i < raw.length; i += 1) {
-    if (raw[i] === '"') quote = !quote;
-    // A comment starts at "//" at the line start or after whitespace, so a
-    // URL in a label ("A > B: https://api") is not mistaken for one.
-    else if (
-      !quote &&
-      raw[i] === "/" &&
-      raw[i + 1] === "/" &&
-      (i === 0 || /\s/.test(raw[i - 1]))
-    ) {
-      return raw.slice(0, i);
-    }
-  }
-  return raw;
-};
-
-const unquote = (text: string): string => {
-  const t = text.trim();
-  return t.length >= 2 && t.startsWith('"') && t.endsWith('"')
-    ? t.slice(1, -1).replace(/\\"/g, '"')
-    : t;
-};
-
-/** Split `text` on `separator` outside quotes and brackets. */
-const splitTopLevel = (text: string, separator: string): string[] => {
-  const parts: string[] = [];
-  let current = "";
-  let quote = false;
-  let depth = 0;
-  for (const ch of text) {
-    if (ch === '"') quote = !quote;
-    if (!quote) {
-      if (ch === "[" || ch === "(") depth += 1;
-      else if (ch === "]" || ch === ")") depth = Math.max(0, depth - 1);
-      else if (ch === separator && depth === 0) {
-        parts.push(current);
-        current = "";
-        continue;
-      }
-    }
-    current += ch;
-  }
-  parts.push(current);
-  return parts;
-};
-
-interface EdgeTokens {
-  parts: string[];
-  connectors: Connector[];
-  label?: string;
-}
+import { compileDiagramCode, membersOf } from "./language";
+import type { DiagramIR } from "./language/ir";
+import type { ParsedDiagramCode, ParsedEdge, ParsedFrame, ParsedGroup, ParsedNode } from "./types";
 
 /**
- * Break a line into endpoints, the connectors between them and an optional
- * trailing `: label`. A connector must stand alone (whitespace or line edge on
- * both sides) so `x>y` stays a name; quoted text and `[...]` are never split.
+ * The shape the canvas layer and the agent tools consume, projected from the validated diagram.
+ * All parsing and validation lives in `language/`; this file only reshapes the result.
  */
-const tokenizeEdge = (line: string): EdgeTokens | null => {
-  const parts: string[] = [];
-  const connectors: Connector[] = [];
-  let current = "";
-  let quote = false;
-  let depth = 0;
-  let label: string | undefined;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (ch === '"') {
-      quote = !quote;
-      current += ch;
-      continue;
-    }
-    if (!quote) {
-      if (ch === "[") depth += 1;
-      else if (ch === "]") depth = Math.max(0, depth - 1);
-      else if (depth === 0) {
-        if (ch === ":" && connectors.length > 0) {
-          label = line.slice(i + 1).trim();
-          break;
-        }
-        if (ch === "<" || ch === "-" || ch === ">") {
-          const found = CONNECTORS.find((c) => line.startsWith(c, i));
-          const before = i === 0 || /\s/.test(line[i - 1]);
-          const after = found ? i + found.length >= line.length || /\s/.test(line[i + found.length]) : false;
-          if (found && before && after) {
-            parts.push(current.trim());
-            current = "";
-            connectors.push(found);
-            i += found.length - 1;
-            continue;
-          }
-        }
-      }
-    }
-    current += ch;
-  }
-  if (connectors.length === 0) return null;
-  parts.push(current.trim());
-  return { parts, connectors, label };
+export const parsedFromIR = (ir: DiagramIR, issues: ParsedDiagramCode["issues"]): ParsedDiagramCode => {
+  const nodes: ParsedNode[] = ir.nodes.map((node) => ({
+    id: node.id,
+    name: node.name,
+    label: node.label,
+    kind: node.kind,
+    icon: node.icon,
+    dashed: node.dashed,
+    shape: node.shape,
+    color: node.color,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+  }));
+  const edges: ParsedEdge[] = ir.edges.map((edge) => ({
+    from: edge.from,
+    to: edge.to,
+    label: edge.label,
+    bidirectional: edge.bidirectional,
+    dashed: edge.dashed,
+    plain: edge.plain,
+    color: edge.color,
+    fromSide: edge.fromSide,
+    toSide: edge.toSide,
+    line: edge.line,
+  }));
+  const groups: ParsedGroup[] = ir.groups.map((group) => ({
+    id: group.id,
+    label: group.label,
+    nodeIds: membersOf(ir, { type: "group", id: group.id }),
+    // A group inside a frame is a top-level group as far as groups are concerned.
+    parentId: group.parent?.type === "group" ? group.parent.id : undefined,
+  }));
+  const frames: ParsedFrame[] = ir.frames.map((frame) => ({
+    id: frame.id,
+    title: frame.title,
+    parentId: frame.parent?.id,
+    x: frame.x,
+    y: frame.y,
+    width: frame.width,
+    height: frame.height,
+    padding: frame.padding,
+    color: frame.color,
+    nodeIds: membersOf(ir, { type: "frame", id: frame.id }),
+  }));
+  return { title: ir.title, diagramType: ir.diagramType, direction: ir.direction, nodes, edges, groups, frames, issues };
 };
 
 export const parseDiagramCode = (source: string): ParsedDiagramCode => {
-  const issues: DiagramCodeIssue[] = [];
-  const nodes: ParsedNode[] = [];
-  const edges: ParsedEdge[] = [];
-  const groups: ParsedGroup[] = [];
-  const result: ParsedDiagramCode = { nodes, edges, groups, issues };
-  const add = (line: number, severity: DiagramCodeIssue["severity"], message: string) =>
-    issues.push({ line, severity, message });
-
-  const lines = source.split(/\r?\n/);
-  if (source.length > MAX_SOURCE_CHARS || lines.length > MAX_SOURCE_LINES) {
-    add(1, "error", `The code is too large (limit ${MAX_SOURCE_LINES} lines / ${MAX_SOURCE_CHARS} characters).`);
-    return result;
-  }
-
-  const nodeByName = new Map<string, ParsedNode>();
-  const nodeGroup = new Map<string, string>(); // node id -> innermost group label, for warnings
-  const usedNodeIds = new Set<string>();
-  const usedGroupIds = new Set<string>();
-  const stack: Array<{ group: ParsedGroup; line: number }> = [];
-
-  const uniqueId = (base: string, used: Set<string>) => {
-    let id = base;
-    for (let n = 2; used.has(id); n += 1) id = `${base}-${n}`;
-    used.add(id);
-    return id;
-  };
-
-  /** `kind: db, label: "X"` -> map; reports unknown / unsupported keys. */
-  const parseProps = (inner: string, line: number) => {
-    const props: Record<string, string> = {};
-    for (const entry of splitTopLevel(inner, ",")) {
-      if (entry.trim() === "") continue;
-      const colon = entry.indexOf(":");
-      if (colon === -1) {
-        add(line, "warning", `Property "${entry.trim()}" needs a value (key: value).`);
-        continue;
-      }
-      const key = entry.slice(0, colon).trim().toLowerCase();
-      const value = unquote(entry.slice(colon + 1));
-      if (UNSUPPORTED_PROPS.has(key)) {
-        add(line, "warning", `"${key}" is not supported yet and was ignored.`);
-      } else if (key === "shape") {
-        const shape = value.toLowerCase();
-        // oval and ellipse are drawn as pills (rectangles with fully rounded ends): the closest shape we have.
-        if (shape === "diamond") props.shape = "diamond";
-        else if (shape === "icon") props.shape = "icon";
-        else if (shape === "pill" || shape === "oval" || shape === "ellipse") props.shape = "pill";
-        else if (shape !== "rectangle") add(line, "warning", `Shape "${value}" is not supported yet; only diamond, pill (also oval, ellipse), icon (needs an icon: id) and rectangle are. It was ignored.`);
-      } else if (key === "color") {
-        const color = normalizeColor(value);
-        if (color) props.color = color;
-        else add(line, "warning", `Color "${value}" was not recognised (use a name such as blue, or "#rrggbb"); it was ignored.`);
-      } else if (["kind", "icon", "label", "dashed"].includes(key)) {
-        props[key] = value;
-      } else if (NUMBER_PROPS[key]) {
-        const field = NUMBER_PROPS[key];
-        const number = Number(value);
-        const size = field === "width" || field === "height";
-        const limit = size ? MAX_SIZE : MAX_COORDINATE;
-        if (!Number.isFinite(number) || value.trim() === "") add(line, "warning", `"${key}" needs a number (e.g. ${key}: 120); it was ignored.`);
-        else if (size ? number < MIN_SIZE || number > limit : Math.abs(number) > limit) add(line, "warning", `"${key}: ${value}" is out of range (${size ? `${MIN_SIZE} to ${limit}` : `-${limit} to ${limit}`}); it was ignored.`);
-        else props[field] = String(Math.round(number * 10) / 10);
-      } else {
-        add(line, "warning", `Unknown property "${key}" was ignored.`);
-      }
-    }
-    return props;
-  };
-
-  /** `Name [props]` -> name + props, or null (with an error) when malformed. */
-  const parseRef = (text: string, line: number) => {
-    const t = text.trim();
-    if (t === "") {
-      add(line, "error", "A node name is missing.");
-      return null;
-    }
-    let quote = false;
-    let bracket = -1;
-    for (let i = 0; i < t.length; i += 1) {
-      if (t[i] === '"') quote = !quote;
-      else if (!quote && t[i] === "[") {
-        bracket = i;
-        break;
-      }
-    }
-    if (quote) {
-      add(line, "error", 'A quoted name is missing its closing ".');
-      return null;
-    }
-    let namePart = t;
-    let props: Record<string, string> = {};
-    if (bracket !== -1) {
-      namePart = t.slice(0, bracket).trim();
-      const rest = t.slice(bracket);
-      if (!rest.endsWith("]")) {
-        add(line, "error", "A property list is missing its closing ].");
-        return null;
-      }
-      props = parseProps(rest.slice(1, -1), line);
-    }
-    const name = unquote(namePart);
-    if (name === "") {
-      add(line, "error", "A node name is missing.");
-      return null;
-    }
-    // Braces mean "group" unless the name is quoted.
-    if (!namePart.trim().startsWith('"') && /[{}]/.test(name)) {
-      add(line, "error", 'A name cannot contain { or } unless it is in "quotes".');
-      return null;
-    }
-    return { name, props };
-  };
-
-  const applyProps = (node: ParsedNode, props: Record<string, string>) => {
-    if (props.kind !== undefined) node.kind = props.kind;
-    if (props.icon !== undefined) node.icon = props.icon;
-    if (props.label !== undefined) node.label = props.label;
-    if (props.dashed !== undefined) node.dashed = props.dashed.toLowerCase() === "true";
-    if (props.shape === "diamond" || props.shape === "pill" || props.shape === "icon") node.shape = props.shape;
-    if (props.color !== undefined) node.color = props.color;
-    for (const field of ["x", "y", "width", "height"] as const) {
-      if (props[field] !== undefined) node[field] = Number(props[field]);
-    }
-  };
-
-  /** Find or create a node; new nodes join every group currently open. */
-  const resolveNode = (
-    ref: { name: string; props: Record<string, string> },
-    line: number,
-    explicit: boolean,
-  ): ParsedNode => {
-    let node = nodeByName.get(ref.name);
-    if (node) {
-      if (explicit) {
-        add(line, "warning", `"${ref.name}" was already declared; the properties were merged.`);
-        const current = stack[stack.length - 1]?.group.label;
-        const original = nodeGroup.get(node.id);
-        if (current && original && current !== original) {
-          add(line, "warning", `"${ref.name}" already belongs to "${original}"; it was not moved.`);
-        }
-      }
-    } else {
-      node = {
-        id: uniqueId(slugId(ref.name, "node"), usedNodeIds),
-        name: ref.name,
-        label: ref.name,
-      };
-      nodes.push(node);
-      nodeByName.set(ref.name, node);
-      const innermost = stack[stack.length - 1];
-      if (innermost) nodeGroup.set(node.id, innermost.group.label);
-      stack.forEach(({ group }) => group.nodeIds.push(node!.id));
-    }
-    applyProps(node, ref.props);
-    return node;
-  };
-
-  let inHeader = true;
-
-  lines.forEach((raw, index) => {
-    const line = index + 1;
-    const text = stripComment(raw).trim();
-    if (text === "") return;
-
-    // Directives are only recognised before the diagram body starts, so a node
-    // that happens to be called "type checker" stays a node.
-    if (inHeader) {
-      const directive = DIRECTIVE.exec(text);
-      if (directive) {
-        const key = directive[1].toLowerCase();
-        const value = unquote(directive[2]);
-        if (key === "title") result.title = value;
-        else if (key === "type") {
-          const type = parseDiagramType(value);
-          if (type) result.diagramType = type;
-          else add(line, "warning", `Unknown diagram type "${value}" was ignored.`);
-        } else {
-          const dir = value.toLowerCase();
-          if (["down", "tb", "top-to-bottom", "vertical"].includes(dir)) result.direction = "down";
-          else if (["right", "lr", "left-to-right", "horizontal"].includes(dir)) result.direction = "right";
-          else add(line, "warning", `Unknown direction "${value}" was ignored.`);
-        }
-        return;
-      }
-    }
-    inHeader = false;
-
-    if (text === "}") {
-      if (stack.length === 0) add(line, "error", "Unmatched } (no group is open).");
-      else stack.pop();
-      return;
-    }
-
-    const edgeTokens = tokenizeEdge(text);
-    if (edgeTokens) {
-      const sides = edgeTokens.parts.map((part) =>
-        splitTopLevel(part, ",")
-          .map((item) => parseRef(item, line))
-          .filter((ref): ref is NonNullable<typeof ref> => ref !== null),
-      );
-      if (sides.some((side, i) => side.length === 0 && edgeTokens.parts[i].trim() === "")) {
-        // parseRef already reported the missing name
-        return;
-      }
-      const resolved = sides.map((side) => side.map((ref) => resolveNode(ref, line, false)));
-      let edgeLabel = edgeTokens.label;
-      let edgeColor: string | undefined;
-      let fromSide: ParsedEdge["fromSide"];
-      let toSide: ParsedEdge["toSide"];
-      const tail = edgeLabel === undefined ? null : EDGE_PROPS_TAIL.exec(edgeLabel);
-      const entries = tail ? splitTopLevel(tail[1], ",").filter((e) => e.trim() !== "") : [];
-      // Only a list made entirely of edge properties is one; "array[0]" in a label stays label text.
-      const isEdgeProps = entries.length > 0 && entries.every((e) => EDGE_PROP_KEYS.has(e.split(":")[0].trim().toLowerCase()) && e.includes(":"));
-      if (tail && isEdgeProps) {
-        for (const entry of entries) {
-          const colon = entry.indexOf(":");
-          const key = entry.slice(0, colon).trim().toLowerCase();
-          const value = unquote(entry.slice(colon + 1));
-          if (key === "color" || key === "colour") {
-            edgeColor = normalizeColor(value);
-            if (!edgeColor) add(line, "warning", `Color "${value}" was not recognised; it was ignored.`);
-          } else if (!SIDE_NAMES.has(value.toLowerCase())) {
-            add(line, "warning", `"${key}: ${value}" is not a side (use top, right, bottom or left); it was ignored.`);
-          } else if (key === "from") fromSide = value.toLowerCase() as ParsedEdge["fromSide"];
-          else toSide = value.toLowerCase() as ParsedEdge["toSide"];
-        }
-        edgeLabel = edgeLabel!.slice(0, tail.index).trim();
-      } else if (edgeLabel !== undefined && /\[\s*(colou?r|from|to)\b/i.test(edgeLabel)) {
-        add(
-          line,
-          "warning",
-          /\[\s*colou?r\b/i.test(edgeLabel)
-            ? 'This looks like an edge color but is not "[color: name]" at the end of the connection; it was kept as label text.'
-            : 'This looks like edge sides but is not "[from: side, to: side]" at the end of the connection; it was kept as label text.',
-        );
-      }
-      edgeTokens.connectors.forEach((connector, i) => {
-        for (const left of resolved[i]) {
-          for (const right of resolved[i + 1]) {
-            const [from, to] = connector === "<" ? [right, left] : [left, right];
-            if (from.id === to.id) {
-              add(line, "warning", `"${from.name}" cannot connect to itself; the connection was ignored.`);
-              continue;
-            }
-            edges.push({
-              from: from.id,
-              to: to.id,
-              label: edgeLabel || undefined,
-              bidirectional: connector === "<>" || connector === "<-->" ? true : undefined,
-              dashed: connector === "-->" || connector === "<-->" || connector === "--" ? true : undefined,
-              plain: connector === "-" || connector === "--" ? true : undefined,
-              color: edgeColor,
-              // A reversed connector (`<`) swaps the ends, so the sides swap with them.
-              fromSide: connector === "<" ? toSide : fromSide,
-              toSide: connector === "<" ? fromSide : toSide,
-              line,
-            });
-          }
-        }
-      });
-      return;
-    }
-
-    const strayConnector = /(^|\s)([-<>]{2,})(?=\s|$)/.exec(text.replace(/"[^"]*"/g, '""'));
-    if (strayConnector) {
-      add(line, "warning", `"${strayConnector[2]}" is not a connector (use >, <, <>, -, -- or -->), so this line was read as a node name. Put the name in "quotes" if that is what you meant.`);
-    }
-
-    if (text.endsWith("{")) {
-      const ref = parseRef(text.slice(0, -1), line);
-      if (!ref) return;
-      const group: ParsedGroup = {
-        id: uniqueId(slugId(ref.name, "group"), usedGroupIds),
-        label: ref.props.label ?? ref.name,
-        nodeIds: [],
-        parentId: stack[stack.length - 1]?.group.id,
-      };
-      groups.push(group);
-      stack.push({ group, line });
-      return;
-    }
-
-    for (const item of splitTopLevel(text, ",")) {
-      const ref = parseRef(item, line);
-      if (ref) resolveNode(ref, line, nodeByName.has(ref.name));
-    }
-  });
-
-  stack.forEach(({ group, line }) =>
-    add(line, "error", `The group "${group.label}" is never closed (missing }).`),
-  );
-  return result;
+  const { ir, diagnostics } = compileDiagramCode(source);
+  return parsedFromIR(ir, diagnostics);
 };

@@ -150,3 +150,18 @@ describe("serializing lines, shapes and colours", () => {
     expect(parseDiagramCode(code).nodes.map((n) => n.name)).toEqual(["Auth - Login", "B"]);
   });
 });
+
+describe("block keywords in names", () => {
+  it("quotes a group label that would otherwise read as a frame or group keyword", async () => {
+    const { parseDiagramCode } = await import("./parse");
+    const code = serializeDiagramCode({
+      nodes: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
+      edges: [],
+      groups: [{ id: "g", label: "frame work", nodeIds: ["a", "b"] }],
+    });
+    expect(code).toContain('"frame work" {');
+    const parsed = parseDiagramCode(code);
+    expect(parsed.frames).toEqual([]);
+    expect(parsed.groups.map((g) => g.label)).toEqual(["frame work"]);
+  });
+});

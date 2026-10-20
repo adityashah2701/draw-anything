@@ -83,6 +83,16 @@ export const elementsFromDiagramCode = (
     };
   }
 
+  if (parsed.frames.length > 0) {
+    // The language knows frames; drawing them waits for the canvas frame API.
+    issues.push({
+      line: 1,
+      severity: "warning",
+      code: "frame/not-drawn",
+      message: `${parsed.frames.length === 1 ? "A frame is" : `${parsed.frames.length} frames are`} not drawn on the canvas yet; the nodes inside ${parsed.frames.length === 1 ? "it are" : "them are"} placed as usual.`,
+    });
+  }
+
   const { document, warnings } = documentFromParsedCode(parsed, generationId);
   warnings.forEach((message) => issues.push({ line: 1, severity: "warning", message }));
 
