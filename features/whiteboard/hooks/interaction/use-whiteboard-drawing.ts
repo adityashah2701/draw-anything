@@ -499,7 +499,9 @@ export const useWhiteboardDrawing = ({
         const connectable = [...atPoint]
           .reverse()
           .find((element) => getElementConnectionHandles(element).length > 0);
-        setHoveredElementId(connectable?.id ?? null);
+        // A frame has no connection handles; it is hovered so its box can be shown.
+        const hoverable = connectable ?? [...atPoint].reverse().find((element) => element.type === "frame");
+        setHoveredElementId(hoverable?.id ?? null);
       } else {
         // Clear hover when not on select tool
         setHoveredElementId(null);

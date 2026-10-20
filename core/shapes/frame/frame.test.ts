@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getShapeAnchors, getShapeBounds, getShapeDefinition, moveShape, resizeShape, createShape } from "@/core/shapes/shape-runtime";
+import { getShapeAnchors, getShapeBounds, getShapeDefinition, getShapeHitBounds, moveShape, resizeShape, createShape } from "@/core/shapes/shape-runtime";
 import { frame } from "@/core/frames/test-helpers";
 import { SvgContext } from "@/features/whiteboard/export/svg-context";
 
@@ -31,6 +31,13 @@ describe("the frame shape definition", () => {
     const f = frame("f", 10, 20, 100, 50);
     expect(getShapeBounds(f)).toMatchObject({ minX: 10, minY: 20, maxX: 110, maxY: 70 });
     expect(moveShape(f, { x: 5, y: -5 }).points).toEqual([{ x: 15, y: 15 }, { x: 115, y: 65 }]);
+  });
+
+  it("can be picked on its tab, so the tab is part of its hit area but not of its bounds", () => {
+    const tabbed = frame("f", 0, 0, 400, 300, { titlePlacement: "above" });
+    expect(getShapeBounds(tabbed)!.minY).toBe(0);
+    expect(getShapeHitBounds(tabbed)!.minY).toBe(-24);
+    expect(getShapeHitBounds(frame("f", 0, 0, 400, 300))).toEqual(getShapeBounds(frame("f", 0, 0, 400, 300)));
   });
 
   describe("picking", () => {

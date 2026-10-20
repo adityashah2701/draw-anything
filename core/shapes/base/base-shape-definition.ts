@@ -63,6 +63,11 @@ export interface BaseShapeDefinition<T extends DrawingElement> {
    */
   renderSelection?: (shape: T, context: ShapeRenderCanvasContext) => void;
   getBounds: (shape: T, context?: ShapeGeometryContext) => Bounds | null;
+  /**
+   * The area in which the shape can be picked, when that is larger than its bounds (a frame's title
+   * tab sits outside its box). Used only to find hit candidates; absent = `getBounds`.
+   */
+  getHitBounds?: (shape: T, context?: ShapeGeometryContext) => Bounds | null;
   getAnchors: (shape: T, bounds?: Bounds | null) => Anchor[];
   onMove?: (shape: T, delta: Point) => T;
   onResize?: (

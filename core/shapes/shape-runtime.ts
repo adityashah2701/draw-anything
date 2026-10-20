@@ -63,6 +63,10 @@ export const getShapeBounds = (
   return rotation ? rotatedBoundsAabb(local, rotation) : local;
 };
 
+/** Where the shape can be picked: its bounds, or more when its definition says so (a frame's title tab). */
+export const getShapeHitBounds = (shape: DrawingElement, context?: ShapeGeometryContext): Bounds | null =>
+  getShapeDefinition(shape.type)?.getHitBounds?.(shape, context) ?? getShapeBounds(shape, context);
+
 const SIDE_ANGLE: Record<AnchorSide, number> = { right: 0, bottom: 90, left: 180, top: 270 };
 const SIDE_AT: AnchorSide[] = ["right", "bottom", "left", "top"];
 

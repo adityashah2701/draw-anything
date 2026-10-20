@@ -1,7 +1,8 @@
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { resizable } from "@/core/shapes/capabilities/resizable";
-import { frameBox, hasValidBox } from "@/core/frames/frame-model";
+import { unionBounds } from "@/core/geometry/box";
+import { frameBox, frameRegions, hasValidBox } from "@/core/frames/frame-model";
 import { containsPointInFrame, getFrameResizeHandles, resizeFrameShape } from "@/core/shapes/frame/interaction";
 import { renderFrameToCanvas } from "@/core/shapes/frame/renderer";
 import type { FrameShape } from "@/features/whiteboard/types/whiteboard.types";
@@ -30,6 +31,10 @@ export const frameDefinition = createShapeDefinition<FrameShape>({
   render: () => null,
   renderToCanvas: renderFrameToCanvas,
   getBounds: (shape) => frameBox(shape),
+  getHitBounds: (shape) => {
+    const regions = frameRegions(shape);
+    return regions ? unionBounds([regions.box, ...(regions.header ? [regions.header] : [])]) : null;
+  },
   getAnchors: () => [],
   onResize: resizeFrameShape,
   containsPoint: (shape, point, options) => containsPointInFrame(shape, point, options?.radius ?? 0),

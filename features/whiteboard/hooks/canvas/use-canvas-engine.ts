@@ -1,4 +1,5 @@
 import { selectionInk } from "@/core/theme/selection-ink";
+import { paintOrder } from "@/core/frames/paint-order";
 import { useCallback, useEffect, useRef } from "react";
 import {
   drawGrid,
@@ -147,7 +148,7 @@ const useCanvasEngine = ({
     // handles (a group or several shapes), the shapes themselves are drawn unselected.
     const selectedSet = new Set(selectedElements);
     const shapeChrome = !selectionOverlay?.replacesShapeChrome;
-    elements.forEach((element) => {
+    paintOrder(elements).forEach((element) => {
       const selected = selectedSet.has(element.id);
       if (!isVisible(element) && !selected) {
         return;

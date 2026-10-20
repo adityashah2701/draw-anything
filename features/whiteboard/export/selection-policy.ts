@@ -1,3 +1,4 @@
+import { buildFrameIndex, frameDescendants } from "@/core/frames/frame-index";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
 const isConnector = (e: DrawingElement) => e.type === "arrow" || e.type === "arrow-bidirectional";
@@ -13,11 +14,16 @@ type Connected = DrawingElement & {
  *  2. every connector whose two attached ends are both selected (the diagram between the picked nodes);
  *  3. the label of each included connector.
  * A connector with only one selected end is left out unless it is selected itself: exporting it would
- * draw a line to nothing. Group frames are included only when selected.
+ * draw a line to nothing. Group frames are included only when selected. A selected frame brings everything it
+ * owns, at any depth: exporting a frame exports what is in it.
  */
 export const elementsForSelectionExport = (elements: DrawingElement[], selectedIds: Iterable<string>): DrawingElement[] => {
   const selected = new Set(selectedIds);
   if (selected.size === 0) return [];
+  if (elements.some((e) => e.type === "frame" && selected.has(e.id))) {
+    const index = buildFrameIndex(elements);
+    for (const id of [...selected]) if (index.frames.has(id)) for (const owned of frameDescendants(index, id)) selected.add(owned);
+  }
   const included = new Set<string>();
   for (const e of elements) {
     if (selected.has(e.id)) included.add(e.id);
