@@ -37,7 +37,7 @@ const cleanMultiline = (text: string) =>
     .join("\n");
 
 /** Quote a name only when the parser would otherwise misread it. */
-const writeName = (name: string): string =>
+export const writeName = (name: string): string =>
   name === "" ||
   /[\[\]{}",:]/.test(name) ||
   /^(\/\/|#)/.test(name) ||
