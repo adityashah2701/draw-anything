@@ -195,6 +195,16 @@ describe("validate_and_repair_diagram", () => {
     expect(find(s.mem.stored, "a").groupId).toBeUndefined();
   });
 
+  it("reports and repairs an element that says it is in a frame that is not there", async () => {
+    const s = setup({ elements: [node("a", "A", 0, 0, { frameId: "ghost-frame" }), node("b", "B", 400, 0)] });
+    const before = (await s.ok("validate_diagram")).data!.issues as Array<{ code: string; ids: string[] }>;
+    expect(before.find((i) => i.code === "dangling_frame_ref")?.ids).toEqual(["a"]);
+    await s.ok("validate_and_repair_diagram", { codes: ["dangling_frame_ref"] });
+    expect(find(s.mem.stored, "a").frameId).toBeUndefined();
+    const after = (await s.ok("validate_diagram")).data!.issues as Array<{ code: string }>;
+    expect(after.map((i) => i.code)).not.toContain("dangling_frame_ref");
+  });
+
   it("reports what it cannot fix and what is not there", async () => {
     const s = setup({ elements: [node("a", "A", 0, 0), node("b", "B", 50, 20)] });
     const overlap = await s.run("validate_and_repair_diagram", { codes: ["overlap"] });

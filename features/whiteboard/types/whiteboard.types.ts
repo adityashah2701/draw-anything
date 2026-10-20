@@ -61,6 +61,13 @@ export interface BaseDrawingElement {
    * treated as "ungrouped" by `core/groups/group-index.ts`, never as an error.
    */
   groupId?: string;
+  /**
+   * The frame that owns this element (see `FrameShape`, `core/frames`). Absent = top level. Ownership
+   * lives only here: a frame stores no list of its contents. Groups and frames are independent (an
+   * element can have both a `groupId` and a `frameId`). A dangling or cyclic value is read as "not in
+   * a frame", never as an error. Not related to `ai.frameId`, which names an AI generation.
+   */
+  frameId?: string;
   /** Locked elements (and everything inside a locked group) can be selected but not edited. */
   locked?: boolean;
   /**
@@ -200,6 +207,35 @@ export interface BidirectionalArrowShape extends ArrowBaseShape {
   type: "arrow-bidirectional";
 }
 
+/** Where a frame's title sits: in a band at the top of the frame, or on a tab above it. */
+export type FrameTitlePlacement = "inside" | "above";
+
+/** Named starting points for a frame; each only sets defaults (see `core/frames/presets.ts`). */
+export type FramePreset = "section" | "container" | "feature-group" | "swimlane" | "device";
+
+/**
+ * A frame: a titled region that owns the elements placed in it (see `core/frames`). `points` are the
+ * two corners of its box, `color` is its border, `fill` its background (absent = transparent) and
+ * `opacity` applies to the whole frame. Every other field is optional and an absent field means the
+ * design default, so a frame written by an older build still reads correctly.
+ */
+export interface FrameShape extends BaseDrawingElement {
+  type: "frame";
+  title?: string;
+  /** Corner radius in world units; absent = the frame default. */
+  cornerRadius?: number;
+  /** Space kept between the box (below the header) and its contents when fitting. */
+  padding?: number;
+  titlePlacement?: FrameTitlePlacement;
+  /** False hides the title band/tab. Absent = shown. */
+  headerVisible?: boolean;
+  /** The box always wraps its contents plus `padding`; it is then not resized by hand. */
+  autoFit?: boolean;
+  minWidth?: number;
+  minHeight?: number;
+  preset?: FramePreset;
+}
+
 export type DrawingElement =
   | FreehandShape
   | RectangleShape
@@ -212,6 +248,7 @@ export type DrawingElement =
   | LineShape
   | TextShape
   | SemanticNodeShape
+  | FrameShape
   | ArrowShape
   | BidirectionalArrowShape;
 
