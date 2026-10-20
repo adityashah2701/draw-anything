@@ -5,13 +5,20 @@ import {
   normalizeModelPlan,
 } from "@/features/ai/schemas";
 import type { AIDiagramType, AIModelProvider } from "@/features/ai/types";
-import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, FrameShape } from "@/features/whiteboard/types/whiteboard.types";
 import { tint } from "@/core/color/named-colors";
 import { parseAnchorSide } from "@/core/anchors/generate-anchors";
+import { drawFrames } from "./frames";
+import { compileDiagramCode } from "./language/compile";
 import { parseDiagramCode } from "./parse";
 import type { SerializableGraph } from "./serialize";
 import type { NodePin } from "@/features/ai/server/layout/pins";
 import type { DiagramCodeIssue } from "./types";
+
+/** The colour a frame has unless one is chosen. */
+const DEFAULT_FRAME_COLOR = "#64748b";
+
+type FrameElement = FrameShape;
 
 export interface CodeToCanvasResult {
   elements: DrawingElement[];
@@ -84,20 +91,13 @@ export const elementsFromDiagramCode = (
     };
   }
 
-  if (parsed.frames.length > 0) {
-    // The language knows frames; drawing them waits for the canvas frame API.
-    issues.push({
-      line: 1,
-      severity: "warning",
-      code: "frame/not-drawn",
-      message: `${parsed.frames.length === 1 ? "A frame is" : `${parsed.frames.length} frames are`} not drawn on the canvas yet; the nodes inside ${parsed.frames.length === 1 ? "it are" : "them are"} placed as usual.`,
-    });
-  }
-
   const { document, warnings } = documentFromParsedCode(parsed, generationId);
   warnings.forEach((message) => issues.push({ line: 1, severity: "warning", message }));
 
-  return { elements: compileAIDiagramToCanvas(document, frameId, { pins }), issues };
+  const compiled = compileAIDiagramToCanvas(document, frameId, { pins });
+  if (parsed.frames.length === 0) return { elements: compiled, issues };
+  const framed = drawFrames(compileDiagramCode(source).ir, compiled, { source, generationId, frameId });
+  return { elements: framed.elements, issues: [...issues, ...framed.issues] };
 };
 
 // ── canvas -> code ──────────────────────────────────────────────────────────
@@ -151,6 +151,8 @@ export interface GraphProvenance {
   edges: Array<{ arrowId: string; labelId?: string }>;
   /** Aligned with `graph.groups`: the frame rectangle and its title. */
   groups: Array<{ frameId: string; titleId?: string }>;
+  /** Graph frame id to the frame element it was read from. */
+  frames: Map<string, string>;
 }
 
 export interface GraphFromElements {
@@ -237,6 +239,44 @@ export const graphFromElements = (
     if (label) consumed.add(label.id);
   }
 
+  // Frames: ownership is the element's own `frameId`, so a node belongs to every frame above it.
+  const frameElements = elements.filter((el): el is FrameElement => el.type === "frame" && el.points.length >= 2);
+  const frameElementById = new Map(frameElements.map((el) => [el.id, el]));
+  const framesAbove = (start: string | undefined): string[] => {
+    const chain: string[] = [];
+    for (let at = start, guard = 0; at && frameElementById.has(at) && !chain.includes(at) && guard < 100; guard += 1) {
+      chain.push(at);
+      at = frameElementById.get(at)!.frameId;
+    }
+    return chain;
+  };
+  const framedNodes = new Map<string, string[]>(); // frame element id -> graph node ids
+  const innermostFrameOf = new Map<string, string | undefined>(); // graph node id -> frame element id
+  for (const el of nodeElements) {
+    const chain = framesAbove(el.frameId);
+    innermostFrameOf.set(idOfElement.get(el.id)!, chain[0]);
+    for (const frame of chain) framedNodes.set(frame, [...(framedNodes.get(frame) ?? []), idOfElement.get(el.id)!]);
+  }
+  const graphFrames: NonNullable<SerializableGraph["frames"]> = [];
+  const frameSources = new Map<string, string>();
+  const graphIdOfFrame = (el: FrameElement) => el.ai?.semanticId ?? el.id;
+  for (const el of frameElements) {
+    const members = framedNodes.get(el.id);
+    if (!members || members.length === 0) continue;
+    const box = boundsOf(el);
+    graphFrames.push({
+      id: graphIdOfFrame(el),
+      title: el.title?.trim() || "Frame",
+      parentId: el.frameId && frameElementById.has(el.frameId) ? graphIdOfFrame(frameElementById.get(el.frameId)!) : undefined,
+      nodeIds: members,
+      ...(layout ? { x: box.minX, y: box.minY, width: box.maxX - box.minX, height: box.maxY - box.minY } : {}),
+      padding: el.padding,
+      color: el.color && /^#[0-9a-f]{6}$/i.test(el.color) && el.color.toLowerCase() !== DEFAULT_FRAME_COLOR ? el.color.toLowerCase() : undefined,
+    });
+    frameSources.set(graphIdOfFrame(el), el.id);
+    consumed.add(el.id);
+  }
+
   const groups: SerializableGraph["groups"] = [];
   const groupSources: GraphProvenance["groups"] = [];
   for (const frame of elements.filter((el) => el.ai?.role === "group" && el.points.length >= 2)) {
@@ -248,6 +288,9 @@ export const graphFromElements = (
       })
       .map((el) => idOfElement.get(el.id)!);
     if (members.length < 2) continue;
+    // A group cannot span frames, so one that does is left on the board as it is.
+    const nodeIdOfGraph = new Map([...idOfElement].map(([elementId, graphId]) => [graphId, elementId]));
+    if (new Set(members.map((id) => innermostFrameOf.get(id))).size > 1 && nodeIdOfGraph.size > 0) continue;
     const title = elements.find(
       (el) => el.ai?.role === "group-label" && el.ai.semanticId === frame.ai?.semanticId,
     );
@@ -270,8 +313,8 @@ export const graphFromElements = (
   for (const el of nodeElements) nodeSources.set(idOfElement.get(el.id)!, el.id);
 
   return {
-    graph: { diagramType, nodes, edges, groups },
+    graph: { diagramType, nodes, edges, groups, frames: graphFrames },
     consumedIds: [...consumed],
-    provenance: { nodes: nodeSources, edges: edgeSources, groups: groupSources },
+    provenance: { nodes: nodeSources, edges: edgeSources, groups: groupSources, frames: frameSources },
   };
 };

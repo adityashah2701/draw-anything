@@ -25,7 +25,7 @@ interface DiagramCodeEditorProps {
 const EXAMPLE = `type architecture
 title Shop
 
-Backend {
+frame Backend [label: "Backend services"] {
   API [kind: api]
   Orders [kind: service]
   Orders DB [kind: database, shape: icon]
@@ -44,6 +44,8 @@ const REFERENCE: Array<[string, string]> = [
   ["Name [x: 120, y: 80, w: 200, h: 90]", "exact position (top-left) and size"],
   ["Name [color: blue, dashed: true]", "colour and outline"],
   ["Group { … }", "a group (nests)"],
+  ["frame Name [label: Title, padding: 32] { … }", "a frame: a titled box around what is inside (nests; may hold groups)"],
+  ["frame Name [x: 0, y: 0, w: 600, h: 400] { … }", "a frame with an exact box; without one it wraps its contents"],
   ["A > B   A < B   A <> B", "arrow, reversed, both ways"],
   ["A --> B   A - B   A -- B", "dashed, plain line, dashed line"],
   ["A > B: label", "a label on the line"],
@@ -168,7 +170,7 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
       setNotice("Already formatted.");
       return;
     }
-    const caret = mapCaret(code, document.activeElement instanceof HTMLTextAreaElement ? document.activeElement.selectionStart : 0, result.text);
+    const caret = mapCaret(code, fieldRef.current?.selectionStart() ?? 0, result.text);
     setCode(result.text);
     setNotice("Formatted.");
     fieldRef.current?.select(caret, caret);
