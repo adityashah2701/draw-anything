@@ -3,7 +3,7 @@ import { HeroSection } from "./landing/hero-section";
 import { FeaturesSection } from "./landing/features-section";
 import { CtaSection } from "./landing/cta-section";
 import { FooterSection } from "./landing/footer-section";
-import Image from "next/image";
+import { LogoMark } from "@/components/shared/logo-mark";
 import { Button } from "@/components/ui/button";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import { ArrowUpRight, Menu, X } from "lucide-react";
@@ -40,7 +40,7 @@ const Page = () => {
         <div className="mx-auto flex h-[76px] w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="rounded-lg border border-border bg-card p-2 shadow-sm">
-              <Image src="/logo.svg" alt="Logo" height={20} width={20} className="dark:invert" />
+              <LogoMark className="size-5" />
             </div>
             <div className="leading-tight">
               <h1 className="text-[27px] font-bold tracking-tight text-foreground">

@@ -3,6 +3,8 @@ import { useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { AIPanel } from "@/features/whiteboard/components/overlays/ai-panel";
 import { Toaster } from "@/components/ui/sonner";
+import { SidebarView } from "@/components/layout/sidebar/sidebar-view";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import type { AgentUiMessage } from "@/features/canvas-tools/editor/use-canvas-agent";
 import { ExportDialog } from "@/features/whiteboard/components/overlays/export-dialog";
 import { useBoardExport } from "@/features/whiteboard/hooks/export/use-board-export";
@@ -102,4 +104,68 @@ export const mountAgentPanel = (initial: AgentUiMessage[] = [], running = false)
   const root = createRoot(host);
   panel = { root, host };
   root.render(<AgentPanelHarness initial={initial} running={running} />);
+};
+
+// ── the dashboard sidebar, driven from fixtures (Clerk and Convex do not run in a test page) ─────────
+
+const SidebarHarness = ({ onEvent }: { onEvent: (event: string) => void }) => {
+  const [page, setPage] = useState("Dashboard");
+  const [workspaceId, setWorkspaceId] = useState("org_1");
+  const workspaces = [
+    { id: "org_1", name: "Northwind Studio" },
+    { id: "org_2", name: "Side projects" },
+  ];
+  const record = (name: string) => () => onEvent(name);
+  return (
+    <SidebarProvider>
+      <SidebarView
+        selectedPage={page}
+        onNavigate={(next) => {
+          setPage(next);
+          onEvent(`nav:${next}`);
+        }}
+        workspace={workspaces.find((w) => w.id === workspaceId) ?? null}
+        membersCount={4}
+        workspaces={workspaces}
+        user={{ name: "Aditya Shah", email: "aditya@example.com" }}
+        recent={[
+          { id: "b1", title: "Checkout service architecture" },
+          { id: "b2", title: "Retro: October sprint" },
+          { id: "b3", title: "A board with a name long enough that it has to truncate somewhere sensible" },
+        ]}
+        actions={{
+          switchWorkspace: (id) => {
+            setWorkspaceId(id);
+            onEvent(`switch:${id}`);
+          },
+          createWorkspace: record("create"),
+          manageWorkspace: record("manage"),
+          manageAccount: record("account"),
+          signOut: record("signout"),
+          openBoard: (id) => onEvent(`board:${id}`),
+        }}
+      />
+      <SidebarInset>
+        <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3">
+          <SidebarTrigger className="-ml-1" />
+          <span className="label-mono sr-only md:not-sr-only">{page}</span>
+        </header>
+        <main className="flex-1 bg-background p-6 text-sm">Canvas area</main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+};
+
+let sidebar: { root: Root; host: HTMLElement } | null = null;
+
+export const mountSidebar = (onEvent: (event: string) => void) => {
+  if (sidebar) {
+    sidebar.root.unmount();
+    sidebar.host.remove();
+  }
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  sidebar = { root, host };
+  root.render(<SidebarHarness onEvent={onEvent} />);
 };
