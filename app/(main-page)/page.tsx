@@ -1,74 +1,28 @@
-"use client";
-import { useOrganization, useUser } from "@clerk/nextjs";
-import React, { useState } from "react";
-import Dashboard from "@/features/dashboard/components/dashboard/dashboard";
-import Whiteboards from "@/features/dashboard/components/whiteboards/whiteboard";
-import Members from "@/features/dashboard/components/member/member";
-import CustomLoader from "@/components/shared/loader";
-import Page from "@/features/dashboard/components/unauthenticated-page";
-import CleanNavbar from "@/components/layout/navbar/navbar";
-import { AppSidebar } from "@/components/layout/sidebar/app-sidebar";
-import { BillingPage } from "@/features/billing/components/billing-page";
-import {
-  SidebarProvider,
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import type { Metadata } from "next";
+import HomeShell from "@/features/dashboard/components/home-shell";
+import { Landing } from "@/features/dashboard/components/unauthenticated-page";
+import { JsonLd } from "@/components/seo/json-ld";
+import { publicPageMetadata } from "@/lib/seo/metadata";
+import { HOME_TITLE, SITE_DESCRIPTION } from "@/lib/seo/site";
+import { buildHomeStructuredData } from "@/lib/seo/structured-data";
 
-// Type for navigation items
-type NavigationItem =
-  | "Dashboard"
-  | "Whiteboards"
-  | "Templates"
-  | "Shared with Me"
-  | "Members"
-  | "Roles & Permissions"
-  | "Billing";
+export const metadata: Metadata = publicPageMetadata({
+  title: HOME_TITLE,
+  description: SITE_DESCRIPTION,
+  path: "/",
+});
 
-const LandingPage = () => {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const [selectedPage, setSelectedPage] = useState<NavigationItem>("Dashboard");
-  const { organization } = useOrganization();
-  if (!isLoaded) {
-    return <CustomLoader />;
-  }
+// Clerk records a signed-in browser in a `__client_uat` cookie (0 when signed out). Reading it
+// before first paint lets the page hide the marketing content from a returning user while Clerk
+// loads; everyone else, and every crawler, gets the full page immediately.
+const AUTH_HINT_SCRIPT = `try{var c=document.cookie.split("; ");for(var i=0;i<c.length;i++){var p=c[i].split("=");if(p[0].indexOf("__client_uat")===0&&p[1]&&p[1]!=="0"){document.documentElement.setAttribute("data-auth","in");break}}}catch(e){}`;
 
-  // Show unauthenticated page
-  if (!isSignedIn) {
-    return <Page />;
-  }
-
-  const goTo = (page: string) => setSelectedPage(page as NavigationItem);
-
-  // Render the appropriate authenticated page component
-  const renderSelectedPage = () => {
-    switch (selectedPage) {
-      case "Whiteboards":
-        return <Whiteboards />;
-      case "Members":
-        return <Members user={user} organization={organization} />;
-      case "Billing":
-        return <BillingPage />;
-      default:
-        return <Dashboard user={user} selectedPage={selectedPage} setSelectedPage={goTo} />;
-    }
-  };
-
+export default function HomePage() {
   return (
-    <SidebarProvider>
-      <AppSidebar selectedPage={selectedPage} setSelectedPage={goTo} />
-      <SidebarInset>
-        <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3">
-          <SidebarTrigger className="-ml-1" />
-          <span className="label-mono sr-only md:not-sr-only">{selectedPage}</span>
-          <div className="flex-1">
-            <CleanNavbar isSidebarIntegrated={true} />
-          </div>
-        </header>
-        <main className="flex-1 overflow-auto bg-background">{renderSelectedPage()}</main>
-      </SidebarInset>
-    </SidebarProvider>
+    <>
+      <JsonLd data={buildHomeStructuredData()} />
+      <script dangerouslySetInnerHTML={{ __html: AUTH_HINT_SCRIPT }} />
+      <HomeShell landing={<Landing />} />
+    </>
   );
-};
-
-export default LandingPage;
+}

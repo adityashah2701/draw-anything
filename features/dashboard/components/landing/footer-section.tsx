@@ -3,7 +3,7 @@ import { LogoMark } from "@/components/shared/logo-mark";
 const links = [
   { label: "How it works", href: "#how" },
   { label: "Capabilities", href: "#features" },
-  { label: "Start", href: "#cta" },
+  { label: "Start drawing", href: "#cta" },
 ];
 
 export const FooterSection = () => (

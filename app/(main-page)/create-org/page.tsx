@@ -1,5 +1,9 @@
+import type { Metadata } from "next";
+import { privatePageMetadata } from "@/lib/seo/metadata";
 import { CreateOrgForm } from "@/features/organizations/components/create-org-form";
 import { Building2 } from "lucide-react";
+
+export const metadata: Metadata = privatePageMetadata("Create an organization");
 
 export default function CreateOrganizationPage() {
   return (
