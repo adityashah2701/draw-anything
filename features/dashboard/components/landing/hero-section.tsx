@@ -13,7 +13,7 @@ export const HeroSection = () => (
     <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-12 lg:items-center lg:gap-10">
       <div className="lg:col-span-5">
         <p className="landing-rise label-mono mb-5" style={rise(0)}>
-          AI-assisted diagramming
+          AI whiteboard for diagrams
         </p>
         <h1
           className="landing-rise text-[clamp(2rem,3.2vw,3.25rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-foreground"
@@ -24,8 +24,8 @@ export const HeroSection = () => (
           Watch it get drawn.
         </h1>
         <p className="landing-rise mt-5 max-w-md text-base leading-relaxed text-text-secondary" style={rise(100)}>
-          Type what the diagram should show. An agent draws it on your canvas, and everything it draws is an ordinary
-          shape you can move, restyle and connect.
+          Type what the diagram should show. An AI agent draws it on a collaborative whiteboard, and everything it draws
+          is an ordinary shape you can move, restyle and connect.
         </p>
         <div className="landing-rise mt-8 flex flex-wrap items-center gap-2" style={rise(160)}>
           <SignUpButton mode="modal">
