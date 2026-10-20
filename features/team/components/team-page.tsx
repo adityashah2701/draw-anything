@@ -5,7 +5,7 @@ import { useAuth, useClerk, useOrganization, useUser } from "@clerk/nextjs";
 
 import NoOrganizationState from "@/features/dashboard/components/dashboard/no-organization";
 import OrganizationLoading from "@/features/dashboard/components/dashboard/organization-loading";
-import { DEFAULT_ROLES, displayName, type TeamInvite, type TeamMember, type TeamRequest, type TeamRole } from "../team-model";
+import { DEFAULT_ROLES, displayName, type TeamInvite, type TeamMember, type TeamRole } from "../team-model";
 import { TeamView, type TeamActions } from "./team-view";
 
 /** Clerk caps one bulk invitation request at 10 addresses. */
@@ -25,11 +25,10 @@ export function TeamPage({ startInviting, onLeft }: TeamPageProps) {
   const { has } = useAuth();
   const canManage = !!has?.({ permission: "org:sys_memberships:manage" });
 
-  const { organization, isLoaded, memberships, invitations, membershipRequests } = useOrganization({
+  const { organization, isLoaded, memberships, invitations } = useOrganization({
     memberships: { infinite: true, keepPreviousData: true },
     // Only admins may list invitations.
     invitations: canManage ? { infinite: true, keepPreviousData: true, status: ["pending"] } : undefined,
-    membershipRequests: canManage ? { infinite: true, keepPreviousData: true, status: "pending" } : undefined,
   });
 
   const [roles, setRoles] = React.useState<TeamRole[]>(DEFAULT_ROLES);
@@ -75,22 +74,10 @@ export function TeamPage({ startInviting, onLeft }: TeamPageProps) {
     [invitations?.data],
   );
 
-  const requests = React.useMemo<TeamRequest[]>(
-    () =>
-      (membershipRequests?.data ?? []).map((r) => ({
-        id: r.id,
-        name: displayName(r.publicUserData.firstName, r.publicUserData.lastName, r.publicUserData.identifier),
-        email: r.publicUserData.identifier,
-        imageUrl: r.publicUserData.hasImage ? r.publicUserData.imageUrl : undefined,
-        createdAt: r.createdAt,
-      })),
-    [membershipRequests?.data],
-  );
-
   const actions = React.useMemo<TeamActions | null>(() => {
     if (!organization) return null;
     // Counts in the sidebar and header come from the organization resource.
-    const refresh = () => Promise.all([memberships?.revalidate?.(), invitations?.revalidate?.(), membershipRequests?.revalidate?.(), organization.reload()]).then(() => undefined);
+    const refresh = () => Promise.all([memberships?.revalidate?.(), invitations?.revalidate?.(), organization.reload()]).then(() => undefined);
     const leaveShell = async () => {
       try {
         await clerk.setActive({ organization: null });
@@ -121,18 +108,6 @@ export function TeamPage({ startInviting, onLeft }: TeamPageProps) {
         await resource.revoke();
         await refresh();
       },
-      approveRequest: async (request) => {
-        const resource = membershipRequests?.data?.find((r) => r.id === request.id);
-        if (!resource) throw new Error("This request is no longer pending.");
-        await resource.accept();
-        await refresh();
-      },
-      rejectRequest: async (request) => {
-        const resource = membershipRequests?.data?.find((r) => r.id === request.id);
-        if (!resource) throw new Error("This request is no longer pending.");
-        await resource.reject();
-        await refresh();
-      },
       rename: async (name) => {
         await organization.update({ name });
       },
@@ -153,7 +128,7 @@ export function TeamPage({ startInviting, onLeft }: TeamPageProps) {
       openAdvanced: () => clerk.openOrganizationProfile(),
       loadMore: memberships?.hasNextPage ? () => memberships.fetchNext?.() : undefined,
     };
-  }, [organization, memberships, invitations, membershipRequests, user, clerk, onLeft]);
+  }, [organization, memberships, invitations, user, clerk, onLeft]);
 
   if (!isLoaded) return <OrganizationLoading />;
   if (!organization || !actions) return <NoOrganizationState />;
@@ -163,7 +138,6 @@ export function TeamPage({ startInviting, onLeft }: TeamPageProps) {
       workspace={{ name: organization.name, imageUrl: organization.imageUrl, hasImage: organization.hasImage }}
       members={members}
       invites={invites}
-      requests={requests}
       roles={roles}
       currentUserId={user?.id}
       canManage={canManage}
