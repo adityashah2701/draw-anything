@@ -79,6 +79,19 @@ Concepts weighed: a 48px icon-only rail (most canvas, but four destinations plus
 - **Logo** is the original silhouette in ink at four strengths (`components/shared/logo-mark.tsx`, `public/logo.svg`). Orange is reserved for the agent, so the mark no longer uses it.
 - **Motion**: 150-200ms, `--ease-out-strong`, width and colour only; rows scale to 0.98 on press; everything stops under `prefers-reduced-motion`. The collapsed rail mounts tooltips only while collapsed.
 
+## Landing motion
+
+The public landing page (`features/dashboard/components/landing/`) is the one place motion explains the product rather than acknowledging input. Rules, from emilkowalski/skill (`emil-design-eng`, `animate`, `review-animations`):
+
+- **Every animation names its purpose.** Hero demo: explanation (the agent builds a diagram step by step, orange while drawing, neutral once committed). How it works: sequence. Routing demo: explanation (a straight connector crossing a shape, then the routed one). Reveals: orientation as sections arrive. Menus and buttons: feedback.
+- **One vocabulary.** Enter with `--ease-out-strong`, move on screen with `--ease-in-out-strong`; reveals are 320ms and 8px, siblings step 60-120ms; buttons press to 0.97 over 150ms. Never `ease-in`, never `transition: all`, never `scale(0)` (entries start at 0.95).
+- **Transitions, not keyframes, for anything the user can interrupt.** The demos are driven by `data-shown` attributes and CSS transitions, so a scene change or replay retargets from the current state. The only keyframe is the one-off hero rise on first paint.
+- **Hide fast, show slow.** Elements leave in 100ms and arrive in 220-360ms, so replaying never makes the user wait for the old drawing to unwind.
+- **Once.** Reveals and demos fire the first time they are seen and never again on scroll-by. Nothing loops, floats, tracks the cursor or moves with scroll.
+- **Transform and opacity only** (plus `stroke-dashoffset` for drawing lines). No layout properties are animated.
+- **Reduced motion** shows the finished state: reveals are visible, the demo renders fully drawn, the routing demo opens routed, smooth scrolling is off. Nothing depends on motion to be understood.
+- **Cleanup.** Observers disconnect after firing or on unmount; listeners on the mobile menu exist only while it is open.
+
 ## Known gaps
 
 - Boards store `_creationTime` but no updated-at. The dashboard can only say "created", not "last edited". Adding an `updatedAt` field is a schema change and is left for a decision.
