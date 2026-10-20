@@ -105,3 +105,18 @@ describe("stacking", () => {
     expect(ids(next).indexOf("F")).toBeLessThan(ids(next).indexOf("b"));
   });
 });
+
+describe("a locked frame covers its contents", () => {
+  const locked = (): StoredElement[] => scene().map((e) => (e.id === "F" ? ({ ...e, locked: true } as StoredElement) : e));
+
+  it("refuses to move, restack or delete what it owns, and moves nothing when the frame itself is nudged", () => {
+    expect(planMoveBy(ctxOf(locked()), ["a"], 10, 0)).toBeNull();
+    expect(planMoveBy(ctxOf(locked()), ["F"], 10, 0)).toBeNull();
+    expect(planRemove(ctxOf(locked()), ["a"])).toBeNull();
+  });
+
+  it("still moves what is outside it", () => {
+    expect(planMoveBy(ctxOf(locked()), ["out"], 10, 0)).not.toBeNull();
+  });
+});
+

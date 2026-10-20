@@ -313,3 +313,79 @@ suite("editor frames: moving, owning and deleting", () => {
     expect(await s.page.getByLabel("Frame title").count()).toBe(0);
   });
 });
+
+suite("editor frames: lock and hide", () => {
+  let s: EditorSession | undefined;
+  afterEach(async () => {
+    if (s) {
+      expect(s.problems.filter((p) => !/favicon|404|willReadFrequently/i.test(p))).toEqual([]);
+      await s.close();
+    }
+    s = undefined;
+  });
+
+  const pixel = async (session: EditorSession, world: Point) => {
+    const at = await session.toScreen(world);
+    return session.page.evaluate(({ x, y }) => {
+      const canvas = document.querySelector("canvas")!;
+      const rect = canvas.getBoundingClientRect();
+      const dpr = canvas.width / rect.width;
+      const data = canvas.getContext("2d")!.getImageData(Math.round((x - rect.left) * dpr), Math.round((y - rect.top) * dpr), 1, 1).data;
+      return [data[0], data[1], data[2], data[3]];
+    }, at);
+  };
+
+  it("a locked frame locks its contents: they stay put and survive Delete until it is unlocked", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 300, y: 76 });
+    await s.press("Control+Shift+l");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").locked).toBe(true);
+    expect(byId(await s.elements(), "A")).not.toHaveProperty("locked"); // derived, not written to the contents
+    const before = await s.elements();
+    await s.drag({ x: 180, y: 170 }, { x: 260, y: 300 }); // try to move A
+    await s.waitForIdle();
+    expect(await s.elements()).toEqual(before);
+    await s.click({ x: 180, y: 170 });
+    await s.press("Delete");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "A")).toBeTruthy();
+    await s.click({ x: 300, y: 76 });
+    await s.press("Control+Shift+l");
+    await s.waitForIdle();
+    await s.drag({ x: 180, y: 170 }, { x: 180, y: 300 });
+    expect(byId(await s.elements(), "A").points[0].y).toBe(260);
+  });
+
+  it("a hidden frame hides its contents and their connectors; Show all brings them back untouched", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    const painted = await pixel(s, { x: 180, y: 170 }); // inside A, amber
+    await s.click({ x: 300, y: 76 });
+    await s.press("Control+Shift+h");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").hidden).toBe(true);
+    expect(byId(await s.elements(), "A")).not.toHaveProperty("hidden");
+    const gone = await pixel(s, { x: 180, y: 170 });
+    expect(gone).not.toEqual(painted);
+    expect(await s.selected()).toEqual([]);
+    await s.click({ x: 180, y: 170 }); // nothing to pick where A was
+    expect(await s.selected()).toEqual([]);
+    await s.page.getByTestId("hidden-chip").click();
+    await s.waitForIdle();
+    expect(await pixel(s, { x: 180, y: 170 })).toEqual(painted);
+    expect(byId(await s.elements(), "F")).not.toHaveProperty("hidden");
+    expect(byId(await s.elements(), "A").frameId).toBe("F");
+  });
+
+  it("a frame drawn over a locked frame is drawn beside it, not inside", async () => {
+    const stored = scene();
+    stored[0] = { ...stored[0], locked: true };
+    s = await openEditor({ elements: stored as never, dark: false });
+    await s.press("o");
+    await s.drag({ x: 150, y: 300 }, { x: 260, y: 380 });
+    await s.waitForIdle();
+    const made = (await s.elements()).filter((e) => e.type === "frame" && e.id !== "F" && e.id !== "G");
+    expect(made).toHaveLength(1);
+    expect(made[0].frameId).toBeUndefined();
+  });
+});

@@ -161,12 +161,39 @@ export const unitUnder = (index: GroupIndex, id: string, context: string | null)
   }
 };
 
-/** A shape is locked when it, or any group around it, is. */
-export const isEffectivelyLocked = (index: GroupIndex, id: string): boolean => {
-  const own = index.shapes.get(id)?.locked ?? index.groups.get(id)?.locked;
+/** Most frames a `frameId` chain is followed through; also what ends a cycle in damaged data. */
+const MAX_FRAME_CHAIN = 16;
+
+const flaggedItself = (index: GroupIndex, id: string, flag: "locked" | "hidden"): boolean => {
+  const own = index.shapes.get(id)?.[flag] ?? index.groups.get(id)?.[flag];
   if (own) return true;
-  return ancestorsOf(index, id).some((ancestor) => index.groups.get(ancestor)?.locked === true);
+  return ancestorsOf(index, id).some((ancestor) => index.groups.get(ancestor)?.[flag] === true);
 };
+
+/**
+ * Whether a frame around `id` carries `flag` (itself or through a group around the frame). Locking or
+ * hiding a frame covers everything it owns, derived here each time and never written to the contents, so
+ * unlocking or showing the frame gives them back exactly as they were. A group counts when every shape in
+ * it does. Follows the shapes' own `frameId`; a link that is dangling, not a frame, or loops simply stops.
+ */
+export const flaggedByFrame = (index: GroupIndex, id: string, flag: "locked" | "hidden"): boolean => {
+  const shape = index.shapes.get(id);
+  if (!shape) {
+    const leaves = index.leavesOf.get(id);
+    return !!leaves && leaves.length > 0 && leaves.every((leaf) => flaggedByFrame(index, leaf, flag));
+  }
+  let owner = shape.frameId;
+  for (let hops = 0; typeof owner === "string" && hops < MAX_FRAME_CHAIN; hops += 1) {
+    const frame = index.shapes.get(owner);
+    if (!frame || frame.type !== "frame") return false;
+    if (flaggedItself(index, frame.id, flag)) return true;
+    owner = frame.frameId;
+  }
+  return false;
+};
+
+/** A shape is locked when it, a group around it, or a frame around it is. */
+export const isEffectivelyLocked = (index: GroupIndex, id: string): boolean => flaggedItself(index, id, "locked") || flaggedByFrame(index, id, "locked");
 
 /** Selected shape ids with unknown ids and repeats removed, keeping the caller's order. */
 export const selectedShapeIds = (index: GroupIndex, selected: readonly string[]): string[] => {
