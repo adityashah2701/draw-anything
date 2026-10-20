@@ -161,7 +161,7 @@ export const validateBoard = (ctx: CommandContext): Issue[] => {
   if (headingHit.length > 0) issues.push(issue("connector_through_heading", "warning", "A connector runs through these frame headings (fit_frame {frame, ids} moves a heading to a clear spot).", headingHit));
 
   const crossing: string[] = [];
-  const frames = shapes.filter((shape) => shape.ai?.role === "group" && shape.type === "rectangle");
+  const frames = shapes.filter((shape) => shape.type === "frame" || (shape.ai?.role === "group" && shape.type === "rectangle"));
   for (const frame of frames) {
     const f = ctx.getBounds(frame);
     if (!f) continue;

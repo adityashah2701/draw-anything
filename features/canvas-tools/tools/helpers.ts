@@ -35,6 +35,10 @@ export interface ElementSummary {
   h?: number;
   icon?: string;
   group?: string;
+  /** The frame that owns it. */
+  frame?: string;
+  /** A frame's title. */
+  title?: string;
   locked?: true;
   hidden?: true;
   from?: string;
@@ -57,6 +61,8 @@ export const summarize = (ctx: CommandContext, shape: DrawingElement): ElementSu
   if (shape.type === "semantic-node" || shape.type === "icon") out.icon = iconForNode(shape.ai).id;
   const parent = ctx.index.parentOf.get(shape.id);
   if (parent) out.group = parent;
+  if (typeof shape.frameId === "string" && ctx.index.shapes.get(shape.frameId)?.type === "frame") out.frame = shape.frameId;
+  if (shape.type === "frame" && typeof shape.title === "string") out.title = shortText(shape.title);
   if (isEffectivelyLocked(ctx.index, shape.id)) out.locked = true;
   if (isHiddenByFlag(ctx.index, shape.id)) out.hidden = true;
   if (typeof shape.rotation === "number" && shape.rotation % 360 !== 0) out.rotation = round(shape.rotation);
@@ -219,7 +225,7 @@ const PLACE_SNAP = 16;
 export const snapPlacement = (env: ToolEnv, wanted: { x: number; y: number; width: number; height: number }): { x: number; y: number } => {
   const { ctx } = env;
   const boxes = ctx.shapes.flatMap((shape) => {
-    if (shape.isGuide || isArrowElement(shape) || shape.points.length < 2 || isHiddenByFlag(ctx.index, shape.id)) return [];
+    if (shape.isGuide || shape.type === "frame" || isArrowElement(shape) || shape.points.length < 2 || isHiddenByFlag(ctx.index, shape.id)) return [];
     const b = ctx.getBounds(shape);
     return b ? [b] : [];
   });
@@ -267,12 +273,15 @@ export const lockedSkips = (ids: readonly string[]) => ids.map((id) => ({ id, re
 export const canHoldLabel = (shape: DrawingElement): boolean =>
   !isArrowElement(shape) && (shape.type === "icon" || getShapeDefinition(shape.type)?.labelConfig?.anchor === "center");
 
+/** A frame: the frame element, or the outline rectangle older boards and AI diagrams draw for one. */
+export const isFrameLike = (shape: DrawingElement): boolean => shape.type === "frame" || (shape.ai?.role === "group" && shape.type === "rectangle");
+
 /** A frame's border is not a place for a new node: it should sit clear of it, or be a member (inside, then fit_frame). */
 const FRAME_CLEARANCE = 40;
 const frameWarnings = (env: ToolEnv, box: { x: number; y: number; width: number; height: number }): string[] => {
   const out: string[] = [];
   for (const shape of env.ctx.shapes) {
-    if (shape.ai?.role !== "group" || shape.type !== "rectangle") continue;
+    if (!isFrameLike(shape)) continue;
     const f = env.ctx.getBounds(shape);
     if (!f) continue;
     const near = box.x < f.maxX + FRAME_CLEARANCE && f.minX - FRAME_CLEARANCE < box.x + box.width && box.y < f.maxY + FRAME_CLEARANCE && f.minY - FRAME_CLEARANCE < box.y + box.height;
@@ -286,7 +295,7 @@ const frameWarnings = (env: ToolEnv, box: { x: number; y: number; width: number;
 export const overlapWarnings = (env: ToolEnv, box: { x: number; y: number; width: number; height: number }, ignoreId?: string): string[] => {
   const hit: string[] = [];
   for (const shape of env.ctx.shapes) {
-    if (shape.id === ignoreId || shape.isGuide || shape.type === "text" || isArrowElement(shape)) continue;
+    if (shape.id === ignoreId || shape.isGuide || shape.type === "text" || shape.type === "frame" || isArrowElement(shape)) continue;
     const other = env.ctx.getBounds(shape);
     if (!other) continue;
     if (box.x < other.maxX && other.minX < box.x + box.width && box.y < other.maxY && other.minY < box.y + box.height) hit.push(`"${shape.label ?? shape.id}" (${shape.id})`);
