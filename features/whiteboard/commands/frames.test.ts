@@ -7,6 +7,7 @@ import { planAlign, planMoveBy, planZOrder } from "./arrange";
 import { createCommandContext } from "./context";
 import { planDuplicate } from "./duplicate";
 import { planRemove } from "./remove";
+import { planStyle, supportsStyle } from "./style";
 
 const ctxOf = (stored: StoredElement[]) => {
   let n = 0;
@@ -103,5 +104,31 @@ describe("stacking", () => {
     const patch = planZOrder(ctxOf(stored), ["b"], "back");
     const next = patch ? applyPatch(stored, patch) : stored;
     expect(ids(next).indexOf("F")).toBeLessThan(ids(next).indexOf("b"));
+  });
+});
+
+describe("a locked frame covers its contents", () => {
+  const locked = (): StoredElement[] => scene().map((e) => (e.id === "F" ? ({ ...e, locked: true } as StoredElement) : e));
+
+  it("refuses to move, restack or delete what it owns, and moves nothing when the frame itself is nudged", () => {
+    expect(planMoveBy(ctxOf(locked()), ["a"], 10, 0)).toBeNull();
+    expect(planMoveBy(ctxOf(locked()), ["F"], 10, 0)).toBeNull();
+    expect(planRemove(ctxOf(locked()), ["a"])).toBeNull();
+  });
+
+  it("still moves what is outside it", () => {
+    expect(planMoveBy(ctxOf(locked()), ["out"], 10, 0)).not.toBeNull();
+  });
+});
+
+
+describe("styling a frame by command", () => {
+  it("takes corner radius, fill, stroke and opacity, and leaves what it owns alone", () => {
+    const stored = scene();
+    const plan = planStyle(ctxOf(stored), ["F"], { cornerRadius: 16, fill: "#dbeafe", color: "#ef4444", opacity: 0.5 }, { strict: true });
+    expect(supportsStyle(at(stored, "F"), "cornerRadius")).toBe(true);
+    const after = applyPatch(stored, plan.patch!);
+    expect(at(after, "F")).toMatchObject({ cornerRadius: 16, fill: "#dbeafe", color: "#ef4444", opacity: 0.5 });
+    expect(at(after, "a")).toEqual(at(stored, "a"));
   });
 });

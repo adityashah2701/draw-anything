@@ -2,7 +2,7 @@ import { buildFrameIndex } from "@/core/frames/frame-index";
 import { frameRegions } from "@/core/frames/frame-model";
 import { makeBounds } from "@/core/geometry/box";
 import { frameForBounds } from "@/core/frames/containment";
-import { createFrame, planAutoFit, reparentMoved } from "@/core/frames/frame-api";
+import { createFrame, fitFrames, planAutoFit, reparentMoved, updateFrames, type FrameChanges } from "@/core/frames/frame-api";
 import { applyPatch as applyStoredPatch } from "@/core/groups/patch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
@@ -50,6 +50,7 @@ import { useWhiteboardUtils } from "@/features/whiteboard/hooks/utils/use-whiteb
 import { useWhiteboardDrawing } from "@/features/whiteboard/hooks/interaction/use-whiteboard-drawing";
 import { useWhiteboardKeyboard } from "@/features/whiteboard/hooks/interaction/use-whiteboard-keyboard";
 import type { ShortcutCommand } from "@/features/whiteboard/hooks/interaction/keyboard-policy";
+import { useFrameCommands } from "@/features/whiteboard/hooks/interaction/use-frame-commands";
 import { useOrganizeCommands } from "@/features/whiteboard/hooks/interaction/use-organize-commands";
 import { useElementCommands } from "@/features/whiteboard/hooks/interaction/use-element-commands";
 import type { CommandContext } from "@/features/whiteboard/commands/context";
@@ -372,14 +373,41 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       if (!a || !b) return;
       const box = makeBounds(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y));
       const stored = readLiveStored();
-      const parent = frameForBounds(buildFrameIndex(stored), box);
+      const frameIndex = buildFrameIndex(stored);
+      // A locked frame cannot take a new one in: draw beside it, at the level above.
+      const lockIndex = buildGroupIndex(stored);
+      const lockedFrames = new Set([...frameIndex.frames.keys()].filter((id) => isEffectivelyLocked(lockIndex, id)));
+      const parent = frameForBounds(frameIndex, box, lockedFrames);
       const created = createFrame(stored, { id: draft.id, box, parent, adopt: true });
-      if (!created.ok) return;
+      if (!created.ok) {
+        toast(created.message);
+        return;
+      }
       applyDocPatch(created.patch);
       setSelectedElements([created.frameId]);
       uiState.setCurrentTool("select");
     },
     [applyDocPatch, readLiveStored, setSelectedElements, uiState],
+  );
+
+  /** Properties-bar edits that only frames have (title, header, padding, auto-fit), as one undo step. */
+  const updateFrameProps = useCallback(
+    (ids: readonly string[], changes: FrameChanges) => {
+      if (!whiteboardAccess.hasEditAccess) return;
+      const result = updateFrames(readLiveStored(), ids, changes);
+      if (result.ok && result.changed.length > 0) applyDocPatch(result.patch);
+    },
+    [applyDocPatch, readLiveStored, whiteboardAccess.hasEditAccess],
+  );
+
+  /** Sizes the frames to wrap what they hold. */
+  const fitFramesToContent = useCallback(
+    (ids: readonly string[]) => {
+      if (!whiteboardAccess.hasEditAccess) return;
+      const result = fitFrames(readLiveStored(), ids);
+      if (result.ok && result.changed.length > 0) applyDocPatch(result.patch);
+    },
+    [applyDocPatch, readLiveStored, whiteboardAccess.hasEditAccess],
   );
 
   const completeCurrentElement = useCallback(() => {
@@ -549,6 +577,16 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     applyPatch: applyDocPatch,
   });
 
+  const frameCommands = useFrameCommands({
+    stored,
+    readLive: readLiveStored,
+    selectedElements,
+    setSelectedElements,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    generateId,
+    applyPatch: applyDocPatch,
+  });
+
   const groupCommands = useGroupCommands({
     stored,
     groupIndex,
@@ -659,6 +697,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "ungroup": return groupCommands.ungroup();
         case "lock-toggle": return groupCommands.toggleLock();
         case "hide": return void organizeCommands.hide();
+        case "frame-selection": return void frameCommands.frameSelection();
         case "align": return elementCommands.align(command.mode);
         case "distribute": return elementCommands.distribute(command.axis);
         case "nudge": return elementCommands.nudge(command.dx, command.dy);
@@ -696,6 +735,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       elements,
       groupCommands,
       organizeCommands,
+      frameCommands,
       handleFitToScreen,
       handleRedo,
       handleUndo,
@@ -900,7 +940,16 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
           if (!organizeCommands.showAll().changed) toast("Nothing is hidden.");
           break;
         case "frame":
-          if (!organizeCommands.frame().changed) toast("Select something to put a frame around.");
+          frameCommands.frameSelection();
+          break;
+        case "frame-fit":
+          frameCommands.fitFrames();
+          break;
+        case "frame-remove-from":
+          frameCommands.removeFromFrame();
+          break;
+        case "frame-release":
+          frameCommands.releaseFrames();
           break;
         case "auto-layout":
         case "tidy": {
@@ -938,6 +987,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       whiteboardAccess.hasEditAccess,
       boardExport,
       elementCommands,
+      frameCommands,
       groupCommands,
       organizeCommands,
       selectedElements.length,
@@ -1038,6 +1088,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     groupIndex,
     groupCommands,
     organizeCommands,
+    frameCommands,
     groupSelection,
     selectionOverlay,
     inspector,
@@ -1083,6 +1134,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleFontSizeChange,
     applyStyle,
     handleStyleChange,
+    updateFrameProps,
+    fitFramesToContent,
     updateConnectors,
     propertiesBar,
     updateArrowBendsAtPoint,

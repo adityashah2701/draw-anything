@@ -35,7 +35,7 @@ Properties go in square brackets after a name. Hover a property in the editor fo
 | --- | --- | --- |
 | `kind` | node | what it is (`service`, `database`, `queue`, `user`, `decision`, ...); picks icon and colours |
 | `icon` | node | an icon id or alias from the icon library (`postgres`, `redis`, ...) |
-| `shape` | node | `rectangle` (default), `diamond`, `pill`, `icon` |
+| `shape` | node | `rectangle` (default), `diamond`, `pill`, `icon`, `cylinder`, `cloud`, `document`, `hexagon`, `parallelogram` |
 | `label` | node, group, frame | the text shown, when it differs from the name |
 | `color` | node, frame, connection | a colour name (`blue`) or `#rrggbb` |
 | `dashed` | node | dashed outline |
@@ -191,11 +191,31 @@ App > Redis
 App > Files
 ```
 
+## Outline shapes
+
+`cylinder`, `cloud`, `document`, `hexagon` and `parallelogram` are drawn as outline shapes: one kind of element with a variant, so each is resizable, takes a label, a colour and connectors like any node. They are also in the shape picker (the hexagon button in the left toolbar) and the properties bar's Shape control, and a board edit of the variant is written back as `shape:`.
+
+```diagram-code
+type architecture
+
+Orders DB [shape: cylinder, color: blue]
+Provider [shape: cloud]
+Invoice [shape: document]
+Queue [shape: hexagon]
+Import [shape: parallelogram]
+
+Provider > Orders DB
+Orders DB > Invoice
+Queue > Import
+```
+
+A shape name the editor does not know (a typo, or one a newer version added) is reported with the list of real shapes, and the node is drawn as an ordinary rectangle node.
+
 ## Not supported
 
 These are reported as diagnostics with a suggestion rather than silently ignored or faked:
 
-- **Shapes** the renderer does not draw: `cylinder`, `cloud`, `document`, `hexagon`, `parallelogram` and similar. Use `kind: database` for a database. These need new renderer shapes first.
+- **Shapes** that are not in the list above (`star`, `octagon`, ...). The diagnostic names the shapes that exist, and the node is drawn as a rectangle.
 - **Sequence diagrams** with lifelines and messages, **mind maps** with a radial layout, and **UML class diagrams** with member compartments. `type sequence`, `type mind-map` and `type class` only label the diagram.
 - **`direction`**: parsed, no layout effect.
 

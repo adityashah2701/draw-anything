@@ -82,6 +82,7 @@ export const scriptedRun = async (options: {
   onEvent?: (event: AgentEvent) => void;
   checkBoardAccess?: Parameters<typeof createCanvasAgentHandler>[0]["checkBoardAccess"];
   autoApprove?: boolean;
+  autoTidy?: boolean;
   memories?: Array<{ kind: string; text: string }>;
 }) => {
   const mem = createMemoryHost(options.board);
@@ -93,6 +94,7 @@ export const scriptedRun = async (options: {
     executor,
     callTurn: createTurnClient({ whiteboardId: "board_1", fetchImpl, signal: options.signal }),
     maxSteps: options.maxSteps,
+    autoTidy: options.autoTidy,
     budget: options.budget,
     now: options.now,
     history: options.history,

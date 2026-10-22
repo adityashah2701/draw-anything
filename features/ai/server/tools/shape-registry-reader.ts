@@ -1,3 +1,4 @@
+import { describeOutlineVariants } from "@/core/shapes/outline/variants";
 import { AISemanticNodeKind } from "@/features/ai/types";
 
 const SEMANTIC_NODE_KINDS: AISemanticNodeKind[] = [
@@ -67,6 +68,9 @@ export const readShapeRegistry = () => ({
     "arrow-bidirectional",
     "text",
     "semantic-node",
+    "outline",
   ],
+  /** The variants an `outline` shape can take (`shape: <id>` in diagram code), read from the registry. */
+  outlineVariants: describeOutlineVariants(),
   semanticKinds: SEMANTIC_NODE_KINDS,
 });

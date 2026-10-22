@@ -5,6 +5,7 @@ import type { DocPatch } from "@/core/groups/patch";
 import { isCustomIcon } from "@/features/whiteboard/utils/icon-picker";
 import { mergeNodeStyle, CORNER_RADIUS_LIMITS, ICON_SIZE_LIMITS } from "@/core/shapes/semantic-node/style";
 import { semanticMinSize } from "@/core/shapes/semantic-node/layout";
+import { describeOutlineVariants, getOutlineVariant, outlineVariantIds } from "@/core/shapes/outline/variants";
 import { createShape, getShapeDefinition, isRotatable } from "@/core/shapes/shape-runtime";
 import { ICON_NODE_GLYPH } from "@/core/shapes/icon/caption";
 import { sizeIconNode, sizeSemanticNode } from "@/core/text/node-size";
@@ -18,7 +19,7 @@ import type { DrawingElement, GroupRecord } from "@/features/whiteboard/types/wh
 import { ToolError } from "../errors";
 import { color, coordinate, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POINTS, newElementId, point, targetIds } from "../schemas";
 import type { ToolDefinition } from "../types";
-import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, snapPlacement } from "./helpers";
+import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, revealContent, snapPlacement } from "./helpers";
 
 const normalizeText = (value: string) => value.replace(/\r\n?/g, "\n");
 
@@ -47,10 +48,15 @@ const DEFAULT_BOX: Record<(typeof BOX_SHAPES)[number], { width: number; height: 
   triangle: { width: 120, height: 100 },
 };
 
+/** Outline variants come from the registry (the id is the shape name), so a new variant is drawable here without a change. */
+const OUTLINE_IDS = outlineVariantIds() as [string, ...string[]];
+const variantSize = (id: string) => getOutlineVariant(id)?.defaultSize;
+const variantList = () => describeOutlineVariants().map((v) => `${v.id} (${v.description.replace(/[.:].*$/, "")})`).join(", ");
+
 const shapeInput = z
   .object({
     id: newElementId.optional(),
-    shape: z.enum([...BOX_SHAPES, "line", "freehand"]).describe("rectangle, ellipse, diamond, pill (terminator), triangle, line, or freehand (a pencil stroke through `points`)."),
+    shape: z.enum([...BOX_SHAPES, "line", "freehand", ...OUTLINE_IDS]).describe(`rectangle, ellipse, diamond, pill (terminator), triangle, line, freehand (a pencil stroke through \`points\`), or an outline: ${variantList()}.`),
     x: coordinate.optional().describe("Left edge. Omit x and y to place it beside the existing content."),
     y: coordinate.optional().describe("Top edge."),
     width: length.optional(),
@@ -64,21 +70,22 @@ const shapeInput = z
     corner_radius: z.number().finite().min(0).max(CORNER_RADIUS_LIMITS.max * 2).optional().describe("Rectangles only; 0 is square."),
     font_size: fontSize.optional(),
     rotation: rotation.optional(),
+    snap: z.boolean().optional().describe("false = exactly x, y (default: snaps to a neighbour within a few units)."),
   })
   .strict();
 
 export const createShapeTool: ToolDefinition<typeof shapeInput> = {
   name: "create_shape",
   group: "create",
-  description: "Draw one shape (rectangle, ellipse, diamond, pill, triangle, line, freehand) with optional label and style. For a labelled, icon-bearing box prefer create_semantic_node. Adds one element.",
+  description: "Draw one shape (rectangle, ellipse, diamond, pill, triangle, line, freehand, or an outline such as a cylinder for a database) with optional label and style. For a labelled, icon-bearing box prefer create_semantic_node. Adds one element.",
   input: shapeInput,
   access: "write",
   run: (input, env) => {
     const id = claimId(env, input.id);
     const origin = defaultOrigin(env);
     const isPath = input.shape === "line" || input.shape === "freehand";
-    const fallbackBox = isPath ? undefined : DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX];
-    const snapped = !isPath && fallbackBox && (input.x !== undefined || input.y !== undefined) ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width: input.width ?? fallbackBox.width, height: input.height ?? fallbackBox.height }) : undefined;
+    const fallbackBox = isPath ? undefined : DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX] ?? variantSize(input.shape);
+    const snapped = !isPath && fallbackBox && input.snap !== false && (input.x !== undefined || input.y !== undefined) ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width: input.width ?? fallbackBox.width, height: input.height ?? fallbackBox.height }) : undefined;
     const x = snapped?.x ?? input.x ?? origin.x;
     const y = snapped?.y ?? input.y ?? origin.y;
 
@@ -89,14 +96,16 @@ export const createShapeTool: ToolDefinition<typeof shapeInput> = {
       else throw new ToolError("invalid_arguments", "freehand needs `points` (at least two).");
     } else {
       if (input.points) throw new ToolError("invalid_arguments", `\`points\` is only for line and freehand; give x, y, width and height for a ${input.shape}.`);
-      const fallback = DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX];
+      const fallback = DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX] ?? variantSize(input.shape)!;
       points = [{ x, y }, { x: x + (input.width ?? fallback.width), y: y + (input.height ?? fallback.height) }];
     }
     if (isPath && input.label !== undefined) throw new ToolError("unsupported", `A ${input.shape} cannot have a label.`);
 
-    const shape = createShape(input.shape, {
+    const variant = getOutlineVariant(input.shape);
+    const shape = createShape(variant ? "outline" : (input.shape as Parameters<typeof createShape>[0]), {
       id,
       points,
+      ...(variant ? { variant: variant.id } : {}),
       ...(input.color ? { color: input.color } : {}),
       ...(input.stroke_width !== undefined ? { strokeWidth: input.stroke_width } : {}),
       ...(input.fill ? { fill: input.fill } : {}),
@@ -249,6 +258,7 @@ const nodeInput = z
     icon_color: color.optional(),
     icon_visible: z.boolean().optional().describe("false hides the icon."),
     corner_radius: z.number().finite().min(CORNER_RADIUS_LIMITS.min).max(CORNER_RADIUS_LIMITS.max).optional(),
+    snap: z.boolean().optional().describe("false = exactly x, y (default: snaps to a neighbour within a few units)."),
   })
   .strict();
 
@@ -281,7 +291,7 @@ export const createSemanticNodeTool: ToolDefinition<typeof nodeInput> = {
       width = Math.max(width, min.width);
       height = Math.max(height, min.height);
     }
-    const placed = input.x !== undefined || input.y !== undefined ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width, height }) : undefined;
+    const placed = input.snap !== false && (input.x !== undefined || input.y !== undefined) ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width, height }) : undefined;
     const x = placed?.x ?? input.x ?? origin.x;
     const y = placed?.y ?? input.y ?? origin.y;
     const byKind = input.kind ? kindColors(input.kind) : undefined;
@@ -394,6 +404,7 @@ const importInput = z
     code: z.string().min(1).max(60_000).describe("Diagram code: lines like `API [kind: service] -> DB [kind: database]`, with optional groups."),
     x: coordinate.optional().describe("Left edge of the imported diagram. Default: beside the existing content."),
     y: coordinate.optional().describe("Top edge."),
+    keep_view: z.boolean().optional().describe("true = do not move the view."),
   })
   .strict();
 
@@ -403,7 +414,7 @@ export const importDiagramTool: ToolDefinition<typeof importInput> = {
   description: "Add a diagram written in the editor's diagram code (nodes, labelled connections, groups) as new, laid-out elements. Existing elements are never touched or replaced. Fails with the code's line errors if it does not parse.",
   input: importInput,
   access: "write",
-  run: ({ code, x, y }, env) => {
+  run: ({ code, x, y, keep_view }, env) => {
     const parsed = parseDiagramCode(code);
     const errors = parsed.issues.filter((issue) => issue.severity === "error");
     if (errors.length > 0) {
@@ -427,9 +438,10 @@ export const importDiagramTool: ToolDefinition<typeof importInput> = {
     const taken = moved.filter((el) => env.ctx.index.shapes.has(el.id) || env.ctx.index.groups.has(el.id));
     if (taken.length > 0) throw new ToolError("conflict", "The imported elements collide with ids already on the board; try again.", { ids: taken.map((el) => el.id).slice(0, 5) });
     const nodes = moved.filter((el) => el.ai?.role === "node");
+    const revealed = revealContent(env, unionBounds(moved.flatMap((el) => env.ctx.getBounds(el) ?? [])), keep_view);
     return {
-      summary: `Imported ${count(nodes.length, "node")} and ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements).`,
-      data: { created: moved.map((el) => el.id), nodes: nodes.map((el) => ({ id: el.id, label: el.label, node: el.ai?.semanticId })) },
+      summary: `Imported ${count(nodes.length, "node")} and ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements).${revealed ? ` ${revealed}` : ""}`,
+      data: { created: moved.map((el) => el.id), ...(revealed ? { viewMoved: true } : {}), nodes: nodes.map((el) => ({ id: el.id, label: el.label, node: el.ai?.semanticId })) },
       warnings: result.issues.filter((issue) => issue.severity !== "error").map((issue) => `line ${issue.line}: ${issue.message}`).slice(0, 8),
       patch: { add: moved, update: [], remove: [] },
     };

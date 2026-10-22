@@ -2,6 +2,10 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardE
 import { Lock } from "lucide-react";
 import type { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import { ChoiceRow, ColorGrid, PopoverLabel, PropertyChip, Swatch } from "@/features/whiteboard/components/properties/bar-primitives";
+import { TextField } from "@/features/whiteboard/components/properties/text-field";
+import { MAX_FRAME_TITLE_LENGTH } from "@/core/frames/frame-model";
+import type { FrameHeader } from "@/features/whiteboard/utils/properties-bar-model";
+import { OutlineVariantIcon } from "@/core/shapes/outline/icon";
 import { NumberField } from "@/features/whiteboard/components/properties/number-field";
 import type { Mixed } from "@/features/whiteboard/utils/inspector-model";
 import { formatNumber } from "@/features/whiteboard/utils/inspector-model";
@@ -85,7 +89,7 @@ const FloatingPropertiesPanel = ({
     triggers[next]?.focus();
   };
 
-  const { stroke, fill, border, text, connector } = m;
+  const { stroke, fill, border, text, connector, frame: frameProps, variant } = m;
 
   return (
     <div
@@ -119,6 +123,50 @@ const FloatingPropertiesPanel = ({
           )}
         </div>
         <Divider />
+
+        {frameProps && (
+          <PropertyChip
+            label="Frame"
+            summary={`${words(frameProps.title, (t) => t)}, ${words(frameProps.header, (h) => (h === "hidden" ? "no header" : `${h} header`))}`}
+            preview={<span aria-hidden className="block h-4 w-5 rounded-[3px] border-2 border-foreground border-t-[5px]" />}
+            disabled={off}
+            resetKey={resetKey}
+            width={232}
+          >
+            <PopoverLabel>Title</PopoverLabel>
+            <TextField label="Frame title" value={frameProps.title} maxLength={MAX_FRAME_TITLE_LENGTH} onCommit={(title) => controller.updateFrameProps(frameProps.ids, { title })} />
+            <PopoverLabel>Header</PopoverLabel>
+            <ChoiceRow<FrameHeader>
+              label="Frame header"
+              value={frameProps.header}
+              onChange={(header) => controller.updateFrameProps(frameProps.ids, header === "hidden" ? { headerVisible: false } : { headerVisible: true, titlePlacement: header })}
+              options={[
+                { value: "inside", title: "Title in a band inside the frame", content: <span>Inside</span> },
+                { value: "above", title: "Title on a tab above the frame", content: <span>Tab</span> },
+                { value: "hidden", title: "No title", content: <span>None</span> },
+              ]}
+            />
+            <PopoverLabel>Padding around contents</PopoverLabel>
+            <NumberField label="Frame padding in pixels" suffix="px" value={frameProps.padding} min={0} max={200} onCommit={(padding) => controller.updateFrameProps(frameProps.ids, { padding })} />
+            <PopoverLabel>Size</PopoverLabel>
+            <ChoiceRow
+              label="Frame size mode"
+              value={frameProps.autoFit}
+              onChange={(autoFit) => controller.updateFrameProps(frameProps.ids, { autoFit })}
+              options={[
+                { value: false, title: "Resize by hand", content: <span>Manual</span> },
+                { value: true, title: "Always wrap its contents", content: <span>Auto-fit</span> },
+              ]}
+            />
+            <button
+              type="button"
+              onClick={() => controller.fitFramesToContent(frameProps.ids)}
+              className="mt-1.5 h-8 w-full rounded-md border border-border text-xs font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Fit to content
+            </button>
+          </PropertyChip>
+        )}
 
         {stroke && (
           <PropertyChip
@@ -174,6 +222,24 @@ const FloatingPropertiesPanel = ({
           </PropertyChip>
         )}
 
+        {variant && (
+          <PropertyChip
+            label="Shape"
+            summary={words(variant.value, (id) => variant.options.find((option) => option.id === id)?.label ?? "Unknown")}
+            preview={variant.value === "mixed" ? <span aria-hidden>…</span> : <OutlineVariantIcon variant={variant.value} size={16} />}
+            disabled={off}
+            resetKey={resetKey}
+          >
+            <PopoverLabel>Shape</PopoverLabel>
+            <ChoiceRow
+              label="Shape"
+              value={variant.value}
+              onChange={(id) => style({ variant: id }, variant.ids)}
+              options={variant.options.map((option) => ({ value: option.id, title: option.label, content: <OutlineVariantIcon variant={option.id} size={18} /> }))}
+            />
+          </PropertyChip>
+        )}
+
         {border && (
           <PropertyChip
             label="Corners"
@@ -218,7 +284,7 @@ const FloatingPropertiesPanel = ({
         {connector && (
           <PropertyChip
             label="Line"
-            summary={`${words(connector.dashed, (d) => (d ? "dashed" : "solid"))}, ${words(connector.routing, (r) => (r === "straight" ? "straight" : "elbow"))}`}
+            summary={`${words(connector.dashed, (d) => (d ? "dashed" : "solid"))}, ${words(connector.routing, (r) => (r === "straight" ? "straight" : r === "curved" ? "curved" : "elbow"))}`}
             preview={
               <svg aria-hidden width="22" height="12" viewBox="0 0 22 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray={connector.dashed === true ? "4 3" : undefined}>
                 <path d="M1 6h17M14 2l5 4-5 4" />
@@ -244,6 +310,7 @@ const FloatingPropertiesPanel = ({
               onChange={(routingMode) => controller.updateConnectors(connector.ids, { routingMode })}
               options={[
                 { value: "orthogonal", title: "Elbow", content: <span>Elbow</span> },
+                { value: "curved", title: "Curved", content: <span>Curved</span> },
                 { value: "straight", title: "Straight", content: <span>Straight</span> },
               ]}
             />

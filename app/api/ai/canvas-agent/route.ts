@@ -8,6 +8,8 @@ import { createSlidingWindowLimiter, getEnabledProviders } from "@/features/ai/s
 import { InvalidRoomError, decideRoomAccess } from "@/lib/authz/room-access";
 
 export const runtime = "nodejs";
+/** A reasoning model can think for minutes on one step; the platform default would cut it off mid-answer. */
+export const maxDuration = 300;
 
 const positiveInt = (value: string | undefined, fallback: number) => {
   const parsed = Number(value);

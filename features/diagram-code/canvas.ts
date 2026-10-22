@@ -5,6 +5,7 @@ import {
   normalizeModelPlan,
 } from "@/features/ai/schemas";
 import type { AIDiagramType, AIModelProvider } from "@/features/ai/types";
+import { isOutlineVariantId } from "@/core/shapes/outline/variants";
 import type { DrawingElement, FrameShape } from "@/features/whiteboard/types/whiteboard.types";
 import { tint } from "@/core/color/named-colors";
 import { parseAnchorSide } from "@/core/anchors/generate-anchors";
@@ -102,10 +103,14 @@ export const elementsFromDiagramCode = (
 
 // ── canvas -> code ──────────────────────────────────────────────────────────
 
-const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "ellipse", "diamond", "pill", "triangle", "icon"]);
+const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "ellipse", "diamond", "pill", "triangle", "icon", "outline"]);
 
 /** An icon the user inserted by hand is not a diagram node; only the ones a diagram generated are. */
 const isDiagramNode = (el: DrawingElement) => NODE_TYPES.has(el.type) && (el.type !== "icon" || el.ai?.role === "node");
+
+/** The `shape:` an element is written with. An outline whose variant is unknown reads back as a plain box. */
+const shapeOfElement = (el: DrawingElement): string | undefined =>
+  el.type === "diamond" || el.type === "pill" || el.type === "icon" ? el.type : el.type === "outline" && isOutlineVariantId(el.variant) ? el.variant : undefined;
 
 const boundsOf = (element: DrawingElement) => ({
   minX: Math.min(...element.points.map((p) => p.x)),
@@ -197,7 +202,7 @@ export const graphFromElements = (
       label: el.label?.trim() || el.text?.trim() || `Shape ${(unlabeled += 1)}`,
       kind: el.ai?.semanticKind ?? (el.type === "diamond" ? "decision" : undefined),
       icon: el.ai?.icon,
-      shape: el.type === "diamond" || el.type === "pill" || el.type === "icon" ? el.type : undefined,
+      shape: shapeOfElement(el),
       color: customColorOf(el),
       ...(layout ? layoutOf(el) : {}),
     };

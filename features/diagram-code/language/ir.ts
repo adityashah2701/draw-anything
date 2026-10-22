@@ -28,7 +28,8 @@ export interface IRNode {
   kind?: string;
   icon?: string;
   dashed?: boolean;
-  shape?: "diamond" | "pill" | "icon";
+  /** diamond, pill, icon, or an outline variant id (core/shapes/outline/variants.ts). */
+  shape?: string;
   /** #rrggbb */
   color?: string;
   x?: number;

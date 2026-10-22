@@ -1,5 +1,6 @@
 import { normalizeColor } from "@/core/color/named-colors";
 import { z } from "zod";
+import { outlineVariantIds } from "@/core/shapes/outline/variants";
 import { resolveIconId } from "@/core/icons/registry";
 import {
   AIDiagramDocumentV1,
@@ -161,6 +162,9 @@ const layoutFields = (record: Record<string, unknown>) => ({
 const normalizeDiagramType = (diagramType: unknown): AIDiagramType =>
   parseDiagramType(diagramType) ?? "architecture";
 
+/** Node shapes a diagram may name: the built-ins plus every outline variant, read from the registry. */
+const NODE_SHAPES = ["diamond", "pill", "icon", ...outlineVariantIds()] as [string, ...string[]];
+
 export const aiDiagramNodeSchema = z.object({
   id: z.string().min(1).max(80),
   label: z.string().min(1).max(80),
@@ -173,7 +177,7 @@ export const aiDiagramNodeSchema = z.object({
   parentId: z.string().min(1).max(80).optional(),
   description: z.string().max(240).optional(),
   priority: z.number().min(0).max(10).optional(),
-  shape: z.enum(["diamond", "pill", "icon"]).optional(),
+  shape: z.enum(NODE_SHAPES).optional(),
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
   width: z.number().finite().optional(),
@@ -493,7 +497,7 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       parentId: text(record.parentId, 80),
       description: text(record.description, 240),
       priority,
-      shape: record.shape === "diamond" || record.shape === "pill" || record.shape === "icon" ? record.shape : undefined,
+      shape: typeof record.shape === "string" && (NODE_SHAPES as readonly string[]).includes(record.shape) ? record.shape : undefined,
       color: normalizeColor(record.color),
       ...layoutFields(record),
     });

@@ -46,7 +46,7 @@ export function buildToolbar(defs: ToolDefinition[]): ToolbarLayout {
   const single = (tool: ToolDefinition | undefined): ToolbarEntry[] => take(tool).map((t) => ({ kind: "tool" as const, tool: t }));
 
   const navigate = [...single(named("select")), ...single(named("hand"))];
-  const shapes = take(...defs.filter((d) => d.group === "shapes"));
+  const shapes = take(...defs.filter((d) => d.group === "shapes" || d.group === "outline"));
   const insert = take(named("text"));
   if (insert.length) insert.push(ICON_PICKER_TOOL);
   const connectors = take(...defs.filter((d) => d.group === "connectors"));

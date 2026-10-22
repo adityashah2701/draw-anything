@@ -170,6 +170,15 @@ on release `createFrame({ adopt: true })` takes over every shape whose centre is
 ends adopted), nests the frame in the frame its centre falls in, places it below its contents, selects it and
 returns to the select tool. That is one patch, hence one undo step. A click without a drag draws nothing.
 
+## Properties
+
+A selected frame shows a **Frame** chip first in the bottom bar (title, header inside / tab / none, padding,
+manual or auto-fit, and a "Fit to content" button), then the shared Stroke, Fill, Corners and Opacity chips.
+Frame-only edits go through `updateFrames` / `fitFrames` (one patch, one undo step; locked frames skipped). The
+shared chips use the style command, which now accepts `cornerRadius` for frames. In the inspector, X and Y move
+a frame together with everything it owns (like dragging it), while W and H resize only the frame, never
+rescaling its contents (like dragging a handle).
+
 ## Title editing
 
 Double-click on a frame's header or tab, or Enter with one frame selected, opens a single-line input over
@@ -177,3 +186,26 @@ the title (`FrameTitleEditor`); it is the frame's own `title` field, never a tex
 frame without its title text while the input is open (`withHiddenTitle`). Enter or a click elsewhere commits
 through `renameFrame` (one undo step; an empty title clears the field and the default "Frame" shows), Escape
 discards. A frame whose header is hidden has no title to edit here (the properties UI will cover it).
+
+## Commands
+
+Frame selection (Ctrl+Alt+G, the context menu and the palette) now creates a real frame through
+`frameSelection`: sized to hold the selection plus padding and header, owned by the nearest frame that already
+held all of it, owning the selection, behind its contents, nothing moves, one undo step, and the new frame ends
+up selected. The old guide-rectangle-plus-text version remains only inside the AI diagram pipeline and the
+agent's legacy tool. Also in the context menu and palette: Remove from frame (one level up), Fit frame to
+contents, and Remove frame, keep contents (the frame goes, what it held stays and is selected). Delete on a
+frame still removes it with its contents. A command with nothing to do (nothing in a frame, a locked frame, a
+frame that already fits) leaves the board alone and says why in a toast. Everything is planned by the pure
+`features/whiteboard/commands/frame-actions.ts` and wired by `useFrameCommands`.
+
+## Lock and hide
+
+Locking or hiding a frame covers everything it owns, at any depth, the way a group does. The effect is derived,
+never written: `flaggedByFrame` (core/groups/group-index.ts) walks a shape's `frameId` chain and
+`isEffectivelyLocked` / `isEffectivelyHidden` consult it, so move, delete, style, drop and the lock chip all
+follow, a connector with a hidden end disappears with it, and unlocking or showing the frame gives the contents
+back exactly as they were (their own flags are never touched). A group counts as locked or hidden by a frame only
+when every shape in it is. Damaged links (dangling, a non-frame owner, a loop) end the walk without throwing.
+Drawing a frame over a locked frame puts it beside that frame, at the level above, rather than failing.
+

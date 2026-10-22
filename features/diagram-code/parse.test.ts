@@ -258,13 +258,13 @@ describe("Eraser-style lines, shapes and colours", () => {
   });
 
   it("supports node shape: diamond and color, and warns about the rest", () => {
-    const parsed = parseDiagramCode('A [shape: diamond, color: blue]\nB [shape: cylinder, color: "url(x)"]\nC [shape: rectangle]');
+    const parsed = parseDiagramCode('A [shape: diamond, color: blue]\nB [shape: star, color: "url(x)"]\nC [shape: rectangle]');
     expect(parsed.nodes[0]).toMatchObject({ shape: "diamond", color: "#2563eb" });
     expect(parsed.nodes[1].shape).toBeUndefined();
     expect(parsed.nodes[1].color).toBeUndefined();
     expect(parsed.nodes[2].shape).toBeUndefined();
     const messages = parsed.issues.map((i) => i.message).join(" | ");
-    expect(messages).toMatch(/cylinder/);
+    expect(messages).toMatch(/star/);
     expect(messages).toMatch(/not recognised/);
     expect(parsed.issues).toHaveLength(2);
   });
@@ -314,12 +314,12 @@ describe("Eraser-style syntax: edge cases", () => {
 
   it("reads shape case-insensitively; a later unsupported shape does not undo an earlier one", () => {
     expect(parseDiagramCode("A [shape: DIAMOND]").nodes[0].shape).toBe("diamond");
-    const parsed = parseDiagramCode("A [shape: diamond]\nA [shape: cylinder]");
+    const parsed = parseDiagramCode("A [shape: diamond]\nA [shape: star]");
     expect(parsed.nodes).toHaveLength(1);
     expect(parsed.nodes[0].shape).toBe("diamond");
   });
 
-  it.each(["cylinder", "hexagon", "parallelogram", "star"])("reports shape %s once and still declares the node", (shape) => {
+  it.each(["star", "blob", "octagon"])("reports shape %s once and still declares the node", (shape) => {
     const parsed = parseDiagramCode(`Thing [shape: ${shape}, icon: database]`);
     expect(parsed.nodes).toHaveLength(1);
     expect(parsed.nodes[0]).toMatchObject({ name: "Thing", icon: "database" });

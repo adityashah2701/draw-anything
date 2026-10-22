@@ -1,0 +1,166 @@
+import { sizeDiamondNode, sizeIconNode, sizePillNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
+import type { ViewportInfo } from "./types";
+import { fitZoomFor, MIN_READABLE_PX } from "./review";
+
+export const NODE_KINDS = ["process", "decision", "terminal", "icon", "note"] as const;
+export type NodeKind = (typeof NODE_KINDS)[number];
+
+export interface PlanNode {
+  label: string;
+  kind?: NodeKind;
+}
+
+export interface PlannedSlot {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface LayoutPlan {
+  direction: "down" | "right";
+  /** Nodes side by side across one rank. */
+  lanes: number;
+  ranks: number;
+  /** One size per kind, so nodes of a role match. Text-fitted: the label fits at its font size. */
+  sizes: Partial<Record<NodeKind, { width: number; height: number }>>;
+  gaps: { rank: number; lane: number };
+  /** Position and size of every node, in the order given, centred in a shared cell: pass x, y, width, height as they are. */
+  slots: PlannedSlot[];
+  bounds: { width: number; height: number };
+  view: {
+    /** The whole diagram fits the visible canvas at 100%. */
+    fitsAt100: boolean;
+    /** The zoom at which it fits (never above 100%). */
+    fitZoom: number;
+    smallestTextPx: number;
+    readable: boolean;
+  };
+  notes: string[];
+}
+
+const FONT = 16;
+const WEIGHT = "600";
+const RANK_GAP = 80;
+const LANE_GAP = 56;
+const TIGHT_RANK_GAP = 56;
+const TIGHT_LANE_GAP = 40;
+/** What the visible canvas is taken to be when the host reports none (a headless run). */
+const DEFAULT_VIEW: ViewportInfo = { zoom: 1, pan: { x: 0, y: 0 }, width: 1200, height: 800 };
+const MAX_LANES = 8;
+/** A diagram needs room around it in the view (matches the editor's fit padding). */
+const VIEW_PADDING = 80;
+
+const sizeOf = (kind: NodeKind, label: string): NodeSize => {
+  const base = { label, fontSize: FONT, fontWeight: WEIGHT };
+  switch (kind) {
+    case "decision":
+      return sizeDiamondNode({ ...base, minWidth: 160, maxWidth: 280, minHeight: 100 });
+    case "terminal":
+      return sizePillNode({ ...base, minWidth: 140, maxWidth: 260, minHeight: 56 });
+    case "icon":
+      return sizeIconNode({ label, fontSize: 14, fontWeight: WEIGHT });
+    case "note":
+      return sizeSemanticNode({ ...base, minWidth: 140, maxWidth: 320, minHeight: 64 });
+    default: {
+      let fit = sizeSemanticNode({ ...base, minWidth: 168, maxWidth: 280, minHeight: 78 });
+      for (let width = 360; !fit.fits && width <= 520; width += 80) fit = sizeSemanticNode({ ...base, minWidth: 168, maxWidth: width, minHeight: 78 });
+      return fit;
+    }
+  }
+};
+
+/**
+ * Geometry for a diagram before any of it is drawn: a size per role that fits its text, one shared cell and gap,
+ * a grid of positions, and whether the result can be seen and read in the current view. The agent chooses what
+ * is in the diagram and how it flows; this is the arithmetic it should not have to guess.
+ */
+export const planLayout = (
+  input: { nodes: readonly PlanNode[]; direction?: "down" | "right"; lanes?: number },
+  origin: { x: number; y: number },
+  view: ViewportInfo | null,
+): LayoutPlan => {
+  const direction = input.direction ?? "down";
+  const kinds = input.nodes.map((node) => node.kind ?? "process");
+  const measured = input.nodes.map((node, i) => sizeOf(kinds[i], node.label));
+
+  // One size per kind: the largest any node of that kind needs, so equal roles look equal.
+  const sizes: LayoutPlan["sizes"] = {};
+  measured.forEach((size, i) => {
+    const current = sizes[kinds[i]];
+    sizes[kinds[i]] = { width: Math.max(current?.width ?? 0, Math.round(size.width)), height: Math.max(current?.height ?? 0, Math.round(size.height)) };
+  });
+  const boxes = kinds.map((kind) => sizes[kind]!);
+  const along = (box: { width: number; height: number }) => (direction === "down" ? box.height : box.width);
+  const across = (box: { width: number; height: number }) => (direction === "down" ? box.width : box.height);
+
+  const n = input.nodes.length;
+  const canvas = view ?? DEFAULT_VIEW;
+  /** Rank and lane bands: a band is as thick as its largest node, so edges (not centres) are one gap apart wherever a rank holds one node. */
+  const frame = (lanes: number, rankGap: number, laneGap: number) => {
+    const ranks = Math.ceil(n / lanes);
+    const rankBands = Array.from({ length: ranks }, (_, r) => Math.max(...boxes.slice(r * lanes, r * lanes + lanes).map(along)));
+    const laneBands = Array.from({ length: lanes }, (_, l) => Math.max(0, ...boxes.filter((_, i) => i % lanes === l).map(across)));
+    const sum = (bands: number[], gap: number) => bands.reduce((a, b) => a + b, 0) + (bands.length - 1) * gap;
+    const alongTotal = sum(rankBands, rankGap);
+    const acrossTotal = sum(laneBands.filter((band) => band > 0), laneGap);
+    return { ranks, rankBands, laneBands, width: direction === "down" ? acrossTotal : alongTotal, height: direction === "down" ? alongTotal : acrossTotal };
+  };
+  const zoomFor = (width: number, height: number) => fitZoomFor({ minX: 0, minY: 0, maxX: width, maxY: height }, canvas);
+
+  const notes: string[] = [];
+  let rankGap = RANK_GAP;
+  let laneGap = LANE_GAP;
+  let lanes = Math.min(MAX_LANES, Math.max(1, input.lanes ?? 0), n);
+  if (!input.lanes) {
+    // Fewest lanes that are within 10% of the best fit: a chain stays a chain unless it would shrink to nothing.
+    const options = Array.from({ length: Math.min(MAX_LANES, n) }, (_, i) => {
+      const f = frame(i + 1, rankGap, laneGap);
+      return { lanes: i + 1, zoom: zoomFor(f.width, f.height) };
+    });
+    const best = Math.max(...options.map((o) => o.zoom));
+    lanes = options.find((o) => o.zoom >= best * 0.9)!.lanes;
+    if (lanes > 1) notes.push(`Folded into ${lanes} parallel lanes so the diagram stays readable in one view.`);
+  }
+  let shape = frame(lanes, rankGap, laneGap);
+  if (zoomFor(shape.width, shape.height) < 0.6) {
+    rankGap = TIGHT_RANK_GAP;
+    laneGap = TIGHT_LANE_GAP;
+    shape = frame(lanes, rankGap, laneGap);
+    notes.push("Gaps tightened to the minimum that still leaves room for arrowheads and labels.");
+  }
+
+  const starts = (bands: number[], gap: number) => bands.reduce<number[]>((acc, band, i) => [...acc, i === 0 ? 0 : acc[i - 1] + bands[i - 1] + gap], []);
+  const rankStart = starts(shape.rankBands, rankGap);
+  const laneStart = starts(shape.laneBands, laneGap);
+  const slots: PlannedSlot[] = input.nodes.map((_, i) => {
+    const rank = Math.floor(i / lanes);
+    const lane = i % lanes;
+    const box = boxes[i];
+    // Centred in its band on the cross axis, so a column shares one centre line.
+    const a = rankStart[rank] + (shape.rankBands[rank] - along(box)) / 2;
+    const c = laneStart[lane] + (shape.laneBands[lane] - across(box)) / 2;
+    const [dx, dy] = direction === "down" ? [c, a] : [a, c];
+    return { x: Math.round(origin.x + dx), y: Math.round(origin.y + dy), width: box.width, height: box.height };
+  });
+
+  const fitZoom = zoomFor(shape.width, shape.height);
+  const smallestFont = kinds.includes("icon") ? 14 : FONT;
+  const smallestTextPx = Math.round(smallestFont * fitZoom * 10) / 10;
+  const fitsAt100 = shape.width + VIEW_PADDING * 2 <= canvas.width - (canvas.coveredRight ?? 0) && shape.height + VIEW_PADDING * 2 <= canvas.height;
+  const readable = smallestTextPx >= MIN_READABLE_PX;
+  if (!readable) notes.push(`At the zoom that fits everything (${Math.round(fitZoom * 100)}%) the text is about ${smallestTextPx}px: split the diagram into titled frames or fewer nodes per view.`);
+  else if (!fitsAt100) notes.push(`It does not fit at 100% but stays readable at ${Math.round(fitZoom * 100)}%; the view will be fitted after you draw it.`);
+
+  return {
+    direction,
+    lanes,
+    ranks: shape.ranks,
+    sizes,
+    gaps: { rank: rankGap, lane: laneGap },
+    slots,
+    bounds: { width: Math.round(shape.width), height: Math.round(shape.height) },
+    view: { fitsAt100, fitZoom: Math.round(fitZoom * 100) / 100, smallestTextPx, readable },
+    notes,
+  };
+};

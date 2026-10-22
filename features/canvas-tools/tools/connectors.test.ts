@@ -37,6 +37,27 @@ describe("create_connector", () => {
     expect(arrow.points).toHaveLength(2);
   });
 
+  it("makes a curved connector: routed like an elbow, marked curved", async () => {
+    const s = setup({ elements: [node("a", "A", 0, 0), node("b", "B", 400, 200)] });
+    await s.ok("create_connector", { id: "ab", from: "a", to: "b", routing: "curved" });
+    const curved = find<Arrow>(s.mem.stored, "ab");
+    const elbow = setup({ elements: [node("a", "A", 0, 0), node("b", "B", 400, 200)] });
+    await elbow.ok("create_connector", { id: "ab", from: "a", to: "b" });
+    expect(curved.routingMode).toBe("curved");
+    expect(curved.points).toEqual(find<Arrow>(elbow.mem.stored, "ab").points);
+  });
+
+  it("switches an elbow to curved and back without disturbing its path", async () => {
+    const s = setup({ elements: [node("a", "A", 0, 0), node("b", "B", 400, 200)] });
+    await s.ok("create_connector", { id: "ab", from: "a", to: "b" });
+    const before = find<Arrow>(s.mem.stored, "ab").points;
+    await s.ok("update_connector", { ids: ["ab"], routing: "curved" });
+    expect(find<Arrow>(s.mem.stored, "ab")).toMatchObject({ routingMode: "curved", points: before });
+    await s.ok("update_connector", { ids: ["ab"], routing: "straight" });
+    await s.ok("update_connector", { ids: ["ab"], routing: "curved" });
+    expect(find<Arrow>(s.mem.stored, "ab").points.length).toBeGreaterThan(2);
+  });
+
   it("routes around a shape standing between the two", async () => {
     const s = setup({ elements: [node("a", "A", 0, 0), node("wall", "Wall", 300, -20, {}, { w: 120, h: 120 }), node("b", "B", 600, 0)] });
     await s.ok("create_connector", { id: "ab", from: "a", to: "b" });

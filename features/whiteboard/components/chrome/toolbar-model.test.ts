@@ -19,6 +19,7 @@ describe("buildToolbar", () => {
     expect(create[0]).toMatch(/^shapes:rectangle,ellipse,diamond,pill,triangle/);
     expect(create[1]).toBe("connectors:arrow,arrow-bidirectional,line");
     expect(create[0]).toContain("frame");
+    expect(create[0]).toContain("outline");
     expect(create[2]).toBe("insert:text,icon-picker");
     expect(create[3]).toMatch(/^draw:freehand/);
     expect(create[3]).toContain("eraser");

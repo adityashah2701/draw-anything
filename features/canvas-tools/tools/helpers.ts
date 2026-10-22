@@ -8,6 +8,7 @@ import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import { createCommandContext } from "@/features/whiteboard/commands/context";
 import { planReroute } from "@/features/whiteboard/commands/connectors";
+import { isVisible } from "../review";
 import { validateBoard } from "../validate";
 
 import type { CommandContext } from "@/features/whiteboard/commands/context";
@@ -48,6 +49,8 @@ export interface ElementSummary {
   connectorLabel?: string;
   routing?: string;
   rotation?: number;
+  /** An outline's variant (cylinder, hexagon, ...). */
+  variant?: string;
 }
 
 const sideOf = (anchorId: string | undefined) => (anchorId ? anchorId.split("-").pop() : undefined);
@@ -66,6 +69,7 @@ export const summarize = (ctx: CommandContext, shape: DrawingElement): ElementSu
   if (isEffectivelyLocked(ctx.index, shape.id)) out.locked = true;
   if (isHiddenByFlag(ctx.index, shape.id)) out.hidden = true;
   if (typeof shape.rotation === "number" && shape.rotation % 360 !== 0) out.rotation = round(shape.rotation);
+  if (shape.type === "outline" && typeof (shape as { variant?: unknown }).variant === "string") out.variant = (shape as { variant: string }).variant;
   if (isArrowElement(shape)) {
     out.from = shape.startConnection?.elementId;
     out.to = shape.endConnection?.elementId;
@@ -212,6 +216,19 @@ export const defaultOrigin = (env: ToolEnv, gap = 64): { x: number; y: number } 
   const view = host.getViewport();
   if (view && view.zoom > 0) return { x: Math.round(-view.pan.x / view.zoom + 80), y: Math.round(-view.pan.y / view.zoom + 80) };
   return { x: 80, y: 80 };
+};
+
+/**
+ * Brings freshly drawn content into view when part of it is outside the visible canvas (the agent panel's share
+ * excluded), by the editor's own fit-to-view: it never zooms past 100%, and the result says the view moved.
+ * Content already in view leaves the view alone, and a caller can opt out with `keep_view`.
+ */
+export const revealContent = (env: ToolEnv, box: { minX: number; minY: number; maxX: number; maxY: number } | null, keepView?: boolean): string | undefined => {
+  const view = env.host.getViewport();
+  if (keepView || !box || !view || view.zoom <= 0 || !env.host.capabilities.viewport || !env.host.fitView) return undefined;
+  if (isVisible(box, view)) return undefined;
+  env.host.fitView({ ...box, width: box.maxX - box.minX, height: box.maxY - box.minY });
+  return "The new content was outside the view, so the view was moved to show it.";
 };
 
 /** How close, in board units, a new node must land to a neighbour's edge or centre to be pulled onto it. */

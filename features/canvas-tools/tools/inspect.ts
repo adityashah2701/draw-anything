@@ -242,7 +242,7 @@ export const clearSelection: ToolDefinition<z.ZodObject<Record<string, never>>> 
 
 // ── icons, validation, serialisation, meta ────────────────────────────────────
 
-const iconSearchInput = z.object({ query: z.string().min(1).max(200).describe("One or more words, comma-separated: kafka, postgres, load balancer."), limit: z.number().int().min(1).max(20).optional() }).strict();
+const iconSearchInput = z.object({ query: z.string().min(1).max(400).describe("All the words you need in ONE call, comma-separated: kafka, postgres, load balancer (up to 12)."), limit: z.number().int().min(1).max(20).optional() }).strict();
 
 export const searchIconsTool: ToolDefinition<typeof iconSearchInput> = {
   name: "search_icons",
@@ -252,7 +252,7 @@ export const searchIconsTool: ToolDefinition<typeof iconSearchInput> = {
   access: "read",
   boardIndependent: true,
   run: ({ query, limit = 5 }) => {
-    const terms = [...new Set(query.split(/[,\n;]/).map((t) => t.trim()).filter(Boolean))].slice(0, 8);
+    const terms = [...new Set(query.split(/[,\n;]/).map((t) => t.trim()).filter(Boolean))].slice(0, 12);
     const results = terms.map((term) => ({ term, icons: searchIcons(term, limit).map((m) => ({ id: m.id, category: m.category, via: m.via })) }));
     return { summary: results.map((r) => `${r.term}: ${r.icons.map((i) => i.id).join(", ") || "no match"}`).join(" | "), data: { results, registrySize: listIcons().length } };
   },

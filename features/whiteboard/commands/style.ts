@@ -1,4 +1,5 @@
 import type { DocPatch } from "@/core/groups/patch";
+import { isOutlineVariantId } from "@/core/shapes/outline/variants";
 import { mergeNodeStyle } from "@/core/shapes/semantic-node/style";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -13,11 +14,13 @@ export interface StyleChange {
   strokeWidth?: number;
   /** 0 (invisible) to 1. */
   opacity?: number;
-  /** World units; rectangles and semantic nodes. */
+  /** World units; rectangles, semantic nodes and frames. */
   cornerRadius?: number;
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: "normal" | "italic";
+  /** Outline shapes only: another variant of the outline registry (an unknown id changes nothing). */
+  variant?: string;
 }
 
 export type StyleKey = keyof StyleChange;
@@ -34,8 +37,10 @@ export const supportsStyle = (shape: DrawingElement, key: StyleKey): boolean => 
       return config(shape)?.supportsFill === true;
     case "strokeWidth":
       return config(shape)?.supportsStrokeWidth === true;
+    case "variant":
+      return shape.type === "outline";
     case "cornerRadius":
-      return shape.type === "rectangle" || shape.type === "semantic-node";
+      return shape.type === "rectangle" || shape.type === "semantic-node" || shape.type === "frame";
     case "fontSize":
     case "fontWeight":
     case "fontStyle":
@@ -62,6 +67,8 @@ const apply = (shape: DrawingElement, change: StyleChange, keys: StyleKey[]): Dr
     } else if (key === "cornerRadius") {
       if (shape.type === "semantic-node") next.nodeStyle = mergeNodeStyle((shape as { nodeStyle?: unknown }).nodeStyle, { cornerRadius: value as number });
       else next.cornerRadius = value;
+    } else if (key === "variant") {
+      if (isOutlineVariantId(value)) next.variant = value;
     } else if (key === "opacity") {
       // Fully opaque is the default: store nothing, so an untouched element stays byte-identical.
       next.opacity = value === 1 ? undefined : value;
@@ -93,7 +100,7 @@ export const planStyle = (ctx: CommandContext, ids: readonly string[], change: S
       plan.locked.push(id);
       continue;
     }
-    const applicable = strict ? keys.filter((key) => supportsStyle(shape, key)) : keys.filter((key) => key !== "cornerRadius" || supportsStyle(shape, key));
+    const applicable = strict ? keys.filter((key) => supportsStyle(shape, key)) : keys.filter((key) => (key !== "cornerRadius" && key !== "variant") || supportsStyle(shape, key));
     if (strict && applicable.length !== keys.length) {
       plan.unsupported.push({ id, keys: keys.filter((key) => !applicable.includes(key)) });
       continue;

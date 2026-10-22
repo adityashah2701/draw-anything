@@ -451,7 +451,7 @@ export const WhiteboardEditingOverlays = ({
           if (!bounds) return null;
 
           // The text region, not the whole shape: semantic nodes keep their label beside the icon.
-          const region = getShapeLabelRegion(shape.type, bounds, shape.type === "semantic-node" ? shape.nodeStyle : undefined);
+          const region = getShapeLabelRegion(shape.type, bounds, shape.type === "semantic-node" ? shape.nodeStyle : undefined, shape.type === "outline" ? shape.variant : undefined);
           const rotation = getShapeRotation(shape);
           const labelCenter = rotatePoint({ x: region.centerX, y: region.centerY }, centerOf(bounds), rotation);
           const sx = labelCenter.x * canvasViewport.zoom + canvasViewport.panOffset.x;

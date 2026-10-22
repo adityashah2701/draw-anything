@@ -43,6 +43,8 @@ export interface RunAgentOptions {
   callTurn: (input: { messages: CanvasMessage[]; enabledGroups: ToolGroup[] }) => Promise<CanvasTurn>;
   /** Model turns (default 40). `maxSteps` is the older name. */
   maxSteps?: number;
+  /** false skips the automatic straightening of what the run made, so nothing moves unless a tool call moved it. Default true. */
+  autoTidy?: boolean;
   /** Budgets for one run; each can be raised or lowered, none can be switched off. */
   budget?: Partial<RunBudget>;
   /** Called with the current time in ms; tests pass a fake clock. */
@@ -58,12 +60,14 @@ export interface RunBudget {
   ms: number;
   /** Absolute ceiling on one run, however much it changes. */
   maxMs: number;
+  /** One model answer: a step that takes longer is given up on, so a hung provider ends the run with a message instead of "Working…" forever. */
+  turnMs: number;
   /** Rounds of "the final check found problems, fix them" before the run ends and reports what is left. */
   verifyRounds: number;
 }
 
 /** Enough for a real edit of a large diagram, still bounded: a run that needs more says what is left and can be continued. */
-export const DEFAULT_BUDGET: RunBudget = { turns: 40, toolCalls: 120, ms: 5 * 60_000, maxMs: 20 * 60_000, verifyRounds: 2 };
+export const DEFAULT_BUDGET: RunBudget = { turns: 40, toolCalls: 120, ms: 5 * 60_000, maxMs: 20 * 60_000, turnMs: 4 * 60_000, verifyRounds: 2 };
 /** The same failing call this many times in a row ends the run instead of looping. */
 const STALL_LIMIT = 3;
 /** The same call, with the same arguments, on a board that did not change, this many times in a row is no progress. */
@@ -76,6 +80,22 @@ const READ_ONLY_LIMIT = 10;
 /** Steps in a row where every answer was one the model already had. */
 const REPEAT_LIMIT = 3;
 
+/** `work`, or a rejection with `message` once `ms` have passed. The work itself cannot be cancelled from here; its late answer is ignored. */
+const withDeadline = <T,>(work: Promise<T>, ms: number, message: string): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+
 const callKey = (call: CanvasToolCall) => `${call.name}:${JSON.stringify(call.args ?? {})}`;
 
 /** What the final check counts as unfinished work: broken connectors and shapes on top of each other. */
@@ -84,14 +104,15 @@ const callKey = (call: CanvasToolCall) => `${call.name}:${JSON.stringify(call.ar
  * with one even gap. Only those nodes move, so a board the person drew is never rearranged; a model asked to do it
  * by hand tends to nudge things and leave kinks.
  */
-const straightenWhatWasMade = async (executor: ToolExecutor, id: string) => {
+const straightenWhatWasMade = async (executor: ToolExecutor, id: string): Promise<string | undefined> => {
   const ids = [...executor.session.touched];
-  if (ids.length < 2) return;
+  if (ids.length < 2) return undefined;
   const check = await executor.execute({ id: `layout_check_${id}`, name: "validate_diagram", args: {} });
   const issues = check.ok ? (((check.data as { issues?: Array<{ code: string }> } | undefined)?.issues) ?? []) : [];
-  if (!issues.some((issue) => issue.code === "misaligned_connection" || issue.code === "uneven_spacing")) return;
+  if (!issues.some((issue) => issue.code === "misaligned_connection" || issue.code === "uneven_spacing")) return undefined;
   executor.enable(["arrange"]);
-  await executor.execute({ id: `layout_tidy_${id}`, name: "tidy_diagram", args: { ids } });
+  const tidy = await executor.execute({ id: `layout_tidy_${id}`, name: "tidy_diagram", args: { ids } });
+  return tidy.ok && tidy.affected.updated.length > 0 ? `Straightened the new diagram automatically: ${tidy.summary}` : undefined;
 };
 
 const BLOCKING = new Set(["dangling_connector", "stale_connector", "connector_through_node", "overlap", "invalid_geometry", "duplicate_id", "bad_anchor"]);
@@ -153,7 +174,7 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
 
     let turn: CanvasTurn;
     try {
-      turn = await callTurn({ messages: [...messages], enabledGroups: [...executor.session.enabledGroups] });
+      turn = await withDeadline(callTurn({ messages: [...messages], enabledGroups: [...executor.session.enabledGroups] }), budget.turnMs, `The model took longer than ${Math.round(budget.turnMs / 60_000)} minutes to answer step ${step}. The changes so far are on the board; say "continue" to pick up from there.`);
     } catch (error) {
       if (signal?.aborted) return finish("aborted", "", undefined, step - 1);
       return finish("error", "", error instanceof Error ? error.message : "The assistant could not be reached.", step - 1);
@@ -174,7 +195,8 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
       if (wroteSinceCheck && verifyRounds < budget.verifyRounds) {
         verifyRounds += 1;
         wroteSinceCheck = false;
-        await straightenWhatWasMade(executor, `${step}_${verifyRounds}`);
+        const straightened = options.autoTidy === false ? undefined : await straightenWhatWasMade(executor, `${step}_${verifyRounds}`);
+        if (straightened) onEvent?.({ type: "notice", text: straightened });
         const check = await executor.execute({ id: `verify_${step}_${verifyRounds}`, name: "validate_diagram", args: {} });
         const issues = check.ok ? (((check.data as { issues?: Array<{ code: string; severity: string; message: string; ids: string[] }> } | undefined)?.issues) ?? []).filter((issue) => BLOCKING.has(issue.code)) : [];
         remaining = issues.map((issue) => `${issue.message} (${issue.ids.slice(0, 5).join(", ")})`);
