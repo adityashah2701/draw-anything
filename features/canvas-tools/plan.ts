@@ -11,7 +11,6 @@ export interface PlanNode {
 }
 
 export interface PlannedSlot {
-  index: number;
   x: number;
   y: number;
   width: number;
@@ -26,7 +25,7 @@ export interface LayoutPlan {
   /** One size per kind, so nodes of a role match. Text-fitted: the label fits at its font size. */
   sizes: Partial<Record<NodeKind, { width: number; height: number }>>;
   gaps: { rank: number; lane: number };
-  /** Top-left of every node in the order given, centred in a shared cell. Pass them as x, y, width, height. */
+  /** Position and size of every node, in the order given, centred in a shared cell: pass x, y, width, height as they are. */
   slots: PlannedSlot[];
   bounds: { width: number; height: number };
   view: {
@@ -92,15 +91,20 @@ export const planLayout = (
     sizes[kinds[i]] = { width: Math.max(current?.width ?? 0, Math.round(size.width)), height: Math.max(current?.height ?? 0, Math.round(size.height)) };
   });
   const boxes = kinds.map((kind) => sizes[kind]!);
-  const cell = { width: Math.max(...boxes.map((b) => b.width)), height: Math.max(...boxes.map((b) => b.height)) };
+  const along = (box: { width: number; height: number }) => (direction === "down" ? box.height : box.width);
+  const across = (box: { width: number; height: number }) => (direction === "down" ? box.width : box.height);
 
   const n = input.nodes.length;
   const canvas = view ?? DEFAULT_VIEW;
+  /** Rank and lane bands: a band is as thick as its largest node, so edges (not centres) are one gap apart wherever a rank holds one node. */
   const frame = (lanes: number, rankGap: number, laneGap: number) => {
     const ranks = Math.ceil(n / lanes);
-    const across = lanes * (direction === "down" ? cell.width : cell.height) + (lanes - 1) * laneGap;
-    const along = ranks * (direction === "down" ? cell.height : cell.width) + (ranks - 1) * rankGap;
-    return { ranks, width: direction === "down" ? across : along, height: direction === "down" ? along : across };
+    const rankBands = Array.from({ length: ranks }, (_, r) => Math.max(...boxes.slice(r * lanes, r * lanes + lanes).map(along)));
+    const laneBands = Array.from({ length: lanes }, (_, l) => Math.max(0, ...boxes.filter((_, i) => i % lanes === l).map(across)));
+    const sum = (bands: number[], gap: number) => bands.reduce((a, b) => a + b, 0) + (bands.length - 1) * gap;
+    const alongTotal = sum(rankBands, rankGap);
+    const acrossTotal = sum(laneBands.filter((band) => band > 0), laneGap);
+    return { ranks, rankBands, laneBands, width: direction === "down" ? acrossTotal : alongTotal, height: direction === "down" ? alongTotal : acrossTotal };
   };
   const zoomFor = (width: number, height: number) => fitZoomFor({ minX: 0, minY: 0, maxX: width, maxY: height }, canvas);
 
@@ -126,13 +130,18 @@ export const planLayout = (
     notes.push("Gaps tightened to the minimum that still leaves room for arrowheads and labels.");
   }
 
+  const starts = (bands: number[], gap: number) => bands.reduce<number[]>((acc, band, i) => [...acc, i === 0 ? 0 : acc[i - 1] + bands[i - 1] + gap], []);
+  const rankStart = starts(shape.rankBands, rankGap);
+  const laneStart = starts(shape.laneBands, laneGap);
   const slots: PlannedSlot[] = input.nodes.map((_, i) => {
     const rank = Math.floor(i / lanes);
     const lane = i % lanes;
-    const cellX = direction === "down" ? lane * (cell.width + laneGap) : rank * (cell.width + rankGap);
-    const cellY = direction === "down" ? rank * (cell.height + rankGap) : lane * (cell.height + laneGap);
     const box = boxes[i];
-    return { index: i, x: Math.round(origin.x + cellX + (cell.width - box.width) / 2), y: Math.round(origin.y + cellY + (cell.height - box.height) / 2), width: box.width, height: box.height };
+    // Centred in its band on the cross axis, so a column shares one centre line.
+    const a = rankStart[rank] + (shape.rankBands[rank] - along(box)) / 2;
+    const c = laneStart[lane] + (shape.laneBands[lane] - across(box)) / 2;
+    const [dx, dy] = direction === "down" ? [c, a] : [a, c];
+    return { x: Math.round(origin.x + dx), y: Math.round(origin.y + dy), width: box.width, height: box.height };
   });
 
   const fitZoom = zoomFor(shape.width, shape.height);

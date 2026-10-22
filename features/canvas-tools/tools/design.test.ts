@@ -3,7 +3,7 @@ import { MAX_REVIEWS } from "../review";
 import { boxOf, find, node, rectangle, setup } from "../test-helpers";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
-interface Slot { index: number; x: number; y: number; width: number; height: number }
+interface Slot { x: number; y: number; width: number; height: number }
 interface Plan { sizes: Record<string, { width: number; height: number }>; slots: Slot[]; lanes: number; ranks: number; bounds: { width: number; height: number }; view: { fitsAt100: boolean; fitZoom: number; readable: boolean; smallestTextPx: number }; gaps: { rank: number; lane: number } }
 interface Review { verdict: "good" | "needs_work"; findings: Array<{ code: string; ids: string[]; severity: string }>; attempt: number; next: string; view?: { allVisible: boolean; fitZoom: number } }
 

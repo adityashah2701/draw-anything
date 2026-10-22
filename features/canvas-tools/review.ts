@@ -81,7 +81,7 @@ const round = (n: number) => Math.round(n);
 /** Findings the board validator already computes that matter for how a diagram looks, with the repair for each. */
 const FROM_VALIDATE: Record<ReviewValidateCode, { severity: Finding["severity"]; fix: string }> = {
   overlap: { severity: "warning", fix: "move_elements the overlapping shapes apart (or tidy_diagram on them)" },
-  connector_through_node: { severity: "warning", fix: "reroute_connector, or update_connector {routing} to another route" },
+  connector_through_node: { severity: "warning", fix: "reroute_connector, or update_connector {routing: \"orthogonal\"} if it is straight" },
   connector_through_frame: { severity: "warning", fix: "move the nodes, or reroute_connector" },
   connector_through_heading: { severity: "warning", fix: "fit_frame {frame, ids} moves a heading to a clear spot" },
   stale_connector: { severity: "warning", fix: "reroute_connector" },
