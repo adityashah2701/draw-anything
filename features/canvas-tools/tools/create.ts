@@ -5,6 +5,7 @@ import type { DocPatch } from "@/core/groups/patch";
 import { isCustomIcon } from "@/features/whiteboard/utils/icon-picker";
 import { mergeNodeStyle, CORNER_RADIUS_LIMITS, ICON_SIZE_LIMITS } from "@/core/shapes/semantic-node/style";
 import { semanticMinSize } from "@/core/shapes/semantic-node/layout";
+import { describeOutlineVariants, getOutlineVariant, outlineVariantIds } from "@/core/shapes/outline/variants";
 import { createShape, getShapeDefinition, isRotatable } from "@/core/shapes/shape-runtime";
 import { ICON_NODE_GLYPH } from "@/core/shapes/icon/caption";
 import { sizeIconNode, sizeSemanticNode } from "@/core/text/node-size";
@@ -47,10 +48,15 @@ const DEFAULT_BOX: Record<(typeof BOX_SHAPES)[number], { width: number; height: 
   triangle: { width: 120, height: 100 },
 };
 
+/** Outline variants come from the registry (the id is the shape name), so a new variant is drawable here without a change. */
+const OUTLINE_IDS = outlineVariantIds() as [string, ...string[]];
+const variantSize = (id: string) => getOutlineVariant(id)?.defaultSize;
+const variantList = () => describeOutlineVariants().map((v) => `${v.id} (${v.description.replace(/[.:].*$/, "")})`).join(", ");
+
 const shapeInput = z
   .object({
     id: newElementId.optional(),
-    shape: z.enum([...BOX_SHAPES, "line", "freehand"]).describe("rectangle, ellipse, diamond, pill (terminator), triangle, line, or freehand (a pencil stroke through `points`)."),
+    shape: z.enum([...BOX_SHAPES, "line", "freehand", ...OUTLINE_IDS]).describe(`rectangle, ellipse, diamond, pill (terminator), triangle, line, freehand (a pencil stroke through \`points\`), or an outline: ${variantList()}.`),
     x: coordinate.optional().describe("Left edge. Omit x and y to place it beside the existing content."),
     y: coordinate.optional().describe("Top edge."),
     width: length.optional(),
@@ -71,14 +77,14 @@ const shapeInput = z
 export const createShapeTool: ToolDefinition<typeof shapeInput> = {
   name: "create_shape",
   group: "create",
-  description: "Draw one shape (rectangle, ellipse, diamond, pill, triangle, line, freehand) with optional label and style. For a labelled, icon-bearing box prefer create_semantic_node. Adds one element.",
+  description: "Draw one shape (rectangle, ellipse, diamond, pill, triangle, line, freehand, or an outline such as a cylinder for a database) with optional label and style. For a labelled, icon-bearing box prefer create_semantic_node. Adds one element.",
   input: shapeInput,
   access: "write",
   run: (input, env) => {
     const id = claimId(env, input.id);
     const origin = defaultOrigin(env);
     const isPath = input.shape === "line" || input.shape === "freehand";
-    const fallbackBox = isPath ? undefined : DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX];
+    const fallbackBox = isPath ? undefined : DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX] ?? variantSize(input.shape);
     const snapped = !isPath && fallbackBox && input.snap !== false && (input.x !== undefined || input.y !== undefined) ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width: input.width ?? fallbackBox.width, height: input.height ?? fallbackBox.height }) : undefined;
     const x = snapped?.x ?? input.x ?? origin.x;
     const y = snapped?.y ?? input.y ?? origin.y;
@@ -90,14 +96,16 @@ export const createShapeTool: ToolDefinition<typeof shapeInput> = {
       else throw new ToolError("invalid_arguments", "freehand needs `points` (at least two).");
     } else {
       if (input.points) throw new ToolError("invalid_arguments", `\`points\` is only for line and freehand; give x, y, width and height for a ${input.shape}.`);
-      const fallback = DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX];
+      const fallback = DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX] ?? variantSize(input.shape)!;
       points = [{ x, y }, { x: x + (input.width ?? fallback.width), y: y + (input.height ?? fallback.height) }];
     }
     if (isPath && input.label !== undefined) throw new ToolError("unsupported", `A ${input.shape} cannot have a label.`);
 
-    const shape = createShape(input.shape, {
+    const variant = getOutlineVariant(input.shape);
+    const shape = createShape(variant ? "outline" : (input.shape as Parameters<typeof createShape>[0]), {
       id,
       points,
+      ...(variant ? { variant: variant.id } : {}),
       ...(input.color ? { color: input.color } : {}),
       ...(input.stroke_width !== undefined ? { strokeWidth: input.stroke_width } : {}),
       ...(input.fill ? { fill: input.fill } : {}),
