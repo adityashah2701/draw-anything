@@ -83,3 +83,37 @@ describe("design-first drawing", () => {
     expect(boxOf(find<DrawingElement>(on.mem.stored, "db")).x).not.toBe(280);
   });
 });
+
+describe("a request with many branches", () => {
+  it("draws a 14-node order flow in a handful of calls: plan, create_nodes, connect, frame, review", async () => {
+    const spec = [
+      ["customer", "Customer", "icon", "user"], ["place", "Place order", "terminal"], ["validate", "Validate order", "process"], ["pay", "Payment OK?", "decision"],
+      ["retry", "Retry payment", "process"], ["cancel", "Cancel order", "terminal"], ["stock", "In stock?", "decision"], ["restock", "Restock item", "process"],
+      ["process", "Process order", "process"], ["ship", "Ship order", "process"], ["notify", "Notify customer", "process"], ["deliver", "Deliver order", "terminal"],
+    ] as const;
+    const { run, mem, turns } = await scriptedRun({
+      prompt: "Draw an e-commerce order flow with payment and stock decisions, retry and cancellation paths",
+      board: { viewport: { zoom: 1, pan: { x: 0, y: 0 }, width: 1470, height: 923 } },
+      script: [
+        reply("Planning.", [call("plan_layout", { nodes: spec.map(([, label, kind]) => ({ label, kind })) })]),
+        (c) => {
+          const plan = dataOf<{ slots: Array<{ x: number; y: number; width: number; height: number }> }>(c, "plan_layout");
+          return reply("Drawing the nodes.", [call("create_nodes", { nodes: spec.map(([id, label, kind, icon], i) => ({ id, label, kind, ...(icon ? { icon } : {}), ...plan.slots[i] })) })]);
+        },
+        reply("Connecting.", [call("connect_elements", { connections: [
+          { from: "customer", to: "place" }, { from: "place", to: "validate" }, { from: "validate", to: "pay" }, { from: "pay", to: "stock", label: "Yes" },
+          { from: "pay", to: "retry", label: "No" }, { from: "retry", to: "cancel", label: "Failure" }, { from: "stock", to: "process", label: "In stock" },
+          { from: "stock", to: "restock", label: "Out of stock" }, { from: "process", to: "ship" }, { from: "ship", to: "notify" }, { from: "notify", to: "deliver" },
+        ] })]),
+        reply("", [call("create_frame_or_section", { title: "Order validation", ids: ["place", "validate", "pay"] })]),
+        reply("", [call("review_layout")]),
+        reply("The order flow is drawn."),
+      ],
+    });
+    expect(run.status).toBe("done");
+    expect(run.results.filter((r) => !r.ok).map((r) => `${r.tool}:${r.error?.message}`)).toEqual([]);
+    expect(run.results.filter((r) => r.tool === "create_nodes")).toHaveLength(1);
+    expect(mem.stored.filter((e) => e.type === "arrow")).toHaveLength(11);
+    expect(turns[0].system).toContain("create_nodes");
+  });
+});
