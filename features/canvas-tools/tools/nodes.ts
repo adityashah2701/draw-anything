@@ -5,7 +5,7 @@ import { coordinate, length, newElementId, MAX_ELEMENTS_PER_CALL } from "../sche
 import { NODE_KINDS } from "../plan";
 import type { ToolDefinition } from "../types";
 import { createIconTool, createSemanticNodeTool, createShapeTool } from "./create";
-import { ToolError } from "../errors";
+import { resolveIconId, searchIcons } from "@/core/icons/registry";
 import { count, mergePatches, overlapWarnings } from "./helpers";
 
 const nodesInput = z
@@ -23,15 +23,21 @@ const nodesInput = z
             width: length.optional().describe("Default: the size the kind needs for its label (plan_layout gives it)."),
             height: length.optional(),
           })
-          .strict(),
+          // Not strict: a model adds fields of its own (description, type) to each node, and none of them changes what is drawn.
+          .passthrough(),
       )
       .min(1)
       .max(MAX_ELEMENTS_PER_CALL),
   })
   .strict();
 
-const missingIcon = (id: string): never => {
-  throw new ToolError("invalid_arguments", `Node "${id}" has kind icon, which needs an icon id (search_icons finds them).`);
+/** An icon a model named, or the nearest real one: a batch of nodes is not refused for one unknown icon name. */
+const usableIcon = (reference: string | undefined, label: string, warnings: string[]): string | undefined => {
+  const wanted = reference?.trim();
+  if (wanted && resolveIconId(wanted)) return wanted;
+  const near = searchIcons(wanted || label, 1)[0];
+  if (wanted) warnings.push(near ? `There is no icon "${wanted}"; "${label}" uses "${near.id}".` : `There is no icon "${wanted}"; "${label}" has none (search_icons finds ids).`);
+  return near && wanted ? near.id : undefined;
 };
 
 /**
@@ -55,8 +61,15 @@ export const createNodesTool: ToolDefinition<typeof nodesInput> = {
       let result;
       if (kind === "decision") result = await createShapeTool.run(createShapeTool.input.parse({ ...at, shape: "diamond", label: node.label, snap: false }), env);
       else if (kind === "terminal") result = await createShapeTool.run(createShapeTool.input.parse({ ...at, shape: "pill", label: node.label, snap: false }), env);
-      else if (kind === "icon") result = await createIconTool.run(createIconTool.input.parse({ id: node.id, icon: node.icon ?? missingIcon(node.id), caption: node.label, x: node.x, y: node.y }), env);
-      else result = await createSemanticNodeTool.run(createSemanticNodeTool.input.parse({ ...at, label: node.label, ...(node.icon ? { icon: node.icon } : {}), snap: false }), env);
+      else if (kind === "icon") {
+        const icon = usableIcon(node.icon ?? node.label, node.label, warnings);
+        result = icon
+          ? await createIconTool.run(createIconTool.input.parse({ id: node.id, icon, caption: node.label, x: node.x, y: node.y }), env)
+          : await createSemanticNodeTool.run(createSemanticNodeTool.input.parse({ ...at, label: node.label, snap: false }), env);
+      } else {
+        const icon = node.icon ? usableIcon(node.icon, node.label, warnings) : undefined;
+        result = await createSemanticNodeTool.run(createSemanticNodeTool.input.parse({ ...at, label: node.label, ...(icon ? { icon } : {}), snap: false }), env);
+      }
       if (result.patch) patches.push(result.patch);
       warnings.push(...(result.warnings ?? []).filter((w) => !/^The new element overlaps/.test(w)));
     }
