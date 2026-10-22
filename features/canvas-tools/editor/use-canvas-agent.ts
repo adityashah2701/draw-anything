@@ -211,13 +211,29 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     [convex],
   );
 
+  const waitTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopWaiting = useCallback(() => {
+    if (waitTimer.current) clearInterval(waitTimer.current);
+    waitTimer.current = null;
+  }, []);
+
   const record = useCallback((event: AgentEvent) => {
-    if (event.type === "thinking") {
+    if (event.type === "turn") {
+      // The model can take minutes on one step; say so, with a running clock, instead of a bare "Working…".
+      stopWaiting();
+      const started = Date.now();
+      const show = () => setActivity(`Waiting for the model, step ${event.step} · ${Math.round((Date.now() - started) / 1000)}s`);
+      show();
+      waitTimer.current = setInterval(show, 1000);
+    } else if (event.type === "finished") {
+      stopWaiting();
+    } else if (event.type === "thinking") {
       generatorThinkingId.current = null;
       setMessages((prev) => [...prev, { id: nextId(), kind: "thinking", text: event.text, source: "model" }]);
     } else if (event.type === "notice") {
       setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone: "warn", text: event.text }]);
     } else if (event.type === "calling") {
+      stopWaiting();
       generatorThinkingId.current = null;
       const names = event.calls.map((c) => c.name);
       setActivity(names.includes("generate_diagram") ? "Generating the diagram…" : names.length === 1 ? `Running ${names[0]}…` : `Running ${names.length} steps…`);
@@ -242,7 +258,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         },
       ]);
     }
-  }, []);
+  }, [stopWaiting]);
 
   /** Writes this run's transcript and model history to the board's conversation, then drops the local copy (it now comes back from the query). */
   const persistRun = useCallback(

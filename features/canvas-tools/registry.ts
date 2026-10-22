@@ -4,6 +4,7 @@ import { ARRANGE_TOOLS } from "./tools/arrange";
 import { CONNECTOR_TOOLS } from "./tools/connectors";
 import { CREATE_TOOLS } from "./tools/create";
 import { DESIGN_TOOLS } from "./tools/design";
+import { createNodesTool } from "./tools/nodes";
 import { DOCUMENT_TOOLS } from "./tools/document";
 import { CODE_TOOLS } from "./tools/code";
 import { EDIT_TOOLS } from "./tools/edit";
@@ -18,6 +19,7 @@ export const STATIC_TOOLS: readonly ToolDefinition[] = [
   ...INSPECT_TOOLS,
   ...DESIGN_TOOLS,
   ...CREATE_TOOLS,
+  createNodesTool,
   ...EDIT_TOOLS,
   ...CONNECTOR_TOOLS,
   ...ARRANGE_TOOLS,
