@@ -151,8 +151,9 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
           },
         },
         viewport: () => {
-          const { canvasViewport } = latest.current;
-          return { zoom: canvasViewport.zoom, pan: canvasViewport.panOffset, width: canvasViewport.canvasSize.width, height: canvasViewport.canvasSize.height };
+          const c = latest.current;
+          const { canvasViewport } = c;
+          return { zoom: canvasViewport.zoom, pan: canvasViewport.panOffset, width: canvasViewport.canvasSize.width, height: canvasViewport.canvasSize.height, coveredRight: coveredByPanels(c.showAIModal, c.showCodePanel) };
         },
         document: () => {
           const c = latest.current;

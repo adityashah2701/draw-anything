@@ -43,6 +43,8 @@ export interface RunAgentOptions {
   callTurn: (input: { messages: CanvasMessage[]; enabledGroups: ToolGroup[] }) => Promise<CanvasTurn>;
   /** Model turns (default 40). `maxSteps` is the older name. */
   maxSteps?: number;
+  /** false skips the automatic straightening of what the run made, so nothing moves unless a tool call moved it. Default true. */
+  autoTidy?: boolean;
   /** Budgets for one run; each can be raised or lowered, none can be switched off. */
   budget?: Partial<RunBudget>;
   /** Called with the current time in ms; tests pass a fake clock. */
@@ -84,14 +86,15 @@ const callKey = (call: CanvasToolCall) => `${call.name}:${JSON.stringify(call.ar
  * with one even gap. Only those nodes move, so a board the person drew is never rearranged; a model asked to do it
  * by hand tends to nudge things and leave kinks.
  */
-const straightenWhatWasMade = async (executor: ToolExecutor, id: string) => {
+const straightenWhatWasMade = async (executor: ToolExecutor, id: string): Promise<string | undefined> => {
   const ids = [...executor.session.touched];
-  if (ids.length < 2) return;
+  if (ids.length < 2) return undefined;
   const check = await executor.execute({ id: `layout_check_${id}`, name: "validate_diagram", args: {} });
   const issues = check.ok ? (((check.data as { issues?: Array<{ code: string }> } | undefined)?.issues) ?? []) : [];
-  if (!issues.some((issue) => issue.code === "misaligned_connection" || issue.code === "uneven_spacing")) return;
+  if (!issues.some((issue) => issue.code === "misaligned_connection" || issue.code === "uneven_spacing")) return undefined;
   executor.enable(["arrange"]);
-  await executor.execute({ id: `layout_tidy_${id}`, name: "tidy_diagram", args: { ids } });
+  const tidy = await executor.execute({ id: `layout_tidy_${id}`, name: "tidy_diagram", args: { ids } });
+  return tidy.ok && tidy.affected.updated.length > 0 ? `Straightened the new diagram automatically: ${tidy.summary}` : undefined;
 };
 
 const BLOCKING = new Set(["dangling_connector", "stale_connector", "connector_through_node", "overlap", "invalid_geometry", "duplicate_id", "bad_anchor"]);
@@ -174,7 +177,8 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
       if (wroteSinceCheck && verifyRounds < budget.verifyRounds) {
         verifyRounds += 1;
         wroteSinceCheck = false;
-        await straightenWhatWasMade(executor, `${step}_${verifyRounds}`);
+        const straightened = options.autoTidy === false ? undefined : await straightenWhatWasMade(executor, `${step}_${verifyRounds}`);
+        if (straightened) onEvent?.({ type: "notice", text: straightened });
         const check = await executor.execute({ id: `verify_${step}_${verifyRounds}`, name: "validate_diagram", args: {} });
         const issues = check.ok ? (((check.data as { issues?: Array<{ code: string; severity: string; message: string; ids: string[] }> } | undefined)?.issues) ?? []).filter((issue) => BLOCKING.has(issue.code)) : [];
         remaining = issues.map((issue) => `${issue.message} (${issue.ids.slice(0, 5).join(", ")})`);
