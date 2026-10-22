@@ -18,7 +18,7 @@ import type { DrawingElement, GroupRecord } from "@/features/whiteboard/types/wh
 import { ToolError } from "../errors";
 import { color, coordinate, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POINTS, newElementId, point, targetIds } from "../schemas";
 import type { ToolDefinition } from "../types";
-import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, snapPlacement } from "./helpers";
+import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, revealContent, snapPlacement } from "./helpers";
 
 const normalizeText = (value: string) => value.replace(/\r\n?/g, "\n");
 
@@ -64,6 +64,7 @@ const shapeInput = z
     corner_radius: z.number().finite().min(0).max(CORNER_RADIUS_LIMITS.max * 2).optional().describe("Rectangles only; 0 is square."),
     font_size: fontSize.optional(),
     rotation: rotation.optional(),
+    snap: z.boolean().optional().describe("false = exactly x, y (default: snaps to a neighbour within a few units)."),
   })
   .strict();
 
@@ -78,7 +79,7 @@ export const createShapeTool: ToolDefinition<typeof shapeInput> = {
     const origin = defaultOrigin(env);
     const isPath = input.shape === "line" || input.shape === "freehand";
     const fallbackBox = isPath ? undefined : DEFAULT_BOX[input.shape as keyof typeof DEFAULT_BOX];
-    const snapped = !isPath && fallbackBox && (input.x !== undefined || input.y !== undefined) ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width: input.width ?? fallbackBox.width, height: input.height ?? fallbackBox.height }) : undefined;
+    const snapped = !isPath && fallbackBox && input.snap !== false && (input.x !== undefined || input.y !== undefined) ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width: input.width ?? fallbackBox.width, height: input.height ?? fallbackBox.height }) : undefined;
     const x = snapped?.x ?? input.x ?? origin.x;
     const y = snapped?.y ?? input.y ?? origin.y;
 
@@ -249,6 +250,7 @@ const nodeInput = z
     icon_color: color.optional(),
     icon_visible: z.boolean().optional().describe("false hides the icon."),
     corner_radius: z.number().finite().min(CORNER_RADIUS_LIMITS.min).max(CORNER_RADIUS_LIMITS.max).optional(),
+    snap: z.boolean().optional().describe("false = exactly x, y (default: snaps to a neighbour within a few units)."),
   })
   .strict();
 
@@ -281,7 +283,7 @@ export const createSemanticNodeTool: ToolDefinition<typeof nodeInput> = {
       width = Math.max(width, min.width);
       height = Math.max(height, min.height);
     }
-    const placed = input.x !== undefined || input.y !== undefined ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width, height }) : undefined;
+    const placed = input.snap !== false && (input.x !== undefined || input.y !== undefined) ? snapPlacement(env, { x: input.x ?? origin.x, y: input.y ?? origin.y, width, height }) : undefined;
     const x = placed?.x ?? input.x ?? origin.x;
     const y = placed?.y ?? input.y ?? origin.y;
     const byKind = input.kind ? kindColors(input.kind) : undefined;
@@ -394,6 +396,7 @@ const importInput = z
     code: z.string().min(1).max(60_000).describe("Diagram code: lines like `API [kind: service] -> DB [kind: database]`, with optional groups."),
     x: coordinate.optional().describe("Left edge of the imported diagram. Default: beside the existing content."),
     y: coordinate.optional().describe("Top edge."),
+    keep_view: z.boolean().optional().describe("true = do not move the view."),
   })
   .strict();
 
@@ -403,7 +406,7 @@ export const importDiagramTool: ToolDefinition<typeof importInput> = {
   description: "Add a diagram written in the editor's diagram code (nodes, labelled connections, groups) as new, laid-out elements. Existing elements are never touched or replaced. Fails with the code's line errors if it does not parse.",
   input: importInput,
   access: "write",
-  run: ({ code, x, y }, env) => {
+  run: ({ code, x, y, keep_view }, env) => {
     const parsed = parseDiagramCode(code);
     const errors = parsed.issues.filter((issue) => issue.severity === "error");
     if (errors.length > 0) {
@@ -427,9 +430,10 @@ export const importDiagramTool: ToolDefinition<typeof importInput> = {
     const taken = moved.filter((el) => env.ctx.index.shapes.has(el.id) || env.ctx.index.groups.has(el.id));
     if (taken.length > 0) throw new ToolError("conflict", "The imported elements collide with ids already on the board; try again.", { ids: taken.map((el) => el.id).slice(0, 5) });
     const nodes = moved.filter((el) => el.ai?.role === "node");
+    const revealed = revealContent(env, unionBounds(moved.flatMap((el) => env.ctx.getBounds(el) ?? [])), keep_view);
     return {
-      summary: `Imported ${count(nodes.length, "node")} and ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements).`,
-      data: { created: moved.map((el) => el.id), nodes: nodes.map((el) => ({ id: el.id, label: el.label, node: el.ai?.semanticId })) },
+      summary: `Imported ${count(nodes.length, "node")} and ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements).${revealed ? ` ${revealed}` : ""}`,
+      data: { created: moved.map((el) => el.id), ...(revealed ? { viewMoved: true } : {}), nodes: nodes.map((el) => ({ id: el.id, label: el.label, node: el.ai?.semanticId })) },
       warnings: result.issues.filter((issue) => issue.severity !== "error").map((issue) => `line ${issue.line}: ${issue.message}`).slice(0, 8),
       patch: { add: moved, update: [], remove: [] },
     };

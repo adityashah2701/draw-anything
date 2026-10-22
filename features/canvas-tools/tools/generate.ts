@@ -3,7 +3,7 @@ import { unionBounds } from "@/core/geometry/box";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { ToolError } from "../errors";
 import type { ToolDefinition } from "../types";
-import { count, defaultOrigin } from "./helpers";
+import { count, defaultOrigin, revealContent } from "./helpers";
 
 /** Most elements one generated diagram may add (a large architecture is a few hundred). */
 export const MAX_GENERATED_ELEMENTS = 500;
@@ -17,6 +17,7 @@ const generateInput = z
       .enum(["architecture", "flowchart", "concept", "mind-map", "sequence", "network", "entity-relationship", "workflow", "class", "organization", "dependency"])
       .optional()
       .describe("The kind of diagram, when the request names one."),
+    keep_view: z.boolean().optional().describe("true = do not move the view."),
   })
   .strict();
 
@@ -34,7 +35,7 @@ export const generateDiagramTool: ToolDefinition<typeof generateInput> = {
   input: generateInput,
   access: "write",
   needs: ["generate"],
-  run: async ({ description, diagram_type }, env) => {
+  run: async ({ description, diagram_type, keep_view }, env) => {
     const generate = env.host.generateDiagram;
     if (!generate) throw new ToolError("unavailable", "Diagram generation is not available here.");
     let outcome;
@@ -56,9 +57,10 @@ export const generateDiagramTool: ToolDefinition<typeof generateInput> = {
     const dy = origin.y - (box?.minY ?? 0);
     const moved = elements.map((el) => ({ ...structuredClone(el), points: el.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) })) as DrawingElement[];
     const nodes = moved.filter((el) => el.ai?.role === "node");
+    const revealed = revealContent(env, unionBounds(moved.flatMap((el) => env.ctx.getBounds(el) ?? [])), keep_view);
     return {
-      summary: `Generated a diagram: ${count(nodes.length, "node")}, ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements), placed beside the existing content.`,
-      data: { created: moved.map((el) => el.id), nodes: nodes.slice(0, 60).map((el) => ({ id: el.id, label: el.label })) },
+      summary: `Generated a diagram: ${count(nodes.length, "node")}, ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements), placed beside the existing content.${revealed ? ` ${revealed}` : ""}`,
+      data: { created: moved.map((el) => el.id), ...(revealed ? { viewMoved: true } : {}), nodes: nodes.slice(0, 60).map((el) => ({ id: el.id, label: el.label })) },
       warnings: (outcome.warnings ?? []).slice(0, 8),
       patch: { add: moved, update: [], remove: [] },
       selection: nodes.length > 0 ? nodes.map((el) => el.id) : undefined,

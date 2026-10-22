@@ -3,6 +3,7 @@ import { toParameters } from "./schemas";
 import { ARRANGE_TOOLS } from "./tools/arrange";
 import { CONNECTOR_TOOLS } from "./tools/connectors";
 import { CREATE_TOOLS } from "./tools/create";
+import { DESIGN_TOOLS } from "./tools/design";
 import { DOCUMENT_TOOLS } from "./tools/document";
 import { CODE_TOOLS } from "./tools/code";
 import { EDIT_TOOLS } from "./tools/edit";
@@ -15,6 +16,7 @@ import { TOOL_GROUPS, toolEnabled, type ToolDefinition, type ToolGroup } from ".
 /** Every tool except the meta tool that needs the live session; each is a separate, independently callable definition. */
 export const STATIC_TOOLS: readonly ToolDefinition[] = [
   ...INSPECT_TOOLS,
+  ...DESIGN_TOOLS,
   ...CREATE_TOOLS,
   ...EDIT_TOOLS,
   ...CONNECTOR_TOOLS,
