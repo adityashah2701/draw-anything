@@ -1,5 +1,5 @@
 import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
-import { ancestorsOf, type GroupIndex } from "./group-index";
+import { flaggedByFrame, ancestorsOf, type GroupIndex } from "./group-index";
 
 type Connected = DrawingElement & {
   startConnection?: { elementId?: string };
@@ -9,13 +9,13 @@ type Connected = DrawingElement & {
 const isConnector = (shape: DrawingElement) => shape.type === "arrow" || shape.type === "arrow-bidirectional";
 
 /**
- * Whether a shape (or a group) is hidden: it carries `hidden`, or a group around it does. Hiding is a
+ * Whether a shape (or a group) is hidden: it carries `hidden`, or a group or a frame around it does. Hiding is a
  * property of the document, not a view setting, so it is saved, undone and seen by every collaborator.
  */
 export const isHiddenByFlag = (index: GroupIndex, id: string): boolean => {
   const own = index.shapes.get(id)?.hidden ?? index.groups.get(id)?.hidden;
   if (own) return true;
-  return ancestorsOf(index, id).some((ancestor) => index.groups.get(ancestor)?.hidden === true);
+  return ancestorsOf(index, id).some((ancestor) => index.groups.get(ancestor)?.hidden === true) || flaggedByFrame(index, id, "hidden");
 };
 
 /**

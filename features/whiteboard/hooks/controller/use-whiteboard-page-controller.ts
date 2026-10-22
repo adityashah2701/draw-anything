@@ -373,9 +373,16 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       if (!a || !b) return;
       const box = makeBounds(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y));
       const stored = readLiveStored();
-      const parent = frameForBounds(buildFrameIndex(stored), box);
+      const frameIndex = buildFrameIndex(stored);
+      // A locked frame cannot take a new one in: draw beside it, at the level above.
+      const lockIndex = buildGroupIndex(stored);
+      const lockedFrames = new Set([...frameIndex.frames.keys()].filter((id) => isEffectivelyLocked(lockIndex, id)));
+      const parent = frameForBounds(frameIndex, box, lockedFrames);
       const created = createFrame(stored, { id: draft.id, box, parent, adopt: true });
-      if (!created.ok) return;
+      if (!created.ok) {
+        toast(created.message);
+        return;
+      }
       applyDocPatch(created.patch);
       setSelectedElements([created.frameId]);
       uiState.setCurrentTool("select");

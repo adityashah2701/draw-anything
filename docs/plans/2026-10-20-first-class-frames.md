@@ -198,3 +198,14 @@ contents, and Remove frame, keep contents (the frame goes, what it held stays an
 frame still removes it with its contents. A command with nothing to do (nothing in a frame, a locked frame, a
 frame that already fits) leaves the board alone and says why in a toast. Everything is planned by the pure
 `features/whiteboard/commands/frame-actions.ts` and wired by `useFrameCommands`.
+
+## Lock and hide
+
+Locking or hiding a frame covers everything it owns, at any depth, the way a group does. The effect is derived,
+never written: `flaggedByFrame` (core/groups/group-index.ts) walks a shape's `frameId` chain and
+`isEffectivelyLocked` / `isEffectivelyHidden` consult it, so move, delete, style, drop and the lock chip all
+follow, a connector with a hidden end disappears with it, and unlocking or showing the frame gives the contents
+back exactly as they were (their own flags are never touched). A group counts as locked or hidden by a frame only
+when every shape in it is. Damaged links (dangling, a non-frame owner, a loop) end the walk without throwing.
+Drawing a frame over a locked frame puts it beside that frame, at the level above, rather than failing.
+
