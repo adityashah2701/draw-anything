@@ -107,7 +107,6 @@ describe("stacking", () => {
   });
 });
 
-<<<<<<< HEAD
 describe("a locked frame covers its contents", () => {
   const locked = (): StoredElement[] => scene().map((e) => (e.id === "F" ? ({ ...e, locked: true } as StoredElement) : e));
 
@@ -122,7 +121,7 @@ describe("a locked frame covers its contents", () => {
   });
 });
 
-=======
+
 describe("styling a frame by command", () => {
   it("takes corner radius, fill, stroke and opacity, and leaves what it owns alone", () => {
     const stored = scene();
@@ -133,4 +132,3 @@ describe("styling a frame by command", () => {
     expect(at(after, "a")).toEqual(at(stored, "a"));
   });
 });
->>>>>>> origin/main
