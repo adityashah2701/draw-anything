@@ -27,8 +27,7 @@ suite("editor outline shapes", () => {
   };
 
   const pick = async (session: EditorSession, label: string) => {
-    await session.page.getByRole("button", { name: "More shapes", exact: true }).click();
-    await session.page.getByRole("menuitem", { name: label, exact: true }).click();
+    await session.pickTool(label);
   };
 
   it("draws every variant from the picker, picks it by its outline and styles it from the bar", async () => {

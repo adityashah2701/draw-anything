@@ -28,6 +28,8 @@ export const useWhiteboardKeyboard = ({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // A menu (the toolbar flyouts) owns the keyboard while it has focus: arrows, typeahead, Enter.
+      if (e.target instanceof Element && e.target.closest("[role=menu]")) return;
       const command = resolveShortcut(e, {
         textEntry: isTextEntryTarget(e.target),
         hasEditAccess,

@@ -156,7 +156,27 @@ export const openEditor = async (options: OpenEditorOptions = {}): Promise<Edito
     tool: () => page.evaluate(() => String(window.__editor.controller!.currentTool)),
     async pickTool(nameOrShortcut) {
       if (nameOrShortcut.length === 1) await page.keyboard.press(nameOrShortcut);
-      else await page.getByRole("button", { name: nameOrShortcut, exact: true }).click();
+      else {
+        const button = page.getByRole("button", { name: nameOrShortcut, exact: true });
+        if (await button.count()) return button.click();
+        // Not on the rail: it is inside one of the group flyouts.
+        for (const group of await page.locator("[data-toolbar-group]").all()) {
+          await group.click({ button: "right" });
+          const item = page.getByRole("menuitem", { name: new RegExp(`^${nameOrShortcut}`) });
+          await page.getByRole("menu").waitFor();
+          if (await item.count()) {
+            await item.click();
+            await page.getByRole("menu").waitFor({ state: "detached" });
+            // Leave the rail so its tooltip is gone before the next gesture.
+            await page.mouse.move(700, 500);
+            await page.getByRole("tooltip").waitFor({ state: "detached" });
+            return;
+          }
+          await page.keyboard.press("Escape");
+          await page.getByRole("menu").waitFor({ state: "detached" });
+        }
+        throw new Error(`No toolbar tool named ${nameOrShortcut}`);
+      }
     },
     async drag(from, to, { steps = 8, space = "world" } = {}) {
       const a = await place(from, space);
