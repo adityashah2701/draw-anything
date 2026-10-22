@@ -13,7 +13,7 @@ export interface StyleChange {
   strokeWidth?: number;
   /** 0 (invisible) to 1. */
   opacity?: number;
-  /** World units; rectangles and semantic nodes. */
+  /** World units; rectangles, semantic nodes and frames. */
   cornerRadius?: number;
   fontSize?: number;
   fontWeight?: string | number;
@@ -35,7 +35,7 @@ export const supportsStyle = (shape: DrawingElement, key: StyleKey): boolean => 
     case "strokeWidth":
       return config(shape)?.supportsStrokeWidth === true;
     case "cornerRadius":
-      return shape.type === "rectangle" || shape.type === "semantic-node";
+      return shape.type === "rectangle" || shape.type === "semantic-node" || shape.type === "frame";
     case "fontSize":
     case "fontWeight":
     case "fontStyle":

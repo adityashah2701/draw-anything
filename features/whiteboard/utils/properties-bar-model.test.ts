@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildGroupIndex } from "@/core/groups/group-index";
+import { frame } from "@/core/frames/test-helpers";
 import { arrow, group, rect } from "@/core/groups/test-helpers";
 import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
 import { readPropertiesBar } from "./properties-bar-model";
@@ -80,5 +81,37 @@ describe("readPropertiesBar", () => {
     const all = read(stored, ["a"])!;
     expect(all.locked).toBe(true);
     expect(all.stroke).toBeNull();
+  });
+});
+
+describe("readPropertiesBar for frames", () => {
+  it("gives a frame stroke, fill, corners, opacity and its own frame section", () => {
+    const m = read([frame("f", 0, 0, 400, 300, { title: "Billing", padding: 16, autoFit: true, cornerRadius: 12 })], ["f"])!;
+    expect(m.title).toBe("Frame");
+    expect(m.stroke).toMatchObject({ color: "#64748b", width: 1, colorLabel: "Stroke" });
+    expect(m.fill).toEqual({ value: "transparent", ids: ["f"] });
+    expect(m.border).toEqual({ radius: 12, ids: ["f"] });
+    expect(m.frame).toEqual({ ids: ["f"], title: "Billing", header: "inside", padding: 16, autoFit: true });
+    expect(m.text).toBeNull();
+  });
+
+  it("reads defaults for a frame that stores none, and names a hidden header and a tab", () => {
+    const m = read([frame("f", 0, 0), frame("g", 0, 0, 100, 100, { headerVisible: false }), frame("h", 0, 0, 100, 100, { titlePlacement: "above" })], ["f", "g", "h"])!;
+    expect(m.title).toBe("3 objects");
+    expect(m.frame).toMatchObject({ title: "Frame", header: "mixed", padding: 24, autoFit: false });
+    expect(read([frame("g", 0, 0, 100, 100, { headerVisible: false })], ["g"])!.frame!.header).toBe("hidden");
+    expect(read([frame("h", 0, 0, 100, 100, { titlePlacement: "above" })], ["h"])!.frame!.header).toBe("above");
+  });
+
+  it("shows the frame section only for frames, and lists just the frames of a mixed selection", () => {
+    expect(read([rect("a", 0, 0)], ["a"])!.frame).toBeNull();
+    const m = read([frame("f", 0, 0), rect("a", 10, 10, 50, 50)], ["f", "a"])!;
+    expect(m.frame!.ids).toEqual(["f"]);
+    expect(m.border!.ids).toEqual(["f", "a"]);
+  });
+
+  it("is mixed when the frames disagree on a value", () => {
+    const m = read([frame("f", 0, 0, 100, 100, { title: "A", padding: 8 }), frame("g", 0, 0, 100, 100, { title: "B", padding: 8 })], ["f", "g"])!;
+    expect(m.frame).toMatchObject({ title: "mixed", padding: 8 });
   });
 });

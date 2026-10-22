@@ -2,7 +2,7 @@ import { buildFrameIndex } from "@/core/frames/frame-index";
 import { frameRegions } from "@/core/frames/frame-model";
 import { makeBounds } from "@/core/geometry/box";
 import { frameForBounds } from "@/core/frames/containment";
-import { createFrame, planAutoFit, reparentMoved } from "@/core/frames/frame-api";
+import { createFrame, fitFrames, planAutoFit, reparentMoved, updateFrames, type FrameChanges } from "@/core/frames/frame-api";
 import { applyPatch as applyStoredPatch } from "@/core/groups/patch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
@@ -387,6 +387,26 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       uiState.setCurrentTool("select");
     },
     [applyDocPatch, readLiveStored, setSelectedElements, uiState],
+  );
+
+  /** Properties-bar edits that only frames have (title, header, padding, auto-fit), as one undo step. */
+  const updateFrameProps = useCallback(
+    (ids: readonly string[], changes: FrameChanges) => {
+      if (!whiteboardAccess.hasEditAccess) return;
+      const result = updateFrames(readLiveStored(), ids, changes);
+      if (result.ok && result.changed.length > 0) applyDocPatch(result.patch);
+    },
+    [applyDocPatch, readLiveStored, whiteboardAccess.hasEditAccess],
+  );
+
+  /** Sizes the frames to wrap what they hold. */
+  const fitFramesToContent = useCallback(
+    (ids: readonly string[]) => {
+      if (!whiteboardAccess.hasEditAccess) return;
+      const result = fitFrames(readLiveStored(), ids);
+      if (result.ok && result.changed.length > 0) applyDocPatch(result.patch);
+    },
+    [applyDocPatch, readLiveStored, whiteboardAccess.hasEditAccess],
   );
 
   const completeCurrentElement = useCallback(() => {
@@ -1090,6 +1110,8 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleFontSizeChange,
     applyStyle,
     handleStyleChange,
+    updateFrameProps,
+    fitFramesToContent,
     updateConnectors,
     propertiesBar,
     updateArrowBendsAtPoint,

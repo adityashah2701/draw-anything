@@ -2,6 +2,9 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardE
 import { Lock } from "lucide-react";
 import type { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import { ChoiceRow, ColorGrid, PopoverLabel, PropertyChip, Swatch } from "@/features/whiteboard/components/properties/bar-primitives";
+import { TextField } from "@/features/whiteboard/components/properties/text-field";
+import { MAX_FRAME_TITLE_LENGTH } from "@/core/frames/frame-model";
+import type { FrameHeader } from "@/features/whiteboard/utils/properties-bar-model";
 import { NumberField } from "@/features/whiteboard/components/properties/number-field";
 import type { Mixed } from "@/features/whiteboard/utils/inspector-model";
 import { formatNumber } from "@/features/whiteboard/utils/inspector-model";
@@ -85,7 +88,7 @@ const FloatingPropertiesPanel = ({
     triggers[next]?.focus();
   };
 
-  const { stroke, fill, border, text, connector } = m;
+  const { stroke, fill, border, text, connector, frame: frameProps } = m;
 
   return (
     <div
@@ -119,6 +122,50 @@ const FloatingPropertiesPanel = ({
           )}
         </div>
         <Divider />
+
+        {frameProps && (
+          <PropertyChip
+            label="Frame"
+            summary={`${words(frameProps.title, (t) => t)}, ${words(frameProps.header, (h) => (h === "hidden" ? "no header" : `${h} header`))}`}
+            preview={<span aria-hidden className="block h-4 w-5 rounded-[3px] border-2 border-foreground border-t-[5px]" />}
+            disabled={off}
+            resetKey={resetKey}
+            width={232}
+          >
+            <PopoverLabel>Title</PopoverLabel>
+            <TextField label="Frame title" value={frameProps.title} maxLength={MAX_FRAME_TITLE_LENGTH} onCommit={(title) => controller.updateFrameProps(frameProps.ids, { title })} />
+            <PopoverLabel>Header</PopoverLabel>
+            <ChoiceRow<FrameHeader>
+              label="Frame header"
+              value={frameProps.header}
+              onChange={(header) => controller.updateFrameProps(frameProps.ids, header === "hidden" ? { headerVisible: false } : { headerVisible: true, titlePlacement: header })}
+              options={[
+                { value: "inside", title: "Title in a band inside the frame", content: <span>Inside</span> },
+                { value: "above", title: "Title on a tab above the frame", content: <span>Tab</span> },
+                { value: "hidden", title: "No title", content: <span>None</span> },
+              ]}
+            />
+            <PopoverLabel>Padding around contents</PopoverLabel>
+            <NumberField label="Frame padding in pixels" suffix="px" value={frameProps.padding} min={0} max={200} onCommit={(padding) => controller.updateFrameProps(frameProps.ids, { padding })} />
+            <PopoverLabel>Size</PopoverLabel>
+            <ChoiceRow
+              label="Frame size mode"
+              value={frameProps.autoFit}
+              onChange={(autoFit) => controller.updateFrameProps(frameProps.ids, { autoFit })}
+              options={[
+                { value: false, title: "Resize by hand", content: <span>Manual</span> },
+                { value: true, title: "Always wrap its contents", content: <span>Auto-fit</span> },
+              ]}
+            />
+            <button
+              type="button"
+              onClick={() => controller.fitFramesToContent(frameProps.ids)}
+              className="mt-1.5 h-8 w-full rounded-md border border-border text-xs font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Fit to content
+            </button>
+          </PropertyChip>
+        )}
 
         {stroke && (
           <PropertyChip
