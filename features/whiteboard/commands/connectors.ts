@@ -53,6 +53,10 @@ export const applyArrowChange = (arrow: ArrowElement, change: ArrowChange, route
     next.isManuallyRouted = false;
   } else if (change.routingMode === "orthogonal") {
     next = route(next);
+  } else if (change.routingMode === "curved") {
+    // Curved draws the elbow route smoothly, so a connector that already has a route keeps it (bends a person
+    // dragged included); only a straight one has no route to keep.
+    if ((arrow.routingMode ?? "orthogonal") === "straight") next = route(next);
   }
   return next;
 };
@@ -262,7 +266,7 @@ export const planUpdateConnector = (ctx: CommandContext, arrowId: string, edit: 
   }
   const endsChanged = next !== arrow;
   next = applyArrowChange(next, edit.change ?? {}, ctx.routeArrow);
-  if (endsChanged && edit.change?.routingMode !== "straight" && (next.routingMode ?? "orthogonal") === "orthogonal") next = ctx.routeArrow(next);
+  if (endsChanged && edit.change?.routingMode !== "straight" && (next.routingMode ?? "orthogonal") !== "straight") next = ctx.routeArrow(next);
   const label = labelOf(ctx, arrow);
   const follower = label && endsChanged ? labelFollowers({ ...ctx, shapes: ctx.shapes.map((s) => (s.id === next.id ? next : s)) } as CommandContext, [next]) : [];
   return { patch: { add: [], update: [next, ...follower], remove: [] }, connectorId: arrowId };

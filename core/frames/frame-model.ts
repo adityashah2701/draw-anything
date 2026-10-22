@@ -1,4 +1,5 @@
 import { estimateTextWidth } from "@/core/text/estimate";
+import { CORNER_RADIUS } from "@/core/shapes/base/geometry-tokens";
 import { makeBounds } from "@/core/geometry/box";
 import type { Bounds, DrawingElement, FramePreset, FrameShape, FrameTitlePlacement } from "@/features/whiteboard/types/whiteboard.types";
 
@@ -10,7 +11,7 @@ export const FRAME_DEFAULTS = {
   headerHeight: 32,
   /** Height of the title tab of an `above` header. */
   tabHeight: 24,
-  cornerRadius: 8,
+  cornerRadius: CORNER_RADIUS.frame,
   minWidth: 80,
   minHeight: 60,
   strokeWidth: 1,

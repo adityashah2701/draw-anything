@@ -1,6 +1,12 @@
-/** Corner radii in world units. Pills are fully rounded and ellipses are true curves, so neither has a token. */
+/**
+ * Corner radii in world units, the one place they are decided. The scale follows what a shape is for: a plain
+ * rectangle is the tightest, a frame (a container) is a step softer, and a semantic node (a labelled card with
+ * an icon) is the softest rectangle. Pills are fully rounded and ellipses are true curves, so neither has a
+ * token; diamonds and triangles keep their points and only round them with the stroke's round join.
+ */
 export const CORNER_RADIUS = {
   rectangle: 6,
+  frame: 8,
   semanticNode: 10,
 } as const;
 

@@ -98,4 +98,16 @@ suite("editor orthogonal routing", () => {
     expect(pts.at(-2)!.y, text(pts)).toBe(end.y); // arrives horizontally, no jog or run along the edge
     expect(pts.at(-2)!.x, text(pts)).toBeLessThan(end.x);
   });
+
+  it("a curved arrow keeps its elbow route, is picked on the curve, and leaves squarely", async () => {
+    const before = (await arrowOf(s)).points as Pt[];
+    await s.click({ x: 360, y: 230 });
+    await s.page.getByRole("toolbar", { name: "Style properties" }).getByRole("button", { name: /^Line/ }).click();
+    await s.page.getByRole("button", { name: "Path: Curved" }).click();
+    await s.waitForIdle();
+    const arrow = await arrowOf(s);
+    expect(arrow.routingMode).toBe("curved");
+    expect(arrow.points).toEqual(before);
+    await s.screenshot("curved-arrow");
+  });
 });
