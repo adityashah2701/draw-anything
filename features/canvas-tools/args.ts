@@ -42,6 +42,9 @@ interface JsonSchemaNode {
   anyOf?: JsonSchemaNode[];
   items?: JsonSchemaNode;
   properties?: Record<string, JsonSchemaNode>;
+  required?: string[];
+  enum?: unknown[];
+  minLength?: number;
 }
 
 const schemas = new WeakMap<ToolDefinition, JsonSchemaNode>();
@@ -68,10 +71,38 @@ const memberOf = (node: JsonSchemaNode, type: string): JsonSchemaNode => (node.t
 const jsonTypeOf = (value: unknown): string => (value === null ? "null" : Array.isArray(value) ? "array" : Number.isInteger(value) ? "integer" : typeof value);
 const NUMBER = /^-?\d+(?:\.\d+)?$/;
 
+/** Keys under which a model wraps "the name of the thing" when it sends an object where the schema wants a word (an icon result copied as {id, category}). */
+const NAME_KEYS = ["id", "name", "value", "icon", "label", "text", "title"];
+
 const coerceValue = (value: unknown, node: JsonSchemaNode | undefined, path: string, notes: string[]): unknown => {
   const types = typesOf(node);
   if (!node || types.length === 0) return value;
   const actual = jsonTypeOf(value);
+  if (types.includes("string") && !types.includes(actual)) {
+    // A word wrapped in an object or list, or a number, where a word is wanted.
+    if (actual === "object") {
+      const record = value as Record<string, unknown>;
+      const key = NAME_KEYS.find((name) => typeof record[name] === "string" && (record[name] as string).trim() !== "");
+      if (key) {
+        notes.push(`${path} (the ${key} of an object read as text)`);
+        return record[key];
+      }
+    } else if (actual === "array" && (value as unknown[]).length === 1 && typeof (value as unknown[])[0] === "string") {
+      notes.push(`${path} (one-item list read as text)`);
+      return (value as unknown[])[0];
+    } else if (actual === "integer" || actual === "number" || actual === "boolean") {
+      notes.push(`${path} (${actual} read as text)`);
+      return String(value);
+    }
+  }
+  // A word that is a listed choice in other letters: "Decision" for "decision".
+  if (typeof value === "string" && node.enum && !node.enum.includes(value)) {
+    const match = node.enum.find((choice) => typeof choice === "string" && choice.toLowerCase() === value.trim().toLowerCase().replace(/[\s-]+/g, "_"));
+    if (match !== undefined) {
+      notes.push(`${path} (read as "${String(match)}")`);
+      return match;
+    }
+  }
   const fits = (type: string) => type === actual || (type === "number" && actual === "integer");
   if (types.some(fits)) {
     if (actual === "array") return (value as unknown[]).map((item, i) => coerceValue(item, memberOf(node, "array").items, `${path}.${i}`, notes));
@@ -112,6 +143,11 @@ const coerceObject = (input: Record<string, unknown>, node: JsonSchemaNode, path
     // An optional argument sent as null means "not given" (models fill every field of a schema); only a property that allows null keeps it.
     if (value === null && prop && !typesOf(prop).includes("null")) {
       notes.push(`${where} (null left out)`);
+      continue;
+    }
+    // An empty word for an optional argument that cannot be empty means "not given" (a model filling every field). Where empty is a real value (update_text clearing a label) it stays.
+    if (value === "" && prop && typesOf(prop).includes("string") && (prop.minLength ?? 0) >= 1 && !node.required?.includes(key)) {
+      notes.push(`${where} (empty text left out)`);
       continue;
     }
     out[key] = coerceValue(value, prop, where, notes);
