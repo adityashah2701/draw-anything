@@ -17,7 +17,7 @@ describe("diagnostics carry exact locations", () => {
     const cases: Array<[string, string, string]> = [
       ["A [color: nope]", "property/invalid-value", "nope"],
       ["A [x: left]", "property/invalid-value", "left"],
-      ["A [shape: cylinder]", "shape/unsupported", "cylinder"],
+      ["A [shape: blob]", "shape/unsupported", "blob"],
       ["A > B: [from: middle]", "property/invalid-value", "middle"],
       ["type banana\nA", "header/unknown-type", "banana"],
       ["A [kind: servise]", "reference/unknown-kind", "servise"],
@@ -41,7 +41,7 @@ describe("diagnostics carry exact locations", () => {
   });
 
   it("tells the user what to use instead of an unsupported shape", () => {
-    const [d] = compile("DB [shape: cylinder]").diagnostics;
+    const [d] = compile("DB [shape: database]").diagnostics;
     expect(d.code).toBe("shape/unsupported");
     expect(d.message).toMatch(/kind: database/);
   });

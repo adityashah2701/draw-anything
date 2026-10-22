@@ -5,6 +5,7 @@ import { ChoiceRow, ColorGrid, PopoverLabel, PropertyChip, Swatch } from "@/feat
 import { TextField } from "@/features/whiteboard/components/properties/text-field";
 import { MAX_FRAME_TITLE_LENGTH } from "@/core/frames/frame-model";
 import type { FrameHeader } from "@/features/whiteboard/utils/properties-bar-model";
+import { OutlineVariantIcon } from "@/core/shapes/outline/icon";
 import { NumberField } from "@/features/whiteboard/components/properties/number-field";
 import type { Mixed } from "@/features/whiteboard/utils/inspector-model";
 import { formatNumber } from "@/features/whiteboard/utils/inspector-model";
@@ -88,7 +89,7 @@ const FloatingPropertiesPanel = ({
     triggers[next]?.focus();
   };
 
-  const { stroke, fill, border, text, connector, frame: frameProps } = m;
+  const { stroke, fill, border, text, connector, frame: frameProps, variant } = m;
 
   return (
     <div
@@ -217,6 +218,24 @@ const FloatingPropertiesPanel = ({
                   <Swatch color="none" size={18} ring={false} />
                 </button>
               }
+            />
+          </PropertyChip>
+        )}
+
+        {variant && (
+          <PropertyChip
+            label="Shape"
+            summary={words(variant.value, (id) => variant.options.find((option) => option.id === id)?.label ?? "Unknown")}
+            preview={variant.value === "mixed" ? <span aria-hidden>…</span> : <OutlineVariantIcon variant={variant.value} size={16} />}
+            disabled={off}
+            resetKey={resetKey}
+          >
+            <PopoverLabel>Shape</PopoverLabel>
+            <ChoiceRow
+              label="Shape"
+              value={variant.value}
+              onChange={(id) => style({ variant: id }, variant.ids)}
+              options={variant.options.map((option) => ({ value: option.id, title: option.label, content: <OutlineVariantIcon variant={option.id} size={18} /> }))}
             />
           </PropertyChip>
         )}

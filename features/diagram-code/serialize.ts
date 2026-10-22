@@ -4,7 +4,7 @@ import { escapeString } from "./language/strings";
 export interface SerializableGraph {
   diagramType?: AIDiagramType;
   title?: string;
-  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: "diamond" | "pill" | "icon"; color?: string; x?: number; y?: number; width?: number; height?: number }>;
+  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: string; color?: string; x?: number; y?: number; width?: number; height?: number }>;
   edges: Array<{
     from: string;
     to: string;

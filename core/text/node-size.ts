@@ -2,6 +2,7 @@ import { estimateLabelBox } from "./estimate";
 import { LABEL_PADDING } from "./label-layout";
 import { DIAMOND_LABEL_FRACTION, PILL_MAX_LINES, pillSizeForLabel, SEMANTIC_INSET_WIDTH, SEMANTIC_MAX_LINES } from "./label-region";
 import { LINE_HEIGHT_RATIO } from "./typography";
+import { resolveOutlineVariant } from "@/core/shapes/outline/variants";
 import { ICON_CAPTION_HEIGHT, ICON_NODE_GLYPH } from "@/core/shapes/icon/caption";
 
 export interface NodeSize {
@@ -87,4 +88,30 @@ export const sizePillNode = (input: NodeSizeInput): NodeSize => {
   }
   const widest = estimateLabelBox({ label: input.label, fontSize: input.fontSize, fontWeight: input.fontWeight, maxLines: PILL_MAX_LINES, minWidth: 0, maxWidth: input.maxWidth });
   return { ...pillSizeForLabel(widest, min), lineCount: PILL_MAX_LINES, fits: false };
+};
+
+const OUTLINE_MAX_LINES = 3;
+const OUTLINE_FIT_ROUNDS = 8;
+
+/**
+ * Size of an outline node that shows `label`: its variant's text region (a function of the size, see
+ * `outline/variants.ts`) must hold the label. Starts from the variant's default size and grows both sides
+ * by the shortfall until the region fits, so it works for any variant without knowing its shape.
+ */
+export const sizeOutlineNode = (variantId: string, input: Pick<NodeSizeInput, "label" | "fontSize" | "fontWeight" | "maxWidth">): NodeSize => {
+  const variant = resolveOutlineVariant(variantId);
+  let width = variant.defaultSize.width;
+  let height = variant.defaultSize.height;
+  let lineCount = 1;
+  for (let round = 0; round < OUTLINE_FIT_ROUNDS; round += 1) {
+    const region = variant.textRegion(width, height);
+    const need = estimateLabelBox({ label: input.label, fontSize: input.fontSize, fontWeight: input.fontWeight, maxLines: OUTLINE_MAX_LINES, minWidth: 0, maxWidth: Math.max(input.maxWidth, region.width) });
+    lineCount = need.lineCount;
+    const growX = need.width / region.width;
+    const growY = need.height / region.height;
+    if (growX <= 1 && growY <= 1) return { width: Math.ceil(width), height: Math.ceil(height), lineCount, fits: need.fits };
+    width = Math.min(input.maxWidth * 1.6, width * Math.max(growX, 1));
+    height *= Math.max(growY, 1);
+  }
+  return { width: Math.ceil(width), height: Math.ceil(height), lineCount, fits: false };
 };

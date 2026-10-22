@@ -39,7 +39,8 @@ import {
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { tint } from "@/core/color/named-colors";
-import { sizeDiamondNode, sizeIconNode, sizePillNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
+import { sizeDiamondNode, sizeIconNode, sizeOutlineNode, sizePillNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
+import { isOutlineVariantId } from "@/core/shapes/outline/variants";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import {
   AIDiagramDocumentV1,
@@ -123,7 +124,7 @@ const NODE_WIDEST_WIDTH = 520;
  * Decisions are real diamonds and start/end are pills, both with no icon tile; the rest are semantic
  * nodes. An explicit `shape:` wins over what the kind implies.
  */
-const shapeOf = (node: AIDiagramNode): "diamond" | "pill" | "icon" | undefined => {
+const shapeOf = (node: AIDiagramNode): "diamond" | "pill" | "icon" | (string & {}) | undefined => {
   // `shape: icon` draws just the glyph, so it needs one: a named icon, or a kind that has its own (the
   // normaliser drops an `icon:` equal to the kind's, so `[kind: database, shape: icon]` is enough).
   if (node.shape === "icon") return node.icon || node.kind !== "generic" ? "icon" : undefined;
@@ -141,6 +142,7 @@ const PILL_NODE_HEIGHT = 64;
 export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize => {
   const shape = shapeOf(node);
   if (shape === "icon") return sizeIconNode({ label: node.label, fontSize: ICON_NODE_FONT_SIZE, fontWeight: NODE_FONT_WEIGHT });
+  if (shape && isOutlineVariantId(shape)) return sizeOutlineNode(shape, { label: node.label, fontSize: NODE_FONT_SIZE, fontWeight: NODE_FONT_WEIGHT, maxWidth: NODE_MAX_WIDTH });
   const sizeWith = (maxWidth: number) => {
     const input = {
       label: node.label,
@@ -576,9 +578,10 @@ export const buildCanvas = (
     const isIcon = shape === "icon";
     // A bare icon on a dark or light canvas needs a colour that reads on both: the icon's own, unless the code or kind chose one.
     const glyph = isIcon && !node.color && !KIND_COLORS[node.kind] ? iconForNode({ icon: node.icon, semanticKind: node.kind }) : null;
-    const element: DrawingElement = {
+    const element = {
       id: `${document.metadata.generationId}-${node.id}`,
-      type: shape ?? "semantic-node",
+      type: shape && isOutlineVariantId(shape) ? "outline" : ((shape ?? "semantic-node") as "diamond" | "pill" | "icon" | "semantic-node"),
+      ...(shape && isOutlineVariantId(shape) ? { variant: shape } : {}),
       points: [
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },
@@ -601,7 +604,7 @@ export const buildCanvas = (
         diagramType: document.diagramType,
         role: "node",
       },
-    };
+    } as DrawingElement;
     nodeElements.push(element);
     positionedByNodeId.set(node.id, { node, element, bounds, depth });
   });

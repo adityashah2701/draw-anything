@@ -1,3 +1,4 @@
+import { outlineVariantOfTool } from "@/core/shapes/outline/variants";
 import { withFrameContents } from "@/core/frames/payload";
 import { classifyDraftCommit, growDraftElement, straightArrowPreview } from "./draft-element";
 import { createScratch } from "./gesture-scratch";
@@ -391,7 +392,9 @@ export const useWhiteboardDrawing = ({
 
       setGesture("drawing");
 
-      const shapeType = TOOL_TO_SHAPE_TYPE[currentTool] || currentTool;
+      // Every outline variant draws as an "outline" element; the tool name carries which.
+      const outlineVariant = outlineVariantOfTool(currentTool);
+      const shapeType = outlineVariant !== null ? "outline" : TOOL_TO_SHAPE_TYPE[currentTool] || currentTool;
       
       const shapeDef = shapeRegistry.get(shapeType as DrawingElement["type"]);
       if (!shapeDef) return;
@@ -408,6 +411,7 @@ export const useWhiteboardDrawing = ({
 
       const newElement = createShape(shapeType as DrawingElement["type"], {
         id: generateId(),
+        ...(outlineVariant !== null ? { variant: outlineVariant } : {}),
         points: [startSnap ? { x: startSnap.anchor.x, y: startSnap.anchor.y } : point],
         startConnection: startSnap
           ? { elementId: startSnap.elementId, anchorId: startSnap.anchor.id }
