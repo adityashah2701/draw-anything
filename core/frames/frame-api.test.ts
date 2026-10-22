@@ -19,7 +19,9 @@ import {
   renameFrame,
   reparentMoved,
   resizeFrame,
+  fitFrames,
   updateFrame,
+  updateFrames,
 } from "./frame-api";
 import { buildFrameIndex } from "./frame-index";
 import { FRAME_DEFAULTS, frameBox } from "./frame-model";
@@ -491,5 +493,67 @@ describe("a board with damaged links", () => {
     const next = apply(stored, addToFrame(stored, "f", ["a"]));
     expect(byId(next, "a").frameId).toBe("f");
     expect(checkPatch(stored, { add: [], update: [{ ...byId(stored, "a"), frameId: "ghost" }], remove: [] }).join(" ")).toContain("not a frame");
+  });
+});
+
+describe("editing several frames at once", () => {
+  const board = (): StoredElement[] => [
+    frame("F", 0, 0, 400, 300),
+    frame("G", 500, 0, 400, 300, { title: "Old" }),
+    rect("a", 40, 80, 100, 60, { frameId: "F" }),
+    rect("b", 600, 80, 100, 60, { frameId: "G" }),
+  ];
+
+  it("writes one patch that changes each frame and nothing else", () => {
+    const stored = board();
+    const result = must(updateFrames(stored, ["F", "G"], { title: "Team", titlePlacement: "above" }));
+    expect(result.changed).toEqual(["F", "G"]);
+    const after = applyPatch(stored, result.patch);
+    expect(byId(after, "F")).toMatchObject({ title: "Team", titlePlacement: "above" });
+    expect(byId(after, "G")).toMatchObject({ title: "Team", titlePlacement: "above" });
+    expect(byId(after, "a")).toEqual(byId(stored, "a"));
+  });
+
+  it("skips locked, missing and already-matching frames and says why", () => {
+    const stored = board();
+    stored[0] = { ...stored[0], locked: true } as StoredElement;
+    const result = must(updateFrames(stored, ["F", "G", "ghost", "a"], { title: "Old" }));
+    expect(result.changed).toEqual([]);
+    expect(result.skipped).toEqual([
+      { id: "F", reason: "locked" },
+      { id: "G", reason: "unchanged" },
+      { id: "ghost", reason: "not_found" },
+      { id: "a", reason: "not_found" },
+    ]);
+    expect(result.patch).toEqual({ add: [], update: [], remove: [] });
+  });
+
+  it("clearing the title removes the field, and a duplicate id is handled once", () => {
+    const stored = board();
+    const result = must(updateFrames(stored, ["G", "G"], { title: "" }));
+    expect(result.changed).toEqual(["G"]);
+    expect("title" in byId(applyPatch(stored, result.patch), "G")).toBe(false);
+  });
+
+  it("fits an outer frame around its inner frame's new size even when the outer id comes first", () => {
+    const stored = [frame("O", 0, 0, 900, 700), frame("I", 20, 40, 800, 600, { frameId: "O" }), rect("a", 100, 150, 100, 60, { frameId: "I" })];
+    const parentFirst = applyPatch(stored, must(fitFrames(stored, ["O", "I"])).patch);
+    const childFirst = applyPatch(stored, must(fitFrames(stored, ["I", "O"])).patch);
+    expect(frameBox(byId(parentFirst, "O") as FrameShape)).toEqual(frameBox(byId(childFirst, "O") as FrameShape));
+    const inner = frameBox(byId(parentFirst, "I") as FrameShape)!;
+    expect(frameBox(byId(parentFirst, "O") as FrameShape)!.maxX).toBeLessThan(900);
+    expect(frameBox(byId(parentFirst, "O") as FrameShape)!.minX).toBeLessThanOrEqual(inner.minX);
+  });
+
+  it("fits frames to what they hold, nested ones included, in one patch", () => {
+    const stored = [frame("O", 0, 0, 900, 700), frame("I", 20, 40, 800, 600, { frameId: "O" }), rect("a", 100, 150, 100, 60, { frameId: "I" })];
+    const result = must(fitFrames(stored, ["I", "O"]));
+    const after = applyPatch(stored, result.patch);
+    const inner = frameBox(byId(after, "I") as FrameShape)!;
+    expect(inner.minX).toBe(100 - FRAME_DEFAULTS.padding);
+    expect(inner.maxX).toBe(200 + FRAME_DEFAULTS.padding);
+    const outer = frameBox(byId(after, "O") as FrameShape)!;
+    expect(outer.minX).toBeLessThanOrEqual(inner.minX - FRAME_DEFAULTS.padding);
+    expect(result.changed.length).toBeGreaterThan(0);
   });
 });

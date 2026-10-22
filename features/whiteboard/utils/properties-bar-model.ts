@@ -1,10 +1,11 @@
 import { expandUnits, isEffectivelyLocked, selectionUnits, type GroupIndex } from "@/core/groups/group-index";
+import { resolveFrame } from "@/core/frames/frame-model";
 import { CORNER_RADIUS } from "@/core/shapes/base/geometry-tokens";
 import { getArrowHeadVisibility, isArrowElement, type ArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { normalizeNodeStyle } from "@/core/shapes/semantic-node/style";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import { DEFAULT_LABEL_FONT_SIZE } from "@/core/text/label-layout";
-import type { ArrowRoutingMode, DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { ArrowRoutingMode, DrawingElement, FrameShape } from "@/features/whiteboard/types/whiteboard.types";
 import type { Mixed } from "@/features/whiteboard/utils/inspector-model";
 
 /**
@@ -28,6 +29,14 @@ export interface PropertiesBarModel {
   border: { radius: Mixed<number>; ids: string[] } | null;
   text: { size: Mixed<number>; ids: string[] } | null;
   opacity: Mixed<number>;
+  /** Frame-only properties: the title, how it is shown, the padding around contents, whether it fits them. */
+  frame: {
+    ids: string[];
+    title: Mixed<string>;
+    header: Mixed<FrameHeader>;
+    padding: Mixed<number>;
+    autoFit: Mixed<boolean>;
+  } | null;
   connector: {
     ids: string[];
     dashed: Mixed<boolean>;
@@ -36,6 +45,9 @@ export interface PropertiesBarModel {
     headEnd: Mixed<boolean>;
   } | null;
 }
+
+/** Where a frame's title sits: in a band, on a tab above the box, or not at all. */
+export type FrameHeader = "inside" | "above" | "hidden";
 
 const same = <T>(values: readonly T[]): Mixed<T> => (values.every((value) => value === values[0]) ? values[0] : "mixed");
 
@@ -58,10 +70,12 @@ const TITLES: Record<string, string> = {
   text: "Text",
   icon: "Icon",
   "semantic-node": "Node",
+  frame: "Frame",
 };
 
 const radiusOf = (shape: DrawingElement): number | null => {
   if (shape.type === "rectangle") return (shape as { cornerRadius?: number }).cornerRadius ?? CORNER_RADIUS.rectangle;
+  if (shape.type === "frame") return resolveFrame(shape).cornerRadius;
   if (shape.type === "semantic-node") return normalizeNodeStyle(shape.nodeStyle).cornerRadius ?? CORNER_RADIUS.semanticNode;
   return null;
 };
@@ -82,7 +96,7 @@ export const readPropertiesBar = (index: GroupIndex, selected: readonly string[]
   const title = titleOf(units.length, units.length === 1 && index.groups.has(units[0]), targets.length > 0 ? targets : expandUnits(index, units).flatMap((id) => index.shapes.get(id) ?? []));
 
   const base = { title, locked: editableUnits.length === 0, partlyLocked: editableUnits.length > 0 && editableUnits.length < units.length, targetIds };
-  if (targets.length === 0) return { ...base, stroke: null, fill: null, border: null, text: null, opacity: 1, connector: null };
+  if (targets.length === 0) return { ...base, stroke: null, fill: null, border: null, text: null, opacity: 1, frame: null, connector: null };
 
   const idsOf = (shapes: readonly DrawingElement[]) => shapes.map((shape) => shape.id);
   const strokable = targets.filter((shape) => supports(shape, "supportsStrokeWidth"));
@@ -90,6 +104,7 @@ export const readPropertiesBar = (index: GroupIndex, selected: readonly string[]
   const rounded = targets.filter((shape) => radiusOf(shape) !== null);
   const texty = targets.filter(hasLabelText);
   const connectors = targets.filter(isArrowElement) as ArrowElement[];
+  const frames = targets.filter((shape): shape is FrameShape => shape.type === "frame");
   const onlyText = targets.every((shape) => shape.type === "text");
 
   return {
@@ -105,6 +120,16 @@ export const readPropertiesBar = (index: GroupIndex, selected: readonly string[]
     border: rounded.length > 0 ? { radius: same(rounded.map((shape) => radiusOf(shape) ?? 0)), ids: idsOf(rounded) } : null,
     text: texty.length > 0 ? { size: same(texty.map((shape) => shape.fontSize ?? DEFAULT_LABEL_FONT_SIZE)), ids: idsOf(texty) } : null,
     opacity: same(targets.map((shape) => shape.opacity ?? 1)),
+    frame:
+      frames.length > 0
+        ? {
+            ids: idsOf(frames),
+            title: same(frames.map((frame) => resolveFrame(frame).title)),
+            header: same(frames.map((frame): FrameHeader => { const r = resolveFrame(frame); return !r.headerVisible ? "hidden" : r.titlePlacement; })),
+            padding: same(frames.map((frame) => resolveFrame(frame).padding)),
+            autoFit: same(frames.map((frame) => resolveFrame(frame).autoFit)),
+          }
+        : null,
     connector:
       connectors.length > 0
         ? {
