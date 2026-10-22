@@ -49,6 +49,8 @@ export interface ElementSummary {
   connectorLabel?: string;
   routing?: string;
   rotation?: number;
+  /** An outline's variant (cylinder, hexagon, ...). */
+  variant?: string;
 }
 
 const sideOf = (anchorId: string | undefined) => (anchorId ? anchorId.split("-").pop() : undefined);
@@ -67,6 +69,7 @@ export const summarize = (ctx: CommandContext, shape: DrawingElement): ElementSu
   if (isEffectivelyLocked(ctx.index, shape.id)) out.locked = true;
   if (isHiddenByFlag(ctx.index, shape.id)) out.hidden = true;
   if (typeof shape.rotation === "number" && shape.rotation % 360 !== 0) out.rotation = round(shape.rotation);
+  if (shape.type === "outline" && typeof (shape as { variant?: unknown }).variant === "string") out.variant = (shape as { variant: string }).variant;
   if (isArrowElement(shape)) {
     out.from = shape.startConnection?.elementId;
     out.to = shape.endConnection?.elementId;
