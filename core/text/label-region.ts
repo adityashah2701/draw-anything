@@ -1,5 +1,6 @@
 import { ICON_CAPTION_HEIGHT } from "@/core/shapes/icon/caption";
 import { layoutSemanticNode } from "@/core/shapes/semantic-node/layout";
+import { resolveOutlineVariant } from "@/core/shapes/outline/variants";
 import type { Bounds } from "@/features/whiteboard/types/whiteboard.types";
 
 export { SEMANTIC_INSET_WIDTH, SEMANTIC_MAX_LINES } from "@/core/shapes/semantic-node/layout";
@@ -48,9 +49,13 @@ const FRACTION_MAX_LINES = 3;
 
 /**
  * `nodeStyle` is the element's stored `nodeStyle`; only a semantic node reads it (its icon placement and
- * size decide where the text goes).
+ * size decide where the text goes). `variant` is the element's `variant`; only an outline reads it.
  */
-export const getShapeLabelRegion = (type: string, bounds: Bounds, nodeStyle?: unknown): LabelRegion => {
+export const getShapeLabelRegion = (type: string, bounds: Bounds, nodeStyle?: unknown, variant?: string): LabelRegion => {
+  if (type === "outline") {
+    const text = resolveOutlineVariant(variant).textRegion(bounds.width, bounds.height);
+    return { centerX: bounds.minX + text.x + text.width / 2, centerY: bounds.minY + text.y + text.height / 2, width: text.width, height: text.height, maxLines: FRACTION_MAX_LINES };
+  }
   if (type === "icon") {
     // An icon node names itself in a caption under the glyph (see core/shapes/icon/caption.ts).
     return { centerX: bounds.minX + bounds.width / 2, centerY: bounds.maxY - ICON_CAPTION_HEIGHT / 2, width: bounds.width, height: ICON_CAPTION_HEIGHT, maxLines: 2 };

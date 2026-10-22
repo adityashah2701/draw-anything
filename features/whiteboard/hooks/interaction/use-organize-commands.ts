@@ -3,7 +3,6 @@ import { hasHidden } from "@/core/groups/visibility";
 import type { DocPatch } from "@/core/groups/patch";
 import { planConnectorLabel } from "@/features/whiteboard/commands/connectors";
 import type { CommandContext } from "@/features/whiteboard/commands/context";
-import { planFrame } from "@/features/whiteboard/commands/frame";
 import { planAutoLayout, planTidy, type LayoutOptions } from "@/features/whiteboard/commands/layout";
 import { planHide, planShow, planShowAll } from "@/features/whiteboard/commands/visibility";
 
@@ -25,7 +24,7 @@ export interface OrganizeOutcome {
 const NOTHING: OrganizeOutcome = { changed: false, notes: [] };
 
 /**
- * Hide and show, frame a selection, lay out or tidy shapes, label a connector: thin wiring over the planners
+ * Hide and show, lay out or tidy shapes, label a connector: thin wiring over the planners
  * in `features/whiteboard/commands`, the same ones the AI tools run.
  */
 export const useOrganizeCommands = ({ ctx, selectedElements, setSelectedElements, hasEditAccess, applyPatch }: Props) => {
@@ -52,15 +51,6 @@ export const useOrganizeCommands = ({ ctx, selectedElements, setSelectedElements
 
   const showAll = useCallback((): OrganizeOutcome => (hasEditAccess ? write(planShowAll(ctx)) : NOTHING), [ctx, hasEditAccess, write]);
 
-  const frame = useCallback(
-    (title = "Section"): OrganizeOutcome => {
-      if (!hasEditAccess || selectedElements.length === 0) return NOTHING;
-      const plan = planFrame(ctx, selectedElements, { title });
-      return plan ? write(plan.patch) : NOTHING;
-    },
-    [ctx, hasEditAccess, selectedElements, write],
-  );
-
   /** `ids` omitted: the selection, or every node when nothing is selected. */
   const autoLayout = useCallback(
     (options: LayoutOptions): OrganizeOutcome => {
@@ -86,5 +76,5 @@ export const useOrganizeCommands = ({ ctx, selectedElements, setSelectedElements
     [ctx, hasEditAccess, write],
   );
 
-  return { hiddenCount, anyHidden: hasHidden(ctx.stored), hide, show, showAll, frame, autoLayout, tidy, setConnectorLabel };
+  return { hiddenCount, anyHidden: hasHidden(ctx.stored), hide, show, showAll, autoLayout, tidy, setConnectorLabel };
 };

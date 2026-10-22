@@ -97,7 +97,7 @@ export interface AIDiagramNode {
   description?: string;
   priority?: number;
   /** Drawn as a real diamond (decisions always are) or a pill (start and end always are). */
-  shape?: "diamond" | "pill" | "icon";
+  shape?: DiagramNodeShape;
   /** Top-left corner and size in canvas units; when given the node is drawn exactly there. */
   x?: number;
   y?: number;
@@ -444,3 +444,6 @@ export interface AIGenerateDiagramRequest {
     };
   };
 }
+
+/** A node's explicit shape: one of the built-ins, or an id from the outline variant registry (core/shapes/outline/variants.ts). */
+export type DiagramNodeShape = "diamond" | "pill" | "icon" | (string & {});

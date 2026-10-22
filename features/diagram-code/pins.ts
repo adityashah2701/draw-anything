@@ -41,7 +41,7 @@ export const findMovedNodes = (elements: DrawingElement[]): Map<string, NodePin>
   );
 
   const current = elements
-    .filter((e) => e.points.length >= 2 && !e.isGuide && e.ai?.role !== "group" && (["semantic-node", "rectangle", "circle", "ellipse", "diamond", "pill", "triangle"].includes(e.type) || (e.type === "icon" && e.ai?.role === "node")))
+    .filter((e) => e.points.length >= 2 && !e.isGuide && e.ai?.role !== "group" && (["semantic-node", "rectangle", "circle", "ellipse", "diamond", "pill", "triangle", "outline"].includes(e.type) || (e.type === "icon" && e.ai?.role === "node")))
     .map((e) => ({ id: e.ai?.semanticId ?? e.id, at: centreOf(e) }))
     .filter((n) => fresh.has(n.id));
 

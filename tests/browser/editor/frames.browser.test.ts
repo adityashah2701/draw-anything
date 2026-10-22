@@ -26,6 +26,121 @@ const scene = (): El[] => [
 ];
 
 const suite = hasChrome() ? describe : describe.skip;
+suite("editor frames: properties", () => {
+  let s: EditorSession | undefined;
+  afterEach(async () => {
+    if (s) {
+      expect(s.problems.filter((p) => !/favicon|404|willReadFrequently/i.test(p))).toEqual([]);
+      await s.close();
+    }
+    s = undefined;
+  });
+
+  const bar = (session: EditorSession) => session.page.getByRole("toolbar", { name: "Style properties" });
+  const chip = (session: EditorSession, label: RegExp | string) => bar(session).getByRole("button", { name: label });
+  const popover = (session: EditorSession, name: string) => session.page.getByRole("dialog", { name, exact: true });
+  const open = async () => {
+    const session = await openEditor({ elements: scene() as never, dark: false, viewport: { width: 1280, height: 800 } });
+    await session.click({ x: 300, y: 76 }); // Billing's header
+    await session.waitForIdle();
+    return session;
+  };
+
+  it("a selected frame offers its own Frame section ahead of stroke, fill, corners and opacity", async () => {
+    s = await open();
+    const labels = await bar(s).locator("[data-chip-trigger]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")!.split(":")[0]));
+    expect(labels).toEqual(["Frame", "Stroke", "Fill", "Corners", "Opacity"]);
+    expect(await bar(s).getByTestId("properties-title").innerText()).toContain("Frame");
+    await chip(s, /^Frame/).click();
+    await s.screenshot("frame-properties-popover");
+  });
+
+  it("renames the frame from the bar as one undo step", async () => {
+    s = await open();
+    await chip(s, /^Frame/).click();
+    const field = popover(s, "Frame").getByRole("textbox", { name: "Frame title" });
+    await field.fill("Payments");
+    await field.press("Enter");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").title).toBe("Payments");
+    await s.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await s.press("Control+z");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").title).toBe("Billing");
+  });
+
+  it("moves the title to a tab, and hides it", async () => {
+    s = await open();
+    await chip(s, /^Frame/).click();
+    await popover(s, "Frame").getByRole("button", { name: "Frame header: Title on a tab above the frame" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F")).toMatchObject({ titlePlacement: "above" }); // a visible header is the default, so nothing else is stored
+    expect(byId(await s.elements(), "F").headerVisible).not.toBe(false);
+    await popover(s, "Frame").getByRole("button", { name: "Frame header: No title" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").headerVisible).toBe(false);
+  });
+
+  it("auto-fit wraps the contents, and Fit to content does it once for a manual frame", async () => {
+    s = await open();
+    await chip(s, /^Frame/).click();
+    await popover(s, "Frame").getByRole("button", { name: "Fit to content" }).click();
+    await s.waitForIdle();
+    const fitted = byId(await s.elements(), "F").points;
+    expect(Math.round(fitted[1].x)).toBe(460 + 24); // B's right edge plus the default padding
+    expect(Math.round(fitted[0].x)).toBe(120 - 24);
+    expect(byId(await s.elements(), "F").autoFit).toBeUndefined();
+    await popover(s, "Frame").getByRole("button", { name: "Frame size mode: Always wrap its contents" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").autoFit).toBe(true);
+    const padding = popover(s, "Frame").getByRole("textbox", { name: "Frame padding in pixels" });
+    await padding.fill("40");
+    await padding.press("Enter");
+    await s.waitForIdle();
+    const grown = byId(await s.elements(), "F").points;
+    expect(Math.round(grown[1].x)).toBe(460 + 40);
+  });
+
+  it("styles the frame like any shape: corner radius and fill", async () => {
+    s = await open();
+    await chip(s, /^Corners/).click();
+    await popover(s, "Corners").getByRole("button", { name: "Corner radius: Round corners" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").cornerRadius).toBe(16);
+    await s.page.keyboard.press("Escape");
+    await chip(s, /^Fill/).click();
+    await popover(s, "Fill").getByRole("button", { name: "Fill #dcfce7" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").fill).toBe("#dcfce7");
+    expect(byId(await s.elements(), "A").fill).toBe("#fde68a"); // contents untouched
+  });
+
+  it("the inspector's X and Y move a frame with its contents; W and H resize only the frame", async () => {
+    s = await open();
+    const field = (label: string) => s!.page.getByRole("textbox", { name: label, exact: true });
+    await field("X").fill("180");
+    await field("X").press("Enter");
+    await s.waitForIdle();
+    let els = await s.elements();
+    expect(byId(els, "F").points[0].x).toBe(180);
+    expect(byId(els, "A").points[0].x).toBe(220); // 100 to the right, like the frame
+    expect(byId(els, "ab").points[0].x).toBe(340);
+    expect(byId(els, "C").points[0].x).toBe(700); // outside: untouched
+    await s.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await s.press("Control+z");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "A").points[0].x).toBe(120); // one undo step for the frame and its contents
+    await field("Width").fill("700");
+    await field("Width").press("Enter");
+    await s.waitForIdle();
+    els = await s.elements();
+    expect(byId(els, "F").points[1].x - byId(els, "F").points[0].x).toBe(700);
+    expect(byId(els, "A").points[0]).toMatchObject({ x: 120, y: 130 });
+    expect(byId(els, "B").points[0]).toMatchObject({ x: 340, y: 130 });
+  });
+});
+
+
 suite("editor frames: drawing and picking", () => {
   let s: EditorSession | undefined;
   afterEach(async () => {
@@ -314,7 +429,7 @@ suite("editor frames: moving, owning and deleting", () => {
   });
 });
 
-suite("editor frames: properties", () => {
+suite("editor frames: lock and hide", () => {
   let s: EditorSession | undefined;
   afterEach(async () => {
     if (s) {
@@ -324,106 +439,144 @@ suite("editor frames: properties", () => {
     s = undefined;
   });
 
-  const bar = (session: EditorSession) => session.page.getByRole("toolbar", { name: "Style properties" });
-  const chip = (session: EditorSession, label: RegExp | string) => bar(session).getByRole("button", { name: label });
-  const popover = (session: EditorSession, name: string) => session.page.getByRole("dialog", { name, exact: true });
-  const open = async () => {
-    const session = await openEditor({ elements: scene() as never, dark: false, viewport: { width: 1280, height: 800 } });
-    await session.click({ x: 300, y: 76 }); // Billing's header
-    await session.waitForIdle();
-    return session;
+  const pixel = async (session: EditorSession, world: Point) => {
+    const at = await session.toScreen(world);
+    return session.page.evaluate(({ x, y }) => {
+      const canvas = document.querySelector("canvas")!;
+      const rect = canvas.getBoundingClientRect();
+      const dpr = canvas.width / rect.width;
+      const data = canvas.getContext("2d")!.getImageData(Math.round((x - rect.left) * dpr), Math.round((y - rect.top) * dpr), 1, 1).data;
+      return [data[0], data[1], data[2], data[3]];
+    }, at);
   };
 
-  it("a selected frame offers its own Frame section ahead of stroke, fill, corners and opacity", async () => {
-    s = await open();
-    const labels = await bar(s).locator("[data-chip-trigger]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")!.split(":")[0]));
-    expect(labels).toEqual(["Frame", "Stroke", "Fill", "Corners", "Opacity"]);
-    expect(await bar(s).getByTestId("properties-title").innerText()).toContain("Frame");
-    await chip(s, /^Frame/).click();
-    await s.screenshot("frame-properties-popover");
+  it("a locked frame locks its contents: they stay put and survive Delete until it is unlocked", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 300, y: 76 });
+    await s.press("Control+Shift+l");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").locked).toBe(true);
+    expect(byId(await s.elements(), "A")).not.toHaveProperty("locked"); // derived, not written to the contents
+    const before = await s.elements();
+    await s.drag({ x: 180, y: 170 }, { x: 260, y: 300 }); // try to move A
+    await s.waitForIdle();
+    expect(await s.elements()).toEqual(before);
+    await s.click({ x: 180, y: 170 });
+    await s.press("Delete");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "A")).toBeTruthy();
+    await s.click({ x: 300, y: 76 });
+    await s.press("Control+Shift+l");
+    await s.waitForIdle();
+    await s.drag({ x: 180, y: 170 }, { x: 180, y: 300 });
+    expect(byId(await s.elements(), "A").points[0].y).toBe(260);
   });
 
-  it("renames the frame from the bar as one undo step", async () => {
-    s = await open();
-    await chip(s, /^Frame/).click();
-    const field = popover(s, "Frame").getByRole("textbox", { name: "Frame title" });
-    await field.fill("Payments");
-    await field.press("Enter");
+  it("a hidden frame hides its contents and their connectors; Show all brings them back untouched", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    const painted = await pixel(s, { x: 180, y: 170 }); // inside A, amber
+    await s.click({ x: 300, y: 76 });
+    await s.press("Control+Shift+h");
     await s.waitForIdle();
-    expect(byId(await s.elements(), "F").title).toBe("Payments");
-    await s.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    expect(byId(await s.elements(), "F").hidden).toBe(true);
+    expect(byId(await s.elements(), "A")).not.toHaveProperty("hidden");
+    const gone = await pixel(s, { x: 180, y: 170 });
+    expect(gone).not.toEqual(painted);
+    expect(await s.selected()).toEqual([]);
+    await s.click({ x: 180, y: 170 }); // nothing to pick where A was
+    expect(await s.selected()).toEqual([]);
+    await s.page.getByTestId("hidden-chip").click();
+    await s.waitForIdle();
+    expect(await pixel(s, { x: 180, y: 170 })).toEqual(painted);
+    expect(byId(await s.elements(), "F")).not.toHaveProperty("hidden");
+    expect(byId(await s.elements(), "A").frameId).toBe("F");
+  });
+
+  it("a frame drawn over a locked frame is drawn beside it, not inside", async () => {
+    const stored = scene();
+    stored[0] = { ...stored[0], locked: true };
+    s = await openEditor({ elements: stored as never, dark: false });
+    await s.press("o");
+    await s.drag({ x: 150, y: 300 }, { x: 260, y: 380 });
+    await s.waitForIdle();
+    const made = (await s.elements()).filter((e) => e.type === "frame" && e.id !== "F" && e.id !== "G");
+    expect(made).toHaveLength(1);
+    expect(made[0].frameId).toBeUndefined();
+  });
+});
+
+
+suite("editor frames: commands", () => {
+  let s: EditorSession | undefined;
+  afterEach(async () => {
+    if (s) {
+      expect(s.problems.filter((p) => !/favicon|404|willReadFrequently/i.test(p))).toEqual([]);
+      await s.close();
+    }
+    s = undefined;
+  });
+
+  const palette = async (session: EditorSession, name: string) => {
+    await session.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await session.page.keyboard.press("Control+k");
+    await session.page.getByRole("option", { name }).click();
+    await session.waitForIdle();
+  };
+  const contextMenu = async (session: EditorSession, at: Point, name: string) => {
+    const screen = await session.toScreen(at);
+    await session.page.mouse.click(screen.x, screen.y, { button: "right" });
+    await session.page.getByRole("menuitem", { name }).click();
+    await session.waitForIdle();
+  };
+
+  it("Ctrl+Alt+G frames the selection; one undo step takes the frame away again", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 760, y: 150 }); // C
+    await s.page.keyboard.down("Shift");
+    await s.click({ x: 160, y: 150 }); // A, inside Billing
+    await s.page.keyboard.up("Shift");
+    await s.page.keyboard.press("Control+Alt+g");
+    await s.waitForIdle();
+    const els = await s.elements();
+    const added = els.filter((e) => e.type === "frame" && e.id !== "F" && e.id !== "G");
+    expect(added).toHaveLength(1);
+    expect(byId(els, "C").frameId).toBe(added[0].id);
+    expect(byId(els, "A").frameId).toBe(added[0].id);
+    expect(await s.selected()).toEqual([added[0].id]);
     await s.press("Control+z");
-    await s.waitForIdle();
-    expect(byId(await s.elements(), "F").title).toBe("Billing");
+    expect((await s.elements()).filter((e) => e.type === "frame")).toHaveLength(2);
+    expect(byId(await s.elements(), "A").frameId).toBe("F");
   });
 
-  it("moves the title to a tab, and hides it", async () => {
-    s = await open();
-    await chip(s, /^Frame/).click();
-    await popover(s, "Frame").getByRole("button", { name: "Frame header: Title on a tab above the frame" }).click();
-    await s.waitForIdle();
-    expect(byId(await s.elements(), "F")).toMatchObject({ titlePlacement: "above" }); // a visible header is the default, so nothing else is stored
-    expect(byId(await s.elements(), "F").headerVisible).not.toBe(false);
-    await popover(s, "Frame").getByRole("button", { name: "Frame header: No title" }).click();
-    await s.waitForIdle();
-    expect(byId(await s.elements(), "F").headerVisible).toBe(false);
-  });
-
-  it("auto-fit wraps the contents, and Fit to content does it once for a manual frame", async () => {
-    s = await open();
-    await chip(s, /^Frame/).click();
-    await popover(s, "Frame").getByRole("button", { name: "Fit to content" }).click();
-    await s.waitForIdle();
-    const fitted = byId(await s.elements(), "F").points;
-    expect(Math.round(fitted[1].x)).toBe(460 + 24); // B's right edge plus the default padding
-    expect(Math.round(fitted[0].x)).toBe(120 - 24);
-    expect(byId(await s.elements(), "F").autoFit).toBeUndefined();
-    await popover(s, "Frame").getByRole("button", { name: "Frame size mode: Always wrap its contents" }).click();
-    await s.waitForIdle();
-    expect(byId(await s.elements(), "F").autoFit).toBe(true);
-    const padding = popover(s, "Frame").getByRole("textbox", { name: "Frame padding in pixels" });
-    await padding.fill("40");
-    await padding.press("Enter");
-    await s.waitForIdle();
-    const grown = byId(await s.elements(), "F").points;
-    expect(Math.round(grown[1].x)).toBe(460 + 40);
-  });
-
-  it("styles the frame like any shape: corner radius and fill", async () => {
-    s = await open();
-    await chip(s, /^Corners/).click();
-    await popover(s, "Corners").getByRole("button", { name: "Corner radius: Round corners" }).click();
-    await s.waitForIdle();
-    expect(byId(await s.elements(), "F").cornerRadius).toBe(16);
-    await s.page.keyboard.press("Escape");
-    await chip(s, /^Fill/).click();
-    await popover(s, "Fill").getByRole("button", { name: "Fill #dcfce7" }).click();
-    await s.waitForIdle();
-    expect(byId(await s.elements(), "F").fill).toBe("#dcfce7");
-    expect(byId(await s.elements(), "A").fill).toBe("#fde68a"); // contents untouched
-  });
-
-  it("the inspector's X and Y move a frame with its contents; W and H resize only the frame", async () => {
-    s = await open();
-    const field = (label: string) => s!.page.getByRole("textbox", { name: label, exact: true });
-    await field("X").fill("180");
-    await field("X").press("Enter");
-    await s.waitForIdle();
-    let els = await s.elements();
-    expect(byId(els, "F").points[0].x).toBe(180);
-    expect(byId(els, "A").points[0].x).toBe(220); // 100 to the right, like the frame
-    expect(byId(els, "ab").points[0].x).toBe(340);
-    expect(byId(els, "C").points[0].x).toBe(700); // outside: untouched
-    await s.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  it("the context menu removes a shape from its frame, fits a frame, and removes a frame but keeps its contents", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 160, y: 150 }); // A
+    await contextMenu(s, { x: 160, y: 150 }, "Remove from frame");
+    expect(byId(await s.elements(), "A").frameId).toBeUndefined();
+    expect(byId(await s.elements(), "B").frameId).toBe("F");
     await s.press("Control+z");
-    await s.waitForIdle();
-    expect(byId(await s.elements(), "A").points[0].x).toBe(120); // one undo step for the frame and its contents
-    await field("Width").fill("700");
-    await field("Width").press("Enter");
-    await s.waitForIdle();
-    els = await s.elements();
-    expect(byId(els, "F").points[1].x - byId(els, "F").points[0].x).toBe(700);
-    expect(byId(els, "A").points[0]).toMatchObject({ x: 120, y: 130 });
-    expect(byId(els, "B").points[0]).toMatchObject({ x: 340, y: 130 });
+    expect(byId(await s.elements(), "A").frameId).toBe("F");
+
+    await s.click({ x: 300, y: 76 });
+    await contextMenu(s, { x: 300, y: 76 }, "Fit frame to contents");
+    expect(Math.round(byId(await s.elements(), "F").points[1].x)).toBe(460 + 24);
+
+    await s.click({ x: 300, y: 76 });
+    await contextMenu(s, { x: 300, y: 76 }, "Remove frame, keep contents");
+    const els = await s.elements();
+    expect(els.some((e) => e.id === "F")).toBe(false);
+    expect(["A", "B", "ab"].every((id) => els.some((e) => e.id === id && e.frameId === undefined))).toBe(true);
+    expect((await s.selected()).sort()).toEqual(["A", "B", "ab"]);
+  });
+
+  it("the palette runs the same commands, and a command with nothing to do says so instead of changing the board", async () => {
+    s = await openEditor({ elements: scene() as never, dark: false });
+    await s.click({ x: 760, y: 150 }); // C: loose, in no frame
+    const before = await s.elements();
+    await palette(s, "Remove from frame");
+    expect(await s.elements()).toEqual(before);
+    await s.page.getByText("Nothing selected is in a frame.").waitFor();
+    await palette(s, "Frame selection");
+    expect((await s.elements()).filter((e) => e.type === "frame")).toHaveLength(3);
   });
 });

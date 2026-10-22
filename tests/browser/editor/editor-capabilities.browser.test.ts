@@ -119,16 +119,20 @@ suite("editor capabilities shared with the AI tools", () => {
     expect(byId(await s.elements(), "D").hidden).toBe(true);
   });
 
-  it("Frame selection draws a titled outline behind the selection and moves nothing", async () => {
+  it("Frame selection wraps the selection in a real frame behind it, owns it, and moves nothing", async () => {
     await select("A", "B");
     await menu("Frame selection");
     const els = await s.elements();
-    const frame = els.find((e: El) => e.ai?.role === "group")!;
+    const frame = els.find((e: El) => e.type === "frame")!;
     expect(frame).toBeTruthy();
     expect(frame.points[0].x).toBeLessThan(100);
     expect(frame.points[1].x).toBeGreaterThan(520);
     expect(byId(els, "A").points[0]).toEqual({ x: 100, y: 100 });
-    expect(els.some((e: El) => e.ai?.role === "group-label")).toBe(true);
+    expect(byId(els, "A").frameId).toBe(frame.id);
+    expect(byId(els, "B").frameId).toBe(frame.id);
+    expect(els.some((e: El) => e.ai?.role === "group-label")).toBe(false); // the title is the frame's own field
+    expect(els.findIndex((e: El) => e.id === frame.id)).toBeLessThan(els.findIndex((e: El) => e.id === "A"));
+    expect(await s.selected()).toEqual([frame.id]);
   });
 
   it("Tidy up lines near-aligned shapes up and keeps the connectors attached", async () => {

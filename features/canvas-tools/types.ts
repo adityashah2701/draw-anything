@@ -46,6 +46,8 @@ export interface ViewportInfo {
   /** Size of the visible canvas in screen pixels. */
   width: number;
   height: number;
+  /** Screen px at the right edge covered by editor panels (the agent panel): drawings are fitted into what is left. */
+  coveredRight?: number;
 }
 
 export interface DocumentInfo {
@@ -138,6 +140,8 @@ export interface ToolSession {
   replay: Map<string, ToolResult>;
   /** Ids this run created or changed, so a final tidy touches only what the agent made. */
   touched: Set<string>;
+  /** Layout reviews this run has made; the inspect-and-refine loop is bounded by it (MAX_REVIEWS in review.ts). */
+  reviews?: number;
   /** True in tests: destructive tools proceed without a person to ask. */
   autoApproveDestructive?: boolean;
   log?: ToolLogger;

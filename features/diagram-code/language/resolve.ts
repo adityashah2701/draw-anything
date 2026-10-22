@@ -39,7 +39,7 @@ interface Props {
   icon?: string;
   label?: string;
   dashed?: boolean;
-  shape?: "diamond" | "pill" | "icon";
+  shape?: string;
   color?: string;
   x?: number;
   y?: number;
@@ -129,7 +129,7 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
           sink.warn(
             "shape/unsupported",
             entry.valueSpan,
-            `Shape "${value}" is not supported yet; only diamond, pill (also oval, ellipse), icon (needs an icon: id) and rectangle are. It was ignored.${hint ? ` ${hint}` : near ? ` Did you mean "${near}"?` : ""}`,
+            `Shape "${value}" is not a known shape; the shapes are ${shapeNames().join(", ")} (icon needs an icon: id). It was ignored and the node is drawn as a rectangle.${hint ? ` ${hint}` : near ? ` Did you mean "${near}"?` : ""}`,
             near,
           );
         } else if (shape !== "rectangle") props.shape = shape;

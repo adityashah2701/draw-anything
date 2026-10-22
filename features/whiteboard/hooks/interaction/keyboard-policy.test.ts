@@ -38,6 +38,16 @@ describe("canvas shortcuts", () => {
     expect(resolveShortcut(ev("d", { metaKey: true }), ctx())).toEqual({ type: "duplicate" });
   });
 
+  it("Ctrl+Alt+G frames the selection, by physical key, only for editors with a selection", () => {
+    const frameKey = ev("©", { ctrlKey: true, altKey: true, code: "KeyG" });
+    expect(resolveShortcut(frameKey, ctx())).toEqual({ type: "frame-selection" });
+    expect(resolveShortcut(ev("g", { metaKey: true, altKey: true, code: "KeyG" }), ctx())).toEqual({ type: "frame-selection" });
+    expect(resolveShortcut(frameKey, ctx({ hasSelection: false }))).toBeNull();
+    expect(resolveShortcut(frameKey, ctx({ hasEditAccess: false }))).toBeNull();
+    expect(resolveShortcut(frameKey, ctx({ textEntry: true }))).toBeNull();
+    expect(resolveShortcut(ev("g", { ctrlKey: true }), ctx())).toEqual({ type: "group" }); // plain Ctrl+G is unchanged
+  });
+
   it("O picks the frame tool, and not for a viewer", () => {
     expect(resolveShortcut(ev("o"), ctx())).toEqual({ type: "tool", tool: "frame" });
     expect(resolveShortcut(ev("o"), ctx({ hasEditAccess: false }))).toBeNull();

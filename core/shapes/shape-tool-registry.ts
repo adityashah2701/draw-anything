@@ -1,4 +1,6 @@
 import { shapeRegistry } from "./shape-registry";
+import { OUTLINE_VARIANTS, outlineToolName } from "@/core/shapes/outline/variants";
+import { outlineIconComponent } from "@/core/shapes/outline/icon";
 import { Tool } from "@/features/whiteboard/types/whiteboard.types";
 
 export interface ToolDefinition {
@@ -6,7 +8,7 @@ export interface ToolDefinition {
   icon: unknown;
   label: string;
   shortcut?: string;
-  group: "shapes" | "connectors" | "drawing" | "tools";
+  group: "shapes" | "outline" | "connectors" | "drawing" | "tools";
   order: number;
   allowInReadOnly: boolean;
 }
@@ -25,6 +27,18 @@ export function getToolDefinitions(): ToolDefinition[] {
       order: def.toolbarConfig!.order ?? 99,
       allowInReadOnly: false,
     }));
+
+  // One draw tool per outline variant, from the variant registry.
+  const outlineTools: ToolDefinition[] = shapeRegistry.get("outline")
+    ? OUTLINE_VARIANTS.map((variant, index) => ({
+        name: outlineToolName(variant.id),
+        icon: outlineIconComponent(variant.id),
+        label: variant.label,
+        group: "outline" as const,
+        order: 20 + index,
+        allowInReadOnly: false,
+      }))
+    : [];
 
   // Add non-shape tools:
   const extraTools: ToolDefinition[] = [
@@ -66,5 +80,5 @@ export function getToolDefinitions(): ToolDefinition[] {
     },
   ];
 
-  return [...shapeDefs, ...extraTools].sort((a, b) => a.order - b.order);
+  return [...shapeDefs, ...outlineTools, ...extraTools].sort((a, b) => a.order - b.order);
 }

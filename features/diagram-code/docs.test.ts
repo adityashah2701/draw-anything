@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { outlineVariantIds } from "@/core/shapes/outline/variants";
 import { planApply } from "./apply";
 import { formatDiagramCode } from "./language/format";
 import { compileDiagramCode } from "./language/compile";
@@ -13,6 +14,10 @@ describe("docs/diagram-code/README.md examples", () => {
     expect(examples.length).toBeGreaterThanOrEqual(8);
     for (const type of ["flowchart", "entity-relationship", "architecture", "network"]) expect(examples.some((code) => code.includes(`type ${type}`))).toBe(true);
     expect(examples.some((code) => /^frame /m.test(code))).toBe(true);
+  });
+
+  it("documents every outline variant of the registry", () => {
+    for (const id of outlineVariantIds()) expect(doc, id).toContain(`shape: ${id}`);
   });
 
   examples.forEach((code, i) => {
