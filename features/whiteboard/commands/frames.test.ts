@@ -7,6 +7,7 @@ import { planAlign, planMoveBy, planZOrder } from "./arrange";
 import { createCommandContext } from "./context";
 import { planDuplicate } from "./duplicate";
 import { planRemove } from "./remove";
+import { planStyle, supportsStyle } from "./style";
 
 const ctxOf = (stored: StoredElement[]) => {
   let n = 0;
@@ -103,5 +104,16 @@ describe("stacking", () => {
     const patch = planZOrder(ctxOf(stored), ["b"], "back");
     const next = patch ? applyPatch(stored, patch) : stored;
     expect(ids(next).indexOf("F")).toBeLessThan(ids(next).indexOf("b"));
+  });
+});
+
+describe("styling a frame by command", () => {
+  it("takes corner radius, fill, stroke and opacity, and leaves what it owns alone", () => {
+    const stored = scene();
+    const plan = planStyle(ctxOf(stored), ["F"], { cornerRadius: 16, fill: "#dbeafe", color: "#ef4444", opacity: 0.5 }, { strict: true });
+    expect(supportsStyle(at(stored, "F"), "cornerRadius")).toBe(true);
+    const after = applyPatch(stored, plan.patch!);
+    expect(at(after, "F")).toMatchObject({ cornerRadius: 16, fill: "#dbeafe", color: "#ef4444", opacity: 0.5 });
+    expect(at(after, "a")).toEqual(at(stored, "a"));
   });
 });

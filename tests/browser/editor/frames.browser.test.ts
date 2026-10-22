@@ -313,3 +313,117 @@ suite("editor frames: moving, owning and deleting", () => {
     expect(await s.page.getByLabel("Frame title").count()).toBe(0);
   });
 });
+
+suite("editor frames: properties", () => {
+  let s: EditorSession | undefined;
+  afterEach(async () => {
+    if (s) {
+      expect(s.problems.filter((p) => !/favicon|404|willReadFrequently/i.test(p))).toEqual([]);
+      await s.close();
+    }
+    s = undefined;
+  });
+
+  const bar = (session: EditorSession) => session.page.getByRole("toolbar", { name: "Style properties" });
+  const chip = (session: EditorSession, label: RegExp | string) => bar(session).getByRole("button", { name: label });
+  const popover = (session: EditorSession, name: string) => session.page.getByRole("dialog", { name, exact: true });
+  const open = async () => {
+    const session = await openEditor({ elements: scene() as never, dark: false, viewport: { width: 1280, height: 800 } });
+    await session.click({ x: 300, y: 76 }); // Billing's header
+    await session.waitForIdle();
+    return session;
+  };
+
+  it("a selected frame offers its own Frame section ahead of stroke, fill, corners and opacity", async () => {
+    s = await open();
+    const labels = await bar(s).locator("[data-chip-trigger]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")!.split(":")[0]));
+    expect(labels).toEqual(["Frame", "Stroke", "Fill", "Corners", "Opacity"]);
+    expect(await bar(s).getByTestId("properties-title").innerText()).toContain("Frame");
+    await chip(s, /^Frame/).click();
+    await s.screenshot("frame-properties-popover");
+  });
+
+  it("renames the frame from the bar as one undo step", async () => {
+    s = await open();
+    await chip(s, /^Frame/).click();
+    const field = popover(s, "Frame").getByRole("textbox", { name: "Frame title" });
+    await field.fill("Payments");
+    await field.press("Enter");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").title).toBe("Payments");
+    await s.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await s.press("Control+z");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").title).toBe("Billing");
+  });
+
+  it("moves the title to a tab, and hides it", async () => {
+    s = await open();
+    await chip(s, /^Frame/).click();
+    await popover(s, "Frame").getByRole("button", { name: "Frame header: Title on a tab above the frame" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F")).toMatchObject({ titlePlacement: "above" }); // a visible header is the default, so nothing else is stored
+    expect(byId(await s.elements(), "F").headerVisible).not.toBe(false);
+    await popover(s, "Frame").getByRole("button", { name: "Frame header: No title" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").headerVisible).toBe(false);
+  });
+
+  it("auto-fit wraps the contents, and Fit to content does it once for a manual frame", async () => {
+    s = await open();
+    await chip(s, /^Frame/).click();
+    await popover(s, "Frame").getByRole("button", { name: "Fit to content" }).click();
+    await s.waitForIdle();
+    const fitted = byId(await s.elements(), "F").points;
+    expect(Math.round(fitted[1].x)).toBe(460 + 24); // B's right edge plus the default padding
+    expect(Math.round(fitted[0].x)).toBe(120 - 24);
+    expect(byId(await s.elements(), "F").autoFit).toBeUndefined();
+    await popover(s, "Frame").getByRole("button", { name: "Frame size mode: Always wrap its contents" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").autoFit).toBe(true);
+    const padding = popover(s, "Frame").getByRole("textbox", { name: "Frame padding in pixels" });
+    await padding.fill("40");
+    await padding.press("Enter");
+    await s.waitForIdle();
+    const grown = byId(await s.elements(), "F").points;
+    expect(Math.round(grown[1].x)).toBe(460 + 40);
+  });
+
+  it("styles the frame like any shape: corner radius and fill", async () => {
+    s = await open();
+    await chip(s, /^Corners/).click();
+    await popover(s, "Corners").getByRole("button", { name: "Corner radius: Round corners" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").cornerRadius).toBe(16);
+    await s.page.keyboard.press("Escape");
+    await chip(s, /^Fill/).click();
+    await popover(s, "Fill").getByRole("button", { name: "Fill #dcfce7" }).click();
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "F").fill).toBe("#dcfce7");
+    expect(byId(await s.elements(), "A").fill).toBe("#fde68a"); // contents untouched
+  });
+
+  it("the inspector's X and Y move a frame with its contents; W and H resize only the frame", async () => {
+    s = await open();
+    const field = (label: string) => s!.page.getByRole("textbox", { name: label, exact: true });
+    await field("X").fill("180");
+    await field("X").press("Enter");
+    await s.waitForIdle();
+    let els = await s.elements();
+    expect(byId(els, "F").points[0].x).toBe(180);
+    expect(byId(els, "A").points[0].x).toBe(220); // 100 to the right, like the frame
+    expect(byId(els, "ab").points[0].x).toBe(340);
+    expect(byId(els, "C").points[0].x).toBe(700); // outside: untouched
+    await s.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await s.press("Control+z");
+    await s.waitForIdle();
+    expect(byId(await s.elements(), "A").points[0].x).toBe(120); // one undo step for the frame and its contents
+    await field("Width").fill("700");
+    await field("Width").press("Enter");
+    await s.waitForIdle();
+    els = await s.elements();
+    expect(byId(els, "F").points[1].x - byId(els, "F").points[0].x).toBe(700);
+    expect(byId(els, "A").points[0]).toMatchObject({ x: 120, y: 130 });
+    expect(byId(els, "B").points[0]).toMatchObject({ x: 340, y: 130 });
+  });
+});
