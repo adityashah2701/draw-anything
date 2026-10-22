@@ -26,7 +26,7 @@ const labelText = z.string().max(200).describe("Text on the connector (e.g. a re
 
 const lookFields = {
   type: z.enum(["arrow", "arrow-bidirectional"]).optional().describe("arrow: head at the end; arrow-bidirectional: heads at both ends."),
-  routing: z.enum(["orthogonal", "straight"]).optional().describe("orthogonal: right-angle path routed around other elements (default); straight: a direct line."),
+  routing: z.enum(["orthogonal", "curved", "straight"]).optional().describe("orthogonal: right-angle path routed around other elements (default); curved: the same routed path drawn as a smooth curve, for organic or hub-and-spoke relationships; straight: a direct line, for short links between neighbours."),
   dashed: z.boolean().optional(),
   head_start: z.boolean().optional().describe("Arrow head at the start."),
   head_end: z.boolean().optional().describe("Arrow head at the end."),
@@ -36,7 +36,7 @@ const lookFields = {
 
 interface Look {
   type?: "arrow" | "arrow-bidirectional";
-  routing?: "orthogonal" | "straight";
+  routing?: "orthogonal" | "curved" | "straight";
   dashed?: boolean;
   head_start?: boolean;
   head_end?: boolean;
@@ -218,7 +218,7 @@ const updateInput = z
 export const updateConnector: ToolDefinition<typeof updateInput> = {
   name: "update_connector",
   group: "connect",
-  description: "Change connectors: arrow type and heads, routing (straight/orthogonal), dashed, colour, width, or re-attach an end to another element/side. The route is recomputed when it can change. Locked connectors are refused.",
+  description: "Change connectors: arrow type and heads, routing (orthogonal/curved/straight), dashed, colour, width, or re-attach an end to another element/side. The route is recomputed when it can change. Locked connectors are refused.",
   input: updateInput,
   access: "write",
   run: (input, env) => {
@@ -286,7 +286,7 @@ const rerouteInput = z
 export const rerouteConnector: ToolDefinition<typeof rerouteInput> = {
   name: "reroute_connector",
   group: "connect",
-  description: "Recompute connector paths from their attachments with the editor's router (after shapes moved or labels changed). Manually bent connectors keep their bends unless forget_manual_bends is true. Straight connectors are unchanged.",
+  description: "Recompute connector paths from their attachments with the editor's router (after shapes moved or labels changed). Manually bent connectors keep their bends unless forget_manual_bends is true. Curved connectors are re-routed like orthogonal ones and drawn smooth. Straight connectors are unchanged.",
   input: rerouteInput,
   access: "write",
   run: ({ ids, forget_manual_bends }, env) => {

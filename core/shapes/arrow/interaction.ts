@@ -13,6 +13,7 @@ import {
   getArrowEditHandles,
 } from "@/core/shapes/arrow/arrow-utils";
 import { ArrowShape } from "@/core/shapes/arrow/types";
+import { flattenCurve } from "@/core/routing/curve";
 import { parseAnchorSide } from "@/core/anchors/anchor-geometry";
 
 const getConnectionSide = (connection?: ArrowElement["startConnection"]) => {
@@ -28,7 +29,7 @@ export const containsPointInArrow = (
   radius = 0,
   zoom = 1,
 ): boolean => {
-  return isPointNearPolyline(point, shape.points, screenTolerance(10, zoom) + radius);
+  return isPointNearPolyline(point, shape.routingMode === "curved" ? flattenCurve(shape.points) : shape.points, screenTolerance(10, zoom) + radius);
 };
 
 export const getArrowResizeHandles = (shape: ArrowElement): ShapeResizeHandle[] => {
@@ -173,7 +174,7 @@ export const resizeArrowElement = <T extends ArrowElement>(
     points: resizedPoints,
     ...(manualEdit
       ? {
-          routingMode: "orthogonal",
+          routingMode: shape.routingMode === "curved" ? "curved" : "orthogonal",
           isManuallyRouted: true,
         }
       : {}),

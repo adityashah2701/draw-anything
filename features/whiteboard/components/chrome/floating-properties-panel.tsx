@@ -218,7 +218,7 @@ const FloatingPropertiesPanel = ({
         {connector && (
           <PropertyChip
             label="Line"
-            summary={`${words(connector.dashed, (d) => (d ? "dashed" : "solid"))}, ${words(connector.routing, (r) => (r === "straight" ? "straight" : "elbow"))}`}
+            summary={`${words(connector.dashed, (d) => (d ? "dashed" : "solid"))}, ${words(connector.routing, (r) => (r === "straight" ? "straight" : r === "curved" ? "curved" : "elbow"))}`}
             preview={
               <svg aria-hidden width="22" height="12" viewBox="0 0 22 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray={connector.dashed === true ? "4 3" : undefined}>
                 <path d="M1 6h17M14 2l5 4-5 4" />
@@ -244,6 +244,7 @@ const FloatingPropertiesPanel = ({
               onChange={(routingMode) => controller.updateConnectors(connector.ids, { routingMode })}
               options={[
                 { value: "orthogonal", title: "Elbow", content: <span>Elbow</span> },
+                { value: "curved", title: "Curved", content: <span>Curved</span> },
                 { value: "straight", title: "Straight", content: <span>Straight</span> },
               ]}
             />

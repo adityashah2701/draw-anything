@@ -9,6 +9,7 @@ import {
   DrawingElement,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { traceCurve } from "@/core/routing/curve";
 import { parseAnchorSide } from "@/core/anchors/anchor-geometry";
 
 export type ArrowElement = ArrowShape | BidirectionalArrowShape;
@@ -107,9 +108,13 @@ export const drawArrow = (
   ctx.setLineDash(style.dashed ? [10 * zoom, 8 * zoom] : []);
 
   ctx.beginPath();
-  ctx.moveTo(transformed[0].x, transformed[0].y);
-  for (let i = 1; i < transformed.length; i += 1) {
-    ctx.lineTo(transformed[i].x, transformed[i].y);
+  if (element.routingMode === "curved") {
+    traceCurve(ctx, transformed);
+  } else {
+    ctx.moveTo(transformed[0].x, transformed[0].y);
+    for (let i = 1; i < transformed.length; i += 1) {
+      ctx.lineTo(transformed[i].x, transformed[i].y);
+    }
   }
   ctx.stroke();
 
