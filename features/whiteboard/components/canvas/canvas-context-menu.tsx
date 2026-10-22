@@ -16,7 +16,7 @@ const mod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 
 /** Right-click menu for the canvas; every entry runs the same command as its keyboard shortcut. */
 export const CanvasContextMenu = ({ controller, children }: { controller: WhiteboardPageController; children: ReactNode }) => {
-  const { elementCommands: c, groupCommands: g, selectedElements, whiteboardAccess, elements } = controller;
+  const { elementCommands: c, groupCommands: g, frameCommands: f, selectedElements, whiteboardAccess, elements } = controller;
   const edit = whiteboardAccess.hasEditAccess;
   // Align and distribute work on units: a group counts as one, however many shapes it holds.
   const count = g.units.length;
@@ -49,6 +49,16 @@ export const CanvasContextMenu = ({ controller, children }: { controller: Whiteb
           <ContextMenuItem onSelect={() => g.enter()}>
             Edit group <ContextMenuShortcut>↵</ContextMenuShortcut>
           </ContextMenuItem>
+        )}
+        <ContextMenuItem disabled={!f.canFrame} onSelect={f.frameSelection}>
+          Frame selection <ContextMenuShortcut>{mod}⌥G</ContextMenuShortcut>
+        </ContextMenuItem>
+        {f.canRemoveFromFrame && <ContextMenuItem onSelect={f.removeFromFrame}>Remove from frame</ContextMenuItem>}
+        {f.hasSelectedFrame && edit && (
+          <>
+            <ContextMenuItem onSelect={f.fitFrames}>Fit frame to contents</ContextMenuItem>
+            <ContextMenuItem onSelect={f.releaseFrames}>Remove frame, keep contents</ContextMenuItem>
+          </>
         )}
         <ContextMenuItem disabled={!edit || !some} onSelect={g.toggleLock}>
           {g.allLocked ? "Unlock" : "Lock"} <ContextMenuShortcut>{mod}⇧L</ContextMenuShortcut>

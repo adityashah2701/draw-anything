@@ -29,6 +29,7 @@ export type ShortcutCommand =
   | { type: "export" }
   | { type: "icon-picker" }
   | { type: "edit" }
+  | { type: "frame-selection" }
   | { type: "tool"; tool: Tool }
   | { type: "hand-hold" };
 
@@ -109,6 +110,9 @@ export const resolveShortcut = (e: ShortcutEvent, ctx: ShortcutContext): Shortcu
     }
     return { type: "align", mode: ALIGN_KEYS[e.code] };
   }
+
+  // Ctrl+Alt+G frames the selection (Alt changes `key` on some layouts, so this reads the physical key).
+  if (mod && e.altKey && e.code === "KeyG") return edit && ctx.hasSelection ? { type: "frame-selection" } : null;
 
   if (mod) {
     if (e.altKey) return null;
