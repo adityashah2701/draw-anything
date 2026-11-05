@@ -38,7 +38,7 @@ export const checkDiagram = (code: string): CheckReport => {
   if (errors.length === 0 && parsed.nodes.length > 0) {
     try {
       const { document } = documentFromParsedCode(parsed, "check");
-      const result = compileAIDiagramDetailed(document, "check");
+      const result = compileAIDiagramDetailed(document, "check", { channelGaps: true });
       const m = measureLayout(result.elements, document.groups);
       metrics = {
         nodes: m.nodes,

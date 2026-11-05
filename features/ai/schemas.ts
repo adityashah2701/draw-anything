@@ -226,7 +226,7 @@ export const aiPlanSchema = z.object({
     .enum(["layered", "hierarchical", "radial", "tree", "grid", "dag", "swimlane"])
     .default("layered"),
   direction: z
-    .enum(["left-to-right", "top-to-bottom", "radial"])
+    .enum(["left-to-right", "top-to-bottom", "right-to-left", "bottom-to-top", "radial"])
     .default("top-to-bottom"),
   styleTheme: z.enum(["default", "technical", "product", "minimal"]).default("technical"),
   density: z.enum(["compact", "balanced", "spacious"]).default("balanced"),
@@ -299,7 +299,7 @@ export const normalizeModelPlan = (value: unknown): AIPlanOutput => {
     ),
     direction: pick(
       plan.direction,
-      ["left-to-right", "top-to-bottom", "radial"] as const,
+      ["left-to-right", "top-to-bottom", "right-to-left", "bottom-to-top", "radial"] as const,
       "top-to-bottom",
     ),
     styleTheme: pick(

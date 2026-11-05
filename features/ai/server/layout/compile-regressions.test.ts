@@ -138,7 +138,7 @@ describe("persistence and compatibility", () => {
 
   it("adds no new stored fields: every element keeps the shape older boards use", () => {
     const keys = new Set(compileAIDiagramToCanvas(LAYOUT_FIXTURES.architecture, "f").flatMap((e) => Object.keys(e)));
-    const allowed = new Set(["id", "type", "points", "color", "strokeWidth", "fill", "label", "fontSize", "fontWeight", "fontStyle", "text", "dashed", "isGuide", "ai", "arrowHeadStart", "arrowHeadEnd", "routingMode", "routePreference", "isManuallyRouted", "startConnection", "endConnection"]);
+    const allowed = new Set(["id", "type", "points", "color", "strokeWidth", "fill", "label", "fontSize", "fontWeight", "fontStyle", "text", "dashed", "isGuide", "ai", "arrowHeadStart", "arrowHeadEnd", "routingMode", "cornerRadius", "routePreference", "isManuallyRouted", "startConnection", "endConnection"]); // cornerRadius is optional: boards saved without it draw sharp corners as before
     expect([...keys].filter((k) => !allowed.has(k))).toEqual([]);
   });
 });

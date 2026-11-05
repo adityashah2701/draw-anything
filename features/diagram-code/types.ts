@@ -87,7 +87,7 @@ export interface ParsedFrame {
 export interface ParsedDiagramCode {
   title?: string;
   diagramType?: AIDiagramType;
-  direction?: "down" | "right";
+  direction?: "down" | "right" | "up" | "left";
   nodes: ParsedNode[];
   edges: ParsedEdge[];
   groups: ParsedGroup[];

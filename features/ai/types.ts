@@ -260,7 +260,7 @@ export interface AIDiagramDocumentV1 {
   visualImportance: AIVisualImportance[];
   layoutHints: {
     strategy: AILayoutStrategy;
-    direction: "left-to-right" | "top-to-bottom" | "radial";
+    direction: "left-to-right" | "top-to-bottom" | "right-to-left" | "bottom-to-top" | "radial";
   };
   styleHints: {
     theme: "default" | "technical" | "product" | "minimal";

@@ -2,6 +2,7 @@ import { isDarkRender } from "@/core/theme/render-theme";
 import { getAdaptiveColor } from '@/core/color/adaptive-color';
 import {
   ArrowConnection,
+  ArrowheadKind,
   ArrowStyle,
   ArrowShape,
   BidirectionalArrowShape,
@@ -9,7 +10,8 @@ import {
   DrawingElement,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
-import { traceCurve } from "@/core/routing/curve";
+import { roundedCorners, traceCurve } from "@/core/routing/curve";
+import { arrowheadOps, headTrim, type HeadSize } from "@/core/shapes/arrow/arrowhead";
 import { parseAnchorSide } from "@/core/anchors/anchor-geometry";
 
 export type ArrowElement = ArrowShape | BidirectionalArrowShape;
@@ -107,25 +109,62 @@ export const drawArrow = (
   ctx.lineJoin = "round";
   ctx.setLineDash(style.dashed ? [10 * zoom, 8 * zoom] : []);
 
+  const heads = getArrowHeadVisibility(element);
+  const kindStart = element.headStart ?? "triangle";
+  const kindEnd = element.headEnd ?? "triangle";
+  // A hollow head must not have the line drawn through it, so the line stops at the head's base.
+  const path = trimEnds(
+    transformed,
+    heads.start ? headTrim(kindStart, HEAD_SIZE) : 0,
+    heads.end ? headTrim(kindEnd, HEAD_SIZE) : 0,
+  );
+
   ctx.beginPath();
   if (element.routingMode === "curved") {
-    traceCurve(ctx, transformed);
+    traceCurve(ctx, path);
   } else {
-    ctx.moveTo(transformed[0].x, transformed[0].y);
-    for (let i = 1; i < transformed.length; i += 1) {
-      ctx.lineTo(transformed[i].x, transformed[i].y);
+    const radius = element.routingMode === "straight" ? 0 : (element.cornerRadius ?? 0) * zoom;
+    ctx.moveTo(path[0].x, path[0].y);
+    for (const corner of roundedCorners(path, radius)) {
+      ctx.lineTo(corner.enter.x, corner.enter.y);
+      ctx.quadraticCurveTo(corner.control.x, corner.control.y, corner.exit.x, corner.exit.y);
+    }
+    const lastPoint = path[path.length - 1];
+    if (radius > 0) {
+      ctx.lineTo(lastPoint.x, lastPoint.y);
+    } else {
+      for (let i = 1; i < path.length; i += 1) ctx.lineTo(path[i].x, path[i].y);
     }
   }
   ctx.stroke();
 
-  const heads = getArrowHeadVisibility(element);
   ctx.setLineDash([]);
   if (heads.end) {
-    drawArrowhead(ctx, element, transformed, "end");
+    drawArrowhead(ctx, element, transformed, "end", kindEnd);
   }
   if (heads.start) {
-    drawArrowhead(ctx, element, transformed, "start");
+    drawArrowhead(ctx, element, transformed, "start", kindStart);
   }
+};
+
+/** Every head is this size on screen whatever the zoom. */
+const HEAD_SIZE: HeadSize = { length: 12, width: 7 };
+
+/** The path with its first and last points pulled back along their segments by the given distances. */
+const trimEnds = (points: Point[], fromStart: number, fromEnd: number): Point[] => {
+  if ((fromStart <= 0 && fromEnd <= 0) || points.length < 2) return points;
+  const out = points.map((p) => ({ ...p }));
+  const pull = (i: number, j: number, distance: number) => {
+    const dx = out[j].x - out[i].x;
+    const dy = out[j].y - out[i].y;
+    const total = Math.hypot(dx, dy);
+    if (total === 0) return;
+    const t = Math.min(distance, total) / total;
+    out[i] = { x: out[i].x + dx * t, y: out[i].y + dy * t };
+  };
+  if (fromEnd > 0) pull(out.length - 1, out.length - 2, fromEnd);
+  if (fromStart > 0) pull(0, 1, fromStart);
+  return out;
 };
 
 const getConnectionHandle = (
@@ -217,26 +256,32 @@ const drawArrowhead = (
   element: ArrowElement,
   points: Point[],
   position: "start" | "end",
+  kind: ArrowheadKind,
 ) => {
   const tip =
     position === "end" ? points[points.length - 1] : points[0];
   const direction = getArrowHeadDirection(element, points, position);
   if (!tip || !direction) return;
 
-  const length = 12;
-  const width = 7;
-  const baseX = tip.x - direction.x * length;
-  const baseY = tip.y - direction.y * length;
-  const perpX = -direction.y * width;
-  const perpY = direction.x * width;
-
-  ctx.beginPath();
-  ctx.moveTo(tip.x, tip.y);
-  ctx.lineTo(baseX + perpX, baseY + perpY);
-  ctx.lineTo(baseX - perpX, baseY - perpY);
-  ctx.closePath();
-  ctx.fillStyle = getArrowStyle(element).color;
-  ctx.fill();
+  const color = getArrowStyle(element).color;
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  for (const op of arrowheadOps(kind, tip, direction, HEAD_SIZE)) {
+    ctx.beginPath();
+    if (op.kind === "circle") {
+      ctx.arc(op.cx, op.cy, op.r, 0, Math.PI * 2);
+      if (op.fill) ctx.fill();
+      else ctx.stroke();
+      continue;
+    }
+    for (const cmd of op.path) {
+      if (cmd[0] === "M") ctx.moveTo(cmd[1], cmd[2]);
+      else if (cmd[0] === "L") ctx.lineTo(cmd[1], cmd[2]);
+      else ctx.closePath();
+    }
+    if (op.kind === "fill") ctx.fill();
+    else ctx.stroke();
+  }
 };
 
 const getArrowheadLine = (

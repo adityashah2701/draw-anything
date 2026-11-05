@@ -179,7 +179,24 @@ describe("reportCanvas", () => {
     expect(reportCanvas(canvasOf(s), s).problems).toEqual([]);
   });
 
-  it("names the connections that share a line (the login flow's retry arrow)", () => {
+  it("names the connections that run along one line", () => {
+    let state = createState();
+    state = addLines(state, "A\nB\nC\nD\nA > B\nC > D").state;
+    const built = canvasOf(state);
+    const arrows = built.elements.filter((e) => e.type === "arrow");
+    expect(arrows).toHaveLength(2);
+    // Lay the second connector along the first one's line, as two connectors that crowd one lane do.
+    const [first, second] = arrows;
+    const x = first.points[0].x;
+    const y1 = first.points[0].y;
+    const y2 = first.points[first.points.length - 1].y;
+    second.points = [{ x, y: y1 + (y2 - y1) / 4 }, { x, y: y2 + 60 }];
+    const problems = reportCanvas(built, state).problems.join("\n");
+    expect(problems).toMatch(/A > B/);
+    expect(problems).toMatch(/same line/);
+  });
+
+  it("no longer finds the login flow's retry arrow on top of another connector, now that connectors get their own points", () => {
     const code = `type flowchart
 Start [kind: start]
 Enter Credentials [kind: workflow]
@@ -194,13 +211,10 @@ Valid? > Show Error: no
 Show Error > Enter Credentials: retry
 MFA Required? > Create Session: no
 Create Session > Dashboard`;
-    // The agent adds a few statements at a time.
     let state = createState();
     const lines = code.split("\n");
     for (let i = 0; i < lines.length; i += MAX_ADD_STATEMENTS) state = addLines(state, lines.slice(i, i + MAX_ADD_STATEMENTS).join("\n")).state;
-    const problems = reportCanvas(canvasOf(state), state).problems.join("\n");
-    expect(problems).toMatch(/Show Error > Enter Credentials/);
-    expect(problems).toMatch(/same line/);
+    expect(reportCanvas(canvasOf(state), state).problems.join("\n")).not.toMatch(/Show Error > Enter Credentials runs along the same line/);
   });
 
   it("flags a very long connector and counts problems for comparing versions", () => {

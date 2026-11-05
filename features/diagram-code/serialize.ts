@@ -3,6 +3,8 @@ import { escapeString } from "./language/strings";
 
 export interface SerializableGraph {
   diagramType?: AIDiagramType;
+  /** The direction the diagram reads in; absent means top to bottom. */
+  direction?: "down" | "right" | "up" | "left";
   title?: string;
   nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: string; color?: string; x?: number; y?: number; width?: number; height?: number }>;
   edges: Array<{
@@ -193,6 +195,7 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
 
   if (graph.diagramType) lines.push(`type ${graph.diagramType}`);
   if (graph.title) lines.push(`title ${clean(graph.title)}`);
+  if (graph.direction && graph.direction !== "down") lines.push(`direction ${graph.direction}`);
   if (lines.length > 0) lines.push("");
 
   const emitFrame = (frame: (typeof frames)[number], depth: number) => {

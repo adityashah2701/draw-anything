@@ -27,6 +27,8 @@ export interface CodeToCanvasResult {
 }
 
 
+const PLAN_DIRECTION = { down: "top-to-bottom", right: "left-to-right", up: "bottom-to-top", left: "right-to-left" } as const;
+
 export const documentFromParsedCode = (
   parsed: ReturnType<typeof parseDiagramCode>,
   generationId: string,
@@ -54,6 +56,7 @@ export const documentFromParsedCode = (
     plan: normalizeModelPlan({
       diagramType: parsed.diagramType ?? "flowchart",
       summary: parsed.title ?? "Diagram from code",
+      direction: parsed.direction ? PLAN_DIRECTION[parsed.direction] : undefined,
     }),
     graph,
     provider: meta.provider ?? "local",
@@ -313,12 +316,13 @@ export const graphFromElements = (
     .map((el) => el.ai?.diagramType)
     .filter((type): type is string => Boolean(type));
   const diagramType = types.length > 0 ? (types[0] as AIDiagramType) : undefined;
+  const direction = nodeElements.map((el) => el.ai?.diagramDirection).find(Boolean);
 
   const nodeSources = new Map<string, string>();
   for (const el of nodeElements) nodeSources.set(idOfElement.get(el.id)!, el.id);
 
   return {
-    graph: { diagramType, nodes, edges, groups, frames: graphFrames },
+    graph: { diagramType, direction, nodes, edges, groups, frames: graphFrames },
     consumedIds: [...consumed],
     provenance: { nodes: nodeSources, edges: edgeSources, groups: groupSources, frames: frameSources },
   };

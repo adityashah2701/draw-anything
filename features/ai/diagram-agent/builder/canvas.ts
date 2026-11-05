@@ -34,7 +34,7 @@ const shiftTo = (elements: DrawingElement[]): DrawingElement[] => {
 export const buildCanvas = (state: BuilderState, generationId: string, frameId: string): BuiltCanvas | null => {
   if (state.parsed.nodes.length === 0) return null;
   const { document } = documentFromParsedCode(state.parsed, generationId);
-  const compiled = compileAIDiagramDetailed(document, frameId, { offsets: state.offsets, edgeSides: state.edgeSides });
+  const compiled = compileAIDiagramDetailed(document, frameId, { offsets: state.offsets, edgeSides: state.edgeSides, channelGaps: true });
   const elements = shiftTo(compiled.elements);
   const centres = new Map<string, { x: number; y: number }>();
   for (const element of elements) {

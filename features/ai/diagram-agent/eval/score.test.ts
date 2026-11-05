@@ -4,7 +4,8 @@ import { LAYOUT_FIXTURES } from "@/features/ai/server/layout/fixtures";
 import { documentFromParsedCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { EXAMPLES } from "../prompt/examples";
-import { GOLDEN_PROMPTS } from "./golden-prompts";
+import { GOLDEN_FAMILIES, GOLDEN_PROMPTS, familyOf } from "./golden-prompts";
+import { pickSpotCheck, RUBRIC } from "./rubric";
 import { renderEvalReport, scoreDiagram } from "./score";
 
 const scoreCode = (code: string, golden = GOLDEN_PROMPTS[1]) => {
@@ -20,6 +21,28 @@ describe("golden prompts", () => {
       expect(g.mentions.length).toBeGreaterThan(0);
       expect(g.prompt.length).toBeGreaterThan(20);
     }
+  });
+
+  it("cover all six diagram families with at least six prompts each", () => {
+    for (const family of GOLDEN_FAMILIES) {
+      expect(GOLDEN_PROMPTS.filter((g) => familyOf(g.type) === family).length, family).toBeGreaterThanOrEqual(6);
+    }
+    expect(GOLDEN_PROMPTS.every((g) => GOLDEN_FAMILIES.includes(familyOf(g.type)))).toBe(true);
+  });
+});
+
+describe("human spot-check", () => {
+  it("has a fixed rubric on a 1 to 5 scale", () => {
+    expect(new Set(RUBRIC.map((q) => q.id)).size).toBe(RUBRIC.length);
+    expect(RUBRIC.length).toBeGreaterThanOrEqual(5);
+    expect(RUBRIC.every((q) => q.question.endsWith("?") && q.scale.length === 5)).toBe(true);
+  });
+
+  it("picks the same balanced sample every time", () => {
+    const first = pickSpotCheck(GOLDEN_PROMPTS, 10);
+    expect(first).toHaveLength(10);
+    expect(first).toEqual(pickSpotCheck(GOLDEN_PROMPTS, 10));
+    expect(new Set(first.map((g) => familyOf(g.type))).size).toBe(GOLDEN_FAMILIES.length);
   });
 });
 
@@ -37,6 +60,15 @@ describe("scoreDiagram", () => {
     expect(s.iconCoverage).toBe(0);
     expect(s.inRange).toBe(false);
     expect(s.mentionCoverage).toBe(0);
+  });
+
+  it("adds the aesthetic measures and gives the same numbers for the same diagram", () => {
+    const a = scoreCode(EXAMPLES[1].code, GOLDEN_PROMPTS.find((g) => g.id === "web-backend")!);
+    const b = scoreCode(EXAMPLES[1].code, GOLDEN_PROMPTS.find((g) => g.id === "web-backend")!);
+    expect(a.aesthetics).toEqual(b.aesthetics);
+    expect(a.aesthetics.alignment).toBeGreaterThan(0);
+    expect(a.genericShare).toBeGreaterThanOrEqual(0);
+    expect(a.genericShare).toBeLessThanOrEqual(1);
   });
 
   it("scores any pipeline's output from document + elements (legacy fixtures too)", () => {
@@ -62,5 +94,7 @@ describe("renderEvalReport", () => {
     expect(md).toMatch(/\| agent\/native \| 2 \| 1 \|/);
     expect(md).toMatch(/\| legacy \| 1 \| 0 \|/);
     expect(md).toContain("boom / pipe");
+    expect(md).toContain("clearance");
+    expect(md).toContain("reading");
   });
 });

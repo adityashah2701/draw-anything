@@ -8,6 +8,19 @@ export type ConnectionHandle = "top" | "right" | "bottom" | "left";
 export type AnchorSide = ConnectionHandle;
 export type ArrowType = "arrow" | "arrow-bidirectional";
 export type ArrowRoutingMode = "straight" | "orthogonal" | "curved";
+/** How one end of a connector is finished; see `core/shapes/arrow/arrowhead.ts`. Absent = the filled triangle. */
+export type ArrowheadKind =
+  | "triangle"
+  | "open"
+  | "hollow-triangle"
+  | "diamond"
+  | "diamond-filled"
+  | "circle"
+  | "crow-one"
+  | "crow-many"
+  | "crow-zero-one"
+  | "crow-zero-many"
+  | "crow-exactly-one";
 export type ArrowRoutePreference = "vh" | "hv";
 
 export interface Anchor {
@@ -101,6 +114,8 @@ export interface BaseDrawingElement {
       strokeWidth?: number;
     };
     diagramType?: string;
+    /** The direction the diagram reads in, when it is not the default top to bottom (down, right, up, left). */
+    diagramDirection?: "right" | "up" | "left";
     /** What a generated element is, so later edits can find or replace it. */
     role?: "node" | "edge" | "group" | "group-label" | "edge-label";
   };
@@ -207,6 +222,11 @@ export interface ArrowBaseShape extends BaseDrawingElement {
   routingMode?: ArrowRoutingMode;
   routePreference?: ArrowRoutePreference;
   isManuallyRouted?: boolean;
+  /** Reach of the soft corner drawn at each bend of an orthogonal route, in world units. Absent or 0 = sharp (boards saved before corners). */
+  cornerRadius?: number;
+  /** The head at each end, drawn when that end's arrowhead flag is on. Absent = the filled triangle. */
+  headStart?: ArrowheadKind;
+  headEnd?: ArrowheadKind;
 }
 
 export interface ArrowShape extends ArrowBaseShape {

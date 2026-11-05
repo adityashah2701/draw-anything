@@ -1,4 +1,5 @@
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
+import { DEFAULT_ARROW_CORNER_RADIUS } from "@/core/shapes/arrow/corner-radius";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { ArrowShape } from "@/core/shapes/arrow/types";
 import { getArrowBounds } from "@/core/shapes/arrow/geometry";
@@ -24,6 +25,9 @@ export const arrowDefinition = createShapeDefinition<ArrowShape>({
     arrowHeadStart: props.arrowHeadStart ?? false,
     arrowHeadEnd: props.arrowHeadEnd ?? true,
     routingMode: props.routingMode ?? "orthogonal",
+    cornerRadius: props.cornerRadius ?? DEFAULT_ARROW_CORNER_RADIUS,
+    headStart: props.headStart,
+    headEnd: props.headEnd,
     routePreference: props.routePreference,
     isManuallyRouted: props.isManuallyRouted ?? false,
     startConnection: props.startConnection,

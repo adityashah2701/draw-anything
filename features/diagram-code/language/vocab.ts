@@ -105,12 +105,16 @@ export const KIND_ALIAS_NAMES: string[] = Object.keys(KIND_ALIASES);
 export const DIAGRAM_TYPES: string[] = [...aiDiagramTypeSchema.options];
 export const DIAGRAM_TYPE_ALIAS_NAMES: string[] = Object.keys(DIAGRAM_TYPE_ALIASES);
 
-export const DIRECTIONS: Array<{ name: "down" | "right"; aliases: string[] }> = [
+export type CodeDirection = "down" | "right" | "up" | "left";
+
+export const DIRECTIONS: Array<{ name: CodeDirection; aliases: string[] }> = [
   { name: "down", aliases: ["tb", "top-to-bottom", "vertical"] },
   { name: "right", aliases: ["lr", "left-to-right", "horizontal"] },
+  { name: "up", aliases: ["bt", "bottom-to-top"] },
+  { name: "left", aliases: ["rl", "right-to-left"] },
 ];
 
-export const resolveDirection = (value: string): "down" | "right" | undefined => {
+export const resolveDirection = (value: string): CodeDirection | undefined => {
   const v = value.trim().toLowerCase();
   return DIRECTIONS.find((d) => d.name === v || d.aliases.includes(v))?.name;
 };

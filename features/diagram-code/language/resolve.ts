@@ -292,7 +292,7 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
         } else {
           const direction = resolveDirection(statement.value);
           if (direction) ir.direction = direction;
-          else sink.warn("header/unknown-direction", statement.valueSpan, `Unknown direction "${statement.value}" was ignored.`, closest(statement.value, ["down", "right"]));
+          else sink.warn("header/unknown-direction", statement.valueSpan, `Unknown direction "${statement.value}" was ignored.`, closest(statement.value, ["down", "right", "up", "left"]));
         }
         break;
       }

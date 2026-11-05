@@ -86,7 +86,7 @@ export interface IRFrame {
 export interface DiagramIR {
   title?: string;
   diagramType?: AIDiagramType;
-  direction?: "down" | "right";
+  direction?: "down" | "right" | "up" | "left";
   nodes: IRNode[];
   edges: IREdge[];
   groups: IRGroup[];
