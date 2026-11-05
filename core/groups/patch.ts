@@ -1,4 +1,5 @@
-import type { StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import { stampForAdd, stampForUpdate, withStamp, withUpdateStamp } from "@/core/layout/placement";
+import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
 
 /**
  * One atomic change to the stored list. Commands compute it as a pure value; the editor applies it in
@@ -17,6 +18,14 @@ export interface DocPatch {
    * remains, so a stale order can never scramble or drop anything.
    */
   order?: readonly string[];
+  /**
+   * Where the positions in this patch come from: a person or an AI edit made for one (`user`, the default), or a
+   * layout applying its own result (`layout`). The storage boundary turns it into each element's placement
+   * stamp (`core/layout/placement.ts`); a command never stamps by hand.
+   */
+  origin?: "user" | "layout";
+  /** Per-element stamps that win over `origin` (diagram-code apply: explicit x and y in code are `user`, engine-placed nodes `auto`). */
+  placements?: Readonly<Record<string, "auto" | "user">>;
 }
 
 export const emptyPatch = (): DocPatch => ({ add: [], update: [], remove: [] });
@@ -41,13 +50,14 @@ export const mergeStored = <T extends StoredElement>(current: T, change: Partial
 export const applyPatch = (stored: readonly StoredElement[], patch: DocPatch): StoredElement[] => {
   const removed = new Set(patch.remove);
   const updates = new Map(patch.update.map((element) => [element.id, element]));
+  const origin = patch.origin ?? "user";
   const out: StoredElement[] = [];
   for (const item of stored) {
     if (removed.has(item.id)) continue;
     const change = updates.get(item.id);
-    out.push(change ? mergeStored(item, change) : item);
+    out.push(change ? mergeStored(item, withUpdateStamp(change, stampForUpdate(item as DrawingElement, change as Partial<DrawingElement>, origin, patch.placements?.[item.id]))) : item);
   }
-  for (const added of patch.add) if (!removed.has(added.id)) out.push(added);
+  for (const added of patch.add) if (!removed.has(added.id)) out.push(withStamp(added, stampForAdd(added, origin, patch.placements?.[added.id])));
   return patch.order ? restack(out, patch.order) : out;
 };
 

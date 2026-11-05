@@ -33,6 +33,8 @@ export const bidirectionalArrowDefinition =
       isManuallyRouted: props.isManuallyRouted ?? false,
       startConnection: props.startConnection,
       endConnection: props.endConnection,
+    // Stored only when set, so a connector without a relation is saved exactly as before.
+    ...(props.relation ? { relation: props.relation } : {}),
     }),
     render: () => null,
     renderToCanvas: renderBidirectionalArrowToCanvas,

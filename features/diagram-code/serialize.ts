@@ -1,4 +1,6 @@
 import type { AIDiagramType } from "@/features/ai/types";
+import { normalizeRelation } from "@/core/shapes/arrow/relations";
+import type { ConnectorEnd, ConnectorRelation } from "@/features/whiteboard/types/whiteboard.types";
 import { escapeString } from "./language/strings";
 
 export interface SerializableGraph {
@@ -6,7 +8,7 @@ export interface SerializableGraph {
   /** The direction the diagram reads in; absent means top to bottom. */
   direction?: "down" | "right" | "up" | "left";
   title?: string;
-  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: string; border?: string; marker?: string; stack?: boolean; color?: string; x?: number; y?: number; width?: number; height?: number }>;
+  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: string; border?: string; marker?: string; stack?: boolean; data?: Record<string, string>; color?: string; x?: number; y?: number; width?: number; height?: number }>;
   edges: Array<{
     from: string;
     to: string;
@@ -17,6 +19,7 @@ export interface SerializableGraph {
     color?: string;
     fromSide?: "top" | "right" | "bottom" | "left";
     toSide?: "top" | "right" | "bottom" | "left";
+    relation?: ConnectorRelation;
   }>;
   groups: Array<{ id: string; label: string; nodeIds: string[] }>;
   /** Frames that hold at least one node. `nodeIds` includes the nodes of the frames inside it. */
@@ -65,6 +68,23 @@ export const writeName = (name: string): string =>
   CONNECTOR_IN_NAME.test(name)
     ? `"${escapeString(name)}"`
     : name;
+
+/** The properties that say what a connection means. An end value uses `from:`/`to:` unless that end already names a side, then `from-end:`/`to-end:`. */
+const relationProps = (edge: SerializableGraph["edges"][number]): string[] => {
+  const relation = normalizeRelation(edge.relation);
+  if (!relation) return [];
+  const props = [`relation: ${relation.kind}`];
+  if (relation.notation) props.push(`notation: ${relation.notation}`);
+  const end = (data: ConnectorEnd | undefined, key: "from" | "to", side: string | undefined) => {
+    if (!data) return;
+    const value = data.multiplicity ?? data.cardinality;
+    if (value) props.push(`${side ? `${key}-end` : key}: ${value}`);
+    if (data.role) props.push(`${key}-role: "${escapeString(data.role)}"`);
+  };
+  end(relation.start, "from", edge.fromSide);
+  end(relation.end, "to", edge.toSide);
+  return props;
+};
 
 const connectorFor = (edge: { dashed?: boolean; bidirectional?: boolean; plain?: boolean }) =>
   edge.plain ? (edge.dashed ? "--" : "-") : edge.bidirectional ? (edge.dashed ? "<-->" : "<>") : edge.dashed ? "-->" : ">";
@@ -131,6 +151,7 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
     if (node.icon) props.push(`icon: ${node.icon}`);
     // A kind already implies its shape (decision: diamond, start/end: pill), so only say it when it adds something.
     if (node.shape && node.shape !== IMPLIED_SHAPE[node.kind ?? ""]) props.push(`shape: ${node.shape}`);
+    for (const [key, value] of Object.entries(node.data ?? {})) props.push(`${key}: "${escapeString(value)}"`);
     if (node.border) props.push(`border: ${node.border}`);
     if (node.marker) props.push(`marker: ${node.marker}`);
     if (node.stack) props.push("stack: true");
@@ -234,6 +255,7 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
     .filter((edge) => known.has(edge.from) && known.has(edge.to))
     .map((edge) => {
       const edgeProps = [
+        ...relationProps(edge),
         ...(edge.color ? [`color: ${edge.color}`] : []),
         ...(edge.fromSide ? [`from: ${edge.fromSide}`] : []),
         ...(edge.toSide ? [`to: ${edge.toSide}`] : []),

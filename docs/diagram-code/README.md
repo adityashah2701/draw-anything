@@ -45,7 +45,11 @@ Properties go in square brackets after a name. Hover a property in the editor fo
 | `status` | node | `error`, `warning`, `success` or `info`: a colour with a meaning (stored as that colour) |
 | `x`, `y`, `w`, `h` | node, frame | exact position (top-left) and size |
 | `padding` | frame | space between a frame's border and its contents |
-| `from`, `to` | connection | side the line leaves / enters: `top`, `right`, `bottom`, `left` |
+| `from`, `to` | connection | a side the line leaves / enters (`top`, `right`, `bottom`, `left`), or what that end says: a multiplicity (`1`, `0..1`, `0..*`, `2..5`) or a cardinality (`one`, `exactly-one`, `many`, `zero-or-one`, `zero-or-many`, `one-or-many`) |
+| `from-end`, `to-end` | connection | the same end value, for an end that already names a side |
+| `relation` | connection | what the connection means (see below); sets the line style, heads and end glyphs |
+| `notation` | connection | `crows-foot` (default) or `chen`, for an `er-relationship` |
+| `from-role`, `to-role` | connection | a role name written under the line at that end |
 
 Kinds: service, database, server, api, queue, cache, storage, cdn, dns, firewall, waf, load-balancer, internet, kubernetes, pod, cluster, container, worker, service-mesh, deployment, namespace, region, availability-zone, vm, user, mobile, browser, lambda, event-bus, secrets, authentication, gateway, message-broker, ai-model, agent, tool, memory, knowledge-base, vector-store, dashboard, alerting, config, cicd, workflow, start, end, decision, parallel, retry, loop, external, generic.
 
@@ -235,6 +239,39 @@ Inbox > Triage > Rules > Typing > Review > Wait > Reports
 Owner > Review
 Parser > Docs
 Remark > Tip
+```
+
+## Connection meaning
+
+A connection can say what it means: `A > B [relation: composition, from: 1, to: 0..*]` (the bracket may follow the name directly, or a label and a colon). The relation is stored on the connector as data (kind, notation and what each end says), and the line style, heads and end glyphs are derived from it, so a text label is never what carries the meaning. A connection with no `relation` is drawn exactly as before.
+
+| Relation | Drawn as |
+| --- | --- |
+| `association` | plain line; multiplicity and role at each end |
+| `directed-association` | open arrow at the target |
+| `generalization` (inheritance) | solid line, hollow triangle at the parent (target) |
+| `realization` (implements) | dashed line, hollow triangle at the interface (target) |
+| `dependency` | dashed line, open arrow at the target |
+| `aggregation` | hollow diamond at the whole (the source: `Whole > Part`) |
+| `composition` | filled diamond at the whole (the source) |
+| `er-relationship` | a glyph or a label from the cardinality at each end (below) |
+| `sync-message`, `async-message`, `return-message`, `create-message`, `destroy-message` | sequence messages: filled arrow, open arrow, dashed open arrow, dashed open arrow, line ending in a cross |
+| `sequence-flow`, `message-flow`, `bpmn-association` | BPMN: filled arrow; dashed with a circle at the start and a hollow arrow; dotted line |
+| `assembly` | a ball at the source end and a socket at the target end |
+
+Cardinality is a word and multiplicity is `m..n` (`*` for many); anything else, such as `many-ish` or `3..`, is reported and ignored. `notation: chen` writes `1`, `N` and `0..N` beside the line instead of crow's foot glyphs, and switching it changes no data. A relation that does not fit its ends (a `generalization` between two decisions) is reported as a warning and still drawn.
+
+```diagram-code
+type flowchart
+
+Customer
+Order
+Line item
+Product
+
+Customer > Order [relation: er-relationship, from: one, to: zero-or-many]
+Order > Line item [relation: composition, from: 1, to: 1..*, to-role: "lines"]
+Line item > Product [relation: er-relationship, notation: chen, from: many, to: one]
 ```
 
 ## Borders, markers, stacks and statuses

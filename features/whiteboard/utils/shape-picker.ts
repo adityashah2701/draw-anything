@@ -1,4 +1,5 @@
 import { resolveOutlineVariant } from "@/core/shapes/outline/variants";
+import { createShape } from "@/core/shapes/shape-runtime";
 import { outlinePropsOf, supportedEntries, type VocabularyEntry, type VocabularyFamily } from "@/core/shapes/vocabulary";
 import type { DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
 
@@ -41,7 +42,7 @@ const CATEGORY_ORDER = Object.keys(SHAPE_CATEGORY_LABELS);
 export const categoryLabel = (category: string): string => SHAPE_CATEGORY_LABELS[category] ?? category.charAt(0).toUpperCase() + category.slice(1);
 
 /** Everything the picker can insert: outlines, parametric pictures and the three plain shapes. */
-export const pickerEntries = (): VocabularyEntry[] => supportedEntries().filter((entry) => entry.representation.kind !== "element" && !(entry.representation.kind === "shape" && entry.representation.shape === "icon"));
+export const pickerEntries = (): VocabularyEntry[] => supportedEntries().filter((entry) => !(entry.representation.kind === "shape" && entry.representation.shape === "icon"));
 
 /** Categories that have an entry, in a fixed order, with unknown ones last. */
 export const shapeCategories = (): string[] => {
@@ -107,7 +108,25 @@ const PLAIN_SIZES: Record<string, { width: number; height: number }> = {
  * set, like every other path that makes one), or a plain rectangle, diamond or pill. Undefined for an entry the
  * picker does not insert.
  */
+/** Starter content for the structured elements the picker inserts, so a new one is not empty. */
+const STRUCTURED_DEFAULTS: Record<string, Record<string, unknown>> = {
+  "entity-table": { name: "Entity", rows: [{ id: "id", name: "id", type: "int", keys: ["pk"] }, { id: "name", name: "name", type: "text" }] },
+  "uml-classifier": { name: "Class", attributes: ["-id: int"], operations: ["+run(): void"] },
+  "mindmap-node": { label: "Topic", role: "main" },
+  lifeline: { name: "Participant" },
+};
+
 export const buildShapeElement = (entry: VocabularyEntry, center: Point, id: string): DrawingElement | undefined => {
+  if (entry.representation.kind === "element") {
+    const type = entry.representation.type;
+    const made = createShape(type as never, { id, ...(STRUCTURED_DEFAULTS[type] ?? {}), color: "#000000" } as never) as unknown as DrawingElement | undefined;
+    if (!made) return undefined;
+    const [a, b] = made.points;
+    const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+    // A lifeline's box is its body, below its head: the box is centred a little lower so head and body are centred together.
+    const lift = type === "lifeline" ? 20 : 0;
+    return { ...made, points: [{ x: center.x - w / 2, y: center.y - h / 2 + lift }, { x: center.x + w / 2, y: center.y + h / 2 + lift }] } as DrawingElement;
+  }
   const outline = outlinePropsOf(entry);
   const size = outline ? resolveOutlineVariant(outline.variant).defaultSize : entry.representation.kind === "shape" ? PLAIN_SIZES[entry.representation.shape] : undefined;
   if (!size) return undefined;

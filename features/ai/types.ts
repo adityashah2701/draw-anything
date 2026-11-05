@@ -1,4 +1,4 @@
-import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { ConnectorRelation, DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
 export type AIModelProvider =
   | "gemini"
@@ -74,7 +74,22 @@ export type AISemanticNodeKind =
   | "retry"
   | "loop"
   | "external"
-  | "generic";
+  | "generic"
+  | "scheduler"
+  | "topic"
+  | "producer"
+  | "consumer"
+  | "event"
+  | "event-store"
+  | "stream-processor"
+  | "notification-service"
+  | "search-index"
+  | "certificate-authority"
+  | "iam-role"
+  | "logger"
+  | "metrics-collector"
+  | "tracing-collector"
+  | "log-storage";
 
 export type AILayoutStrategy =
   | "layered"
@@ -102,6 +117,8 @@ export interface AIDiagramNode {
   border?: "double" | "thick";
   marker?: string;
   stack?: boolean;
+  /** Content of a structured shape: rows, attributes, operations, variant, stereotype, template. */
+  data?: Record<string, string>;
   /** Top-left corner and size in canvas units; when given the node is drawn exactly there. */
   x?: number;
   y?: number;
@@ -126,6 +143,8 @@ export interface AIDiagramEdge {
   /** Side of the source the line leaves by and side of the target it enters by; chosen automatically when absent. */
   fromSide?: "top" | "right" | "bottom" | "left";
   toSide?: "top" | "right" | "bottom" | "left";
+  /** What the connection means; see `core/shapes/arrow/relations.ts`. */
+  relation?: ConnectorRelation;
 }
 
 export interface AIDiagramGroup {

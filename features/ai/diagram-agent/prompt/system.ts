@@ -3,7 +3,7 @@ import type { ToolTransport } from "../types";
 import { EXAMPLES, examplesFor } from "./examples";
 import { iconVocabulary } from "./icon-vocabulary";
 import { PLAYBOOKS } from "./playbooks";
-import { iconCategoriesFor, type PromptContext } from "./prompt-context";
+import { STRUCTURED_DIAGRAM_TYPES, iconCategoriesFor, type PromptContext } from "./prompt-context";
 
 export const LANGUAGE = `Diagram code (one statement per line; // starts a comment):
   type architecture            header lines, before everything else: type, title, direction
@@ -16,6 +16,8 @@ export const LANGUAGE = `Diagram code (one statement per line; // starts a comme
   A > B: HTTPS                 a label on the connection
   A > B: [from: right, to: left]   which side it leaves and enters (top, right, bottom, left); needed only to separate lines that overlap
   Group Name { ... }           a group; nodes declared inside belong to it; groups can nest
+  Name [shape: entity, rows: "id int pk; team_id int fk -> teams.id"]     ER table; also shape: class (attributes:, operations:), lifeline, topic
+  A > B [relation: er-relationship, from: one, to: zero-or-many]           what a connection means: er-relationship, generalization, composition, aggregation, dependency, sync / async / return (sequence)
 Names must be unique. Quote names that contain punctuation: "Auth (v2)" > Users.`;
 
 /**
@@ -37,7 +39,9 @@ export const buildSystemPrompt = (transport: ToolTransport["kind"], context?: Pr
     "How to work:",
     "1. Decide what the diagram must communicate and for whom. Include only what serves that: the smallest diagram that is complete. Never pad to reach a size.",
     "2. Choose the structure: tiers or domains as groups, a clear main path, entry points first.",
-    "3. Give every node an icon or kind that says what it is. Icons first: draw recognisable components (services, databases, clients, devices) as bare icons, shape: icon with a valid icon id; boxes for steps, decisions and long text; mix both equally. Asked for plain boxes or no icons: obey. Use search_icons when unsure of an id, with every term in ONE call (comma-separated); vendor and technology words (postgres, kafka, nginx, s3, esp32) work.",
+    type && STRUCTURED_DIAGRAM_TYPES.has(type)
+      ? `3. This is a ${type} diagram: draw every node with the shape the playbook below names (a table, a class, a lifeline or a topic). Never use icon:, kind: or shape: icon here, and never plain boxes. Put the content in the shape (rows, attributes, operations) and the meaning on the connection (relation:). Use search_icons only if the person asked for icons.`
+      : "3. Give every node an icon or kind that says what it is. Icons first: draw recognisable components (services, databases, clients, devices) as bare icons, shape: icon with a valid icon id; boxes for steps, decisions and long text; mix both equally. Asked for plain boxes or no icons: obey. Use search_icons when unsure of an id, with every term in ONE call (comma-separated); vendor and technology words (postgres, kafka, nginx, s3, esp32) work.",
     "4. Write the diagram, call check_diagram, and act on the errors and design review it returns (crossings, long connectors, label clutter, missing groups).",
     "5. Call finish with the final diagram.",
     "",

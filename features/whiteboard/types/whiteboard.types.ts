@@ -20,7 +20,48 @@ export type ArrowheadKind =
   | "crow-many"
   | "crow-zero-one"
   | "crow-zero-many"
-  | "crow-exactly-one";
+  | "crow-exactly-one"
+  | "crow-one-many"
+  | "cross"
+  | "lollipop"
+  | "socket";
+
+/** What a connector means (see `core/shapes/arrow/relations.ts`); its line style, heads and end glyphs follow from it. */
+export type RelationKind =
+  | "association"
+  | "directed-association"
+  | "generalization"
+  | "realization"
+  | "dependency"
+  | "aggregation"
+  | "composition"
+  | "er-relationship"
+  | "sequence-flow"
+  | "message-flow"
+  | "bpmn-association"
+  | "assembly"
+  | "sync-message"
+  | "async-message"
+  | "return-message"
+  | "create-message"
+  | "destroy-message";
+export type RelationNotation = "crows-foot" | "chen" | "uml" | "bpmn";
+/** How many of the shape at the far end take part: the ER vocabulary. */
+export type Cardinality = "one" | "exactly-one" | "many" | "zero-or-one" | "zero-or-many" | "one-or-many";
+/** What one end of a connector says about the shape it touches. `multiplicity` is UML text such as `0..*`; both are validated, never free text. */
+export interface ConnectorEnd {
+  cardinality?: Cardinality;
+  multiplicity?: string;
+  role?: string;
+}
+export interface ConnectorRelation {
+  kind: RelationKind;
+  /** Absent = the kind's usual notation. Changing it re-draws the connector and leaves the end data alone. */
+  notation?: RelationNotation;
+  /** The end at the connector's first point (its source), and the end at its last point (its target). */
+  start?: ConnectorEnd;
+  end?: ConnectorEnd;
+}
 export type ArrowRoutePreference = "vh" | "hv";
 
 export interface Anchor {
@@ -70,6 +111,13 @@ export interface BaseDrawingElement {
   /** Annotations (group frames, labels) that are not shapes to connect to or route around. */
   isGuide?: boolean;
   /**
+   * Who last set this element's position or size: `auto` (a layout engine; it may move again) or `user`
+   * (a person, the AI acting for one, or explicit coordinates in diagram code; automatic layout leaves it
+   * alone). **Absent reads as `user`**, so boards and shapes that predate it are never moved by an automatic
+   * layout. Written only by `core/layout/placement.ts` at the storage boundary, never by a caller.
+   */
+  placement?: "auto" | "user";
+  /**
    * Parent composite group (see `GroupRecord`). Absent = top level. A dangling or cyclic value is
    * treated as "ungrouped" by `core/groups/group-index.ts`, never as an error.
    */
@@ -117,7 +165,7 @@ export interface BaseDrawingElement {
     /** The direction the diagram reads in, when it is not the default top to bottom (down, right, up, left). */
     diagramDirection?: "right" | "up" | "left";
     /** What a generated element is, so later edits can find or replace it. */
-    role?: "node" | "edge" | "group" | "group-label" | "edge-label";
+    role?: "node" | "edge" | "group" | "group-label" | "edge-label" | "branch";
   };
 }
 
@@ -235,6 +283,8 @@ export interface ArrowBaseShape extends BaseDrawingElement {
   /** The head at each end, drawn when that end's arrowhead flag is on. Absent = the filled triangle. */
   headStart?: ArrowheadKind;
   headEnd?: ArrowheadKind;
+  /** What the connector means. When present it decides the line style, the heads and the end glyphs; absent = drawn from the flags above, as before. */
+  relation?: ConnectorRelation;
 }
 
 export interface ArrowShape extends ArrowBaseShape {
@@ -245,11 +295,83 @@ export interface BidirectionalArrowShape extends ArrowBaseShape {
   type: "arrow-bidirectional";
 }
 
+/** One column of an entity table. The id is stable: a connector attached to a row survives reordering and edits. */
+export interface EntityRow {
+  id: string;
+  name: string;
+  type?: string;
+  nullable?: boolean;
+  keys?: Array<"pk" | "fk" | "uq">;
+  /** A foreign key's target as `table.column`. */
+  references?: string;
+}
+
+/** An entity with structured rows (plan U11). Sized from its text by `core/shapes/entity-table/layout.ts`. */
+export interface EntityTableShape extends BaseDrawingElement {
+  type: "entity-table";
+  kind?: "strong" | "weak" | "associative" | "junction";
+  name?: string;
+  rows?: EntityRow[];
+}
+
+export type UmlClassifierKind = "class" | "abstract" | "interface" | "enumeration" | "object" | "datatype" | "record" | "template";
+
+/** A UML classifier (plan U12). Members are canonical text lines (`+pay(m: Method): Receipt`), parsed for drawing by `core/shapes/uml-classifier/members.ts`. */
+export interface UmlClassifierShape extends BaseDrawingElement {
+  type: "uml-classifier";
+  kind?: UmlClassifierKind;
+  name?: string;
+  stereotype?: string;
+  /** Template parameters, drawn in a dashed box at the corner. */
+  template?: string;
+  attributes?: string[];
+  operations?: string[];
+  collapsed?: { attributes?: boolean; operations?: boolean };
+}
+
+export type MindmapRole = "central" | "main" | "sub" | "leaf";
+
+/** A mind-map topic (plan U14). Its branch to the parent is a connector (`ai.role: "branch"`), so collapse is the existing hide. */
+export interface MindmapNodeShape extends BaseDrawingElement {
+  type: "mindmap-node";
+  role?: MindmapRole;
+  parentId?: string;
+  collapsed?: boolean;
+  /** The colour a main branch gives its descendants. */
+  branchColor?: string;
+}
+
+/** A participant with its lifeline (plan U17): a head, a dashed line down the body, and activation bars as fractions of the body. */
+export interface LifelineShape extends BaseDrawingElement {
+  type: "lifeline";
+  name?: string;
+  head?: "box" | "actor";
+  activations?: Array<{ id: string; from: number; to: number }>;
+}
+
 /** Where a frame's title sits: in a band at the top of the frame, or on a tab above it. */
 export type FrameTitlePlacement = "inside" | "above";
 
 /** Named starting points for a frame; each only sets defaults (see `core/frames/presets.ts`). */
-export type FramePreset = "section" | "container" | "feature-group" | "swimlane" | "device";
+export type FramePreset =
+  | "section"
+  | "container"
+  | "feature-group"
+  | "swimlane"
+  | "device"
+  | "system-boundary"
+  | "external-boundary"
+  | "trust-boundary"
+  | "network-boundary"
+  | "cluster"
+  | "layer"
+  | "region"
+  | "pool"
+  | "lane"
+  | "fragment";
+
+/** A sequence-diagram fragment's operator, drawn in its tab. */
+export type FragmentOperator = "loop" | "alt" | "opt" | "par" | "break" | "neg" | "critical";
 
 /**
  * A frame: a titled region that owns the elements placed in it (see `core/frames`). `points` are the
@@ -272,6 +394,12 @@ export interface FrameShape extends BaseDrawingElement {
   minWidth?: number;
   minHeight?: number;
   preset?: FramePreset;
+  /** `fragment` preset only: the operator written in the tab (loop, alt, opt, par, break). */
+  operator?: FragmentOperator;
+  /** `pool` and `lane` presets: the axis lanes stack along. Absent = horizontal bands (lanes stacked top to bottom). */
+  orientation?: "horizontal" | "vertical";
+  /** Fragment divider positions, as fractions of the height (an `else` or `and` section starts at each). */
+  dividers?: number[];
 }
 
 export type DrawingElement =
@@ -287,6 +415,10 @@ export type DrawingElement =
   | LineShape
   | TextShape
   | SemanticNodeShape
+  | EntityTableShape
+  | UmlClassifierShape
+  | MindmapNodeShape
+  | LifelineShape
   | FrameShape
   | ArrowShape
   | BidirectionalArrowShape;
@@ -313,8 +445,32 @@ export interface GroupRecord {
   strokeWidth: number;
 }
 
+/**
+ * The layout configuration of one scope, stored in the same list as the shapes and group records (never
+ * drawn, never selected, never exported). There is at most one per scope; see `core/layout/record.ts`.
+ */
+export interface LayoutRecord {
+  /** `layout:<scope.kind>:<scope.id>` (`layout:board` for the whole board), so a scope has one record. */
+  id: string;
+  type: "layout";
+  points: [];
+  color: string;
+  strokeWidth: number;
+  /** A record is never grouped, locked, hidden or framed; these keep code that reads them off any stored item type-safe. */
+  groupId?: undefined;
+  locked?: undefined;
+  hidden?: undefined;
+  scope: { kind: "board" } | { kind: "diagram"; id: string } | { kind: "frame"; id: string };
+  engine: string;
+  algorithm: string;
+  params?: Record<string, unknown>;
+  /** What an edit that triggers layout may do: leave everything where it is, or adjust auto-placed elements. A full re-layout is never a stored default. */
+  incremental: "preserve" | "adjust";
+  version: 1;
+}
+
 /** Everything the stored list can hold. */
-export type StoredElement = DrawingElement | GroupRecord;
+export type StoredElement = DrawingElement | GroupRecord | LayoutRecord;
 
 export interface CanvasState {
   elements: DrawingElement[];

@@ -17,6 +17,10 @@ export const ARROWHEAD_KINDS: readonly ArrowheadKind[] = [
   "crow-zero-one",
   "crow-zero-many",
   "crow-exactly-one",
+  "crow-one-many",
+  "cross",
+  "lollipop",
+  "socket",
 ];
 
 export type PathCmd = readonly ["M", number, number] | readonly ["L", number, number] | readonly ["Z"];
@@ -33,6 +37,9 @@ export interface HeadSize {
 const n = (v: number) => Math.round(v * 1000) / 1000 + 0;
 
 const circleRadius = (size: HeadSize) => size.length * 0.38;
+/** A socket's stem, and the radius of its cup. */
+const socketStem = (size: HeadSize) => size.length * 0.35;
+const socketRadius = (size: HeadSize) => size.length * 0.55;
 
 /** How far back from the tip the line must stop so a hollow head is not drawn over the line. */
 export const headTrim = (kind: ArrowheadKind, size: HeadSize): number => {
@@ -44,7 +51,10 @@ export const headTrim = (kind: ArrowheadKind, size: HeadSize): number => {
       return circleRadius(size) * 2;
     case "crow-zero-one":
     case "crow-zero-many":
+    case "lollipop":
       return size.length + circleRadius(size) * 2;
+    case "socket":
+      return socketStem(size) + socketRadius(size);
     default:
       return 0;
   }
@@ -96,6 +106,41 @@ export const arrowheadOps = (kind: ArrowheadKind, tip: Point, dir: Point, size: 
         ops.push({ kind: "circle", cx: c.x, cy: c.y, r: n(r), fill: false });
       }
       return ops;
+    }
+    case "crow-one-many": {
+      // The prongs touch the shape; the bar sits just beyond them.
+      const base = at(len, 0);
+      const ops: HeadOp[] = [at(0, -w), tipPoint, at(0, w)].map((end) => ({ kind: "stroke", path: line(base, end) }) as HeadOp);
+      ops.push({ kind: "stroke", path: line(at(len + 3, -w), at(len + 3, w)) });
+      return ops;
+    }
+    case "cross":
+      return [
+        { kind: "stroke", path: line(at(w * 0.2, -w * 0.8), at(w * 1.8, w * 0.8)) },
+        { kind: "stroke", path: line(at(w * 0.2, w * 0.8), at(w * 1.8, -w * 0.8)) },
+      ];
+    case "lollipop": {
+      // A provided interface: a ball on a short stem.
+      const r = circleRadius(size);
+      const c = at(len + r, 0);
+      return [
+        { kind: "stroke", path: line(at(len, 0), tipPoint) },
+        { kind: "circle", cx: c.x, cy: c.y, r: n(r), fill: false },
+      ];
+    }
+    case "socket": {
+      // A required interface: a cup, open toward the line, on a short stem.
+      const stem = socketStem(size);
+      const radius = socketRadius(size);
+      const arc: Point[] = [];
+      for (let degrees = -90; degrees <= 90; degrees += 15) {
+        const t = (degrees * Math.PI) / 180;
+        arc.push(at(stem + radius * (1 - Math.cos(t)), radius * Math.sin(t)));
+      }
+      return [
+        { kind: "stroke", path: line(tipPoint, at(stem, 0)) },
+        { kind: "stroke", path: line(...arc) },
+      ];
     }
     case "crow-zero-one": {
       const r = circleRadius(size);

@@ -51,7 +51,26 @@ const PLAIN: Record<string, { width: number; height: number; path: (w: number, h
  * variant's own path, the second line of a double border, the marker's own strokes), so a preview cannot drift
  * from the shape. Undefined for an entry that is not drawn as an outline or a plain shape.
  */
+/** A schematic picture of a structured element: its parts, not its text. */
+const structuredPreview = (type: string): ShapePreview | undefined => {
+  const box = (x: number, y: number, w: number, h: number) => `M${x} ${y}H${x + w}V${y + h}H${x}Z`;
+  const line = (y: number, x0 = 6, x1 = 38) => `M${x0} ${y}H${x1}`;
+  switch (type) {
+    case "entity-table":
+      return { outlines: [{ d: box(6, 4, 32, 24), width: 1.4 }, { d: line(11), width: 1.4 }], marks: [{ d: `${line(16, 10, 18)}${line(16, 22, 34)}${line(21, 10, 18)}${line(21, 22, 34)}`, filled: false }], circles: [] };
+    case "uml-classifier":
+      return { outlines: [{ d: box(6, 4, 32, 24), width: 1.4 }, { d: line(11), width: 1.4 }, { d: line(19), width: 1.4 }], marks: [{ d: `${line(15, 10, 30)}${line(23, 10, 28)}`, filled: false }], circles: [] };
+    case "mindmap-node":
+      return { outlines: [{ d: `M12 9H32A7 7 0 0 1 32 23H12A7 7 0 0 1 12 9Z`, width: 1.4 }], marks: [{ d: "M4 16H8", filled: false }], circles: [] };
+    case "lifeline":
+      return { outlines: [{ d: box(12, 3, 20, 9), width: 1.4 }], marks: [{ d: "M22 12V29", filled: false }], circles: [] };
+    default:
+      return undefined;
+  }
+};
+
 export const shapePreview = (entry: VocabularyEntry): ShapePreview | undefined => {
+  if (entry.representation.kind === "element") return structuredPreview(entry.representation.type);
   const props = outlinePropsOf(entry);
   const variant = props ? getOutlineVariant(props.variant) : undefined;
   const plain = entry.representation.kind === "shape" ? PLAIN[entry.representation.shape] : undefined;

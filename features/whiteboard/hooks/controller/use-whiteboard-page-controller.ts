@@ -4,6 +4,7 @@ import { makeBounds } from "@/core/geometry/box";
 import { frameForBounds } from "@/core/frames/containment";
 import { createFrame, fitFrames, planAutoFit, reparentMoved, updateFrames, type FrameChanges } from "@/core/frames/frame-api";
 import { applyPatch as applyStoredPatch } from "@/core/groups/patch";
+import { pushElement, writeElement } from "./storage-writes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shapeRegistry } from "@/core/shapes/shape-registry";
 import { DEFAULT_LABEL_FONT_SIZE, defaultLabelWeight } from "@/core/text/label-layout";
@@ -41,6 +42,7 @@ import { createBaselineResolver } from "@/features/whiteboard/utils/text-baselin
 import { planFrameScale, planShapeMoves, uniformOffsets, withInternalConnectors } from "@/features/whiteboard/utils/move-plan";
 import { buildSelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
 import { useSelectionInspector } from "./use-selection-inspector";
+import { isStructured, planStructured, readStructured } from "@/features/whiteboard/utils/structured-edit";
 import { useGroupCommands } from "@/features/whiteboard/hooks/interaction/use-group-commands";
 import { effectiveContext, resolveDoubleClick, resolveGroupClick, resolveMarquee } from "@/features/whiteboard/hooks/interaction/group-selection";
 import { useMagneticSnap } from "@/core/snap/use-magnetic-snap";
@@ -62,6 +64,7 @@ import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/data/use-whit
 import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whiteboard-ui-state";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { planDiagramCode, shiftElement } from "./diagram-placement";
+import { newDiagramPatch, planEngineLayout, type EngineLayoutInput, type EngineLayoutPlan } from "@/features/whiteboard/commands/layout-engine";
 import { useEditingText } from "./use-editing-text";
 import { coveredByPanels } from "@/features/whiteboard/components/overlays/panel-layout";
 import { useSelectedArrow } from "./use-selected-arrow";
@@ -85,13 +88,6 @@ const restackList = (list: LiveList<LiveObject<DrawingElementJson>>, orderedIds:
   const current: string[] = [];
   for (let i = 0; i < list.length; i += 1) current.push(list.get(i)!.get("id") as string);
   for (const move of movesToOrder(current, orderedIds) ?? []) list.move(move.from, move.to);
-};
-
-const writeElement = (live: LiveObject<DrawingElementJson>, element: DrawingElementJson) => {
-  const fields = element as unknown as Record<string, unknown>;
-  const cleared = Object.keys(fields).filter((key) => fields[key] === undefined);
-  live.update(element);
-  for (const key of cleared) live.delete(key as keyof DrawingElementJson);
 };
 
 export const useWhiteboardPageController = (whiteboardId: string) => {
@@ -122,7 +118,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
 
   const addElement = useLiveblocksM(
     ({ storage }, element: DrawingElementJson) => {
-      storage.get("elements").push(new LiveObject(element));
+      pushElement(storage.get("elements"), element);
     },
     [],
   );
@@ -170,16 +166,17 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     const list = storage.get("elements");
     const indexById = new Map<string, number>();
     for (let i = 0; i < list.length; i += 1) indexById.set(list.get(i)!.get("id") as string, i);
+    const origin = patch.origin ?? "user";
     for (const element of patch.update) {
       const index = indexById.get(element.id);
-      if (index !== undefined) writeElement(list.get(index)!, element as unknown as DrawingElementJson);
+      if (index !== undefined) writeElement(list.get(index)!, element as unknown as DrawingElementJson, origin, patch.placements?.[element.id]);
     }
     const doomed = new Set(patch.remove);
     for (let i = list.length - 1; i >= 0; i -= 1) {
       if (doomed.has(list.get(i)!.get("id") as string)) list.delete(i);
     }
     for (const element of patch.add) {
-      if (!doomed.has(element.id)) list.push(new LiveObject(element as unknown as DrawingElementJson));
+      if (!doomed.has(element.id)) pushElement(list, element as unknown as DrawingElementJson, origin, patch.placements?.[element.id]);
     }
     if (patch.order) restackList(list, patch.order);
   }, []);
@@ -609,8 +606,27 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       addElement(node as unknown as DrawingElementJson);
       setSelectedElements([node.id]);
       uiState.setCurrentTool("select");
+      // A table, class, topic or lifeline is empty until it is filled in: open its editor straight away.
+      if (isStructured(node)) uiState.setEditingShapeLabelId(node.id);
     },
     [addElement, canvasViewport.viewportBounds, generateId, uiState],
+  );
+
+  // Layout through the engines: a plan is computed against the board as it is now and nothing is written until it is applied (one undo step).
+  const planLayout = useCallback((input: EngineLayoutInput) => planEngineLayout(commandContextRef.current!, input), []);
+  const applyLayoutPlan = useCallback(
+    (plan: EngineLayoutPlan) => {
+      if (!whiteboardAccess.hasEditAccess || !plan.patch) return false;
+      gestureHistory.begin();
+      try {
+        applyDocPatch(plan.patch);
+      } finally {
+        gestureHistory.end();
+      }
+      toast.success(plan.preview.moves.length === 0 ? "Layout saved." : `Laid out: ${plan.preview.moves.length} element${plan.preview.moves.length === 1 ? "" : "s"} moved.`);
+      return true;
+    },
+    [applyDocPatch, gestureHistory, whiteboardAccess.hasEditAccess],
   );
 
   // A shape from the picker lands the same way an icon does: in the middle of the view, selected, ready to label.
@@ -640,6 +656,13 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       if (element.type === "frame") {
         // The title is a field of the frame, edited in place; a frame with its header hidden has none to edit.
         if (!frameRegions(element)?.header) return false;
+        uiState.setEditingShapeLabelId(element.id);
+        setSelectedElements([element.id]);
+        uiState.setCurrentTool("select");
+        return true;
+      }
+      if (isStructured(element)) {
+        // Entity tables, classes, topics and lifelines edit their content in a card over the shape.
         uiState.setEditingShapeLabelId(element.id);
         setSelectedElements([element.id]);
         uiState.setCurrentTool("select");
@@ -864,6 +887,20 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     beginEditing,
   });
 
+  // Rows, members and names of the one selected structured shape (entity table, class, topic, lifeline), edited as text.
+  const structured = useMemo(() => {
+    const only = selectedElements.length === 1 ? elements.find((el) => el.id === selectedElements[0]) : undefined;
+    if (!isStructured(only)) return null;
+    const editable = whiteboardAccess.hasEditAccess && !groupSelection.isLocked(only.id);
+    return {
+      fields: readStructured(only),
+      editable,
+      set: (field: Parameters<typeof planStructured>[1], text: string) => {
+        if (editable) updateElements([planStructured(only, field, text)] as unknown as DrawingElementJson[]);
+      },
+    };
+  }, [elements, groupSelection, selectedElements, updateElements, whiteboardAccess.hasEditAccess]);
+
   // One picker serves both jobs: a pick adds an icon to the board, or (replace mode) retargets the selected nodes.
   const pickIcon = useCallback(
     (icon: IconDef) => (uiState.iconPickerMode === "replace" ? semanticNodes.replaceIcon(icon) : insertIcon(icon)),
@@ -935,6 +972,9 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
           break;
         case "insert-shape":
           uiState.setShowShapePicker(true);
+          break;
+        case "layout":
+          uiState.setShowLayoutPanel(true);
           break;
         case "open-agent":
           uiState.setShowAIModal(true);
@@ -1037,7 +1077,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
    * editing code feels like editing the diagram.
    */
   const applyDiagramCode = useCallback(
-    ({ elements: next, replaceIds, anchored, patch }: ApplyDiagramCodePayload) => {
+    ({ elements: next, replaceIds, anchored, patch, placements, familyEngine }: ApplyDiagramCodePayload) => {
       if (!whiteboardAccess.hasEditAccess) return;
 
       // An update planned against the board: same elements, only what changed, one undo step.
@@ -1045,7 +1085,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         if (patch.add.length === 0 && patch.update.length === 0 && patch.remove.length === 0) return;
         gestureHistory.begin();
         try {
-          applyDocPatch({ add: patch.add, update: patch.update, remove: patch.remove } as unknown as DocPatch);
+          applyDocPatch({ add: patch.add, update: patch.update, remove: patch.remove, origin: "layout", placements } as unknown as DocPatch);
         } finally {
           gestureHistory.end();
         }
@@ -1061,12 +1101,9 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
       gestureHistory.begin();
       try {
         if (replaced.length > 0) deleteElementsLive(replaced.map((element) => element.id));
-        next.forEach((element) =>
-          addElement({
-            ...element,
-            points: shiftElement(element, shift).points,
-          } as unknown as DrawingElementJson),
-        );
+        // One patch: a diagram the code laid out is `auto` (explicit positions in the code are `user`), and is stored with its layout record.
+        const placed = next.map((element) => ({ ...element, points: shiftElement(element, shift).points }) as DrawingElement);
+        applyDocPatch({ ...newDiagramPatch(placed, undefined, familyEngine === true), placements } as unknown as DocPatch);
       } finally {
         gestureHistory.end();
       }
@@ -1141,8 +1178,11 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     beginEditing,
     insertIcon,
     insertShape,
+    planLayout,
+    applyLayoutPlan,
     pickIcon,
     semanticNodes,
+    structured,
     boardExport,
     deleteSelectedElements,
     elementCommands,

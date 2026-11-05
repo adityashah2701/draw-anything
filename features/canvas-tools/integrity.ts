@@ -1,5 +1,5 @@
 import { brokenFrameLinks } from "@/core/frames/frame-index";
-import { isGroupRecord } from "@/core/groups/group-index";
+import { isGroupRecord, isStoredRecord } from "@/core/groups/group-index";
 import { applyPatch, mergeStored, type DocPatch } from "@/core/groups/patch";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -41,7 +41,7 @@ export const checkPatch = (before: readonly StoredElement[], patch: DocPatch): s
   if (duplicates.size > 0) problems.push(`duplicate ids after the change: ${[...duplicates].slice(0, 5).join(", ")}`);
 
   const groups = new Set(after.filter(isGroupRecord).map((record) => record.id));
-  const shapes = new Set(after.filter((item) => !isGroupRecord(item)).map((item) => item.id));
+  const shapes = new Set(after.filter((item) => !isStoredRecord(item)).map((item) => item.id));
   const touched = new Set([...patch.add.map((e) => e.id), ...patch.update.map((e) => e.id)]);
   const brokenFrames = new Set(brokenFrameLinks(after));
 
@@ -51,6 +51,7 @@ export const checkPatch = (before: readonly StoredElement[], patch: DocPatch): s
       if (item.groupId !== undefined && (item.groupId === item.id || !groups.has(item.groupId))) problems.push(`group "${item.id}" is nested in "${item.groupId}", which is not a group`);
       continue;
     }
+    if (isStoredRecord(item)) continue; // a layout record: configuration, checked by its own reader
     const shape = item as DrawingElement;
     if (!getShapeDefinition(shape.type)) problems.push(`"${shape.id}" has an unknown type "${String(shape.type)}"`);
     if (!finitePoints(shape.points) || shape.points.length === 0) problems.push(`"${shape.id}" has invalid points`);
@@ -67,7 +68,7 @@ export const checkPatch = (before: readonly StoredElement[], patch: DocPatch): s
 
   // A connector this patch did not touch must not be orphaned by it.
   for (const item of after) {
-    if (isGroupRecord(item) || touched.has(item.id)) continue;
+    if (isStoredRecord(item) || touched.has(item.id)) continue;
     const shape = item as Connected;
     if (shape.type !== "arrow" && shape.type !== "arrow-bidirectional") continue;
     for (const end of [shape.startConnection?.elementId, shape.endConnection?.elementId]) {

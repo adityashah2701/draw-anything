@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { orderFramesBelowContents } from "@/core/frames/containment";
 import { applyPatch, type DocPatch } from "@/core/groups/patch";
+import { hasFamilyLayout } from "@/core/layout/record";
 import { loadFromCanvas, planApply } from "@/features/diagram-code/apply";
 import { compileDiagramCode } from "@/features/diagram-code/language/compile";
 import { formatDiagramCode } from "@/features/diagram-code/language/format";
@@ -128,7 +129,7 @@ export const applyDiagramCodeTool: ToolDefinition<typeof applyInput> = {
     const { ctx } = env;
     const scope = ids ? resolveTargets(env, ids).shapeIds : [];
     const generationId = claimId(env, undefined);
-    const loaded = loadFromCanvas(ctx.shapes, { selectedIds: scope, layout: with_layout === true, generationId });
+    const loaded = loadFromCanvas(ctx.shapes, { selectedIds: scope, layout: with_layout === true, generationId, familyEngine: hasFamilyLayout(ctx.stored) });
     if (!loaded) throw new ToolError("invalid_state", "There is no diagram on the board to update (no labelled shapes). Use import_diagram to add one from code.");
     const outcome = planApply({ code, canvas: ctx.shapes, sync: loaded.sync, resolve, generationId });
     if (outcome.status === "invalid") {
@@ -150,7 +151,7 @@ export const applyDiagramCodeTool: ToolDefinition<typeof applyInput> = {
     }
 
     const changed = plan.patch.update.filter((el) => !sameElement(before.get(el.id), el));
-    const patch: DocPatch = { add: plan.patch.add, update: changed.map((el) => asUpdate(before.get(el.id), el)), remove: removed };
+    const patch: DocPatch = { add: plan.patch.add, update: changed.map((el) => asUpdate(before.get(el.id), el)), remove: removed, origin: "layout", placements: plan.placements };
     const order = orderFramesBelowContents(applyPatch(ctx.stored, patch));
     if (order) patch.order = order;
     const { added, removed: gone, restored } = plan.summary;

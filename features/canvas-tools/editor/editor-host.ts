@@ -1,4 +1,4 @@
-import { isGroupRecord } from "@/core/groups/group-index";
+import { isStoredRecord } from "@/core/groups/group-index";
 import type { DocPatch } from "@/core/groups/patch";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
 import type { Bounds, DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -37,7 +37,7 @@ export const sanitizeLoaded = (elements: readonly unknown[]): StoredElement[] =>
   const out: StoredElement[] = [];
   for (const item of elements) {
     if (!isRecord(item) || typeof item.id !== "string" || typeof item.type !== "string" || seen.has(item.id)) continue;
-    if (!isGroupRecord(item) && !Array.isArray(item.points)) continue;
+    if (!isStoredRecord(item) && !Array.isArray(item.points)) continue;
     seen.add(item.id);
     out.push(structuredClone(item) as unknown as StoredElement);
   }

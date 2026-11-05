@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { toParameters } from "./schemas";
 import { ARRANGE_TOOLS } from "./tools/arrange";
+import { LAYOUT_TOOLS } from "./tools/layout";
 import { CONNECTOR_TOOLS } from "./tools/connectors";
 import { CREATE_TOOLS } from "./tools/create";
 import { DESIGN_TOOLS } from "./tools/design";
@@ -23,6 +24,7 @@ export const STATIC_TOOLS: readonly ToolDefinition[] = [
   ...EDIT_TOOLS,
   ...CONNECTOR_TOOLS,
   ...ARRANGE_TOOLS,
+  ...LAYOUT_TOOLS,
   ...ORGANIZE_TOOLS,
   ...FRAME_TOOLS,
   ...DOCUMENT_TOOLS,

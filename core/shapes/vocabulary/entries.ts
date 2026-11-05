@@ -79,9 +79,11 @@ export const VOCABULARY: readonly VocabularyEntry[] = [
   parametric("event-based-gateway", "bpmn", "Event-based gateway", [], [F], "A BPMN split decided by which event happens first: a diamond with a pentagon.", { kind: "parametric", base: "rhombus", marker: "pentagon" }),
   parametric("complex-gateway", "bpmn", "Complex gateway", [], [F], "A BPMN split or join with its own condition: a diamond with an asterisk.", { kind: "parametric", base: "rhombus", marker: "asterisk" }),
 
+  parametric("subprocess", "bpmn", "Subprocess", ["sub-process"], [F], "A BPMN step that contains other steps: a box with the plus marker.", { kind: "parametric", base: "box", marker: "plus" }),
+
   // Structured shapes that need their own data model are named here and listed nowhere until they exist.
-  { id: "entity-table", category: "er", name: "Entity table", aliases: ["entity", "table"], families: [E], tier: 3, representation: { kind: "element", type: "entity-table" }, guidance: "An ER entity with rows for its attributes.", status: "planned" },
-  { id: "uml-class", category: "uml", name: "Class", aliases: ["class", "interface"], families: [U], tier: 3, representation: { kind: "element", type: "uml-classifier" }, guidance: "A UML class with name, attribute and operation compartments.", status: "planned" },
-  { id: "lifeline", category: "sequence", name: "Lifeline", aliases: ["participant"], families: [S], tier: 3, representation: { kind: "element", type: "lifeline" }, guidance: "A participant in a sequence diagram with its lifeline.", status: "planned" },
-  { id: "mindmap-topic", category: "mind-map", name: "Topic", aliases: ["topic", "branch"], families: [M], tier: 3, representation: { kind: "element", type: "mindmap-node" }, guidance: "A topic in a mind map, drawn with its own branch.", status: "planned" },
+  { id: "entity-table", category: "er", name: "Entity table", aliases: ["entity", "table"], families: [E], tier: 3, representation: { kind: "element", type: "entity-table" }, guidance: "An ER entity with rows for its attributes.", status: "supported" },
+  { id: "uml-class", category: "uml", name: "Class", aliases: ["class", "interface"], families: [U], tier: 3, representation: { kind: "element", type: "uml-classifier" }, guidance: "A UML class with name, attribute and operation compartments.", status: "supported" },
+  { id: "lifeline", category: "sequence", name: "Lifeline", aliases: ["participant"], families: [S], tier: 3, representation: { kind: "element", type: "lifeline" }, guidance: "A participant in a sequence diagram with its lifeline.", status: "supported" },
+  { id: "mindmap-topic", category: "mind-map", name: "Topic", aliases: ["topic", "branch"], families: [M], tier: 3, representation: { kind: "element", type: "mindmap-node" }, guidance: "A topic in a mind map, drawn with its own branch.", status: "supported" },
 ];

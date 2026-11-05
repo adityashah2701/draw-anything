@@ -68,7 +68,7 @@ describe("prompts", () => {
   });
 
   it("system prompt stays a sensible size", () => {
-    expect(buildSystemPrompt("text").length).toBeLessThan(12_000);
+    expect(buildSystemPrompt("text").length).toBeLessThan(14_500);
   });
 });
 

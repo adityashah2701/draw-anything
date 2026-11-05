@@ -91,8 +91,43 @@ suite("editor properties bar", () => {
     const c = byId(await s.elements(), "ab");
     await s.click({ x: (c.points[0].x + c.points[c.points.length - 1].x) / 2, y: c.points[0].y });
     await s.waitForIdle();
-    expect(await chips()).toEqual(["Stroke", "Line", "Opacity"]);
+    expect(await chips()).toEqual(["Stroke", "Line", "Meaning", "Opacity"]);
     await s.screenshot("bar-connector");
+  });
+
+  it("changes what a connector means from the Meaning section: data on the connector, one undo step each", async () => {
+    await select("A");
+    await s.page.keyboard.up("Shift");
+    const c = byId(await s.elements(), "ab");
+    await s.click({ x: (c.points[0].x + c.points[c.points.length - 1].x) / 2, y: c.points[0].y });
+    await s.waitForIdle();
+    const relation = async () => (byId(await s.elements(), "ab") as unknown as { relation?: { kind: string; notation?: string; end?: { cardinality?: string } } }).relation;
+    expect(await relation()).toBeUndefined();
+
+    await chip(/^Meaning/).click();
+    await popover("Meaning").getByRole("button", { name: "Relation: ER relationship" }).click();
+    await s.waitForIdle();
+    expect(await relation()).toEqual({ kind: "er-relationship" });
+
+    await popover("Meaning").getByRole("button", { name: "End (target) cardinality: many" }).click();
+    await s.waitForIdle();
+    expect(await relation()).toEqual({ kind: "er-relationship", end: { cardinality: "many" } });
+
+    await popover("Meaning").getByRole("button", { name: "Notation: Chen" }).click();
+    await s.waitForIdle();
+    expect(await relation()).toEqual({ kind: "er-relationship", notation: "chen", end: { cardinality: "many" } });
+
+    // Each change was one undo step, and switching the notation never touched the data.
+    await s.page.keyboard.press("Escape");
+    await s.press("Control+z");
+    await s.waitForIdle();
+    expect(await relation()).toEqual({ kind: "er-relationship", end: { cardinality: "many" } });
+    await s.press("Control+z");
+    await s.waitForIdle();
+    expect(await relation()).toEqual({ kind: "er-relationship" });
+    await s.press("Control+z");
+    await s.waitForIdle();
+    expect(await relation()).toBeUndefined();
   });
 
   it("changes stroke colour and width of the selection, one undo step each", async () => {

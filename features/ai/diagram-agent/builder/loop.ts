@@ -12,6 +12,9 @@ import { addLines, adjust, createState, describeFlow, describeMoved, withBareIco
 /** Each turn is a model call, and free tiers allow few calls a minute: keep the default small. */
 const DEFAULT_MAX_TURNS = 12;
 const DEFAULT_MAX_REVIEWS = 2;
+/** A structured diagram is one add of up to this many statements, then finish; a second step only repairs errors. */
+const STRUCTURED_ADD_STATEMENTS = 48;
+const STRUCTURED_MAX_TURNS = 4;
 /** Wall-clock limit for the whole run: slow reasoning models can spend minutes per step, so steps alone do not bound it. */
 const DEFAULT_MAX_MS = 240_000;
 /** Turns spent only looking up icons do not use the budget, up to this many. */
@@ -50,6 +53,8 @@ export interface BuilderInput {
   frameId: string;
   maxTurns?: number;
   maxReviews?: number;
+  /** An ER, class, sequence or mind-map diagram: written whole in one add and not polished (a table or a lifeline has nothing to adjust). */
+  structured?: boolean;
   /** Stop starting new steps after this many ms once something is drawn (default 240 s). */
   maxMs?: number;
   /** Undo an adjustment that made the picture worse (default on). */
@@ -93,8 +98,8 @@ const NO_CENTRES = { get: () => undefined };
  */
 export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderResult> => {
   const { transport, signal } = input;
-  const baseTurns = Math.max(1, input.maxTurns ?? DEFAULT_MAX_TURNS);
-  const maxReviews = input.maxReviews ?? DEFAULT_MAX_REVIEWS;
+  const baseTurns = Math.max(1, input.maxTurns ?? (input.structured ? STRUCTURED_MAX_TURNS : DEFAULT_MAX_TURNS));
+  const maxReviews = input.maxReviews ?? (input.structured ? 0 : DEFAULT_MAX_REVIEWS);
   let maxTurns = baseTurns;
   let lookupTurns = 0;
 
@@ -226,7 +231,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
           break;
         }
         case "add": {
-          const result = addLines(state, call.arg);
+          const result = addLines(state, call.arg, input.structured ? STRUCTURED_ADD_STATEMENTS : undefined);
           if (result.errors.length > 0) {
             notes.push(`add failed, nothing was added: ${result.errors.slice(0, 4).join("; ")}`);
           } else {

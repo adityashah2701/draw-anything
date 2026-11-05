@@ -40,8 +40,8 @@ describe("completion", () => {
   });
 
   it("offers edge properties after a connection label and node properties before", () => {
-    expect(complete("A > B: hi [fr|")?.labels).toEqual(["from"]);
-    expect(complete("A > B: hi [from: |")?.labels).toEqual(["top", "right", "bottom", "left"]);
+    expect(complete("A > B: hi [fr|")?.labels).toEqual(["from", "from-end", "from-role"]);
+    expect(complete("A > B: hi [from: |")?.labels.slice(0, 4)).toEqual(["top", "right", "bottom", "left"]); // sides first, then what the end says
     expect(complete("A > B [fr|")).toBeNull(); // node B has no `from`
   });
 

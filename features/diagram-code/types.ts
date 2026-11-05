@@ -1,5 +1,5 @@
 import type { AIDiagramType } from "@/features/ai/types";
-import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { ConnectorRelation, DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
 export interface DiagramCodeIssue {
   /** 1-based line in the source. */
@@ -38,6 +38,8 @@ export interface ParsedNode {
   marker?: string;
   /** Drawn as a stack of three. */
   stack?: boolean;
+  /** Structured-shape content (see `IRNode.data`). */
+  data?: Record<string, string>;
   /** #rrggbb */
   color?: string;
   /** Top-left corner and size in canvas units; when given, the node is drawn exactly there. */
@@ -64,6 +66,8 @@ export interface ParsedEdge {
   /** Side of the source node the connection leaves by / side of the target it enters by. */
   fromSide?: EdgeSide;
   toSide?: EdgeSide;
+  /** What the connection means (see `core/shapes/arrow/relations.ts`). */
+  relation?: ConnectorRelation;
   line: number;
 }
 
@@ -116,4 +120,8 @@ export interface ApplyDiagramCodePayload {
    * ids kept. When present, `elements` is ignored and `replaceIds` is empty.
    */
   patch?: { add: DrawingElement[]; update: DrawingElement[]; remove: string[] };
+  /** Who placed each element, where the code gave its position (`user`); everything else the code lays out is `auto`. */
+  placements?: Record<string, "auto" | "user">;
+  /** The diagram was placed by its family's layout engine (it names its type), so its layout record says so. */
+  familyEngine?: boolean;
 }

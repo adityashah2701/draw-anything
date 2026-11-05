@@ -6,7 +6,10 @@ import {
 } from "@/features/ai/schemas";
 import type { AIDiagramType, AIModelProvider } from "@/features/ai/types";
 import { isOutlineVariantId, shapeForBase } from "@/core/shapes/outline/variants";
+import { normalizeRelation, reverseRelation } from "@/core/shapes/arrow/relations";
 import { entryForOutline } from "@/core/shapes/vocabulary";
+import { writeRows } from "@/core/shapes/entity-table/rows";
+import { familyCompileOptions } from "@/features/ai/server/layout/family-placement";
 import type { DrawingElement, FrameShape } from "@/features/whiteboard/types/whiteboard.types";
 import { tint } from "@/core/color/named-colors";
 import { parseAnchorSide } from "@/core/anchors/generate-anchors";
@@ -37,7 +40,7 @@ export const documentFromParsedCode = (
   meta: { prompt?: string; provider?: AIModelProvider; modelName?: string } = {},
 ) => {
   const { graph, warnings } = normalizeModelGraphDraftDetailed({
-    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon, shape: node.shape, border: node.border, marker: node.marker, stack: node.stack, color: node.color, x: node.x, y: node.y, width: node.width, height: node.height })),
+    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon, shape: node.shape, border: node.border, marker: node.marker, stack: node.stack, data: node.data, color: node.color, x: node.x, y: node.y, width: node.width, height: node.height })),
     edges: parsed.edges.map((edge) => ({
       id: edge.id,
       from: edge.from,
@@ -49,6 +52,7 @@ export const documentFromParsedCode = (
       color: edge.color,
       fromSide: edge.fromSide,
       toSide: edge.toSide,
+      relation: edge.relation,
     })),
     groups: parsed.groups.map((group) => ({ id: group.id, label: group.label, nodeIds: group.nodeIds })),
   });
@@ -79,9 +83,12 @@ export const elementsFromDiagramCode = (
     generationId,
     frameId,
     pins,
+    familyEngine,
   }: {
     generationId: string;
     frameId: string;
+    /** A new diagram that names its type (`type er`): its family's layout engine places the nodes (see `familyCompileOptions`). Code with no type keeps the compiler's layout. */
+    familyEngine?: boolean;
     /** Nodes (by id) that must keep their centre; see `findMovedNodes`. */
     pins?: Map<string, NodePin>;
   },
@@ -99,7 +106,7 @@ export const elementsFromDiagramCode = (
   const { document, warnings } = documentFromParsedCode(parsed, generationId);
   warnings.forEach((message) => issues.push({ line: 1, severity: "warning", message }));
 
-  const compiled = compileAIDiagramToCanvas(document, frameId, { pins });
+  const compiled = compileAIDiagramToCanvas(document, frameId, { pins, ...(familyEngine && parsed.diagramType ? familyCompileOptions(document.diagramType) : {}) });
   if (parsed.frames.length === 0) return { elements: compiled, issues };
   const framed = drawFrames(compileDiagramCode(source).ir, compiled, { source, generationId, frameId });
   return { elements: framed.elements, issues: [...issues, ...framed.issues] };
@@ -107,7 +114,7 @@ export const elementsFromDiagramCode = (
 
 // ── canvas -> code ──────────────────────────────────────────────────────────
 
-const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "ellipse", "diamond", "pill", "triangle", "icon", "outline"]);
+const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "ellipse", "diamond", "pill", "triangle", "icon", "outline", "entity-table", "uml-classifier", "mindmap-node", "lifeline"]);
 
 /** An icon the user inserted by hand is not a diagram node; only the ones a diagram generated are. */
 const isDiagramNode = (el: DrawingElement) => NODE_TYPES.has(el.type) && (el.type !== "icon" || el.ai?.role === "node");
@@ -115,9 +122,29 @@ const isDiagramNode = (el: DrawingElement) => NODE_TYPES.has(el.type) && (el.typ
 /** The `shape:` an element is written with. An outline whose variant is unknown reads back as a plain box. */
 const shapeOfElement = (el: DrawingElement): string | undefined => {
   if (el.type === "diamond" || el.type === "pill" || el.type === "icon") return el.type;
+  if (el.type === "entity-table") return "entity";
+  if (el.type === "uml-classifier") return "class";
+  if (el.type === "mindmap-node") return "topic";
+  if (el.type === "lifeline") return "lifeline";
   if (el.type !== "outline" || !isOutlineVariantId(el.variant)) return undefined;
   // A picture with its own name (a timer event, a parallel gateway) is written by that name.
   return entryForOutline(el.variant, el.border, el.marker, el.stack)?.id ?? shapeForBase(el.variant);
+};
+
+/** What a structured element carries, as the code writes it. */
+const dataOfElement = (el: DrawingElement): Record<string, string> | undefined => {
+  const out: Record<string, string> = {};
+  if (el.type === "entity-table") {
+    if (el.rows?.length) out.rows = writeRows(el.rows);
+    if (el.kind && el.kind !== "strong") out.variant = el.kind;
+  } else if (el.type === "uml-classifier") {
+    if (el.attributes?.length) out.attributes = el.attributes.join("; ");
+    if (el.operations?.length) out.operations = el.operations.join("; ");
+    if (el.kind && el.kind !== "class") out.variant = el.kind;
+    if (el.stereotype) out.stereotype = el.stereotype;
+    if (el.template) out.template = el.template;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 };
 
 /** The parameters an outline element carries, as the diagram code writes them; none when its shape name says them. */
@@ -217,13 +244,16 @@ export const graphFromElements = (
     consumed.add(el.id);
     return {
       id,
-      label: el.label?.trim() || el.text?.trim() || `Shape ${(unlabeled += 1)}`,
+      // Entity tables, classes and lifelines keep their title in `name`, not in a label.
+      label: el.label?.trim() || (el as { name?: string }).name?.trim() || el.text?.trim() || `Shape ${(unlabeled += 1)}`,
       kind: el.ai?.semanticKind ?? (el.type === "diamond" ? "decision" : undefined),
       icon: el.ai?.icon,
       shape: shapeOfElement(el),
+      ...(dataOfElement(el) ? { data: dataOfElement(el) } : {}),
       ...paramsOfElement(el),
       color: customColorOf(el),
-      ...(layout ? layoutOf(el) : {}),
+      // A lifeline's body is a fixed narrow strip under its head: it is placed by the sequence layout, not pinned.
+      ...(layout && el.type !== "lifeline" ? layoutOf(el) : {}),
     };
   });
 
@@ -240,6 +270,7 @@ export const graphFromElements = (
       arrowHeadStart?: boolean;
       arrowHeadEnd?: boolean;
       dashed?: boolean;
+      relation?: unknown;
     };
     const start = arrow.startConnection && idOfElement.get(arrow.startConnection.elementId);
     const end = arrow.endConnection && idOfElement.get(arrow.endConnection.elementId);
@@ -248,6 +279,7 @@ export const graphFromElements = (
     const both = el.type === "arrow-bidirectional" || (arrow.arrowHeadStart && arrow.arrowHeadEnd);
     const reversed = !both && arrow.arrowHeadStart && !arrow.arrowHeadEnd;
     const label = labelFor(el.ai?.semanticId ?? el.id);
+    const relation = normalizeRelation(arrow.relation);
     edges.push({
       from: reversed ? end : start,
       to: reversed ? start : end,
@@ -256,6 +288,8 @@ export const graphFromElements = (
       bidirectional: both ? true : undefined,
       plain: arrow.arrowHeadEnd === false && !arrow.arrowHeadStart ? true : undefined,
       color: customEdgeColor(el),
+      // The relation is read from the arrow's own first and last points; a connection written the other way round swaps its ends.
+      ...(relation ? { relation: reversed ? reverseRelation(relation) : relation } : {}),
       ...(layout ? sidesOf(arrow, Boolean(reversed)) : {}),
     });
     edgeSources.push({ arrowId: el.id, labelId: label?.id });

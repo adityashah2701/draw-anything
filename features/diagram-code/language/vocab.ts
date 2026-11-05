@@ -1,5 +1,8 @@
 import { resolveIconId } from "@/core/icons/registry";
+import { RELATION_KINDS } from "@/core/shapes/arrow/relations";
 import { MARKER_IDS } from "@/core/shapes/outline/markers";
+import { BPMN_SHAPES } from "./bpmn";
+import { STRUCTURED_SHAPES } from "./structured";
 import { listOutlineVariants } from "@/core/shapes/outline/variants";
 import { aliasesForOutline, parametersOf, supportedEntries } from "@/core/shapes/vocabulary";
 import CATALOG from "@/core/icons/catalog.json";
@@ -16,7 +19,7 @@ function shapeListText() {
 }
 
 export type ElementKind = "node" | "group" | "frame" | "edge";
-export type ValueType = "text" | "kind" | "icon" | "shape" | "border" | "marker" | "status" | "color" | "boolean" | "number" | "side";
+export type ValueType = "text" | "kind" | "icon" | "shape" | "border" | "marker" | "bpmn" | "data" | "status" | "relation" | "notation" | "end" | "role" | "color" | "boolean" | "number" | "side";
 
 export interface PropertyDoc {
   /** Canonical key; `aliases` are accepted spellings. */
@@ -35,6 +38,17 @@ export const PROPERTIES: PropertyDoc[] = [
   { key: "shape", value: "shape", summary: `How the node is drawn: ${shapeListText()}.`, example: "shape: diamond", appliesTo: ["node"] },
   { key: "border", value: "border", summary: "A second line inside the outline (double) or a heavier one (thick). A plain rectangle, diamond or pill is then drawn as a box, rhombus or ring.", example: "border: double", appliesTo: ["node"] },
   { key: "marker", value: "marker", summary: `A small glyph inside the shape: ${MARKER_IDS.join(", ")}.`, example: "marker: clock", appliesTo: ["node"] },
+  { key: "rows", value: "data", summary: "The rows of an entity: `name type pk|fk|uq|nullable`, separated by `;`, a foreign key as `fk -> table.column`.", example: 'rows: "id int pk; team_id int fk -> teams.id"', appliesTo: ["node"] },
+  { key: "attributes", value: "data", summary: "The attributes of a class (or the literals of an enum), separated by `;`: `-total: Money`.", example: 'attributes: "-total: Money; +id: int"', appliesTo: ["node"] },
+  { key: "operations", value: "data", summary: "The operations of a class, separated by `;`: `+pay(method: Method): Receipt`.", example: 'operations: "+pay(): Receipt"', appliesTo: ["node"] },
+  { key: "variant", value: "data", summary: "A structured shape's variant: weak, associative or junction (entity); abstract, template, object, datatype or record (class).", example: "variant: weak", appliesTo: ["node"] },
+  { key: "stereotype", value: "data", summary: "The stereotype written above a class's name.", example: "stereotype: service", appliesTo: ["node"] },
+  { key: "template", value: "data", summary: "The template parameters of a class, in a dashed box on its corner.", example: "template: T", appliesTo: ["node"] },
+  { key: "position", value: "bpmn", summary: "Where a BPMN event sits in the process: start, intermediate or end.", example: "position: end", appliesTo: ["node"] },
+  { key: "trigger", value: "bpmn", summary: "What triggers a BPMN event: message, timer, error, signal, conditional, escalation, terminate or link.", example: "trigger: message", appliesTo: ["node"] },
+  { key: "gateway", value: "bpmn", summary: "The kind of a BPMN gateway: exclusive, parallel, inclusive, event-based or complex.", example: "gateway: parallel", appliesTo: ["node"] },
+  { key: "task", value: "bpmn", summary: "The type of a BPMN task: user, service, script, manual, send, receive or rule.", example: "task: service", appliesTo: ["node"] },
+  { key: "throwing", value: "boolean", summary: "A BPMN event that throws its trigger (true) instead of catching it: the symbol is filled.", example: "throwing: true", appliesTo: ["node"] },
   { key: "stack", value: "boolean", summary: "Draw the shape as a stack of three (true or false).", example: "stack: true", appliesTo: ["node"] },
   { key: "status", value: "status", summary: "A meaning in colour: error (red), warning (orange), success (green) or info (blue). Same as color, for what the node is telling.", example: "status: error", appliesTo: ["node"] },
   { key: "color", aliases: ["colour"], value: "color", summary: "Outline colour (a name such as blue, or #rrggbb). The fill is a tint of it.", example: "color: blue", appliesTo: ["node", "frame", "edge"] },
@@ -44,14 +58,23 @@ export const PROPERTIES: PropertyDoc[] = [
   { key: "w", aliases: ["width"], value: "number", summary: "Width in canvas units (24 to 4000).", example: "w: 200", appliesTo: ["node", "frame"] },
   { key: "h", aliases: ["height"], value: "number", summary: "Height in canvas units (24 to 4000).", example: "h: 90", appliesTo: ["node", "frame"] },
   { key: "padding", value: "number", summary: "Space between a frame's border and its contents (0 to 400).", example: "padding: 24", appliesTo: ["frame"] },
-  { key: "from", value: "side", summary: "Side of the source node the connection leaves by: top, right, bottom or left.", example: "from: right", appliesTo: ["edge"] },
-  { key: "to", value: "side", summary: "Side of the target node the connection enters by.", example: "to: left", appliesTo: ["edge"] },
+  { key: "from", value: "end", summary: "At the source end: the side the connection leaves by (top, right, bottom or left), or what it says about that end (a multiplicity such as 0..*, or a cardinality such as many).", example: "from: right", appliesTo: ["edge"] },
+  { key: "to", value: "end", summary: "At the target end: the side the connection enters by, or what it says about that end (1, 0..1, one-or-many, ...).", example: "to: 0..*", appliesTo: ["edge"] },
+  { key: "relation", value: "relation", summary: `What the connection means: ${RELATION_KINDS.join(", ")}. It decides the line style, the heads and the end glyphs.`, example: "relation: composition", appliesTo: ["edge"] },
+  { key: "notation", value: "notation", summary: "How an ER relationship is drawn: crows-foot (default) or chen. The meaning does not change.", example: "notation: chen", appliesTo: ["edge"] },
+  { key: "from-end", value: "end", summary: "The same as from: when it is a multiplicity or cardinality; used where from: already names a side.", example: "from-end: 1", appliesTo: ["edge"] },
+  { key: "to-end", value: "end", summary: "The same as to: when it is a multiplicity or cardinality.", example: "to-end: 0..*", appliesTo: ["edge"] },
+  { key: "from-role", value: "role", summary: "The role the source plays in the relation, written under the line at that end.", example: 'from-role: "owner"', appliesTo: ["edge"] },
+  { key: "to-role", value: "role", summary: "The role the target plays, written under the line at that end.", example: 'to-role: "items"', appliesTo: ["edge"] },
 ];
 
 /** Properties that earlier versions of the language named and ignored; still accepted with a warning. */
 export const UNSUPPORTED_PROPERTIES = new Set(["colormode", "stylemode", "typeface", "icon-color"]);
 
-export const EDGE_PROPERTY_KEYS = new Set(["color", "colour", "from", "to"]);
+export const EDGE_PROPERTY_KEYS = new Set(["color", "colour", "from", "to", "relation", "notation", "from-role", "to-role", "from-end", "to-end"]);
+
+/** Properties only a connection has. A bracket after the last name of a connection that holds nothing else is the connection's own: `A > B [relation: composition]`. */
+export const EDGE_ONLY_KEYS = new Set([...EDGE_PROPERTY_KEYS].filter((key) => key !== "color" && key !== "colour"));
 
 export const propertyDoc = (key: string, element: ElementKind): PropertyDoc | undefined =>
   PROPERTIES.find((p) => p.appliesTo.includes(element) && (p.key === key || p.aliases?.includes(key)));
@@ -87,6 +110,8 @@ export const SHAPES: ShapeEntry[] = [
   { name: "icon", aliases: [], summary: "A bare icon with its label underneath; needs `icon:` or a kind." },
   ...listOutlineVariants().map((variant) => ({ name: variant.id, aliases: aliasesForOutline(variant.id), summary: `${variant.description} Resizable like any node.` })),
   // Outlines with a border, a marker or a stack: each is one name here, drawn as its base outline with those parameters.
+  ...STRUCTURED_SHAPES.map((s) => ({ name: s.name, aliases: [...s.aliases], summary: s.summary })),
+  ...BPMN_SHAPES.map((s) => ({ name: s.name, aliases: [...s.aliases], summary: s.summary })),
   ...supportedEntries()
     .filter((entry) => entry.representation.kind === "parametric")
     .map((entry) => ({ name: entry.id, aliases: [...entry.aliases], summary: entry.guidance })),

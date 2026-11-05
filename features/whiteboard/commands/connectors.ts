@@ -1,5 +1,6 @@
 import { buildAnchorId } from "@/core/anchors/anchor-geometry";
 import { ArrowElement, getArrowHeadVisibility, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
+import { normalizeRelation } from "@/core/shapes/arrow/relations";
 import { getShapeAnchors, getShapeDefinition } from "@/core/shapes/shape-runtime";
 import { EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT, placeEdgeLabels } from "@/features/ai/server/layout/edge-labels";
 import type { Box } from "@/features/ai/server/layout/geometry";
@@ -10,6 +11,7 @@ import type {
   ArrowRoutingMode,
   ArrowType,
   Bounds,
+  ConnectorRelation,
   DrawingElement,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
@@ -28,6 +30,8 @@ export interface ArrowChange {
   routePreference?: ArrowRoutePreference;
   color?: string;
   strokeWidth?: number;
+  /** What the connector means: a relation, a function of the current one (so each of several connectors keeps its own ends), or null to remove it. */
+  relation?: ConnectorRelation | null | ((current: ConnectorRelation | undefined) => ConnectorRelation | undefined);
 }
 
 /**
@@ -36,7 +40,13 @@ export interface ArrowChange {
  * the one definition: the arrow panel and the AI's `update_connector` both call it.
  */
 export const applyArrowChange = (arrow: ArrowElement, change: ArrowChange, route: (arrow: ArrowElement) => ArrowElement): ArrowElement => {
-  let next: ArrowElement = { ...arrow, ...change } as ArrowElement;
+  const { relation: relationChange, ...plain } = change;
+  let next: ArrowElement = { ...arrow, ...plain } as ArrowElement;
+  if (relationChange !== undefined) {
+    const value = typeof relationChange === "function" ? relationChange(normalizeRelation(arrow.relation)) : relationChange;
+    // An explicit undefined, because the storage write is a merge and only that removes the field.
+    next = { ...next, relation: value ? normalizeRelation(value) : undefined } as ArrowElement;
+  }
 
   if (change.type === "arrow-bidirectional") {
     next.arrowHeadStart = change.arrowHeadStart ?? true;

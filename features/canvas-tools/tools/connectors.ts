@@ -14,7 +14,8 @@ import {
   type ArrowChange,
 } from "@/features/whiteboard/commands/connectors";
 import { planRemove } from "@/features/whiteboard/commands/remove";
-import type { AnchorSide } from "@/features/whiteboard/types/whiteboard.types";
+import type { AnchorSide, Cardinality, ConnectorRelation, RelationKind, RelationNotation } from "@/features/whiteboard/types/whiteboard.types";
+import { CARDINALITIES, NOTATIONS, RELATION_KINDS, normalizeRelation, parseMultiplicity } from "@/core/shapes/arrow/relations";
 import { ToolError } from "../errors";
 import { color, elementId, expectedRevision, MAX_ELEMENTS_PER_CALL, newElementId } from "../schemas";
 import type { ToolDefinition, ToolEnv } from "../types";
@@ -24,6 +25,23 @@ const side = z.enum(["top", "right", "bottom", "left"]).describe("Which side of 
 const strokeWidth = z.number().finite().min(0.5).max(24);
 const labelText = z.string().max(200).describe("Text on the connector (e.g. a request name or condition). Use \\n for line breaks.");
 
+const relationEnd = z
+  .object({
+    cardinality: z.enum(CARDINALITIES as [Cardinality, ...Cardinality[]]).optional(),
+    multiplicity: z.string().max(12).refine((v) => parseMultiplicity(v) !== null, "A multiplicity is a number or *, or a range such as 0..1, 0..*, 2..5.").optional(),
+    role: z.string().max(40).optional(),
+  })
+  .strict();
+
+const relationInput = z
+  .object({
+    kind: z.enum(RELATION_KINDS as [RelationKind, ...RelationKind[]]),
+    notation: z.enum(NOTATIONS as [RelationNotation, ...RelationNotation[]]).optional(),
+    start: relationEnd.optional(),
+    end: relationEnd.optional(),
+  })
+  .strict();
+
 const lookFields = {
   type: z.enum(["arrow", "arrow-bidirectional"]).optional().describe("arrow: head at the end; arrow-bidirectional: heads at both ends."),
   routing: z.enum(["orthogonal", "curved", "straight"]).optional().describe("orthogonal: right-angle path routed around other elements (default); curved: the same routed path drawn as a smooth curve, for organic or hub-and-spoke relationships; straight: a direct line, for short links between neighbours."),
@@ -32,6 +50,7 @@ const lookFields = {
   head_end: z.boolean().optional().describe("Arrow head at the end."),
   color: color.optional(),
   stroke_width: strokeWidth.optional(),
+  relation: relationInput.nullable().optional().describe("What the connector means (sets line style and heads): kind, optional notation (chen for ER), and per end cardinality / multiplicity (0..*) / role. Structured data, not a label. null removes it."),
 };
 
 interface Look {
@@ -42,6 +61,7 @@ interface Look {
   head_end?: boolean;
   color?: string;
   stroke_width?: number;
+  relation?: ConnectorRelation | null;
 }
 
 const toChange = (look: Look): ArrowChange => ({
@@ -52,6 +72,7 @@ const toChange = (look: Look): ArrowChange => ({
   ...(look.head_end !== undefined ? { arrowHeadEnd: look.head_end } : {}),
   ...(look.color ? { color: look.color } : {}),
   ...(look.stroke_width !== undefined ? { strokeWidth: look.stroke_width } : {}),
+  ...(look.relation !== undefined ? { relation: look.relation === null ? null : (normalizeRelation(look.relation) ?? null) } : {}),
 });
 
 const endsDescribe = (ctx: ToolEnv["ctx"], arrow: ArrowElement) => {

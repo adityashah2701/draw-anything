@@ -32,6 +32,9 @@ export type DiagnosticCode =
   | "node/redeclared"
   | "node/other-parent"
   | "edge/self-loop"
+  | "relation/ends-ignored"
+  | "relation/notation-ignored"
+  | "relation/incompatible"
   | "nesting/frame-in-group";
 
 export interface Diagnostic {

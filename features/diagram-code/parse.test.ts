@@ -411,7 +411,7 @@ describe("layout properties: position, size and connection sides", () => {
   it("warns about a side that is not one, and keeps square brackets in a label that are not properties", () => {
     const bad = parseDiagramCode("A > B: [from: middle]");
     expect(bad.edges[0].fromSide).toBeUndefined();
-    expect(bad.issues.map((i) => i.message).join(" ")).toMatch(/not a side/);
+    expect(bad.issues.map((i) => i.message).join(" ")).toMatch(/neither a side/);
     const label = parseDiagramCode("A > B: rows[0] and [1]");
     expect(label.edges[0].label).toBe("rows[0] and [1]");
     expect(label.issues).toEqual([]);

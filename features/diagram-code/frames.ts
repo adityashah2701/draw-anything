@@ -153,7 +153,7 @@ export const drawFrames = (ir: DiagramIR, elements: DrawingElement[], { source, 
       warn(frame, "frame/not-drawn", `The frame "${frame.title}" is not drawn: ${result.message}`);
       continue;
     }
-    stored = applyPatch(stored, result.patch);
+    stored = applyPatch(stored, { ...result.patch, origin: "layout" }); // frames a diagram draws are placed by its layout
     // Tag it so a later update recognises it as the one drawn for this declaration.
     stored = stored.map((el) =>
       el.id === elementId ? ({ ...el, ai: { semanticId: frame.id, generationId, frameId, diagramType: undefined } } as unknown as StoredElement) : el,
@@ -177,7 +177,7 @@ export const drawFrames = (ir: DiagramIR, elements: DrawingElement[], { source, 
       warn(frame, "frame/not-drawn", `The contents of "${frame.title}" were not put inside it: ${result.message}`);
       continue;
     }
-    stored = applyPatch(stored, result.patch);
+    stored = applyPatch(stored, { ...result.patch, origin: "layout" }); // frames a diagram draws are placed by its layout
   }
 
   return { elements: stored as unknown as DrawingElement[], issues };

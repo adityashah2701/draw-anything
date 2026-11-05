@@ -1,4 +1,5 @@
 import type { AIDiagramType } from "@/features/ai/types";
+import type { ConnectorRelation } from "@/features/whiteboard/types/whiteboard.types";
 import type { Span } from "./source";
 
 /**
@@ -33,6 +34,8 @@ export interface IRNode {
   border?: "double" | "thick";
   marker?: string;
   stack?: boolean;
+  /** What a structured shape carries: `rows` (entity), `attributes` and `operations` (classifier), `variant`, `stereotype`, `template`. */
+  data?: Record<string, string>;
   /** #rrggbb */
   color?: string;
   x?: number;
@@ -55,6 +58,8 @@ export interface IREdge {
   /** `-` / `--`: a line with no arrowhead. */
   plain?: boolean;
   color?: string;
+  /** What the connection means: its kind, notation and what each end says. `start` is the `from` end. */
+  relation?: ConnectorRelation;
   fromSide?: EdgeSide;
   toSide?: EdgeSide;
   line: number;

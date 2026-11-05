@@ -62,6 +62,22 @@ const add = (id: string, category: IconCategory, glyph: string, badge: string, .
 // Ids are neutral technology names. Vendor words (postgres, s3, kafka...) are aliases for them: no
 // trademarked logos are bundled, so a "postgres" node shows the database glyph.
 add("generic", "generic", "box", "·", "default", "component", "block");
+// Architecture vocabulary (plan U16): the neutral terms the generic set lacked, each on an existing glyph and with its own aliases.
+add("scheduler", "compute", "rotate-cw", "SCH", "scheduled-job", "timer", "cron-job");
+add("topic", "data", "radio-tower", "TOP", "kafka-topic", "pubsub-topic");
+add("producer", "data", "rocket", "PRD", "publisher", "emitter");
+add("consumer", "data", "plug", "CON", "subscriber", "listener");
+add("event", "data", "zap", "EVT", "domain-event", "message-event");
+add("event-store", "data", "archive", "ES", "eventstore", "event-log");
+add("stream-processor", "data", "workflow", "SP", "flink", "stream-job");
+add("notification-service", "network", "bell", "NTF", "notifier", "push-service", "notifications");
+add("search-index", "data", "database", "IDX", "elasticsearch", "opensearch", "solr", "search-engine");
+add("certificate-authority", "security", "shield-check", "CA", "pki", "cert-authority");
+add("iam-role", "security", "key-round", "IAM", "role", "iam-policy", "permission");
+add("logger", "observability", "file-code", "LOG", "logging", "log-collector");
+add("metrics-collector", "observability", "gauge", "MET", "prometheus", "metrics", "telemetry");
+add("tracing-collector", "observability", "activity", "TRC", "jaeger", "tracing", "otel", "opentelemetry");
+add("log-storage", "observability", "hard-drive", "LST", "loki", "log-store", "log-archive");
 add("service", "compute", "boxes", "SVC", "microservice", "app", "application", "backend");
 add("server", "compute", "server", "SRV", "host", "node", "instance", "ec2", "compute-engine");
 add("vm", "compute", "cpu", "VM", "virtual-machine");

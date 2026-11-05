@@ -43,7 +43,9 @@ describe("readPropertiesBar", () => {
   it("gives a connector its line options, and none of fill, corners or text", () => {
     const m = read([rect("a", 0, 0), rect("b", 200, 0), arrow("c", "a", "b", { dashed: true, routingMode: "straight" })], ["c"])!;
     expect(m.title).toBe("Connector");
-    expect(m.connector).toEqual({ ids: ["c"], dashed: true, routing: "straight", headStart: false, headEnd: true });
+    expect(m.connector).toMatchObject({ ids: ["c"], dashed: true, routing: "straight", headStart: false, headEnd: true });
+    // No relation yet: the Meaning section shows "none" and offers no end data.
+    expect(m.connector!.relation).toMatchObject({ kind: null, notation: null, accepts: null });
     expect(m.fill).toBeNull();
     expect(m.border).toBeNull();
     expect(m.text).toBeNull();
@@ -113,5 +115,24 @@ describe("readPropertiesBar for frames", () => {
   it("is mixed when the frames disagree on a value", () => {
     const m = read([frame("f", 0, 0, 100, 100, { title: "A", padding: 8 }), frame("g", 0, 0, 100, 100, { title: "B", padding: 8 })], ["f", "g"])!;
     expect(m.frame).toMatchObject({ title: "mixed", padding: 8 });
+  });
+});
+
+describe("the Meaning of a connector", () => {
+  it("shows the shared kind, notation and ends, and what the kind accepts", () => {
+    const relation = { kind: "er-relationship", notation: "chen", start: { cardinality: "one" }, end: { cardinality: "many", role: "items" } };
+    const m = read([rect("a", 0, 0), rect("b", 200, 0), arrow("c", "a", "b", { relation } as never)], ["c"])!;
+    expect(m.connector!.relation).toMatchObject({
+      kind: "er-relationship",
+      notation: "chen",
+      accepts: { cardinality: true, multiplicity: true, role: true },
+      start: { cardinality: "one", multiplicity: "", role: "" },
+      end: { cardinality: "many", role: "items" },
+    });
+  });
+
+  it("reports mixed kinds, and offers no end data for them", () => {
+    const m = read([rect("a", 0, 0), rect("b", 200, 0), arrow("c", "a", "b", { relation: { kind: "association" } } as never), arrow("d", "a", "b", { relation: { kind: "dependency" } } as never)], ["c", "d"])!;
+    expect(m.connector!.relation).toMatchObject({ kind: "mixed", accepts: null });
   });
 });

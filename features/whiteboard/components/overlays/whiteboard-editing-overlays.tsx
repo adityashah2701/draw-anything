@@ -3,7 +3,12 @@ import { FrameTitleEditor } from "@/features/whiteboard/components/overlays/fram
 import { MAX_FRAME_TITLE_LENGTH } from "@/core/frames/frame-model";
 import { renameFrame } from "@/core/frames/frame-api";
 import { IconPicker } from "@/features/whiteboard/components/overlays/icon-picker";
+import { StructuredEditor } from "@/features/whiteboard/components/overlays/structured-editor";
+import { isStructured } from "@/features/whiteboard/utils/structured-edit";
 import { ShapePicker } from "@/features/whiteboard/components/overlays/shape-picker";
+import { LayoutPanel } from "@/features/whiteboard/components/overlays/layout-panel";
+import { layoutEnginesEnabled } from "@/core/layout/flags";
+import { hasFamilyLayout } from "@/core/layout/record";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text-block";
 import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
@@ -371,6 +376,7 @@ export const WhiteboardEditingOverlays = ({
         selectedElementIds={controller.selectedElements}
         onApply={controller.applyDiagramCode}
         loadToken={controller.codeLoadToken}
+        familyLayout={hasFamilyLayout(controller.stored)}
         disabled={!whiteboardAccess.hasEditAccess}
       />
 
@@ -384,6 +390,17 @@ export const WhiteboardEditingOverlays = ({
         onCancelExport={boardExport.cancel}
         onCopySvg={boardExport.copySvg}
       />
+
+      {layoutEnginesEnabled() && (
+        <LayoutPanel
+          open={controller.showLayoutPanel}
+          onOpenChange={controller.setShowLayoutPanel}
+          plan={controller.planLayout}
+          apply={controller.applyLayoutPlan}
+          onPreview={controller.setLayoutPreview}
+          disabled={!whiteboardAccess.hasEditAccess}
+        />
+      )}
 
       <ShapePicker open={controller.showShapePicker} onOpenChange={controller.setShowShapePicker} onPick={controller.insertShape} />
 
@@ -430,6 +447,20 @@ export const WhiteboardEditingOverlays = ({
             (el: DrawingElement) => el.id === editingShapeLabelId,
           );
           if (!shape) return null;
+          if (isStructured(shape)) {
+            return (
+              <StructuredEditor
+                key={editingShapeLabelId}
+                element={shape}
+                zoom={canvasViewport.zoom}
+                panOffset={canvasViewport.panOffset}
+                onDone={(next) => {
+                  if (next) updateElement(next as unknown as DrawingElementJson);
+                  setEditingShapeLabelId(null);
+                }}
+              />
+            );
+          }
           if (shape.type === "frame") {
             return (
               <FrameTitleEditor

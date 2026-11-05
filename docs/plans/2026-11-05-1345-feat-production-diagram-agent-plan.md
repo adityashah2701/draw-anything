@@ -640,6 +640,8 @@ Order inside the phase: U5 (vocabulary and simple outlines), then U10 (connector
   - Round trip: `A > B [relation: composition, from: 1, to: 0..*]` survives canvas to code to canvas.
 - **Verification:** A fixture board with every relation kind and both ER notations passes the U5 harness for connectors in Chrome.
 
+- **Status (built):** All of the above. Relation kinds: association, directed association, generalization, realization, dependency, aggregation, composition, ER relationship (crow's foot and Chen), BPMN sequence flow, message flow and association, assembly, and the sequence messages sync, async, return, create and destroy. New head kinds: one-or-many crow's foot, cross, lollipop, socket. Deviations: the aggregation and composition diamond is at the source (the whole); `from`/`to` take a side or an end value by what the value is, with `from-end`/`to-end` for an end that also names a side; message-flow compatibility between pools is not checked yet (pools arrive in U15) and the generalization check uses a positive list of non-classifier shapes; an assembly draws a ball at one end and a socket at the other rather than interlocking them; the AI schema budget in `registry.test.ts` grew by about 2.5k characters for the `relation` field.
+
 ### U15. Containers and boundaries
 
 - **Goal:** Boundaries, clusters, layers, pools, lanes and fragments own real children and resize correctly.
@@ -818,6 +820,8 @@ Order inside the phase: U5 (vocabulary and simple outlines), then U10 (connector
 ### Phase C - Layouts that match the diagram
 
 ### U6. Layout families
+
+> **Superseded, pending approval:** replaced by the independent, pluggable engine architecture in `docs/plans/2026-11-06-phase-c-pluggable-layout-architecture.md` (phases C0 to C5). The text below is kept for its test scenarios, which become the golden fixtures there. Do not implement it as written.
 
 - **Goal:** Mind maps radiate, sequence diagrams read as timelines, ER diagrams cluster, UML diagrams put generalisation above, swimlanes use lanes; layered stays for the rest.
 - **Requirements:** R11, R12, R18, R19, R20, R21; KTD3, KTD6.

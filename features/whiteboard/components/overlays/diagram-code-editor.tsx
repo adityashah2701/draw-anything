@@ -17,6 +17,8 @@ interface DiagramCodeEditorProps {
   elements: DrawingElement[];
   selectedElementIds: string[];
   onApply: (payload: ApplyDiagramCodePayload) => void;
+  /** The diagram was laid out by a family engine (a layout record says so): updates lay out with it too. */
+  familyLayout?: boolean;
   disabled?: boolean;
   /** Changes each time something asks for the canvas to be loaded into the editor. */
   loadToken?: number;
@@ -64,7 +66,7 @@ const iconIds = (): string[] => (iconIdCache ??= iconCandidates(listIcons().map(
 
 const LIVE_DELAY_MS = 700;
 
-export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, selectedElementIds, onApply, disabled = false, loadToken = 0 }) => {
+export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, selectedElementIds, onApply, disabled = false, loadToken = 0, familyLayout = false }) => {
   const [code, setCode] = React.useState("");
   // What the code was last synchronised with: which elements it owns and what it produced. "Update"
   // changes exactly these, keeping their ids; see features/diagram-code/apply.ts.
@@ -86,15 +88,15 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
   const canRun = !disabled && code.trim() !== "" && errors === 0;
 
   // Read when asked, not on every change of the board: the code is the person's to edit.
-  const latest = React.useRef({ elements, selectedElementIds, includeLayout });
-  latest.current = { elements, selectedElementIds, includeLayout };
+  const latest = React.useRef({ elements, selectedElementIds, includeLayout, familyLayout });
+  latest.current = { elements, selectedElementIds, includeLayout, familyLayout };
 
   const drift = React.useMemo(() => (sync ? canvasDrift(elements, sync) : null), [elements, sync]);
   const drifted = drift ? drift.edited.length + drift.missing.length : 0;
 
   const loadFromBoard = React.useCallback(() => {
-    const { elements: all, selectedElementIds: selected, includeLayout: layout } = latest.current;
-    const loaded = loadFromCanvas(all, { selectedIds: selected, layout, generationId: newGenerationId() });
+    const { elements: all, selectedElementIds: selected, includeLayout: layout, familyLayout: family } = latest.current;
+    const loaded = loadFromCanvas(all, { selectedIds: selected, layout, generationId: newGenerationId(), familyEngine: family });
     if (!loaded) {
       setNotice("No shapes to convert. Draw some labelled shapes, or select a diagram.");
       return;
@@ -140,10 +142,10 @@ export const DiagramCodeEditor: React.FC<DiagramCodeEditorProps> = ({ elements, 
     setConflicts(null);
     setConfirmReload(false);
     if (mode === "update" && sync) {
-      onApply({ elements: [], replaceIds: [], anchored: true, patch: plan.patch });
+      onApply({ elements: [], replaceIds: [], anchored: true, patch: plan.patch, placements: plan.placements, familyEngine: plan.sync.familyEngine });
     } else {
       // A new diagram: placed at the viewport, unless every node was positioned in code.
-      onApply({ elements: plan.patch.add, replaceIds: [], anchored: plan.anchored });
+      onApply({ elements: plan.patch.add, replaceIds: [], anchored: plan.anchored, placements: plan.placements, familyEngine: plan.sync.familyEngine });
     }
     setSync(plan.sync);
     const { added, updated, removed, restored } = plan.summary;

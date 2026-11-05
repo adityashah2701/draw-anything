@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { isGroupRecord } from "@/core/groups/group-index";
+import { isStoredRecord } from "@/core/groups/group-index";
 import { exportScene } from "@/features/whiteboard/export/export-scene";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -19,7 +19,7 @@ const draw = (key: string, content: string): Promise<string | null> => {
   const run = async () => {
     const saved = parseSavedContent(content);
     if (saved.status !== "ok") return null;
-    const elements = saved.elements.filter((element): element is DrawingElement => !isGroupRecord(element));
+    const elements = saved.elements.filter((element): element is DrawingElement => !isStoredRecord(element));
     if (elements.length === 0) return null;
     try {
       const { blob } = await exportScene({

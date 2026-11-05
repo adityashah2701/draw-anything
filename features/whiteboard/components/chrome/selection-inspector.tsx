@@ -88,6 +88,7 @@ const TextCommitField = ({
   placeholder,
   maxLength,
   multiline,
+  rows = 2,
   disabled,
   onCommit,
 }: {
@@ -96,6 +97,7 @@ const TextCommitField = ({
   placeholder?: string;
   maxLength?: number;
   multiline?: boolean;
+  rows?: number;
   disabled: boolean;
   onCommit: (text: string) => void;
 }) => {
@@ -136,7 +138,7 @@ const TextCommitField = ({
     className:
       "w-full min-w-0 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-primary disabled:opacity-50",
   };
-  return multiline ? <textarea rows={2} {...props} className={`${props.className} resize-none py-1`} /> : <input {...props} className={`${props.className} h-8 font-medium`} />;
+  return multiline ? <textarea rows={rows} {...props} className={`${props.className} resize-none py-1`} /> : <input {...props} className={`${props.className} h-8 font-medium`} />;
 };
 
 /** One choice out of a few, as a row of toggle buttons (state is `aria-pressed`, so it reads well to assistive tech). */
@@ -210,7 +212,7 @@ const WEIGHTS: { value: string; text: string; title: string }[] = [
  * field applies to the whole selection as one undo step.
  */
 export const SelectionInspector = ({ controller }: { controller: WhiteboardPageController }) => {
-  const { inspector, groupCommands: g, elementCommands: c, whiteboardAccess, semanticNodes: sn } = controller;
+  const { inspector, groupCommands: g, elementCommands: c, whiteboardAccess, semanticNodes: sn, structured } = controller;
   const panelInset = usePanelInset(controller.showAIModal, controller.showCodePanel);
   const [open, setOpen] = useState(true);
   const m = inspector.model;
@@ -267,6 +269,27 @@ export const SelectionInspector = ({ controller }: { controller: WhiteboardPageC
             <div className="px-3 pb-2 text-[11px] text-muted-foreground">
               {m.locked ? "Locked: unlock to edit." : "Locked objects are left out of edits."}
             </div>
+          )}
+
+          {structured && (
+            <Section title={structured.fields.title}>
+              <FieldLabel>Name</FieldLabel>
+              <TextCommitField label="Name" value={structured.fields.name} maxLength={120} disabled={!structured.editable} onCommit={(t) => structured.set("name", t)} />
+              {structured.fields.rows !== undefined && (
+                <>
+                  <FieldLabel>Fields: one per line (name type pk fk uq nullable, then -&gt; table.col). Shift+Enter = new line; click away to save.</FieldLabel>
+                  <TextCommitField label="Fields" rows={5} value={structured.fields.rows} multiline maxLength={4000} disabled={!structured.editable} placeholder={"id int pk\nemail text uq"} onCommit={(t) => structured.set("rows", t)} />
+                </>
+              )}
+              {structured.fields.attributes !== undefined && (
+                <>
+                  <FieldLabel>Attributes: one per line (-id: int)</FieldLabel>
+                  <TextCommitField label="Attributes" rows={5} value={structured.fields.attributes} multiline maxLength={4000} disabled={!structured.editable} onCommit={(t) => structured.set("attributes", t)} />
+                  <FieldLabel>Operations: one per line (+run(): void)</FieldLabel>
+                  <TextCommitField label="Operations" rows={5} value={structured.fields.operations ?? ""} multiline maxLength={4000} disabled={!structured.editable} onCommit={(t) => structured.set("operations", t)} />
+                </>
+              )}
+            </Section>
           )}
 
           {node && (

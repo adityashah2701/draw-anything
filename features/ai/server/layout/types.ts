@@ -16,6 +16,8 @@ export interface PlacementEdge {
   to: string;
   /** Width of the edge's label, if it has one, so an engine can leave room for it. */
   labelWidth?: number;
+  /** What the connection means, for engines that lay out by relation (inheritance above its subtypes). */
+  relation?: import("@/features/whiteboard/types/whiteboard.types").ConnectorRelation;
 }
 
 export interface PlacementGroup {

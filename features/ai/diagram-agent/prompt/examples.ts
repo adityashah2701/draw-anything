@@ -7,6 +7,9 @@ export interface WorkedExample {
 /** The examples a request of this type learns from the most; the first is always enough on its own. */
 export const examplesFor = (diagramType: string | undefined, prompt = ""): WorkedExample[] => {
   const pick = (...requests: string[]) => requests.map((r) => EXAMPLES.find((e) => e.request === r)!);
+  if (diagramType === "entity-relationship") return pick("Library ER diagram");
+  if (diagramType === "sequence") return pick("Login sequence");
+  if (diagramType === "class") return pick("Payment classes");
   if (diagramType === "flowchart" || diagramType === "workflow") return pick("Login flow");
   if (diagramType === "architecture" && /ci\/cd|pipeline|deploy/i.test(prompt)) return pick("CI/CD pipeline with staging and production");
   return pick("Web app backend on AWS");
@@ -104,5 +107,58 @@ Valid? > Show Error: no
 Show Error > Enter Credentials: retry
 MFA Required? > Create Session: no
 Create Session > Dashboard`,
+  },
+  {
+    request: "Library ER diagram",
+    code: `type entity-relationship
+title Library
+
+Members [shape: entity, rows: "id int pk; email text uq; name text"]
+Loans [shape: entity, rows: "id int pk; member_id int fk -> members.id; copy_id int fk -> copies.id; due_on date; returned_on date nullable"]
+Copies [shape: entity, rows: "id int pk; book_id int fk -> books.id; branch_id int fk -> branches.id"]
+Books [shape: entity, rows: "id int pk; isbn text uq; title text"]
+Book Authors [shape: entity, variant: junction, rows: "book_id int pk fk -> books.id; author_id int pk fk -> authors.id"]
+Authors [shape: entity, rows: "id int pk; name text"]
+Branches [shape: entity, rows: "id int pk; name text; city text"]
+
+Members > Loans [relation: er-relationship, from: one, to: zero-or-many]
+Copies > Loans [relation: er-relationship, from: one, to: zero-or-many]
+Books > Copies [relation: er-relationship, from: one, to: one-or-many]
+Branches > Copies [relation: er-relationship, from: one, to: zero-or-many]
+Books > Book Authors [relation: er-relationship, from: one, to: one-or-many]
+Authors > Book Authors [relation: er-relationship, from: one, to: zero-or-many]`,
+  },
+  {
+    request: "Login sequence",
+    code: `type sequence
+title Login
+
+User [shape: lifeline]
+Web App [shape: lifeline]
+Auth Service [shape: lifeline]
+Database [shape: lifeline]
+
+User > Web App: Submit credentials [relation: sync]
+Web App > Auth Service: Verify [relation: sync]
+Auth Service > Database: Find user [relation: sync]
+Database > Auth Service: User record [relation: return]
+Auth Service > Web App: Token [relation: return]
+Web App > User: Show dashboard [relation: return]`,
+  },
+  {
+    request: "Payment classes",
+    code: `type class
+title Payments
+
+PaymentMethod [shape: class, variant: abstract, attributes: "#id: int", operations: "+pay(amount: Money): Receipt"]
+CreditCard [shape: class, attributes: "-number: string; -expiry: date", operations: "+pay(amount: Money): Receipt"]
+BankTransfer [shape: class, attributes: "-iban: string", operations: "+pay(amount: Money): Receipt"]
+Order [shape: class, attributes: "-id: int; -total: Money", operations: "+checkout(): void"]
+OrderItem [shape: class, attributes: "-sku: string; -qty: int"]
+
+CreditCard > PaymentMethod [relation: generalization]
+BankTransfer > PaymentMethod [relation: generalization]
+Order > PaymentMethod [relation: association, to: 1]
+Order > OrderItem [relation: composition, from: 1, to: 1..*]`,
   },
 ];

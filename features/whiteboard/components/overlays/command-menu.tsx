@@ -1,5 +1,6 @@
 "use client";
 
+import { layoutEnginesEnabled } from "@/core/layout/flags";
 import * as React from "react";
 import {
   ArrowRight,
@@ -323,6 +324,12 @@ export function CommandMenu({
             <Code2 className="mr-2 h-4 w-4" />
             <span>Open diagram code</span>
           </CommandItem>
+          {layoutEnginesEnabled() && (
+            <CommandItem onSelect={() => runCommand(() => onAction?.("layout"))}>
+              <Shapes className="mr-2 h-4 w-4" />
+              <span>Layout…</span>
+            </CommandItem>
+          )}
           <CommandItem onSelect={() => runCommand(() => onAction?.("insert-shape"))}>
             <Shapes className="mr-2 h-4 w-4" />
             <span>Insert shape…</span>

@@ -13,7 +13,8 @@ const TYPES = Object.keys(PLAYBOOKS) as AIDiagramType[];
 
 // Budgets are set from the measured sizes (see docs/superpowers/notes/2026-10-16-handoff-ai-shapes-colors.md)
 // with about 10% headroom, so growing a prompt on purpose is a visible decision.
-const BUDGET = { complete: 2_100, typeUnknown: 1_650, typeKnown: 1_200 };
+// Raised once for the structured-shape guidance (entity rows, class members, lifelines, relations) in the ER, class, sequence and mind-map playbooks.
+const BUDGET = { complete: 3_200, typeUnknown: 2_300, typeKnown: 1_500 };
 
 describe("system prompt budget", () => {
   it.each(["native", "text"] as const)("%s: the complete prompt (no context) stays within its budget", (transport) => {

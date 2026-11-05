@@ -1,3 +1,4 @@
+import type { LayoutPreview } from "@/features/whiteboard/commands/layout-engine";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Anchor, DrawingElement, Point, Tool } from "@/features/whiteboard/types/whiteboard.types";
 import {
@@ -37,6 +38,13 @@ export const useWhiteboardUiState = () => {
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showShapePicker, setShowShapePicker] = useState(false);
+  // The Layout panel, and the layout it is previewing (drawn over the canvas, never written to the board).
+  const [showLayoutPanel, setShowLayoutPanelOpen] = useState(false);
+  const [layoutPreview, setLayoutPreview] = useState<LayoutPreview | null>(null);
+  const setShowLayoutPanel = useCallback((open: boolean) => {
+    setShowLayoutPanelOpen(open);
+    if (!open) setLayoutPreview(null);
+  }, []);
   const [showIconPicker, setShowIconPickerOpen] = useState(false);
   // "insert" adds an icon to the board; "replace" changes the icon of the selected semantic nodes.
   const [iconPickerMode, setIconPickerMode] = useState<"insert" | "replace">("insert");
@@ -149,6 +157,10 @@ export const useWhiteboardUiState = () => {
     setShowExport,
     showShapePicker,
     setShowShapePicker,
+    showLayoutPanel,
+    setShowLayoutPanel,
+    layoutPreview,
+    setLayoutPreview,
     showIconPicker,
     setShowIconPicker,
     iconPickerMode,

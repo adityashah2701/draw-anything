@@ -13,6 +13,8 @@ import {
 import { roundedCorners, traceCurve } from "@/core/routing/curve";
 import { arrowheadOps, headTrim, paintOps, type HeadSize } from "@/core/shapes/arrow/arrowhead";
 import { parseAnchorSide } from "@/core/anchors/anchor-geometry";
+import { normalizeRelation, relationLook, type LineStyle, type RelationLook } from "@/core/shapes/arrow/relations";
+import { FONT_FAMILY } from "@/core/text/typography";
 
 export type ArrowElement = ArrowShape | BidirectionalArrowShape;
 
@@ -107,11 +109,14 @@ export const drawArrow = (
   ctx.lineWidth = style.strokeWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.setLineDash(style.dashed ? [10 * zoom, 8 * zoom] : []);
+  // A connector with a relation is drawn from what it means; one without is drawn from its flags, exactly as before.
+  const relation = normalizeRelation(element.relation);
+  const look = relation ? relationLook(relation) : undefined;
+  ctx.setLineDash(look ? lineDash(look.line, zoom) : style.dashed ? [10 * zoom, 8 * zoom] : []);
 
-  const heads = getArrowHeadVisibility(element);
-  const kindStart = element.headStart ?? "triangle";
-  const kindEnd = element.headEnd ?? "triangle";
+  const heads = look ? { start: look.start !== undefined, end: look.end !== undefined } : getArrowHeadVisibility(element);
+  const kindStart = look ? (look.start ?? "triangle") : (element.headStart ?? "triangle");
+  const kindEnd = look ? (look.end ?? "triangle") : (element.headEnd ?? "triangle");
   // A hollow head must not have the line drawn through it, so the line stops at the head's base.
   const path = trimEnds(
     transformed,
@@ -145,6 +150,45 @@ export const drawArrow = (
   if (heads.start) {
     drawArrowhead(ctx, element, transformed, "start", kindStart);
   }
+  if (look && look.labels.length > 0) drawEndLabels(ctx, element, transformed, look, zoom);
+};
+
+/** The dash pattern of a line style; dots rely on the round line cap set above. */
+const lineDash = (line: LineStyle, zoom: number): number[] =>
+  line === "dashed" ? [10 * zoom, 8 * zoom] : line === "dotted" ? [0.1, 6 * zoom] : [];
+
+/** How far from the tip, along the line and beside it, an end's text sits (screen pixels; clear of the head). */
+const LABEL_BACK = 22;
+const LABEL_SIDE = 11;
+const LABEL_SIZE = 12;
+
+/** Writes the cardinality, multiplicity and role of each end beside the line, near the shape it touches. */
+const drawEndLabels = (
+  ctx: CanvasRenderingContext2D,
+  element: ArrowElement,
+  points: Point[],
+  look: RelationLook,
+  zoom: number,
+) => {
+  void zoom;
+  ctx.save();
+  const color = getArrowStyle(element).color;
+  ctx.fillStyle = color;
+  ctx.font = `600 ${LABEL_SIZE}px ${FONT_FAMILY}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const label of look.labels) {
+    const tip = label.end === "end" ? points[points.length - 1] : points[0];
+    const direction = getArrowHeadDirection(element, points, label.end);
+    if (!tip || !direction) continue;
+    // `direction` points into the shape at the tip, so the line runs the other way.
+    // Both ends put "above" on the same side of the page: the direction at the start tip is the reverse of the end's.
+    const side = (label.slot === "above" ? -LABEL_SIDE : LABEL_SIDE) * (label.end === "start" ? -1 : 1);
+    const x = tip.x - direction.x * LABEL_BACK + -direction.y * side;
+    const y = tip.y - direction.y * LABEL_BACK + direction.x * side;
+    ctx.fillText(label.text, x, y);
+  }
+  ctx.restore();
 };
 
 /** Every head is this size on screen whatever the zoom. */

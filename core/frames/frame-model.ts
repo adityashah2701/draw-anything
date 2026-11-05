@@ -38,7 +38,31 @@ const finite = (value: unknown): value is number => typeof value === "number" &&
 const clamped = (value: unknown, min: number, max: number, fallback: number) => (finite(value) ? Math.min(max, Math.max(min, value)) : fallback);
 
 const PLACEMENTS: readonly FrameTitlePlacement[] = ["inside", "above"];
-export const FRAME_PRESETS: readonly FramePreset[] = ["section", "container", "feature-group", "swimlane", "device"];
+export const FRAME_PRESETS: readonly FramePreset[] = [
+  "section", "container", "feature-group", "swimlane", "device",
+  "system-boundary", "external-boundary", "trust-boundary", "network-boundary", "cluster", "layer", "region", "pool", "lane", "fragment",
+];
+
+/** What a preset sets by default: border pattern, header tint, whether the title sits on a tab. A preset never changes containment. */
+export interface PresetLook {
+  dash?: readonly number[];
+  tint?: string;
+  tab?: boolean;
+  /** Extra padding the preset asks for around its contents. */
+  padding?: number;
+}
+export const PRESET_LOOKS: Partial<Record<FramePreset, PresetLook>> = {
+  "system-boundary": { dash: [], tint: "#1d4ed8" },
+  "external-boundary": { dash: [10, 6], tint: "#6b7280" },
+  "trust-boundary": { dash: [4, 4], tint: "#dc2626", tab: true },
+  "network-boundary": { dash: [14, 5, 3, 5], tint: "#0891b2" },
+  cluster: { dash: [], tint: "#7c3aed" },
+  layer: { dash: [], tint: "#475569", padding: 12 },
+  region: { dash: [10, 6], tint: "#16a34a" },
+  pool: { dash: [], tint: "#0f172a", padding: 0 },
+  lane: { dash: [], tint: "#334155", padding: 8 },
+  fragment: { dash: [], tint: "#334155", tab: true, padding: 10 },
+};
 
 /** A frame with every field concrete: the migration defaults applied and out-of-range values clamped. Never written back. */
 export interface ResolvedFrame {
@@ -52,6 +76,7 @@ export interface ResolvedFrame {
   minHeight: number;
   preset: FramePreset | undefined;
   opacity: number;
+  operator: string | undefined;
 }
 
 /**
@@ -62,15 +87,16 @@ export const resolveFrame = (frame: FrameShape): ResolvedFrame => {
   const title = typeof frame.title === "string" && frame.title.trim() ? frame.title.trim().slice(0, MAX_FRAME_TITLE_LENGTH) : FRAME_DEFAULTS.title;
   return {
     title,
-    padding: clamped(frame.padding, 0, MAX_PADDING, FRAME_DEFAULTS.padding),
+    padding: clamped(frame.padding, 0, MAX_PADDING, PRESET_LOOKS[frame.preset as FramePreset]?.padding ?? FRAME_DEFAULTS.padding),
     cornerRadius: clamped(frame.cornerRadius, 0, MAX_RADIUS, FRAME_DEFAULTS.cornerRadius),
-    titlePlacement: PLACEMENTS.includes(frame.titlePlacement as FrameTitlePlacement) ? (frame.titlePlacement as FrameTitlePlacement) : "inside",
+    titlePlacement: PLACEMENTS.includes(frame.titlePlacement as FrameTitlePlacement) ? (frame.titlePlacement as FrameTitlePlacement) : PRESET_LOOKS[frame.preset as FramePreset]?.tab ? "above" : "inside",
     headerVisible: frame.headerVisible !== false,
     autoFit: frame.autoFit === true,
     minWidth: clamped(frame.minWidth, 1, MAX_MIN_SIZE, FRAME_DEFAULTS.minWidth),
     minHeight: clamped(frame.minHeight, 1, MAX_MIN_SIZE, FRAME_DEFAULTS.minHeight),
     preset: FRAME_PRESETS.includes(frame.preset as FramePreset) ? frame.preset : undefined,
     opacity: clamped(frame.opacity, 0, 1, 1),
+    operator: typeof frame.operator === "string" && frame.operator.length <= 12 ? frame.operator : undefined,
   };
 };
 

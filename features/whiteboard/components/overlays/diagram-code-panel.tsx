@@ -15,6 +15,7 @@ interface DiagramCodePanelProps {
   elements: DrawingElement[];
   selectedElementIds: string[];
   onApply: (payload: ApplyDiagramCodePayload) => void;
+  familyLayout?: boolean;
   loadToken: number;
   disabled?: boolean;
 }
@@ -23,7 +24,7 @@ interface DiagramCodePanelProps {
  * The diagram as code, in a panel of its own: open it from the sidebar, the command menu or the agent,
  * write or paste code, and draw it. It does not depend on the agent being open.
  */
-export const DiagramCodePanel: React.FC<DiagramCodePanelProps> = ({ isOpen, onClose, agentOpen, elements, selectedElementIds, onApply, loadToken, disabled }) => {
+export const DiagramCodePanel: React.FC<DiagramCodePanelProps> = ({ isOpen, onClose, agentOpen, elements, selectedElementIds, onApply, loadToken, disabled, familyLayout }) => {
   // Stay mounted while closed so the code being written survives closing the panel.
   return (
     <aside
@@ -49,7 +50,7 @@ export const DiagramCodePanel: React.FC<DiagramCodePanelProps> = ({ isOpen, onCl
           <X size={15} />
         </button>
       </header>
-      <DiagramCodeEditor elements={elements} selectedElementIds={selectedElementIds} onApply={onApply} disabled={disabled} loadToken={loadToken} />
+      <DiagramCodeEditor elements={elements} selectedElementIds={selectedElementIds} onApply={onApply} disabled={disabled} loadToken={loadToken} familyLayout={familyLayout} />
     </aside>
   );
 };

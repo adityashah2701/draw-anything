@@ -1,4 +1,5 @@
 import { COLOR_NAMES } from "@/core/color/named-colors";
+import { CARDINALITIES, NOTATIONS, RELATION_KINDS } from "@/core/shapes/arrow/relations";
 import { MARKER_IDS } from "@/core/shapes/outline/markers";
 import { writeName } from "../../serialize";
 import {
@@ -150,6 +151,12 @@ const valueItems = (type: string, iconIds: readonly string[]): CompletionItem[] 
       return ["true", "false"].map((b) => ({ label: b, insert: b, kind: "value" as const }));
     case "side":
       return SIDES.map((s) => ({ label: s, insert: s, kind: "value" as const }));
+    case "end":
+      return [...SIDES, ...CARDINALITIES, "1", "0..1", "0..*", "1..*", "*"].map((s) => ({ label: s, insert: s, kind: "value" as const }));
+    case "relation":
+      return RELATION_KINDS.map((s) => ({ label: s, insert: s, kind: "value" as const }));
+    case "notation":
+      return NOTATIONS.map((s) => ({ label: s, insert: s, kind: "value" as const }));
     default:
       return [];
   }

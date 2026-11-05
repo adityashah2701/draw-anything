@@ -3,6 +3,7 @@ import { unionBounds } from "@/core/geometry/box";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { ToolError } from "../errors";
 import type { ToolDefinition } from "../types";
+import { newDiagramPatch } from "@/features/whiteboard/commands/layout-engine";
 import { count, defaultOrigin, revealContent } from "./helpers";
 
 /** Most elements one generated diagram may add (a large architecture is a few hundred). */
@@ -62,7 +63,8 @@ export const generateDiagramTool: ToolDefinition<typeof generateInput> = {
       summary: `Generated a diagram: ${count(nodes.length, "node")}, ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements), placed beside the existing content.${revealed ? ` ${revealed}` : ""}`,
       data: { created: moved.map((el) => el.id), ...(revealed ? { viewMoved: true } : {}), nodes: nodes.slice(0, 60).map((el) => ({ id: el.id, label: el.label })) },
       warnings: (outcome.warnings ?? []).slice(0, 8),
-      patch: { add: moved, update: [], remove: [] },
+      // A generated diagram is placed by a layout (so its elements are `auto`) and is stored with its layout record.
+      patch: newDiagramPatch(moved),
       selection: nodes.length > 0 ? nodes.map((el) => el.id) : undefined,
     };
   },

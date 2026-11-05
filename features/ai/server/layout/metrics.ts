@@ -58,7 +58,7 @@ const EDGE_LABEL_FONT_SIZE = 13;
 
 /** Generated node: a semantic node, or a diamond or pill the compiler drew for a decision, start or end. */
 export const isNodeElement = (e: DrawingElement) =>
-  e.type === "semantic-node" || ((e.type === "diamond" || e.type === "pill" || e.type === "icon" || e.type === "outline") && e.ai?.role === "node");
+  e.type === "semantic-node" || ((e.type === "diamond" || e.type === "pill" || e.type === "icon" || e.type === "outline" || e.type === "entity-table" || e.type === "uml-classifier" || e.type === "mindmap-node" || e.type === "lifeline") && e.ai?.role === "node");
 
 export const nodeBox = (element: DrawingElement): Box => {
   const [a, b] = element.points;

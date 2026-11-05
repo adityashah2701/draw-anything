@@ -8,7 +8,7 @@ import { iconHints, wantsBareIcons, wantsPlainBoxes } from "./builder/icon-hints
 import { runDiagramBuilder } from "./builder/loop";
 import { noteFor, summaryNote } from "./builder/notes";
 import { BUILDER_TOOL_SPECS, buildBuilderSystemPrompt } from "./builder/prompt";
-import { inferDiagramType } from "./prompt/prompt-context";
+import { STRUCTURED_DIAGRAM_TYPES, inferDiagramType } from "./prompt/prompt-context";
 import { createGenerationId, withLiveEvents } from "./run";
 import { createToolTransport, supportsVision } from "./transports/create";
 import type { ToolTransport } from "./types";
@@ -110,6 +110,7 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
           bareIcons,
           plainBoxes,
         }),
+        structured: !editing && ((t) => !!t && STRUCTURED_DIAGRAM_TYPES.has(t))(inferDiagramType(request.prompt)),
         goal: editing ? `Change the diagram that is already on the canvas: ${request.prompt}` : request.prompt,
         bareIcons,
         iconPriority: !bareIcons && !plainBoxes && !editing,

@@ -98,8 +98,10 @@ describe("inserting a shape", () => {
     expect(buildShapeElement(pickerEntries().find((e) => e.id === "diamond")!, center, "c")).toMatchObject({ type: "diamond" });
   });
 
-  it("does not build an entry it does not insert", () => {
-    expect(buildShapeElement(VOCABULARY.find((e) => e.id === "entity-table")!, center, "x")).toBeUndefined();
+  it("builds a structured element with starter content, centred", () => {
+    const made = buildShapeElement(VOCABULARY.find((e) => e.id === "entity-table")!, center, "x") as unknown as { type: string; points: Array<{ x: number; y: number }> };
+    expect(made.type).toBe("entity-table");
+    expect((made.points[0].x + made.points[1].x) / 2).toBeCloseTo(center.x, 1);
   });
 });
 

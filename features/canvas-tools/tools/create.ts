@@ -19,6 +19,7 @@ import type { DrawingElement, GroupRecord } from "@/features/whiteboard/types/wh
 import { ToolError } from "../errors";
 import { color, coordinate, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POINTS, newElementId, point, targetIds } from "../schemas";
 import type { ToolDefinition } from "../types";
+import { newDiagramPatch } from "@/features/whiteboard/commands/layout-engine";
 import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, revealContent, snapPlacement } from "./helpers";
 
 const normalizeText = (value: string) => value.replace(/\r\n?/g, "\n");
@@ -425,7 +426,7 @@ export const importDiagramTool: ToolDefinition<typeof importInput> = {
     }
     const generation = claimId(env, undefined);
     const frameId = `frame-${generation}`;
-    const result = elementsFromDiagramCode(code, { generationId: generation, frameId });
+    const result = elementsFromDiagramCode(code, { generationId: generation, frameId, familyEngine: true });
     const fatal = result.issues.filter((issue) => issue.severity === "error");
     if (fatal.length > 0 || result.elements.length === 0) {
       throw new ToolError("invalid_arguments", `Nothing could be drawn: ${(fatal[0] ?? { message: "the code has no nodes" }).message}`);
@@ -443,7 +444,7 @@ export const importDiagramTool: ToolDefinition<typeof importInput> = {
       summary: `Imported ${count(nodes.length, "node")} and ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements).${revealed ? ` ${revealed}` : ""}`,
       data: { created: moved.map((el) => el.id), ...(revealed ? { viewMoved: true } : {}), nodes: nodes.map((el) => ({ id: el.id, label: el.label, node: el.ai?.semanticId })) },
       warnings: result.issues.filter((issue) => issue.severity !== "error").map((issue) => `line ${issue.line}: ${issue.message}`).slice(0, 8),
-      patch: { add: moved, update: [], remove: [] },
+      patch: newDiagramPatch(moved, new Set(parsed.nodes.filter((n) => n.x !== undefined && n.y !== undefined).map((n) => n.id)), parsed.diagramType !== undefined),
     };
   },
 };

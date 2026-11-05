@@ -1,5 +1,19 @@
 import { listIcons } from "@/core/icons/registry";
+import {
+  CARDINALITIES,
+  NOTATIONS,
+  RELATION_KINDS,
+  normalizeRelation,
+  parseEndValue,
+  parseNotation,
+  parseRelationKind,
+  relationProblem,
+  reverseRelation,
+} from "@/core/shapes/arrow/relations";
 import { MARKER_IDS, isMarkerId } from "@/core/shapes/outline/markers";
+import { expandStructured } from "./structured";
+import { BPMN_GATEWAYS, BPMN_POSITIONS, BPMN_TASKS, BPMN_TRIGGERS, expandBpmn } from "./bpmn";
+import type { ConnectorEnd, ConnectorRelation, RelationKind, RelationNotation } from "@/features/whiteboard/types/whiteboard.types";
 import { normalizeColor } from "@/core/color/named-colors";
 import { normalizeSemanticKind, parseDiagramType } from "@/features/ai/schemas";
 import { slugId } from "@/features/ai/server/validation";
@@ -23,6 +37,7 @@ import {
   propertyDoc,
   propertyNames,
   resolveDirection,
+  EDGE_ONLY_KEYS,
   parametricShape,
   resolveShape,
   shapeNames,
@@ -44,6 +59,19 @@ interface Props {
   stack?: boolean;
   border?: "double" | "thick";
   marker?: string;
+  relation?: RelationKind;
+  notation?: RelationNotation;
+  /** What `from:` / `to:` (or `from-end:` / `to-end:`) say about an end when the value is not a side. */
+  fromEnd?: ConnectorEnd;
+  toEnd?: ConnectorEnd;
+  fromRole?: string;
+  toRole?: string;
+  data?: Record<string, string>;
+  position?: string;
+  trigger?: string;
+  gatewayType?: string;
+  taskType?: string;
+  throwing?: boolean;
   /** What a parametric shape name (`shape: timer-event`) stands for; explicit properties win over it. */
   entry?: { border?: "double" | "thick"; marker?: string; stack?: boolean };
   shape?: string;
@@ -187,18 +215,68 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
         else if (v !== "none") sink.warn("property/invalid-value", entry.valueSpan, `"marker: ${value}" is not a marker (use ${MARKER_IDS.join(", ")}); it was ignored.`, closest(v, MARKER_IDS));
         return;
       }
+      case "data": {
+        props.data = { ...props.data, [doc.key]: value.trim() };
+        return;
+      }
+      case "bpmn": {
+        const v = value.trim().toLowerCase();
+        const allowed: Record<string, readonly string[]> = { position: BPMN_POSITIONS, trigger: Object.keys(BPMN_TRIGGERS), gateway: Object.keys(BPMN_GATEWAYS), task: Object.keys(BPMN_TASKS) };
+        if (!allowed[doc.key].includes(v)) sink.warn("property/invalid-value", entry.valueSpan, `"${doc.key}: ${value}" is not one of ${allowed[doc.key].join(", ")}; it was ignored.`, closest(v, allowed[doc.key]));
+        else if (doc.key === "position") props.position = v;
+        else if (doc.key === "trigger") props.trigger = v;
+        else if (doc.key === "gateway") props.gatewayType = v;
+        else props.taskType = v;
+        return;
+      }
       case "boolean": {
         const v = value.trim().toLowerCase();
-        if (v === "true" || v === "false") props[doc.key === "stack" ? "stack" : "dashed"] = v === "true";
+        if (v === "true" || v === "false") {
+          if (doc.key === "throwing") props.throwing = v === "true";
+          else props[doc.key === "stack" ? "stack" : "dashed"] = v === "true";
+        }
         else sink.warn("property/invalid-value", entry.valueSpan, `"${key}" needs true or false; it was ignored.`, "true");
         return;
       }
-      case "side": {
-        const side = value.trim().toLowerCase();
-        if (!(SIDES as readonly string[]).includes(side)) {
-          sink.warn("property/invalid-value", entry.valueSpan, `"${key}: ${value}" is not a side (use top, right, bottom or left); it was ignored.`, closest(side, SIDES));
-        } else if (doc.key === "from") props.from = side as EdgeSide;
-        else props.to = side as EdgeSide;
+      case "end": {
+        const word = value.trim().toLowerCase();
+        const fromEnd = doc.key === "from" || doc.key === "from-end";
+        // `from:` and `to:` take a side or what the end says; the explicit `-end` forms never mean a side.
+        if (!doc.key.endsWith("-end") && (SIDES as readonly string[]).includes(word)) {
+          if (fromEnd) props.from = word as EdgeSide;
+          else props.to = word as EdgeSide;
+          return;
+        }
+        const data = parseEndValue(value);
+        if (!data) {
+          sink.warn(
+            "property/invalid-value",
+            entry.valueSpan,
+            `"${key}: ${value}" is neither a side (top, right, bottom, left) nor a multiplicity (1, 0..1, 0..*, 2..5) or cardinality (${CARDINALITIES.join(", ")}); it was ignored.`,
+            closest(word, [...SIDES, ...CARDINALITIES]),
+          );
+          return;
+        }
+        if (fromEnd) props.fromEnd = { ...props.fromEnd, ...data };
+        else props.toEnd = { ...props.toEnd, ...data };
+        return;
+      }
+      case "relation": {
+        const kind = parseRelationKind(value);
+        if (kind) props.relation = kind;
+        else sink.warn("property/invalid-value", entry.valueSpan, `"${value}" is not a relation (use ${RELATION_KINDS.join(", ")}); it was ignored.`, closest(value.trim().toLowerCase(), RELATION_KINDS));
+        return;
+      }
+      case "notation": {
+        const notation = parseNotation(value);
+        if (notation) props.notation = notation;
+        else sink.warn("property/invalid-value", entry.valueSpan, `"${value}" is not a notation (use ${NOTATIONS.join(", ")}); it was ignored.`, closest(value.trim().toLowerCase(), NOTATIONS));
+        return;
+      }
+      case "role": {
+        const role = value.trim();
+        if (doc.key === "from-role") props.fromRole = role;
+        else props.toRole = role;
         return;
       }
       case "kind": {
@@ -228,6 +306,20 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
     if (props.label !== undefined) node.label = props.label;
     if (props.dashed !== undefined) node.dashed = props.dashed;
     if (props.shape !== undefined) node.shape = props.shape;
+    const structured = expandStructured(props.shape, props.data);
+    if (structured) {
+      node.shape = structured.shape;
+      node.data = structured.data;
+    }
+    // `shape: event|gateway|task|subprocess` and their choices expand into what the canvas draws; explicit properties still win.
+    const bpmn = expandBpmn(props.shape, { position: props.position, trigger: props.trigger, gatewayType: props.gatewayType, taskType: props.taskType, throwing: props.throwing });
+    if (bpmn) {
+      if (bpmn.shape) node.shape = bpmn.shape;
+      else delete node.shape;
+      if (bpmn.icon && props.icon === undefined) node.icon = bpmn.icon;
+      if (bpmn.border && props.border === undefined) node.border = bpmn.border;
+      if (bpmn.marker && props.marker === undefined) node.marker = bpmn.marker;
+    }
     const border = props.border ?? props.entry?.border;
     const marker = props.marker ?? props.entry?.marker;
     const stack = props.stack ?? props.entry?.stack;
@@ -274,16 +366,45 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
     return node;
   };
 
+  /** The relation the properties of one connection describe; end data alone means an association. Fields the kind cannot take are reported. */
+  const buildRelation = (props: Props, span: Span): ConnectorRelation | undefined => {
+    const start: ConnectorEnd | undefined = props.fromEnd || props.fromRole ? { ...props.fromEnd, ...(props.fromRole ? { role: props.fromRole } : {}) } : undefined;
+    const end: ConnectorEnd | undefined = props.toEnd || props.toRole ? { ...props.toEnd, ...(props.toRole ? { role: props.toRole } : {}) } : undefined;
+    if (!props.relation && !props.notation && !start && !end) return undefined;
+    const raw: ConnectorRelation = { kind: props.relation ?? "association", ...(props.notation ? { notation: props.notation } : {}), ...(start ? { start } : {}), ...(end ? { end } : {}) };
+    const kept = normalizeRelation(raw)!;
+    if (JSON.stringify(kept) !== JSON.stringify(raw)) {
+      sink.warn("relation/ends-ignored", span, `A ${raw.kind} does not take every end value given here (cardinality, multiplicity and role depend on the relation); the ones it cannot show were ignored.`);
+    }
+    if (props.notation && raw.kind !== "er-relationship") sink.warn("relation/notation-ignored", span, `notation applies to an er-relationship; a ${raw.kind} has one drawing.`);
+    return kept;
+  };
+
   const resolveEdge = (statement: ConnectStatement) => {
-    const resolved = statement.endpoints.map((side) => side.map((ref) => resolveNode(ref, false)));
+    // `A > B [relation: composition]`: a bracket on the last name that holds only connection properties belongs to the connection.
+    const last = statement.endpoints.length - 1;
+    const moved: PropEntry[] = [];
+    const endpoints = statement.endpoints.map((side, i) =>
+      i !== last
+        ? side
+        : side.map((ref) => {
+            if (!ref.props || ref.props.entries.length === 0 || !ref.props.entries.every((entry) => EDGE_ONLY_KEYS.has(entry.key))) return ref;
+            moved.push(...ref.props.entries);
+            return { ...ref, props: undefined };
+          }),
+    );
+    const edgeProps: PropList | undefined = moved.length > 0 ? { entries: [...(statement.props?.entries ?? []), ...moved], span: statement.props?.span ?? moved[0].span, closed: true } : statement.props;
+    const resolved = endpoints.map((side) => side.map((ref) => resolveNode(ref, false)));
     let color: string | undefined;
     let fromSide: EdgeSide | undefined;
     let toSide: EdgeSide | undefined;
-    if (statement.props) {
-      const props = readProps(statement.props, "edge");
+    let relation: ConnectorRelation | undefined;
+    if (edgeProps) {
+      const props = readProps(edgeProps, "edge");
       color = props.color;
       fromSide = props.from;
       toSide = props.to;
+      relation = buildRelation(props, edgeProps.span);
     }
     const label = statement.label?.text || undefined;
     statement.connectors.forEach((connector, i) => {
@@ -304,6 +425,7 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
             dashed: connector.symbol === "-->" || connector.symbol === "<-->" || connector.symbol === "--" ? true : undefined,
             plain: connector.symbol === "-" || connector.symbol === "--" ? true : undefined,
             color,
+            ...(relation ? { relation: reversed ? reverseRelation(relation) : relation } : {}),
             // A reversed connector (`<`) swaps the ends, so the sides swap with them.
             fromSide: reversed ? toSide : fromSide,
             toSide: reversed ? fromSide : toSide,
@@ -385,6 +507,15 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
 
   for (const open of stack) {
     sink.error("syntax/unclosed-block", open.span, `The ${open.type} "${open.label}" is never closed (missing }).`);
+  }
+
+  const nodeById = new Map(ir.nodes.map((node) => [node.id, node]));
+  for (const edge of ir.edges) {
+    if (!edge.relation) continue;
+    const from = nodeById.get(edge.from);
+    const to = nodeById.get(edge.to);
+    const problem = from && to ? relationProblem(edge.relation.kind, from, to) : null;
+    if (problem) sink.warn("relation/incompatible", edge.span, problem);
   }
 
   for (const node of ir.nodes) {

@@ -41,11 +41,11 @@ export const PROFILES: Record<AIDiagramType, DiagramProfile> = {
   ),
   "entity-relationship": profile(
     "er",
-    "One node per entity, named in the singular. Connect related entities once with a label naming the relationship (has, belongs to). Group by bounded context when there are many.",
+    "Draw every entity as a table: `Orders [shape: entity, rows: \"id int pk; customer_id int fk -> customers.id; total numeric; note text nullable\"]` (one row per column: name, type, then pk/fk/uq/nullable; `variant: weak|associative|junction`). Name entities in the singular or plural consistently. Connect each pair once with its cardinality: `Customers > Orders [relation: er-relationship, from: one, to: zero-or-many]` (one, zero-or-one, many, zero-or-many, one-or-many). A many-to-many needs a junction table. A table cannot connect to itself: show a self-reference as an fk row. Group by bounded context when there are many.",
   ),
   "mind-map": profile(
     "mind-map",
-    "A single central idea, 4-7 main branches, each with 2-4 children. Short noun phrases. No labels on connections.",
+    "A single central idea (`Idea [shape: topic]`), 4-7 main branches, each with 2-4 children, every one `[shape: topic]` and connected parent > child. Short noun phrases. No labels on connections.",
     "curved",
   ),
   concept: profile(
@@ -67,11 +67,11 @@ export const PROFILES: Record<AIDiagramType, DiagramProfile> = {
   ),
   sequence: profile(
     "sequence",
-    "Order matters: declare participants left to right in the order they first act, and connections in time order. Label every message with the action.",
+    "Draw every participant as a lifeline: `Web App [shape: lifeline]`, declared left to right in the order they first act. Every message is a connection with its action as the label and a type, written in time order: `Web App > API: POST /orders [relation: sync]` (sync = filled arrow, async = open arrow, return = dashed reply, create, destroy). Every request is followed by its return where one exists. A participant cannot message itself.",
   ),
   class: profile(
     "uml",
-    "One node per class or interface, grouped by module. Connect with labelled relationships (extends, uses).",
+    "One node per type: `Order [shape: class, attributes: \"-id: int; -total: Money\", operations: \"+pay(m: Method): Receipt\"]` (members separated by `;`, visibility + - # ~, `variant: abstract`; `shape: interface` and `shape: enum` (literals in attributes) also exist). Connect with the UML relation, source being the child or the part: `Dog > Animal [relation: generalization]`, realization, composition and aggregation (`Whole > Part`, `to: 0..*`), association, dependency. Group by module.",
   ),
 };
 

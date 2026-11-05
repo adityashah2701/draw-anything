@@ -5,6 +5,8 @@ import { ChoiceRow, ColorGrid, PopoverLabel, PropertyChip, Swatch } from "@/feat
 import { TextField } from "@/features/whiteboard/components/properties/text-field";
 import { MAX_FRAME_TITLE_LENGTH } from "@/core/frames/frame-model";
 import type { FrameHeader } from "@/features/whiteboard/utils/properties-bar-model";
+import { CARDINALITIES, RELATIONS, parseMultiplicity, relationDef, withEnd, withNotation, withRelationKind } from "@/core/shapes/arrow/relations";
+import type { Cardinality, RelationKind, RelationNotation } from "@/features/whiteboard/types/whiteboard.types";
 import { OutlineVariantIcon } from "@/core/shapes/outline/icon";
 import { NumberField } from "@/features/whiteboard/components/properties/number-field";
 import type { Mixed } from "@/features/whiteboard/utils/inspector-model";
@@ -325,6 +327,96 @@ const FloatingPropertiesPanel = ({
               <span>Start</span>
               <span>End</span>
             </div>
+          </PropertyChip>
+        )}
+
+        {connector && (
+          <PropertyChip
+            label="Meaning"
+            summary={connector.relation.kind === "mixed" ? "Mixed" : connector.relation.kind === null ? "None" : relationDef(connector.relation.kind).label}
+            preview={<span aria-hidden className="text-xs">{connector.relation.kind === "mixed" || connector.relation.kind === null ? "–" : "◇"}</span>}
+            disabled={off}
+            resetKey={resetKey}
+            width={320}
+          >
+            <PopoverLabel>Relation</PopoverLabel>
+            <ChoiceRow
+              label="Relation"
+              value={connector.relation.kind === null ? "none" : connector.relation.kind}
+              columns={2}
+              onChange={(kind) => controller.updateConnectors(connector.ids, { relation: (current) => withRelationKind(current, kind === "none" ? null : (kind as RelationKind)) })}
+              options={[
+                { value: "none", title: "None (drawn from the line style)", content: <span>None</span> },
+                ...RELATIONS.map((def) => ({ value: def.kind as string, title: def.label, content: <span className="truncate">{def.label}</span> })),
+              ]}
+            />
+            {connector.relation.kind !== "mixed" && connector.relation.kind !== null && (
+              <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">{relationDef(connector.relation.kind).summary}</p>
+            )}
+            {connector.relation.kind === "er-relationship" && (
+              <>
+                <PopoverLabel>Notation</PopoverLabel>
+                <ChoiceRow
+                  label="Notation"
+                  value={connector.relation.notation === null ? "crows-foot" : connector.relation.notation}
+                  onChange={(notation) => controller.updateConnectors(connector.ids, { relation: (current) => withNotation(current, notation) })}
+                  options={[
+                    { value: "crows-foot" as RelationNotation, title: "Crow's foot", content: <span>Crow&apos;s foot</span> },
+                    { value: "chen" as RelationNotation, title: "Chen: 1, N and M beside the line", content: <span>Chen</span> },
+                  ]}
+                />
+              </>
+            )}
+            {connector.relation.accepts && (
+              <>
+                {(["start", "end"] as const).map((which) => {
+                  const data = connector.relation[which];
+                  const accepts = connector.relation.accepts!;
+                  const name = which === "start" ? "Start (source)" : "End (target)";
+                  return (
+                    <div key={which}>
+                      <PopoverLabel>{name}</PopoverLabel>
+                      {accepts.cardinality && (
+                        <ChoiceRow
+                          label={`${name} cardinality`}
+                          value={data.cardinality === null ? "none" : data.cardinality}
+                          columns={3}
+                          onChange={(cardinality) => controller.updateConnectors(connector.ids, { relation: (current) => withEnd(current, which, { cardinality: cardinality === "none" ? undefined : (cardinality as Cardinality), multiplicity: undefined }) })}
+                          options={[
+                            { value: "none", title: "No cardinality", content: <span>None</span> },
+                            ...CARDINALITIES.map((c) => ({ value: c as string, title: c.replace(/-/g, " "), content: <span className="truncate">{c.replace(/-/g, " ")}</span> })),
+                          ]}
+                        />
+                      )}
+                      {accepts.multiplicity && !accepts.cardinality && (
+                        <TextField
+                          label={`${name} multiplicity`}
+                          value={data.multiplicity}
+                          maxLength={12}
+                          onCommit={(text) => {
+                            const clean = text.trim();
+                            if (clean === "") return controller.updateConnectors(connector.ids, { relation: (current) => withEnd(current, which, { multiplicity: undefined }) });
+                            // 1, *, 0..1, 0..*, 2..5: anything else is not a multiplicity and is not stored.
+                            if (parseMultiplicity(clean) === null) return;
+                            controller.updateConnectors(connector.ids, { relation: (current) => withEnd(current, which, { multiplicity: clean }) });
+                          }}
+                        />
+                      )}
+                      {accepts.role && (
+                        <div className="mt-1.5">
+                          <TextField
+                            label={`${name} role`}
+                            value={data.role}
+                            maxLength={40}
+                            onCommit={(text) => controller.updateConnectors(connector.ids, { relation: (current) => withEnd(current, which, { role: text.trim() === "" ? undefined : text.trim() }) })}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </PropertyChip>
         )}
 

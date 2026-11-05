@@ -18,6 +18,7 @@ export const parsedFromIR = (ir: DiagramIR, issues: ParsedDiagramCode["issues"])
     border: node.border,
     marker: node.marker,
     stack: node.stack,
+    data: node.data,
     color: node.color,
     x: node.x,
     y: node.y,
@@ -35,6 +36,7 @@ export const parsedFromIR = (ir: DiagramIR, issues: ParsedDiagramCode["issues"])
     color: edge.color,
     fromSide: edge.fromSide,
     toSide: edge.toSide,
+    relation: edge.relation,
     line: edge.line,
   }));
   const groups: ParsedGroup[] = ir.groups.map((group) => ({

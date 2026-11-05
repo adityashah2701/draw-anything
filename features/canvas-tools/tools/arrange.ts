@@ -125,7 +125,7 @@ const layoutInput = z
 export const autoLayout: ToolDefinition<typeof layoutInput> = {
   name: "auto_layout",
   group: "arrange",
-  description: "Re-arrange nodes with a layout algorithm. Only positions change: ids, labels, sizes, connections and groups are kept, connectors are re-routed, locked elements stay, and the result stays where the nodes were. Moves many elements: pass the board's current revision.",
+  description: "Re-arrange nodes with a generic layout algorithm (for a diagram with its own layout, prefer layout_diagram, which keeps what a person placed). Only positions change: ids, labels, sizes, connections and groups are kept, connectors are re-routed, locked elements stay, and the result stays where the nodes were. Moves many elements: pass the board's current revision.",
   input: layoutInput,
   access: "write",
   strictRevision: true,

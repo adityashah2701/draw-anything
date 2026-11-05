@@ -4,6 +4,7 @@ import { isNodeElement, measureLayout } from "@/features/ai/server/layout/metric
 import type { DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
 import type { BuiltCanvas } from "./canvas";
 import type { BuilderState } from "./state";
+import { MAX_NODES_PER_VIEW, needsViews } from "./views";
 
 export interface CanvasReport {
   /** Specific things to fix, each naming the connections or nodes involved. Empty when the picture is clean. */
@@ -95,15 +96,47 @@ export const reportCanvas = (built: BuiltCanvas, state: BuilderState): CanvasRep
     }
   }
 
+  // Critic v2: judgements about the drawing as a message, not only its geometry.
+  const parsed = state.parsed;
+  const nameById = new Map(parsed.nodes.map((n) => [n.id, n.name]));
+  const touched = new Set(parsed.edges.flatMap((e) => [e.from, e.to]));
+  const isolated = parsed.nodes.length > 1 ? parsed.nodes.filter((n) => !touched.has(n.id)).map((n) => `${n.name} is not connected to anything: connect it, or remove it`) : [];
+  const unlabelledBranches = parsed.nodes
+    .filter((n) => n.kind === "decision" || n.shape === "diamond")
+    .filter((n) => parsed.edges.filter((e) => e.from === n.id).length > 1 && parsed.edges.some((e) => e.from === n.id && !e.label))
+    .map((n) => `The branches leaving ${n.name} need labels (for example Yes / No) with \`label ${n.name} > <Next>: Yes\``);
+  const dir = parsed.direction ?? "down";
+  const backward = list
+    .filter((a) => {
+      const from = boxOf.get(a.startConnection?.elementId ?? "");
+      const to = boxOf.get(a.endConnection?.elementId ?? "");
+      if (!from || !to) return false;
+      const dy = (to.minY + to.maxY - from.minY - from.maxY) / 2;
+      const dx = (to.minX + to.maxX - from.minX - from.maxX) / 2;
+      const against = dir === "down" ? -dy : dir === "up" ? dy : dir === "right" ? -dx : dx;
+      return against > 80 && !parsed.edges.some((e) => e.dashed && nameById.get(e.from) && arrowName(a) === `${nameById.get(e.from)} > ${nameById.get(e.to)}`);
+    })
+    .map((a) => `${arrowName(a)} runs against the reading direction: if it is not a feedback loop, \`swap\` the two nodes; if it is, make it dashed`);
+
+  const tooBig = parsed.nodes.length > MAX_NODES_PER_VIEW
+    ? [needsViews(parsed)
+        ? `${parsed.nodes.length} parts is too many for one picture: keep this as the overview and draw each group in its own focused view`
+        : `${parsed.nodes.length} parts is too many for one picture: group them into 3-6 groups of at most ${MAX_NODES_PER_VIEW / 3} so the diagram can be split`]
+    : [];
+
   const metrics = measureLayout(elements, document.groups);
   const problems = [
     ...overlapsNodes,
+    ...tooBig,
+    ...isolated,
+    ...unlabelledBranches,
     ...through,
     ...shared,
     ...crossings,
     ...detours,
     ...longEdges,
     ...bendy,
+    ...backward,
     ...(metrics.labelsColliding > 0 ? [`${metrics.labelsColliding} connection label(s) overlap a node, a line or another label`] : []),
     ...(metrics.groupViolations > 0 || metrics.groupsDropped > 0 ? [`${metrics.groupViolations + metrics.groupsDropped} group frame problem(s): a frame is missing, or covers a node that is not in it`] : []),
     ...lintDiagram(state.parsed, metrics).filter((f) => f.rule === "generic-icons" || f.rule === "long-label").map((f) => f.advice),

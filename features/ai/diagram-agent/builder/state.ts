@@ -109,7 +109,7 @@ export interface AddResult {
 const ADJUST_COMMAND = /^\s*(?:(?:label|sides|remove|reset)\s+[^>]+>[^>]+|move\s+.+:\s*(?:left|right|up|down)\b.*|align\s+.+\s+with\s+.+:\s*[xy]\s*)$/;
 
 /** Adds diagram code (nodes, connections, groups) to what exists. Atomic: any error leaves the state unchanged. */
-export const addLines = (state: BuilderState, text: string): AddResult => {
+export const addLines = (state: BuilderState, text: string, limit = MAX_ADD_STATEMENTS): AddResult => {
   const lines = text.replace(/\r/g, "").split("\n");
   const misplaced = lines.flatMap((l, i) =>
     ADJUST_COMMAND.test(l)
@@ -133,7 +133,7 @@ export const addLines = (state: BuilderState, text: string): AddResult => {
     }
   }
   if (current.length > 0) units.push(current);
-  const kept = units.slice(0, MAX_ADD_STATEMENTS);
+  const kept = units.slice(0, limit);
   const skipped = units.length - kept.length;
   const body = kept.flat();
 
@@ -197,6 +197,8 @@ export interface Centres {
  *   align <Node> with <Other>: x|y               (same column / same row)
  *   sides <A> > <B>: <from side>, <to side>      (top, right, bottom, left)
  *   label <A> > <B>: text                        (empty text removes the label)
+ *   swap <A> with <B>                            (exchange their places)
+ *   straighten <A> > <B>                         (put the two in line so the connector runs straight)
  *   remove <Node>   |   remove <A> > <B>
  *   reset <Node>    |   reset <A> > <B>           (back to the automatic place / sides)
  * Commands apply in order; a bad one is reported and the rest still run.
@@ -236,12 +238,12 @@ export const adjust = (state: BuilderState, text: string, centres: Centres): Adj
   const limitNote = (r: { limited: boolean }) => (r.limited ? ` (limit reached: a node stays within ${MAX_OFFSET} of its automatic place; use reset)` : "");
 
   // Some models put several commands on one line, separated by `;`: split there too, but only before a command word.
-  for (const raw of text.replace(/\r/g, "").split("\n").flatMap((l) => l.split(/;\s*(?=(?:move|align|sides|label|remove|reset)\b)/i))) {
+  for (const raw of text.replace(/\r/g, "").split("\n").flatMap((l) => l.split(/;\s*(?=(?:move|align|sides|label|remove|reset|swap|straighten)\b)/i))) {
     const line = raw.trim();
     if (!line || line.startsWith("//")) continue;
-    const verb = line.match(/^(move|align|sides|label|remove|reset)\b\s*(.*)$/i);
+    const verb = line.match(/^(move|align|sides|label|remove|reset|swap|straighten)\b\s*(.*)$/i);
     if (!verb) {
-      fail(line, "unknown command (use move, align, sides, label, remove or reset)");
+      fail(line, "unknown command (use move, align, sides, label, remove, reset, swap or straighten)");
       continue;
     }
     const command = verb[1].toLowerCase();
@@ -303,6 +305,29 @@ export const adjust = (state: BuilderState, text: string, centres: Centres): Adj
       parsed = { ...parsed, edges: parsed.edges.map((e) => (matches.includes(e) ? { ...e, label } : e)) };
       structural = true;
       applied.push(label ? `labelled ${pair.a.name} > ${pair.b.name} "${label}"` : `removed the label of ${pair.a.name} > ${pair.b.name}`);
+    } else if (command === "swap") {
+      const m = rest.match(/^(.+?)\s+with\s+(.+)$/i);
+      if (!m) { fail(line, "expected `swap <A> with <B>`"); continue; }
+      const a = nodeOrFail(line, m[1]);
+      const b = nodeOrFail(line, m[2]);
+      if (!a || !b) continue;
+      const ca = centres.get(a.id);
+      const cb = centres.get(b.id);
+      if (!ca || !cb) { fail(line, "the canvas has not placed both nodes yet"); continue; }
+      const toB = shift(a.id, cb.x - ca.x, cb.y - ca.y);
+      const toA = shift(b.id, ca.x - cb.x, ca.y - cb.y);
+      applied.push(`swapped ${a.name} and ${b.name}${limitNote({ limited: toB.limited || toA.limited })}`);
+    } else if (command === "straighten") {
+      const found = pairOrFail(line, rest);
+      if (!found) continue;
+      const ca = centres.get(found.a.id);
+      const cb = centres.get(found.b.id);
+      if (!ca || !cb) { fail(line, "the canvas has not placed both nodes yet"); continue; }
+      // Line the target up with the source across the connector's short axis, so it runs straight.
+      const vertical = Math.abs(cb.y - ca.y) >= Math.abs(cb.x - ca.x);
+      const moved = shift(found.b.id, vertical ? ca.x - cb.x : 0, vertical ? 0 : ca.y - cb.y);
+      edgeSides.delete(`${found.a.id}>${found.b.id}`);
+      applied.push(`straightened ${found.a.name} > ${found.b.name}${limitNote(moved)}`);
     } else if (command === "remove") {
       const pair = splitPair(rest);
       if (pair) {

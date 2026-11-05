@@ -1,5 +1,7 @@
 import { normalizeColor } from "@/core/color/named-colors";
 import { z } from "zod";
+import { CARDINALITIES, NOTATIONS, RELATION_KINDS, normalizeRelation } from "@/core/shapes/arrow/relations";
+import type { ConnectorRelation } from "@/features/whiteboard/types/whiteboard.types";
 import { MARKER_IDS, isMarkerId } from "@/core/shapes/outline/markers";
 import { allOutlineVariantIds } from "@/core/shapes/outline/variants";
 import { resolveIconId } from "@/core/icons/registry";
@@ -63,7 +65,34 @@ export const aiSemanticNodeKindSchema = z.enum([
   "loop",
   "external",
   "generic",
+  "scheduler",
+  "topic",
+  "producer",
+  "consumer",
+  "event",
+  "event-store",
+  "stream-processor",
+  "notification-service",
+  "search-index",
+  "certificate-authority",
+  "iam-role",
+  "logger",
+  "metrics-collector",
+  "tracing-collector",
+  "log-storage",
 ]) satisfies z.ZodType<AISemanticNodeKind>;
+
+/** The content of a structured shape, from model output: only the known keys, as short strings. */
+const DATA_KEYS = ["rows", "attributes", "operations", "variant", "stereotype", "template"] as const;
+const structuredData = (value: unknown): Record<string, string> | undefined => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const key of DATA_KEYS) {
+    const v = (value as Record<string, unknown>)[key];
+    if (typeof v === "string" && v.trim() !== "") out[key] = v.slice(0, 2000);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
 
 const semanticNodeKindValues = new Set<string>(aiSemanticNodeKindSchema.options);
 
@@ -163,7 +192,7 @@ const normalizeDiagramType = (diagramType: unknown): AIDiagramType =>
   parseDiagramType(diagramType) ?? "architecture";
 
 /** Node shapes a diagram may name: the built-ins plus every outline variant, read from the registry. */
-const NODE_SHAPES = ["diamond", "pill", "icon", ...allOutlineVariantIds()] as [string, ...string[]];
+const NODE_SHAPES = ["diamond", "pill", "icon", "entity", "class", "topic", "lifeline", ...allOutlineVariantIds()] as [string, ...string[]];
 
 export const aiDiagramNodeSchema = z.object({
   id: z.string().min(1).max(80),
@@ -181,12 +210,25 @@ export const aiDiagramNodeSchema = z.object({
   border: z.enum(["double", "thick"]).optional(),
   marker: z.enum(MARKER_IDS).optional(),
   stack: z.boolean().optional(),
+  data: z.record(z.string(), z.string().max(2000)).optional(),
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
   width: z.number().finite().optional(),
   height: z.number().finite().optional(),
   color: z.string().max(7).optional(),
 }) satisfies z.ZodType<AIDiagramNode>;
+
+const connectorEndSchema = z.object({
+  cardinality: z.enum(CARDINALITIES as [string, ...string[]]).optional(),
+  multiplicity: z.string().max(12).optional(),
+  role: z.string().max(40).optional(),
+});
+const connectorRelationSchema = z.object({
+  kind: z.enum(RELATION_KINDS as [string, ...string[]]),
+  notation: z.enum(NOTATIONS as [string, ...string[]]).optional(),
+  start: connectorEndSchema.optional(),
+  end: connectorEndSchema.optional(),
+}) as unknown as z.ZodType<ConnectorRelation>;
 
 export const aiDiagramEdgeSchema = z.object({
   id: z.string().min(1).max(100).optional(),
@@ -200,6 +242,7 @@ export const aiDiagramEdgeSchema = z.object({
   color: z.string().max(7).optional(),
   fromSide: z.enum(["top", "right", "bottom", "left"]).optional(),
   toSide: z.enum(["top", "right", "bottom", "left"]).optional(),
+  relation: connectorRelationSchema.optional(),
 }) satisfies z.ZodType<AIDiagramEdge>;
 
 const optionalStringArraySchema = z.array(z.string().min(1).max(120)).default([]);
@@ -397,6 +440,7 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       border: record.border === "double" || record.border === "thick" ? record.border : undefined,
       marker: isMarkerId(record.marker) ? record.marker : undefined,
       stack: record.stack === true ? true : undefined,
+      data: structuredData(record.data),
       color: normalizeColor(record.color),
       ...layoutFields(record),
     });
@@ -442,6 +486,7 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       color: normalizeColor(source.color),
       fromSide: side(source.fromSide),
       toSide: side(source.toSide),
+      relation: normalizeRelation(source.relation),
     });
   });
   if (unusableEdges > 0) warnings.push(`Ignored ${unusableEdges} unusable edge(s).`);

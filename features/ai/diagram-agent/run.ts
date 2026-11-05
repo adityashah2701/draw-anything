@@ -1,4 +1,5 @@
 import { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
+import { familyCompileOptions } from "@/features/ai/server/layout/family-placement";
 import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
 import { createInitialAIFrame, phaseCompleted, phaseStarted } from "./frame";
 import { documentFromParsedCode } from "@/features/diagram-code/canvas";
@@ -100,7 +101,7 @@ export async function* streamDiagramAgentEvents(options: DiagramAgentOptions): A
     yield phaseCompleted(frameId, "architecturePlanner", `Designed ${document.nodes.length} components`);
 
     yield phaseStarted(frameId, "canvasCompiler", "Laying out and drawing");
-    const compiled = compileAIDiagramDetailed(document, frameId, { channelGaps: true });
+    const compiled = compileAIDiagramDetailed(document, frameId, { channelGaps: true, ...familyCompileOptions(document.diagramType) });
     const { collidingLabels, droppedGroups, unfittedNodes, layoutFallback } = compiled.diagnostics;
     if (process.env.NODE_ENV !== "test") {
       // Ids and counts only: nothing from the prompt or the diagram text is logged.

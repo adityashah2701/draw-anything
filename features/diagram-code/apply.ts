@@ -36,6 +36,8 @@ export interface SyncState {
   owned: Record<string, string>;
   /** What the code produced at the last sync, by match key. */
   baseline: Record<string, DrawingElement>;
+  /** The diagram was drawn by its family's layout engine, so an update lays out with the same one (absent: the compiler's own layout, as before). */
+  familyEngine?: boolean;
 }
 
 export interface Conflict {
@@ -64,6 +66,12 @@ export interface ApplyPlan {
   summary: { added: number; updated: number; removed: number; unchanged: number; restored: number };
   /** Warnings from the code; never errors. */
   issues: DiagramCodeIssue[];
+  /**
+   * Who placed each element this plan writes, where it differs from "a layout did": a node whose position the code
+   * gives (`x` and `y`) is `user`. The rest of what the plan moves was placed by the layout, so the patch is applied
+   * with origin `layout`, and these entries override it per element.
+   */
+  placements: Record<string, "auto" | "user">;
 }
 
 export type ApplyOutcome =
@@ -376,8 +384,17 @@ export const planApply = (input: ApplyInput): ApplyOutcome => {
   }
 
   const pins = sync && owned.size > 0 ? movedNodes(owned, sync) : undefined;
+  // A node stamped `user` (a person placed it, recorded at the moment they did) stays where it is, in addition to the nodes the inference above finds moved.
+  if (sync && owned.size > 0) {
+    for (const [key, el] of owned) {
+      if (!key.startsWith("node:") || el.placement !== "user") continue;
+      const id = key.slice(5);
+      if (!pins!.has(id)) pins!.set(id, { ...centreOf(el) });
+    }
+  }
   const generationId = generationOf(sync, input.generationId);
-  const drawn = elementsFromDiagramCode(code, { generationId, frameId, pins });
+  const familyEngine = (sync && owned.size > 0 ? sync.familyEngine === true : true) && compiled.ir.diagramType !== undefined;
+  const drawn = elementsFromDiagramCode(code, { generationId, frameId, pins, familyEngine });
   if (drawn.elements.length === 0) {
     return { status: "invalid", diagnostics: drawn.issues.filter((i) => i.severity === "error") };
   }
@@ -418,6 +435,8 @@ export const planApply = (input: ApplyInput): ApplyOutcome => {
   const autoBoxKeys = new Set(compiled.ir.frames.filter((f) => f.x === undefined && f.y === undefined && f.width === undefined && f.height === undefined).map((f) => `frame:${f.id}`));
 
   const patch: ApplyPatch = { add: [], update: [], remove: [] };
+  const placements: Record<string, "auto" | "user"> = {};
+  const explicitNodes = new Set(compiled.ir.nodes.filter((n) => n.x !== undefined && n.y !== undefined).map((n) => `node:${n.id}`));
   const conflicts: Conflict[] = [];
   const newOwned: Record<string, string> = {};
   const newBaseline: Record<string, DrawingElement> = {};
@@ -428,6 +447,7 @@ export const planApply = (input: ApplyInput): ApplyOutcome => {
     const key = freshKeys.get(el.id);
     const wanted = remap(el);
     if (key) newBaseline[key] = wanted;
+    if (key && explicitNodes.has(key)) placements[wanted.id] = "user";
     const current = key ? owned.get(key) : undefined;
     if (!key || !current) {
       patch.add.push(wanted);
@@ -453,10 +473,11 @@ export const planApply = (input: ApplyInput): ApplyOutcome => {
     status: "ready",
     plan: {
       patch,
-      sync: { code, owned: newOwned, baseline: newBaseline },
+      sync: { code, owned: newOwned, baseline: newBaseline, ...(familyEngine ? { familyEngine: true } : {}) },
       anchored: anchored || owned.size > 0,
       summary: { added: patch.add.length - restored, updated: patch.update.length, removed: patch.remove.length, unchanged, restored },
       issues,
+      placements,
     },
   };
 };
@@ -477,7 +498,7 @@ export interface LoadResult {
  */
 export const loadFromCanvas = (
   elements: readonly DrawingElement[],
-  { selectedIds = [], layout = true, generationId }: { selectedIds?: readonly string[]; layout?: boolean; generationId: string },
+  { selectedIds = [], layout = true, generationId, familyEngine = false }: { selectedIds?: readonly string[]; layout?: boolean; generationId: string; familyEngine?: boolean },
 ): LoadResult | null => {
   const scope = selectedIds.length > 0 ? elements.filter((el) => selectedIds.includes(el.id)) : [...elements];
   const { graph, consumedIds, provenance } = graphFromElements(scope, { layout });
@@ -485,7 +506,7 @@ export const loadFromCanvas = (
 
   const { code, names, frameNames } = serializeDiagramCodeDetailed(graph);
   const compiled = compileDiagramCode(code);
-  const baselineDraw = elementsFromDiagramCode(code, { generationId, frameId: "diagram-code" });
+  const baselineDraw = elementsFromDiagramCode(code, { generationId, frameId: "diagram-code", familyEngine });
   const baselineKeys = keysOfFresh(baselineDraw.elements);
   // The baseline is drawn with ids of its own; a member's `frameId` must name the frame element that is really on the board.
   const boardFrameOfKey = new Map<string, string>();
@@ -549,7 +570,7 @@ export const loadFromCanvas = (
   // Anything the diagram consumed that no declaration claims is removed on the next update, as before.
   for (const id of consumedIds) if (!(id in owned)) owned[id] = `orphan:${id}`;
 
-  return { code, sync: { code, owned, baseline }, nodeCount: graph.nodes.length, edgeCount: graph.edges.length };
+  return { code, sync: { code, owned, baseline, ...(familyEngine ? { familyEngine: true } : {}) }, nodeCount: graph.nodes.length, edgeCount: graph.edges.length };
 };
 
 // ── drift ───────────────────────────────────────────────────────────────────

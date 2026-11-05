@@ -1,4 +1,5 @@
-import type { DrawingElement, GroupRecord, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import { isLayoutRecord } from "@/core/layout/record";
+import type { DrawingElement, GroupRecord, LayoutRecord, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
 
 /** True for a stored composite-group record (never for a drawable shape). */
 export const isGroupRecord = (value: unknown): value is GroupRecord =>
@@ -7,16 +8,24 @@ export const isGroupRecord = (value: unknown): value is GroupRecord =>
   (value as { type?: unknown }).type === "group" &&
   typeof (value as { id?: unknown }).id === "string";
 
-/** The stored list split into what the canvas draws and the group records that describe how it nests. */
-export const splitStored = (stored: readonly StoredElement[]): { shapes: DrawingElement[]; records: GroupRecord[] } => {
+/**
+ * True for anything stored that is not a drawable shape: a composite-group record or a layout record. Code that
+ * walks the stored list and must not treat a record as a shape asks this, so a new kind of record is added here once.
+ */
+export const isStoredRecord = (value: unknown): value is GroupRecord | LayoutRecord => isGroupRecord(value) || isLayoutRecord(value);
+
+/** The stored list split into what the canvas draws, the group records that describe how it nests, and the layout records. */
+export const splitStored = (stored: readonly StoredElement[]): { shapes: DrawingElement[]; records: GroupRecord[]; layouts: LayoutRecord[] } => {
   const shapes: DrawingElement[] = [];
   const records: GroupRecord[] = [];
+  const layouts: LayoutRecord[] = [];
   for (const item of stored) {
     if (!item || typeof item !== "object") continue;
     if (isGroupRecord(item)) records.push(item);
+    else if (isLayoutRecord(item)) layouts.push(item);
     else shapes.push(item as DrawingElement);
   }
-  return { shapes, records };
+  return { shapes, records, layouts };
 };
 
 /**
@@ -57,6 +66,7 @@ export const buildGroupIndex = (stored: readonly StoredElement[]): GroupIndex =>
   const order = new Map<string, number>();
   for (const item of stored) {
     if (!item || typeof item !== "object" || typeof (item as { id?: unknown }).id !== "string") continue;
+    if (isLayoutRecord(item)) continue; // configuration, not a shape and not a group
     if (isGroupRecord(item)) {
       if (!records.has(item.id)) records.set(item.id, item);
     } else if (!shapes.has(item.id)) {

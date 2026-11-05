@@ -46,6 +46,17 @@ export const lintDiagram = (parsed: ParsedDiagramCode, metrics?: LintMetrics): L
     if (to) degree.set(to, (degree.get(to) ?? 0) + 1);
   }
 
+  // The structured families have their own shapes; icons and plain boxes there read as a generic architecture.
+  const WANT: Record<string, { shapes: string[]; fix: string }> = {
+    "entity-relationship": { shapes: ["entity"], fix: 'a table: `Orders [shape: entity, rows: "id int pk; customer_id int fk -> customers.id"]`' },
+    class: { shapes: ["class"], fix: 'a class: `Order [shape: class, attributes: "-id: int", operations: "+pay(): void"]` (or shape: interface / enum)' },
+    sequence: { shapes: ["lifeline"], fix: "a lifeline: `Web App [shape: lifeline]`" },
+    "mind-map": { shapes: ["topic"], fix: "a topic: `Idea [shape: topic]`" },
+  };
+  const want = parsed.diagramType ? WANT[parsed.diagramType] : undefined;
+  const wrong = want ? nodes.filter((n) => !want.shapes.includes(n.shape ?? "")).map((n) => n.label) : [];
+  if (want && wrong.length > 0) add("family-shapes", `In a ${parsed.diagramType} diagram every node must be ${want.fix}. Not yet: ${wrong.slice(0, 6).join(", ")}. Drop icon: and shape: icon there.`);
+
   const orphans = nodes.filter((n) => (degree.get(n.id) ?? 0) === 0 && nodes.length > 1).map((n) => n.label);
   if (orphans.length > 0) add("orphan-node", `Not connected to anything: ${orphans.slice(0, 5).join(", ")}. Connect each or remove it.`);
 

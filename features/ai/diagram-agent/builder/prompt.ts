@@ -1,5 +1,5 @@
 import { iconVocabulary } from "../prompt/icon-vocabulary";
-import { iconCategoriesFor, type PromptContext } from "../prompt/prompt-context";
+import { STRUCTURED_DIAGRAM_TYPES, iconCategoriesFor, type PromptContext } from "../prompt/prompt-context";
 import { LANGUAGE } from "../prompt/system";
 import type { ToolSpec, ToolTransport } from "../types";
 import { MAX_ADD_STATEMENTS } from "./state";
@@ -13,7 +13,7 @@ export const BUILDER_TOOL_SPECS: ToolSpec[] = [
   {
     name: "adjust",
     description:
-      "Fix how the drawn diagram looks, one command per line: `move <Node>: left|right|up|down [distance]`, `align <Node> with <Other>: x|y`, `sides <A> > <B>: <from side>, <to side>` (top, right, bottom, left), `label <A> > <B>: text`, `remove <Node>` or `remove <A> > <B>`, `reset <Node>` or `reset <A> > <B>`.",
+      "Fix how the drawn diagram looks, one command per line: `move <Node>: left|right|up|down [distance]`, `align <Node> with <Other>: x|y`, `sides <A> > <B>: <from side>, <to side>` (top, right, bottom, left), `label <A> > <B>: text`, `swap <A> with <B>` (exchange places), `straighten <A> > <B>` (line the two up so the connector runs straight), `remove <Node>` or `remove <A> > <B>`, `reset <Node>` or `reset <A> > <B>`.",
   },
   { name: "view", description: "Get the exact position of every node and the sides every connection uses on your next step (and a picture of the canvas when you can see images)." },
   { name: "finish", description: "The diagram is finished. If problems remain you are asked to fix them first. The argument is ignored (send an empty string)." },
@@ -48,14 +48,21 @@ export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], conte
     context?.plainBoxes ? "The person asked for plain boxes: draw every node as a box, with no `shape: icon`, and leave out `icon:` unless a kind needs it." : "",
     "How you work:",
     "0. Start every reply with one or two plain sentences saying what you are about to do and why: the structure you chose, a trade-off, what you noticed on the canvas. The person watching reads them as your thinking, so make them specific (\"Grouping the data stores so the backend reads as one block\"), never filler (\"Let me add the next part\"). Then make your tool calls.",
-    `1. Build in steps. Each turn look at the canvas and add the NEXT part: several nodes with their connections, or a group (at most ${MAX_ADD_STATEMENTS} statements). Start at the entry point and follow the flow. Large diagrams take two or three steps, not one.`,
-    "2. Icons first: draw recognisable things (services, databases, queues, caches, gateways, clients, users, devices, cloud parts) as bare icons with their name underneath (`shape: icon`, call search_icons once for all the ids you need). Use a box for what needs text or structure: steps, decisions, descriptions, long names. Mix both in one diagram when it has both kinds of part, giving them equal weight.",
+    "0b. Before the first add, write a one-line BRIEF in your reply: the diagram type, who reads it, the 4-8 main parts in reading order, and which of them belong together (groups). Then build exactly that structure; if the request is large, the brief names the overview first and the detail views after it.",
+    context?.diagramType && STRUCTURED_DIAGRAM_TYPES.has(context.diagramType)
+      ? "1. Write the WHOLE diagram in a single add: every table, class, lifeline or topic with its full content, and every connection with its relation (up to 48 statements). Rows are separated by `;`. Then call finish in the same reply. Do not adjust or polish unless the Problems list names an error."
+      : `1. Build in steps. Each turn look at the canvas and add the NEXT part: several nodes with their connections, or a group (at most ${MAX_ADD_STATEMENTS} statements). Start at the entry point and follow the flow. Large diagrams take two or three steps, not one.`,
+    context?.diagramType && STRUCTURED_DIAGRAM_TYPES.has(context.diagramType)
+      ? `2. This is a ${context.diagramType} diagram: draw every node as its own shape (ER table \`shape: entity\` with rows, class \`shape: class\` with attributes and operations, \`shape: lifeline\`, \`shape: topic\`), never as an icon or a plain box, and put the meaning on connections with \`relation:\`.`
+      : "2. Icons first: draw recognisable things (services, databases, queues, caches, gateways, clients, users, devices, cloud parts) as bare icons with their name underneath (`shape: icon`, call search_icons once for all the ids you need). Use a box for what needs text or structure: steps, decisions, descriptions, long names. Mix both in one diagram when it has both kinds of part, giving them equal weight.",
     "3. When the structure is complete, polish. Read the Problems list: each names the connections or nodes involved. Fix them with adjust, for example:",
     "   - a connection runs along another one or has many bends: `sides A > B: right, right` loops it around the right side, `sides A > B: bottom, top` makes it direct;",
-    "   - a node is slightly off: a small `move B: right 40`, or `align B with C: x` to line them up (moves are nudges, at most 200 at a time);",
+    "   - two nodes are in the wrong order for the flow: `swap A with B`; a connector zig-zags between nearly aligned nodes: `straighten A > B`;\n   - a node is slightly off: a small `move B: right 40`, or `align B with C: x` to line them up (moves are nudges, at most 200 at a time);",
     "   - a connection crosses others or passes through a node: change its sides or move a node; remove a connection that adds nothing.",
     "   Keep the diagram COMPACT. The engine already spaces nodes and routes lines; never use move to spread things apart or to chase a layout you imagine. Prefer `sides` to fix a line. If you see nodes under \"Moved by hand\" and the picture got worse, `reset` them. An adjustment that makes the picture worse is undone for you.",
     "4. Use view only when you need exact positions. Call finish when the Problems list is empty or you cannot improve it further; you may send finish in the same reply as your last add or adjust. Every step costs a model call, so make each one count: a node and all its connections together, not one line at a time.",
+    "",
+    `5. Big systems: a picture holds at most about 24 parts. For a larger system, draw the OVERVIEW first (3-6 groups, each group a few nodes), and leave the detail to focused views per group; never one flat diagram of 30+ nodes.`,
     "",
     "Design rules: short names (1-4 words); every node connects to something; label a connection only when it adds information; group tightly coupled nodes; dashed (-->) for optional, async or feedback paths. y grows downward in positions.",
     "",

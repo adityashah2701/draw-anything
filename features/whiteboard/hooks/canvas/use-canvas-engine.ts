@@ -14,6 +14,8 @@ import {
 } from "@/features/whiteboard/types/whiteboard.types";
 import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
 import { drawGuides, drawSpans } from "@/features/whiteboard/utils/draw-guides";
+import { drawLayoutPreview } from "@/features/whiteboard/utils/draw-layout-preview";
+import type { LayoutPreview } from "@/features/whiteboard/commands/layout-engine";
 import type { Guide, Span } from "@/core/snap/alignment";
 import type { SelectionOverlay } from "@/features/whiteboard/utils/selection-overlay";
 import { drawSelectionOverlay } from "@/features/whiteboard/utils/draw-selection-overlay";
@@ -66,6 +68,8 @@ interface CanvasEngineProps {
   selectionOverlay?: SelectionOverlay | null;
   /** Changes when more icons finish loading, so icons drawn as placeholders are redrawn. */
   iconLibraryVersion?: number;
+  /** A layout being previewed: drawn over the board, never part of it. */
+  layoutPreview?: LayoutPreview | null;
 }
 
 const useCanvasEngine = ({
@@ -93,6 +97,7 @@ const useCanvasEngine = ({
   magneticSnapPreview,
   editingShapeLabelId,
   iconLibraryVersion,
+  layoutPreview,
 }: CanvasEngineProps & {
   getElementBounds: (
     element: DrawingElement,
@@ -228,6 +233,7 @@ const useCanvasEngine = ({
 
     if (alignmentGuides) drawGuides(ctx, alignmentGuides, zoom, panOffset);
     if (alignmentSpans) drawSpans(ctx, alignmentSpans, zoom, panOffset);
+    if (layoutPreview) drawLayoutPreview(ctx, layoutPreview, zoom, panOffset);
 
     // ── Connection draft preview ─────────────────────────────────────────
     if (connectionDraft) {
@@ -332,6 +338,7 @@ const useCanvasEngine = ({
     selectionBox,
     alignmentGuides,
     alignmentSpans,
+    layoutPreview,
     selectionOverlay,
     zoom,
     panOffset,

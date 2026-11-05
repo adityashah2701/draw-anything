@@ -103,7 +103,7 @@ describe("vocabulary", () => {
     expect(resolveEntry("Actor")?.id).toBe("person");
     expect(resolveEntry("speech bubble")?.id).toBe("callout");
     expect(resolveEntry("subroutine")?.id).toBe("predefined-process");
-    expect(resolveEntry("table")).toBeUndefined(); // planned
+    expect(resolveEntry("table")?.id).toBe("entity-table");
     expect(resolveEntry("nonsense")).toBeUndefined();
   });
 });
@@ -135,8 +135,7 @@ describe("the support gate", () => {
 
   it("lists a planned entry nowhere a person or a model can pick it", () => {
     const planned = VOCABULARY.filter((e) => e.status === "planned");
-    expect(planned.length).toBeGreaterThan(0);
-    const listed = new Set([...supportedEntries().map((e) => e.id), ...supportedEntries().flatMap((e) => e.aliases), ...shapeNames()]);
+        const listed = new Set([...supportedEntries().map((e) => e.id), ...supportedEntries().flatMap((e) => e.aliases), ...shapeNames()]);
     for (const entry of planned) {
       for (const word of [entry.id, ...entry.aliases]) {
         expect(listed.has(word), `${word} (planned) must not be listed`).toBe(false);

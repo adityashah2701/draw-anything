@@ -55,9 +55,17 @@ import {
 import {
   Bounds,
   ConnectionHandle,
+  ConnectorRelation,
   DrawingElement,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
+import { normalizeRelation } from "@/core/shapes/arrow/relations";
+import { entityTableSize } from "@/core/shapes/entity-table/layout";
+import { HEAD_HEIGHT as LIFELINE_HEAD_HEIGHT, headWidth } from "@/core/shapes/lifeline/definition";
+import { parseRows } from "@/core/shapes/entity-table/rows";
+import { classifierSize } from "@/core/shapes/uml-classifier/layout";
+import { mindmapSize } from "@/core/shapes/mindmap-node/definition";
+import { BRANCH_COLORS } from "@/core/mindmap/tree-api";
 
 interface PositionedNode {
   node: AIDiagramNode;
@@ -140,6 +148,39 @@ const shapeOf = (node: AIDiagramNode): "diamond" | "pill" | "icon" | (string & {
   return node.border || node.marker || stackedOutline ? (outlineForParams(shape) ?? shape) : shape;
 };
 const ICON_NODE_FONT_SIZE = 14;
+
+/** Structured shapes (entity table, classifier, topic, lifeline) are sized by their own layout modules, from their content. */
+const STRUCTURED_TYPES: Record<string, DrawingElement["type"]> = { entity: "entity-table", class: "uml-classifier", topic: "mindmap-node", lifeline: "lifeline" };
+const structuredSize = (node: AIDiagramNode, shape: string | undefined): NodeSize | null => {
+  const data = node.data ?? {};
+  if (shape === "entity") return { ...entityTableSize({ name: node.label, kind: data.variant as never, rows: parseRows(data.rows) }), fits: true } as NodeSize;
+  if (shape === "class") return { ...classifierSize({ name: node.label, kind: data.variant as never, stereotype: data.stereotype, attributes: splitMembers(data.attributes), operations: splitMembers(data.operations) }), fits: true } as NodeSize;
+  if (shape === "topic") return { ...mindmapSize({ role: "sub", label: node.label }), fits: true } as NodeSize;
+  // The slot is as wide as the head plus room for the messages' labels; the drawn body is narrow and centred in it.
+  if (shape === "lifeline") return { width: Math.max(LIFELINE_SLOT_WIDTH, headWidth({ name: node.label }) + 10), height: 120, fits: true } as NodeSize;
+  return null;
+};
+const splitMembers = (text: string | undefined) => (text ? text.split(";").map((s) => s.trim()).filter(Boolean) : []);
+
+/** Topics' roles and branch colours from the diagram's edges: the topic nothing points to is the centre, its children are main branches (each its own colour), everything below inherits. */
+const mindmapRoles = (document: AIDiagramDocumentV1) => {
+  const topics = new Set(document.nodes.filter((n) => n.shape === "topic").map((n) => n.id));
+  const parent = new Map<string, string>();
+  for (const e of document.edges) if (topics.has(e.from) && topics.has(e.to) && !parent.has(e.to) && e.from !== e.to) parent.set(e.to, e.from);
+  const depth = (id: string, seen = new Set<string>()): number => (parent.has(id) && !seen.has(id) ? 1 + depth(parent.get(id)!, seen.add(id)) : 0);
+  const mainIndex = new Map<string, number>();
+  document.nodes.filter((n) => topics.has(n.id) && depth(n.id) === 1).forEach((n, i) => mainIndex.set(n.id, i));
+  const colorOf = (id: string): string | undefined => {
+    let at = id;
+    for (let g = 0; g < 50 && parent.has(at) && depth(at) > 1; g += 1) at = parent.get(at)!;
+    const i = mainIndex.get(at);
+    return i === undefined ? undefined : BRANCH_COLORS[i % BRANCH_COLORS.length];
+  };
+  return { parent, role: (id: string): "central" | "main" | "sub" | "leaf" => (depth(id) === 0 ? "central" : depth(id) === 1 ? "main" : depth(id) === 2 ? "sub" : "leaf"), colorOf };
+};
+const LIFELINE_SLOT_WIDTH = 150;
+/** Vertical room each message gets on a lifeline; the body grows with the number of messages. */
+const MESSAGE_STEP = 56;
 const DECISION_NODE_HEIGHT = 92;
 const PILL_NODE_HEIGHT = 64;
 
@@ -150,6 +191,8 @@ const PILL_NODE_HEIGHT = 64;
  */
 export const sizeDiagramNode = (node: AIDiagramNode, density: string): NodeSize => {
   const shape = shapeOf(node);
+  const structured = structuredSize(node, shape);
+  if (structured) return structured;
   if (shape === "icon") return sizeIconNode({ label: node.label, fontSize: ICON_NODE_FONT_SIZE, fontWeight: NODE_FONT_WEIGHT });
   if (shape && isOutlineVariantId(shape)) return sizeOutlineNode(shape, { label: node.label, fontSize: NODE_FONT_SIZE, fontWeight: NODE_FONT_WEIGHT, maxWidth: NODE_MAX_WIDTH });
   const sizeWith = (maxWidth: number) => {
@@ -582,6 +625,7 @@ export const prepareDiagram = (
       .map((edge) => ({
         from: edge.from,
         to: edge.to,
+        ...(edge.relation ? { relation: edge.relation } : {}),
         labelWidth: edge.label?.trim()
           ? Math.ceil(estimateTextWidth(edge.label.trim(), EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT))
           : undefined,
@@ -609,37 +653,43 @@ export const buildCanvas = (
   const depthById = new Map(input.nodes.map((n) => [n.id, n.depth]));
   const positionedByNodeId = new Map<string, PositionedNode>();
   const nodeElements: DrawingElement[] = [];
+  const mind = mindmapRoles(document);
 
   // Reading order (top to bottom, left to right) keeps element order stable and readable.
   const order = [...placement.entries()].sort(([, a], [, b]) => a.y - b.y || a.x - b.x);
+  const lifelineIds = new Set(document.nodes.filter((n) => shapeOf(n) === "lifeline").map((n) => n.id));
+  const messageCount = document.edges.filter((e) => lifelineIds.has(e.from) && lifelineIds.has(e.to) && e.from !== e.to).length;
   order.forEach(([id, at]) => {
     const node = nodeById.get(id);
     const size = sizes.get(id);
     if (!node || !size) return;
     const depth = depthById.get(id) ?? 0;
+    const nodeShape = shapeOf(node);
+    // Tables, classes, lifelines and topics keep a neutral look: a kind such as `database` must not paint an ER table orange.
+    const neutral = !!nodeShape && nodeShape in STRUCTURED_TYPES;
     const style = node.color
       ? { fill: tint(node.color, 0.88), stroke: node.color }
-      : (KIND_COLORS[node.kind] ?? {
+      : ((neutral ? undefined : KIND_COLORS[node.kind]) ?? {
           fill: depth % 2 === 0 ? "#f8fafc" : "#eef2ff",
           stroke: "#1f2937",
         });
     const importance =
       document.visualImportance.find((entry) => entry.nodeId === node.id)?.score ?? 5;
-    const bounds: Bounds = {
-      minX: at.x,
-      minY: at.y,
-      maxX: at.x + size.width,
-      maxY: at.y + size.height,
-      width: size.width,
-      height: size.height,
-    };
     const shape = shapeOf(node);
+    // A lifeline's body is a narrow strip under its head, centred in its slot and tall enough for every message.
+    const isLifeline = shape === "lifeline";
+    const bodyW = 16;
+    const bodyH = Math.max(140, MESSAGE_STEP * (messageCount + 1));
+    const bounds: Bounds = isLifeline
+      ? { minX: at.x + (size.width - bodyW) / 2, minY: at.y + LIFELINE_HEAD_HEIGHT, maxX: at.x + (size.width + bodyW) / 2, maxY: at.y + LIFELINE_HEAD_HEIGHT + bodyH, width: bodyW, height: bodyH }
+      : { minX: at.x, minY: at.y, maxX: at.x + size.width, maxY: at.y + size.height, width: size.width, height: size.height };
+    const structuredType = shape ? STRUCTURED_TYPES[shape] : undefined;
     const isIcon = shape === "icon";
     // A bare icon on a dark or light canvas needs a colour that reads on both: the icon's own, unless the code or kind chose one.
     const glyph = isIcon && !node.color && !KIND_COLORS[node.kind] ? iconForNode({ icon: node.icon, semanticKind: node.kind }) : null;
     const element = {
       id: `${document.metadata.generationId}-${node.id}`,
-      type: shape && isOutlineVariantId(shape) ? "outline" : ((shape ?? "semantic-node") as "diamond" | "pill" | "icon" | "semantic-node"),
+      type: shape && isOutlineVariantId(shape) ? "outline" : ((structuredType ? "semantic-node" : (shape ?? "semantic-node")) as "diamond" | "pill" | "icon" | "semantic-node"),
       ...(shape && isOutlineVariantId(shape)
         ? { variant: shape, ...(node.border ? { border: node.border } : {}), ...(node.marker ? { marker: node.marker } : {}), ...(node.stack ? { stack: true } : {}) }
         : {}),
@@ -669,8 +719,9 @@ export const buildCanvas = (
         role: "node",
       },
     } as DrawingElement;
-    nodeElements.push(element);
-    positionedByNodeId.set(node.id, { node, element, bounds, depth });
+    const placed = structuredType ? structuredElement(element, node, structuredType, mind, document) : element;
+    nodeElements.push(placed);
+    positionedByNodeId.set(node.id, { node, element: placed, bounds, depth });
   });
 
   const frames = buildGroupFrames(document, positionedByNodeId, frameId);
@@ -692,6 +743,7 @@ export const buildCanvas = (
     dashed: boolean;
     plain: boolean;
     color?: string;
+    relation?: ConnectorRelation;
   }> = [];
 
   const usedHandlePairs = new Map<string, number>();
@@ -731,6 +783,17 @@ export const buildCanvas = (
   const ports = spread
     ? spreadPorts(pending.map(({ source, target, handles }) => ({ source, target, handles })))
     : pending.map(() => ({} as { from?: number; to?: number }));
+  const messageEdges = new Set<number>();
+  // Messages between lifelines sit at their own height on both, in the order they are written.
+  const messages = pending.map((p, i) => ({ p, i })).filter(({ p }) => p.source.element.type === "lifeline" && p.target.element.type === "lifeline");
+  messages.forEach(({ i }, k) => {
+    const at = (k + 1) / (messages.length + 1);
+    ports[i] = { from: at, to: at };
+    // A message runs level from the side of one body that faces the other.
+    const rightward = pending[i].target.bounds.minX >= pending[i].source.bounds.minX;
+    pending[i].handles = { from: rightward ? "right" : "left", to: rightward ? "left" : "right" };
+    messageEdges.add(i);
+  });
   pending.forEach(({ edge, index, source, target, handles }, i) => {
     const fromPort = ports[i].from;
     const toPort = ports[i].to;
@@ -750,6 +813,7 @@ export const buildCanvas = (
       dashed: Boolean(edge.dashed),
       plain: Boolean(edge.plain),
       color: edge.color,
+      relation: normalizeRelation(edge.relation),
       descriptor: {
         arrowId: edgeId,
         sourceId: source.element.id,
@@ -758,7 +822,7 @@ export const buildCanvas = (
         end: { x: end.x, y: end.y },
         startHandle: handles.from,
         endHandle: handles.to,
-        routingMode: style === "straight" ? "straight" : "orthogonal",
+        routingMode: style === "straight" || messageEdges.has(i) ? "straight" : "orthogonal",
         routePreference:
           handles.from === "top" || handles.from === "bottom" ? "vh" : "hv",
       },
@@ -809,8 +873,10 @@ export const buildCanvas = (
       dashed: draft.dashed,
       arrowHeadStart: draft.bidirectional && !draft.plain,
       arrowHeadEnd: !draft.plain,
-      routingMode: style === "straight" ? "straight" : style === "curved" ? "curved" : "orthogonal",
-      ...(style === "elbow" ? { cornerRadius: DEFAULT_ARROW_CORNER_RADIUS } : {}),
+      // Stored only when the code gave the connection a meaning; it then decides the line style and the heads.
+      ...(draft.relation ? { relation: draft.relation } : {}),
+      routingMode: style === "straight" || draft.descriptor.routingMode === "straight" ? "straight" : style === "curved" ? "curved" : "orthogonal",
+      ...(style === "elbow" && draft.descriptor.routingMode !== "straight" ? { cornerRadius: DEFAULT_ARROW_CORNER_RADIUS } : {}),
       routePreference: draft.descriptor.routePreference,
       isManuallyRouted: false,
       startConnection: {
@@ -909,6 +975,8 @@ export interface CompileOptions {
   channelGaps?: boolean;
   /** How connectors are drawn; the caller's choice beats the diagram profile's. */
   connectors?: ConnectorStyle;
+  /** Force one way of putting nodes in rows instead of trying the candidates and keeping the best (an engine algorithm names one). */
+  depthMode?: DepthMode;
 }
 
 const compileWith = (
@@ -960,9 +1028,9 @@ export const compileAIDiagramDetailed = (
 ): CompileResult => {
   // An architecture can also be laid out by its flow, and a diagram with several groups with each group
   // on its own rows ("stacked"); keep whichever the measurements prefer. Ties keep the earlier one.
-  const modes: DepthMode[] = ["layers"];
-  if (document.diagramType === "architecture" && document.nodes.length >= 2) modes.push("flow");
-  if (document.groups.length >= 2) modes.push("stacked");
+  const modes: DepthMode[] = options.depthMode ? [options.depthMode] : ["layers"];
+  if (!options.depthMode && document.diagramType === "architecture" && document.nodes.length >= 2) modes.push("flow");
+  if (!options.depthMode && document.groups.length >= 2) modes.push("stacked");
   // Connectors that share a side are given separate points (`spreadPorts`); where that makes the drawing
   // worse by the same measure, the middle-of-side drawing is kept instead.
   const compileMode = (mode: DepthMode): CompileResult => {
@@ -990,3 +1058,27 @@ export const compileAIDiagramToCanvas = (
   options: CompileOptions = {},
 ): DrawingElement[] => compileAIDiagramDetailed(document, frameId, options).elements;
 
+
+/** A node's element, turned into its structured form: the content comes from the node's data, the look (colours, points) stays what was computed. */
+const structuredElement = (
+  element: DrawingElement,
+  node: AIDiagramNode,
+  type: DrawingElement["type"],
+  mind: ReturnType<typeof mindmapRoles>,
+  document: AIDiagramDocumentV1,
+): DrawingElement => {
+  const { label, nodeStyle, ...rest } = element as DrawingElement & { nodeStyle?: unknown };
+  void nodeStyle;
+  const data = node.data ?? {};
+  if (type === "entity-table") return { ...rest, type, name: node.label, ...(data.variant ? { kind: data.variant } : {}), rows: parseRows(data.rows) } as unknown as DrawingElement;
+  if (type === "uml-classifier") {
+    const attrs = splitMembers(data.attributes), ops = splitMembers(data.operations);
+    return { ...rest, type, name: node.label, ...(data.variant ? { kind: data.variant } : {}), ...(data.stereotype ? { stereotype: data.stereotype } : {}), ...(data.template ? { template: data.template } : {}), ...(attrs.length ? { attributes: attrs } : {}), ...(ops.length ? { operations: ops } : {}) } as unknown as DrawingElement;
+  }
+  if (type === "mindmap-node") {
+    const color = mind.colorOf(node.id);
+    const parentId = mind.parent.get(node.id);
+    return { ...rest, label, type, role: mind.role(node.id), ...(parentId ? { parentId: `${document.metadata.generationId}-${parentId}` } : {}), ...(color ? { branchColor: color } : {}) } as unknown as DrawingElement;
+  }
+  return { ...rest, type, name: node.label } as unknown as DrawingElement;
+};

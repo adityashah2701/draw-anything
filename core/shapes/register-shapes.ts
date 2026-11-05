@@ -14,6 +14,10 @@ import { freehandDefinition } from "@/core/shapes/freehand/definition";
 import { textDefinition } from "@/core/shapes/text/definition";
 import { frameDefinition } from "@/core/shapes/frame/definition";
 import { semanticNodeDefinition } from "@/core/shapes/semantic-node/definition";
+import { entityTableDefinition } from "@/core/shapes/entity-table/definition";
+import { umlClassifierDefinition } from "@/core/shapes/uml-classifier/definition";
+import { mindmapNodeDefinition } from "@/core/shapes/mindmap-node/definition";
+import { lifelineDefinition } from "@/core/shapes/lifeline/definition";
 
 let initialized = false;
 
@@ -29,6 +33,10 @@ export const initializeShapeRegistry = () => {
   shapeRegistry.register(triangleDefinition);
   shapeRegistry.register(outlineDefinition);
   shapeRegistry.register(semanticNodeDefinition);
+  shapeRegistry.register(entityTableDefinition as never);
+  shapeRegistry.register(umlClassifierDefinition as never);
+  shapeRegistry.register(mindmapNodeDefinition as never);
+  shapeRegistry.register(lifelineDefinition as never);
   shapeRegistry.register(frameDefinition);
   shapeRegistry.register(lineDefinition);
   shapeRegistry.register(textDefinition);

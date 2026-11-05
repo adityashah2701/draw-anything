@@ -291,3 +291,23 @@ describe("connector colour", () => {
     expect(find<Arrow & { color: string }>(s.mem.stored, "bc").color).toBe("#2563eb");
   });
 });
+
+describe("connector relations", () => {
+  it("creates a connector with a relation as structured data, and changes and removes it later", async () => {
+    const s = setup({ elements: pair() });
+    await s.ok("create_connector", { id: "ab", from: "a", to: "b", relation: { kind: "composition", start: { multiplicity: "1" }, end: { multiplicity: "0..*" } } });
+    expect((find(s.mem.stored, "ab") as { relation?: unknown }).relation).toEqual({ kind: "composition", start: { multiplicity: "1" }, end: { multiplicity: "0..*" } });
+    await s.ok("update_connector", { ids: ["ab"], relation: { kind: "er-relationship", notation: "chen", start: { cardinality: "one" }, end: { cardinality: "many" } } });
+    expect((find(s.mem.stored, "ab") as { relation?: unknown }).relation).toMatchObject({ kind: "er-relationship", notation: "chen" });
+    await s.ok("update_connector", { ids: ["ab"], relation: null });
+    expect((find(s.mem.stored, "ab") as { relation?: unknown }).relation).toBeUndefined();
+  });
+
+  it("refuses a multiplicity that is not one, instead of storing it as text", async () => {
+    const s = setup({ elements: pair() });
+    const result = await s.run("create_connector", { id: "ab", from: "a", to: "b", relation: { kind: "association", end: { multiplicity: "3.." } } });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("invalid_arguments");
+    expect(s.mem.stored.some((e) => e.id === "ab")).toBe(false);
+  });
+});

@@ -9,18 +9,21 @@ export interface PromptContext {
   prompt?: string;
 }
 
+/** Families drawn with their own shapes (table, class, lifeline, topic), not with icons. */
+export const STRUCTURED_DIAGRAM_TYPES: ReadonlySet<string> = new Set(["entity-relationship", "class", "sequence", "mind-map"]);
+
 const TYPE_KEYWORDS: Array<[RegExp, AIDiagramType]> = [
   [/\bsequence (diagram|chart)\b/i, "sequence"],
-  [/\b(erd|entity[- ]relationship|database schema|data model)\b/i, "entity-relationship"],
+  [/\b(erd|er (diagram|model)|entity[- ]relationship|database schema|schema design|data model|tables? and (relationships|keys))\b/i, "entity-relationship"],
   [/\bmind[- ]?map\b/i, "mind-map"],
-  [/\b(class diagram|uml)\b/i, "class"],
+  [/\b(class diagram|uml|low[- ]level design|lld)\b/i, "class"],
   [/\b(org(anization(al)?)? chart|reporting structure)\b/i, "organization"],
   [/\bdependency (graph|diagram)|\bpackage dependencies\b/i, "dependency"],
   [/\bconcept (map|diagram)\b/i, "concept"],
   [/\b(flow ?chart|flow diagram|decision tree|login flow|user flow|process flow)\b/i, "flowchart"],
   [/\bworkflow\b/i, "workflow"],
   [/\bnetwork (diagram|topology)\b|\b(vlan|subnet|dmz)\b/i, "network"],
-  [/\b(architecture|infrastructure|aws|azure|gcp|kubernetes|microservices?|ci\/cd|backend|cloud)\b/i, "architecture"],
+  [/\b(architecture|high[- ]level design|hld|system design|infrastructure|aws|azure|gcp|kubernetes|microservices?|ci\/cd|backend|cloud)\b/i, "architecture"],
 ];
 
 /** The diagram type the request or the existing diagram's `type` line names, if any. A guess; unknown is fine. */

@@ -3,10 +3,11 @@ import { resolveFrame } from "@/core/frames/frame-model";
 import { CORNER_RADIUS } from "@/core/shapes/base/geometry-tokens";
 import { getOutlineVariant, listOutlineVariants } from "@/core/shapes/outline/variants";
 import { getArrowHeadVisibility, isArrowElement, type ArrowElement } from "@/core/shapes/arrow/arrow-utils";
+import { endsAccepted, normalizeRelation } from "@/core/shapes/arrow/relations";
 import { normalizeNodeStyle } from "@/core/shapes/semantic-node/style";
 import { getShapeDefinition } from "@/core/shapes/shape-runtime";
 import { DEFAULT_LABEL_FONT_SIZE } from "@/core/text/label-layout";
-import type { ArrowRoutingMode, DrawingElement, FrameShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { ArrowRoutingMode, Cardinality, ConnectorRelation, DrawingElement, FrameShape, RelationKind, RelationNotation } from "@/features/whiteboard/types/whiteboard.types";
 import type { Mixed } from "@/features/whiteboard/utils/inspector-model";
 
 /**
@@ -46,11 +47,48 @@ export interface PropertiesBarModel {
     routing: Mixed<ArrowRoutingMode>;
     headStart: Mixed<boolean>;
     headEnd: Mixed<boolean>;
+    relation: RelationView;
   } | null;
+}
+
+/** What one end of the selected connectors says: shared or "mixed", and null where nothing is set. */
+export interface EndView {
+  cardinality: Mixed<Cardinality | null>;
+  multiplicity: Mixed<string>;
+  role: Mixed<string>;
+}
+
+/** The meaning of the selected connectors, for the Meaning section of the bar. */
+export interface RelationView {
+  /** null = no relation: the connector is drawn from its flags. */
+  kind: Mixed<RelationKind | null>;
+  notation: Mixed<RelationNotation | null>;
+  /** Which end data the shared kind takes; null when the kinds differ or there is none. */
+  accepts: { cardinality: boolean; multiplicity: boolean; role: boolean } | null;
+  start: EndView;
+  end: EndView;
 }
 
 /** Where a frame's title sits: in a band, on a tab above the box, or not at all. */
 export type FrameHeader = "inside" | "above" | "hidden";
+
+const readEnd = (relations: ReadonlyArray<ConnectorRelation | undefined>, which: "start" | "end"): EndView => ({
+  cardinality: same(relations.map((r) => r?.[which]?.cardinality ?? null)),
+  multiplicity: same(relations.map((r) => r?.[which]?.multiplicity ?? "")),
+  role: same(relations.map((r) => r?.[which]?.role ?? "")),
+});
+
+const readRelation = (connectors: readonly ArrowElement[]): RelationView => {
+  const relations = connectors.map((arrow) => normalizeRelation(arrow.relation));
+  const kind = same(relations.map((r) => r?.kind ?? null));
+  return {
+    kind,
+    notation: same(relations.map((r) => r?.notation ?? null)),
+    accepts: kind !== "mixed" && kind !== null ? endsAccepted(kind) : null,
+    start: readEnd(relations, "start"),
+    end: readEnd(relations, "end"),
+  };
+};
 
 const same = <T>(values: readonly T[]): Mixed<T> => (values.every((value) => value === values[0]) ? values[0] : "mixed");
 
@@ -145,6 +183,7 @@ export const readPropertiesBar = (index: GroupIndex, selected: readonly string[]
             routing: same(connectors.map((arrow) => arrow.routingMode ?? "orthogonal")),
             headStart: same(connectors.map((arrow) => getArrowHeadVisibility(arrow).start)),
             headEnd: same(connectors.map((arrow) => getArrowHeadVisibility(arrow).end)),
+            relation: readRelation(connectors),
           }
         : null,
   };
