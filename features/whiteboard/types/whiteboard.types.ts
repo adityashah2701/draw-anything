@@ -166,6 +166,12 @@ export interface TriangleShape extends BaseDrawingElement {
 export interface OutlineShape extends BaseDrawingElement {
   type: "outline";
   variant: string;
+  /** A second line inside the outline (double) or a heavier one (thick). Absent = a single ordinary line. */
+  border?: "double" | "thick";
+  /** A small glyph drawn inside the shape (see `core/shapes/outline/markers.ts`). */
+  marker?: string;
+  /** Drawn as a stack: two more copies behind it. */
+  stack?: boolean;
 }
 
 export interface LineShape extends BaseDrawingElement {
@@ -203,6 +209,8 @@ export interface SemanticNodeStyle {
    * registry id it named, or `null` when it had none (it drew the icon its kind implies).
    */
   originalIcon?: string | null;
+  /** Drawn as a stack: two more copies peek out behind it (replicas, clusters). */
+  stack?: boolean;
 }
 
 export interface SemanticNodeShape extends BaseDrawingElement {
@@ -246,7 +254,7 @@ export type FramePreset = "section" | "container" | "feature-group" | "swimlane"
 /**
  * A frame: a titled region that owns the elements placed in it (see `core/frames`). `points` are the
  * two corners of its box, `color` is its border, `fill` its background (absent = transparent) and
- * `opacity` applies to the whole frame. Every other field is optional and an absent field means the
+ * `opacity` is how see-through its background and header band are (the border and title stay solid). Every other field is optional and an absent field means the
  * design default, so a frame written by an older build still reads correctly.
  */
 export interface FrameShape extends BaseDrawingElement {

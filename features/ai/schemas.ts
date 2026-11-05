@@ -1,6 +1,7 @@
 import { normalizeColor } from "@/core/color/named-colors";
 import { z } from "zod";
-import { outlineVariantIds } from "@/core/shapes/outline/variants";
+import { MARKER_IDS, isMarkerId } from "@/core/shapes/outline/markers";
+import { allOutlineVariantIds } from "@/core/shapes/outline/variants";
 import { resolveIconId } from "@/core/icons/registry";
 import {
   AIDiagramEdge,
@@ -162,7 +163,7 @@ const normalizeDiagramType = (diagramType: unknown): AIDiagramType =>
   parseDiagramType(diagramType) ?? "architecture";
 
 /** Node shapes a diagram may name: the built-ins plus every outline variant, read from the registry. */
-const NODE_SHAPES = ["diamond", "pill", "icon", ...outlineVariantIds()] as [string, ...string[]];
+const NODE_SHAPES = ["diamond", "pill", "icon", ...allOutlineVariantIds()] as [string, ...string[]];
 
 export const aiDiagramNodeSchema = z.object({
   id: z.string().min(1).max(80),
@@ -177,6 +178,9 @@ export const aiDiagramNodeSchema = z.object({
   description: z.string().max(240).optional(),
   priority: z.number().min(0).max(10).optional(),
   shape: z.enum(NODE_SHAPES).optional(),
+  border: z.enum(["double", "thick"]).optional(),
+  marker: z.enum(MARKER_IDS).optional(),
+  stack: z.boolean().optional(),
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
   width: z.number().finite().optional(),
@@ -390,6 +394,9 @@ export const normalizeModelGraphDraftDetailed = (value: unknown): NormalizedGrap
       description: text(record.description, 240),
       priority,
       shape: typeof record.shape === "string" && (NODE_SHAPES as readonly string[]).includes(record.shape) ? record.shape : undefined,
+      border: record.border === "double" || record.border === "thick" ? record.border : undefined,
+      marker: isMarkerId(record.marker) ? record.marker : undefined,
+      stack: record.stack === true ? true : undefined,
       color: normalizeColor(record.color),
       ...layoutFields(record),
     });

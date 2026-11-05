@@ -35,10 +35,14 @@ Properties go in square brackets after a name. Hover a property in the editor fo
 | --- | --- | --- |
 | `kind` | node | what it is (`service`, `database`, `queue`, `user`, `decision`, ...); picks icon and colours |
 | `icon` | node | an icon id or alias from the icon library (`postgres`, `redis`, ...) |
-| `shape` | node | `rectangle` (default), `diamond`, `pill`, `icon`, `cylinder`, `cloud`, `document`, `hexagon`, `parallelogram` |
+| `shape` | node | `rectangle` (default), `diamond`, `pill`, `icon`, `cylinder`, `cloud`, `document`, `hexagon`, `parallelogram`, `queue`, `package`, `component`, `person`, `note`, `callout`, `step`, `predefined-process`, `documents`, `manual-input`, `manual-operation`, `delay` |
 | `label` | node, group, frame | the text shown, when it differs from the name |
 | `color` | node, frame, connection | a colour name (`blue`) or `#rrggbb` |
 | `dashed` | node | dashed outline |
+| `border` | node | `double` or `thick`: a second line inside the outline, or a heavier one |
+| `marker` | node | a glyph inside the shape: `envelope`, `clock`, `cross`, `plus`, `circle`, `pentagon`, `asterisk`, `dot`, `bullseye` |
+| `stack` | node | `true`: drawn as a stack of three (replicas, clusters) |
+| `status` | node | `error`, `warning`, `success` or `info`: a colour with a meaning (stored as that colour) |
 | `x`, `y`, `w`, `h` | node, frame | exact position (top-left) and size |
 | `padding` | frame | space between a frame's border and its contents |
 | `from`, `to` | connection | side the line leaves / enters: `top`, `right`, `bottom`, `left` |
@@ -193,7 +197,7 @@ App > Files
 
 ## Outline shapes
 
-`cylinder`, `cloud`, `document`, `hexagon` and `parallelogram` are drawn as outline shapes: one kind of element with a variant, so each is resizable, takes a label, a colour and connectors like any node. They are also in the shape picker (the hexagon button in the left toolbar) and the properties bar's Shape control, and a board edit of the variant is written back as `shape:`.
+`cylinder`, `cloud`, `document`, `hexagon`, `parallelogram`, `queue`, `package`, `component`, `person`, `note`, `callout`, `step`, `predefined-process`, `documents`, `manual-input`, `manual-operation` and `delay` are drawn as outline shapes: one kind of element with a variant, so each is resizable, takes a label, a colour and connectors like any node. They are also in the shape picker ("More shapes…" at the end of the Shapes flyout, or "Insert shape…" in the command menu) and the properties bar's Shape control, and a board edit of the variant is written back as `shape:`.
 
 ```diagram-code
 type architecture
@@ -207,6 +211,53 @@ Import [shape: parallelogram]
 Provider > Orders DB
 Orders DB > Invoice
 Queue > Import
+```
+
+Some outlines have other names that mean the same: `actor` for `person`, `chevron` for `step`, `namespace` for `package`, `module` for `component`, `subroutine` for `predefined-process`, `speech-bubble` for `callout` and `sticky` for `note`.
+
+```diagram-code
+type flowchart
+
+Inbox [shape: queue]
+Triage [shape: step]
+Rules [shape: predefined-process]
+Typing [shape: manual-input]
+Review [shape: manual-operation]
+Wait [shape: delay]
+Reports [shape: documents]
+Owner [shape: person]
+Docs [shape: package]
+Parser [shape: component]
+Remark [shape: note]
+Tip [shape: callout]
+
+Inbox > Triage > Rules > Typing > Review > Wait > Reports
+Owner > Review
+Parser > Docs
+Remark > Tip
+```
+
+## Borders, markers, stacks and statuses
+
+A few pictures a plain shape cannot draw are an outline with a parameter. `border: double|thick` adds a second or a heavier line, `marker: <glyph>` draws a small symbol inside, and `stack: true` draws a stack of three. A plain `rectangle`, `diamond` or `pill` that takes `border` or `marker` is drawn as a box, a diamond or an ellipse with them; on an ordinary node `stack: true` keeps its icon and kind and only adds the copies behind it. Common combinations have their own names, which you can use instead of the parameters (and which are what code read from a board is written with):
+
+`initial-state`, `final-state`, `identifying-relationship`, `start-event`, `intermediate-event` (also `multivalued-attribute`), `end-event`, `timer-event`, `message-event`, `exclusive-gateway`, `parallel-gateway`, `inclusive-gateway`, `event-based-gateway` and `complex-gateway`.
+
+```diagram-code
+type flowchart
+
+Start [shape: start-event]
+Wait [shape: timer-event]
+Approved? [shape: exclusive-gateway]
+Fan out [shape: parallel-gateway]
+Done [shape: end-event]
+Replicas [kind: database, stack: true]
+Dead letters [kind: queue, status: error]
+Custom [shape: diamond, border: double, marker: plus]
+
+Start > Wait > Approved? > Fan out > Done
+Fan out > Replicas
+Approved? > Dead letters
 ```
 
 A shape name the editor does not know (a typo, or one a newer version added) is reported with the list of real shapes, and the node is drawn as an ordinary rectangle node.

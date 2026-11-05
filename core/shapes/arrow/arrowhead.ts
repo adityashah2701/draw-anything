@@ -111,3 +111,23 @@ export const arrowheadOps = (kind: ArrowheadKind, tip: Point, dir: Point, size: 
       return [{ kind: "fill", path: [...line(tipPoint, at(len, w), at(len, -w)), ["Z"]] }];
   }
 };
+
+/** Paints a list of drawing instructions with the stroke and fill already set on `ctx`. Canvas and SVG export share it. */
+export const paintOps = (ctx: CanvasRenderingContext2D, ops: readonly HeadOp[]) => {
+  for (const op of ops) {
+    ctx.beginPath();
+    if (op.kind === "circle") {
+      ctx.arc(op.cx, op.cy, op.r, 0, Math.PI * 2);
+      if (op.fill) ctx.fill();
+      else ctx.stroke();
+      continue;
+    }
+    for (const cmd of op.path) {
+      if (cmd[0] === "M") ctx.moveTo(cmd[1], cmd[2]);
+      else if (cmd[0] === "L") ctx.lineTo(cmd[1], cmd[2]);
+      else ctx.closePath();
+    }
+    if (op.kind === "fill") ctx.fill();
+    else ctx.stroke();
+  }
+};

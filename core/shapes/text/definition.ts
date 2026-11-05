@@ -19,7 +19,7 @@ export const textDefinition = createShapeDefinition<TextShape>({
     id: props.id ?? "",
     type: "text",
     points: props.points ?? [{ x: 0, y: 0 }],
-    color: props.color ?? "#1f2937",
+    color: props.color ?? "#000000",
     strokeWidth: props.strokeWidth ?? 1,
     text: props.text ?? "",
     fontSize: props.fontSize ?? 20,

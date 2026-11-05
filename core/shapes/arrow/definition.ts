@@ -19,7 +19,7 @@ export const arrowDefinition = createShapeDefinition<ArrowShape>({
     id: props.id ?? "",
     type: "arrow",
     points: props.points ?? [{ x: 0, y: 0 }, { x: 120, y: 0 }],
-    color: props.color ?? "#475569",
+    color: props.color ?? "#000000",
     strokeWidth: props.strokeWidth ?? 2,
     dashed: props.dashed,
     arrowHeadStart: props.arrowHeadStart ?? false,

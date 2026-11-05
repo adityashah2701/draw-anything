@@ -1,7 +1,7 @@
 import { unionBounds } from "@/core/geometry/box";
 import { expandUnits, selectionUnits } from "@/core/groups/group-index";
 import type { DocPatch } from "@/core/groups/patch";
-import { FRAME_PADDING, FRAME_STROKE_WIDTH } from "@/features/ai/server/layout/frame-constants";
+import { FRAME_PADDING, groupFrameStyle } from "@/features/ai/server/layout/frame-constants";
 import { pathHitsBox } from "@/features/ai/server/layout/geometry";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
@@ -71,8 +71,7 @@ export const planFrame = (
       { x: frameBox.minX, y: frameBox.minY },
       { x: frameBox.maxX, y: frameBox.maxY },
     ],
-    color: "#000000",
-    strokeWidth: FRAME_STROKE_WIDTH,
+    ...groupFrameStyle(0),
     isGuide: true,
     ai: { ...ai, role: "group" },
   };

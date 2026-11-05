@@ -4,7 +4,7 @@ import { bundleFans } from "@/features/ai/server/layout/bus";
 import {
   FRAME_NEST_STEP,
   FRAME_PADDING,
-  FRAME_STROKE_WIDTH,
+  groupFrameStyle,
   FRAME_TITLE_FONT_SIZE,
   FRAME_TITLE_FONT_WEIGHT,
   FRAME_TITLE_HEIGHT,
@@ -45,7 +45,7 @@ import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { tint } from "@/core/color/named-colors";
 import { sizeDiamondNode, sizeIconNode, sizeOutlineNode, sizePillNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
-import { isOutlineVariantId } from "@/core/shapes/outline/variants";
+import { isOutlineVariantId, outlineForParams } from "@/core/shapes/outline/variants";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import {
   AIDiagramDocumentV1,
@@ -133,7 +133,11 @@ const shapeOf = (node: AIDiagramNode): "diamond" | "pill" | "icon" | (string & {
   // `shape: icon` draws just the glyph, so it needs one: a named icon, or a kind that has its own (the
   // normaliser drops an `icon:` equal to the kind's, so `[kind: database, shape: icon]` is enough).
   if (node.shape === "icon") return node.icon || node.kind !== "generic" ? "icon" : undefined;
-  return node.shape ?? (node.kind === "decision" ? "diamond" : node.kind === "start" || node.kind === "end" ? "pill" : undefined);
+  const shape = node.shape ?? (node.kind === "decision" ? "diamond" : node.kind === "start" || node.kind === "end" ? "pill" : undefined);
+  // A border or marker is a parameter of an outline, so the plain shape is drawn by its base outline. A stack is
+  // too, except on a plain node, where it is a modifier that keeps the icon (see `nodeStyle` below).
+  const stackedOutline = node.stack && shape !== undefined && shape !== "rectangle";
+  return node.border || node.marker || stackedOutline ? (outlineForParams(shape) ?? shape) : shape;
 };
 const ICON_NODE_FONT_SIZE = 14;
 const DECISION_NODE_HEIGHT = 92;
@@ -420,9 +424,8 @@ const buildGroupFrames = (
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },
       ],
-      // Black and white by theme (the renderer swaps them), like every other line the agent draws.
-      color: "#000000",
-      strokeWidth: FRAME_STROKE_WIDTH,
+      // An accent by nesting level with a translucent tint of it (hit-tested on its border only, see the rectangle).
+      ...groupFrameStyle(accepted.filter((other) => other.box !== box && contains(other.bounds, bounds)).length),
       isGuide: true,
       ai: { ...ai, role: "group" },
     };
@@ -637,7 +640,9 @@ export const buildCanvas = (
     const element = {
       id: `${document.metadata.generationId}-${node.id}`,
       type: shape && isOutlineVariantId(shape) ? "outline" : ((shape ?? "semantic-node") as "diamond" | "pill" | "icon" | "semantic-node"),
-      ...(shape && isOutlineVariantId(shape) ? { variant: shape } : {}),
+      ...(shape && isOutlineVariantId(shape)
+        ? { variant: shape, ...(node.border ? { border: node.border } : {}), ...(node.marker ? { marker: node.marker } : {}), ...(node.stack ? { stack: true } : {}) }
+        : {}),
       points: [
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },
@@ -647,7 +652,9 @@ export const buildCanvas = (
       // A bare icon has no box to fill.
       ...(isIcon ? {} : { fill: style.fill }),
       // A step with no icon and no kind would otherwise show the placeholder cube: let its label have the whole box.
-      ...(!shape && !node.icon && node.kind === "generic" ? { nodeStyle: { iconHidden: true } } : {}),
+      ...(!shape && (node.stack || (!node.icon && node.kind === "generic"))
+        ? { nodeStyle: { ...(!node.icon && node.kind === "generic" ? { iconHidden: true } : {}), ...(node.stack ? { stack: true } : {}) } }
+        : {}),
       label: node.label,
       fontSize: isIcon ? ICON_NODE_FONT_SIZE : NODE_FONT_SIZE,
       fontWeight: NODE_FONT_WEIGHT,

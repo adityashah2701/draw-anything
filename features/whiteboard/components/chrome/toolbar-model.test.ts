@@ -1,7 +1,7 @@
 import { initializeShapeRegistry } from "@/core/shapes/register-shapes";
 import { describe, expect, it } from "vitest";
 import { getToolDefinitions } from "@/core/shapes/shape-tool-registry";
-import { buildToolbar, type ToolbarEntry } from "./toolbar-model";
+import { buildToolbar, FLYOUT_OUTLINES, type ToolbarEntry } from "./toolbar-model";
 
 const names = (entries: ToolbarEntry[]) => entries.map((e) => (e.kind === "tool" ? e.tool.name : `${e.id}:${e.tools.map((t) => t.name).join(",")}`));
 
@@ -27,7 +27,16 @@ describe("buildToolbar", () => {
 
   it("places every registered tool exactly once", () => {
     const all = [...layout.navigate, ...layout.create, ...layout.utility].flatMap((e) => (e.kind === "tool" ? [e.tool.name] : e.tools.map((t) => t.name)));
-    expect(all.filter((n) => n !== "icon-picker").sort()).toEqual(getToolDefinitions().map((d) => d.name).sort());
+    const pickerOnly = (name: string) => name.startsWith("outline:") && !FLYOUT_OUTLINES.includes(name);
+    expect(all.filter((n) => n !== "icon-picker" && n !== "shape-picker").sort()).toEqual(getToolDefinitions().map((d) => d.name).filter((n) => !pickerOnly(n)).sort());
+  });
+
+  it("keeps the Shapes flyout short: the basic shapes, a few outlines and the picker", () => {
+    const shapes = layout.create[0];
+    expect(shapes.kind === "group" && shapes.tools.length).toBeLessThanOrEqual(15);
+    expect(shapes.kind === "group" && shapes.tools[shapes.tools.length - 1].name).toBe("shape-picker");
+    const all = names(layout.create).join(" ") + names(layout.utility).join(" ");
+    expect(all).not.toContain("outline:manual-operation");
   });
 
   it("puts a newly registered shape into the shapes flyout", () => {

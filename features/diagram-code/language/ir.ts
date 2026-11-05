@@ -30,6 +30,9 @@ export interface IRNode {
   dashed?: boolean;
   /** diamond, pill, icon, or an outline variant id (core/shapes/outline/variants.ts). */
   shape?: string;
+  border?: "double" | "thick";
+  marker?: string;
+  stack?: boolean;
   /** #rrggbb */
   color?: string;
   x?: number;

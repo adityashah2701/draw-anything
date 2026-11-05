@@ -40,3 +40,5 @@ export { shapeContainsPoint } from "@/core/shapes/shape-runtime";
 export { layoutSemanticNode, semanticMinSize } from "@/core/shapes/semantic-node/layout";
 export { renderSemanticNodeSelection } from "@/core/shapes/semantic-node/selection";
 export { withRenderTheme } from "@/core/theme/render-theme";
+export { listOutlineVariants } from "@/core/shapes/outline/variants";
+export { outlinePropsOf, supportedEntries } from "@/core/shapes/vocabulary";

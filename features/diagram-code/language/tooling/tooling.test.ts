@@ -26,7 +26,7 @@ describe("completion", () => {
 
   it("offers values for the property being typed", () => {
     expect(complete("A [kind: dat|")?.labels).toEqual(["database"]);
-    expect(complete("A [shape: di|")?.labels).toEqual(["diamond"]);
+    expect(complete("A [shape: di|")?.labels[0]).toBe("diamond"); // prefix matches rank first
     expect(complete("A [color: bl|")?.labels).toEqual(expect.arrayContaining(["blue", "black"]));
     expect(complete("A [dashed: |")?.labels).toEqual(["true", "false"]);
     expect(complete("A [icon: cal|")?.labels).toEqual(["calendar-check"]);

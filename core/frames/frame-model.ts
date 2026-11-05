@@ -26,6 +26,8 @@ const MAX_MIN_SIZE = 10_000;
 /** Horizontal room around the title text inside an `above` tab. */
 const TAB_PADDING_X = 10;
 const TAB_FONT_SIZE = 13;
+/** The estimate is for Inter; the system font people actually get is wider. The tab is sized with room to spare, and the renderer grows it to the measured text. */
+const TAB_WIDTH_SAFETY = 1.15;
 
 export const isFrameShape = (value: unknown): value is FrameShape =>
   typeof value === "object" && value !== null && (value as { type?: unknown }).type === "frame" && typeof (value as { id?: unknown }).id === "string";
@@ -98,7 +100,7 @@ export const frameRegions = (frame: FrameShape): FrameRegions | null => {
     const bandBottom = Math.min(box.maxY, box.minY + FRAME_DEFAULTS.headerHeight);
     return { box, header: makeBounds(box.minX, box.minY, box.maxX, bandBottom), content: makeBounds(box.minX, bandBottom, box.maxX, box.maxY) };
   }
-  const tabWidth = Math.min(box.width, Math.ceil(estimateTextWidth(resolved.title, TAB_FONT_SIZE, "600")) + TAB_PADDING_X * 2);
+  const tabWidth = Math.min(box.width, Math.ceil(estimateTextWidth(resolved.title, TAB_FONT_SIZE, "600") * TAB_WIDTH_SAFETY) + TAB_PADDING_X * 2);
   return { box, header: makeBounds(box.minX, box.minY - FRAME_DEFAULTS.tabHeight, box.minX + tabWidth, box.minY), content: box };
 };
 

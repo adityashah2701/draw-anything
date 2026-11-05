@@ -52,6 +52,12 @@ describe("containsPointInRectangle", () => {
       expect(containsPointInRectangle(rect({ isGuide: true, fill: "#fef3c7" }), { x: 200, y: 150 })).toBe(true);
     });
 
+    it("stays border-only when it is a tinted group frame, so clicks reach the nodes inside", () => {
+      const group = rect({ isGuide: true, fill: "rgba(245, 158, 11, 0.1)", ai: { role: "group" } } as Partial<RectangleShape>);
+      expect(containsPointInRectangle(group, { x: 200, y: 150 })).toBe(false);
+      expect(containsPointInRectangle(group, { x: 1, y: 150 })).toBe(true);
+    });
+
     it.each(["transparent", "none", ""])("treats fill %j as unfilled", (fill) => {
       expect(containsPointInRectangle(rect({ isGuide: true, fill }), { x: 200, y: 150 })).toBe(false);
     });

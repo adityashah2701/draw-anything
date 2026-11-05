@@ -122,7 +122,9 @@ export const drawElement = (
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   // `opacity` fades the whole element (label included); chrome drawn after the restore below stays opaque.
-  ctx.globalAlpha = typeof element.opacity === "number" && Number.isFinite(element.opacity) ? Math.min(1, Math.max(0, element.opacity)) : 1;
+  // A frame is the exception: its opacity is the translucency of its background, so its border and title stay crisp
+  // (the frame renderer applies it to the fill and the header tint itself).
+  ctx.globalAlpha = element.type !== "frame" && typeof element.opacity === "number" && Number.isFinite(element.opacity) ? Math.min(1, Math.max(0, element.opacity)) : 1;
 
   if (element.fill) {
     ctx.fillStyle = element.fill;

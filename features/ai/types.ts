@@ -98,6 +98,10 @@ export interface AIDiagramNode {
   priority?: number;
   /** Drawn as a real diamond (decisions always are) or a pill (start and end always are). */
   shape?: DiagramNodeShape;
+  /** Parameters of an outline: a second or heavier border, a glyph inside, a stack of three. A box, rhombus or ring carries them when `shape` is rectangle, diamond or pill. */
+  border?: "double" | "thick";
+  marker?: string;
+  stack?: boolean;
   /** Top-left corner and size in canvas units; when given the node is drawn exactly there. */
   x?: number;
   y?: number;

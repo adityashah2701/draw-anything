@@ -27,10 +27,10 @@ export const containsPointInRectangle = (
     point.y <= maxY + radius;
   if (!insideOuter) return false;
 
-  // An unfilled guide frame (an AI group box) surrounds other shapes. Hitting
+  // A guide frame (an AI group box, tinted or not) surrounds other shapes. Hitting
   // its empty interior would let a click or the eraser take the whole group
   // instead of the node inside it, so only its border counts.
-  if (shape.isGuide && isUnfilled(shape.fill)) {
+  if (shape.isGuide && (isUnfilled(shape.fill) || shape.ai?.role === "group")) {
     const band = Math.max(radius, (shape.strokeWidth || 1) / 2);
     const insideInner =
       point.x > minX + band &&

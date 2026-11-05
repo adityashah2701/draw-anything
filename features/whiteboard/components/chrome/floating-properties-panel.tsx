@@ -234,6 +234,8 @@ const FloatingPropertiesPanel = ({
             <ChoiceRow
               label="Shape"
               value={variant.value}
+              // Seventeen shapes in one row were slivers: a grid keeps each icon a readable size.
+              columns={6}
               onChange={(id) => style({ variant: id }, variant.ids)}
               options={variant.options.map((option) => ({ value: option.id, title: option.label, content: <OutlineVariantIcon variant={option.id} size={18} /> }))}
             />

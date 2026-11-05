@@ -323,6 +323,10 @@ export function CommandMenu({
             <Code2 className="mr-2 h-4 w-4" />
             <span>Open diagram code</span>
           </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => onAction?.("insert-shape"))}>
+            <Shapes className="mr-2 h-4 w-4" />
+            <span>Insert shape…</span>
+          </CommandItem>
           <CommandItem onSelect={() => runCommand(() => onAction?.("insert-icon"))}>
             <Shapes className="mr-2 h-4 w-4" />
             <span>Insert icon…</span>

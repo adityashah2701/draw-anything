@@ -18,7 +18,7 @@ export const lineDefinition = createShapeDefinition<LineShape>({
     id: props.id ?? "",
     type: "line",
     points: props.points ?? [{ x: 0, y: 0 }, { x: 120, y: 0 }],
-    color: props.color ?? "#1f2937",
+    color: props.color ?? "#000000",
     strokeWidth: props.strokeWidth ?? 2,
   }),
   render: () => null,

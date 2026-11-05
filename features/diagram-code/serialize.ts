@@ -6,7 +6,7 @@ export interface SerializableGraph {
   /** The direction the diagram reads in; absent means top to bottom. */
   direction?: "down" | "right" | "up" | "left";
   title?: string;
-  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: string; color?: string; x?: number; y?: number; width?: number; height?: number }>;
+  nodes: Array<{ id: string; label: string; kind?: string; icon?: string; shape?: string; border?: string; marker?: string; stack?: boolean; color?: string; x?: number; y?: number; width?: number; height?: number }>;
   edges: Array<{
     from: string;
     to: string;
@@ -131,6 +131,9 @@ export const serializeDiagramCodeDetailed = (graph: SerializableGraph): Serializ
     if (node.icon) props.push(`icon: ${node.icon}`);
     // A kind already implies its shape (decision: diamond, start/end: pill), so only say it when it adds something.
     if (node.shape && node.shape !== IMPLIED_SHAPE[node.kind ?? ""]) props.push(`shape: ${node.shape}`);
+    if (node.border) props.push(`border: ${node.border}`);
+    if (node.marker) props.push(`marker: ${node.marker}`);
+    if (node.stack) props.push("stack: true");
     if (node.color) props.push(`color: ${node.color}`);
     // Where it is and how big, so the code can reproduce the picture exactly.
     if (node.x !== undefined) props.push(`x: ${Math.round(node.x)}`);

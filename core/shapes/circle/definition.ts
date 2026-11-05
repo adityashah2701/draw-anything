@@ -25,7 +25,7 @@ export const circleDefinition = createShapeDefinition<CircleShape>({
     id: props.id ?? "",
     type: "circle",
     points: props.points ?? [{ x: 0, y: 0 }, { x: 60, y: 0 }],
-    color: props.color ?? "#1f2937",
+    color: props.color ?? "#000000",
     strokeWidth: props.strokeWidth ?? 2,
     fill: props.fill,
     label: props.label,

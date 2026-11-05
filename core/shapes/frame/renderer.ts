@@ -24,6 +24,15 @@ const fit = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   return `${text.slice(0, end)}…`;
 };
 
+/** Width of an `above` tab: the modelled width, grown to the measured title plus its insets, never wider than the box. */
+const tabWidth = (ctx: CanvasRenderingContext2D, title: string, modelled: number, boxWidth: number, zoom: number) => {
+  ctx.save();
+  ctx.font = `600 ${TITLE_SIZE * zoom}px ${FONT_FAMILY}`;
+  const measured = ctx.measureText(title).width + 2 * TITLE_INSET * zoom;
+  ctx.restore();
+  return Math.min(boxWidth, Math.max(modelled, measured));
+};
+
 /** Draws background, border, header and title. The stroke colour is the one the editor already set for the element (theme-adapted). */
 export const renderFrameToCanvas = (shape: FrameShape, { ctx, zoom, panOffset }: ShapeRenderCanvasContext) => {
   const regions = frameRegions(shape);
@@ -36,11 +45,17 @@ export const renderFrameToCanvas = (shape: FrameShape, { ctx, zoom, panOffset }:
   const radius = Math.min(resolved.cornerRadius * zoom, w / 2, h / 2);
   const border = ctx.strokeStyle;
 
+  // The frame's opacity is the translucency of what is behind its border: the background and the header band.
+  // The border and the title are always fully drawn.
+  const backdrop = resolved.opacity;
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, radius);
   if (shape.fill) {
+    ctx.save();
+    ctx.globalAlpha *= backdrop;
     ctx.fillStyle = shape.fill;
     ctx.fill();
+    ctx.restore();
   }
 
   const header = regions.header;
@@ -50,7 +65,7 @@ export const renderFrameToCanvas = (shape: FrameShape, { ctx, zoom, panOffset }:
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, radius);
     ctx.clip();
-    ctx.globalAlpha *= HEADER_TINT;
+    ctx.globalAlpha *= HEADER_TINT * backdrop;
     ctx.fillStyle = border;
     ctx.fillRect(x, y, w, hh);
     ctx.restore();
@@ -59,13 +74,14 @@ export const renderFrameToCanvas = (shape: FrameShape, { ctx, zoom, panOffset }:
     ctx.lineTo(x + w, y + hh);
     ctx.stroke();
   } else if (header) {
-    // A tab above the box, joined to its top-left corner.
+    // A tab above the box, joined to its top-left corner. It is as wide as the title really measures in the
+    // font in use (the model's estimate is for Inter), up to the width of the box.
     const tx = header.minX * zoom + panOffset.x;
     const ty = header.minY * zoom + panOffset.y;
-    const tw = header.width * zoom;
+    const tw = tabWidth(ctx, resolved.title, header.width * zoom, w, zoom);
     const th = header.height * zoom;
     ctx.save();
-    ctx.globalAlpha *= HEADER_TINT;
+    ctx.globalAlpha *= HEADER_TINT * backdrop;
     ctx.fillStyle = border;
     ctx.beginPath();
     ctx.roundRect(tx, ty, tw, th, [Math.min(radius, th / 2), Math.min(radius, th / 2), 0, 0]);
@@ -87,7 +103,7 @@ export const renderFrameToCanvas = (shape: FrameShape, { ctx, zoom, panOffset }:
     ctx.textAlign = "left";
     const hx = header.minX * zoom + panOffset.x;
     const hy = header.minY * zoom + panOffset.y;
-    const hw = header.width * zoom;
+    const hw = resolved.titlePlacement === "inside" ? header.width * zoom : tabWidth(ctx, resolved.title, header.width * zoom, w, zoom);
     const hh = header.height * zoom;
     ctx.fillText(fit(ctx, resolved.title, Math.max(0, hw - inset * 2)), hx + inset, hy + hh / 2);
     ctx.restore();

@@ -11,7 +11,7 @@ import {
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { roundedCorners, traceCurve } from "@/core/routing/curve";
-import { arrowheadOps, headTrim, type HeadSize } from "@/core/shapes/arrow/arrowhead";
+import { arrowheadOps, headTrim, paintOps, type HeadSize } from "@/core/shapes/arrow/arrowhead";
 import { parseAnchorSide } from "@/core/anchors/anchor-geometry";
 
 export type ArrowElement = ArrowShape | BidirectionalArrowShape;
@@ -266,22 +266,7 @@ const drawArrowhead = (
   const color = getArrowStyle(element).color;
   ctx.fillStyle = color;
   ctx.strokeStyle = color;
-  for (const op of arrowheadOps(kind, tip, direction, HEAD_SIZE)) {
-    ctx.beginPath();
-    if (op.kind === "circle") {
-      ctx.arc(op.cx, op.cy, op.r, 0, Math.PI * 2);
-      if (op.fill) ctx.fill();
-      else ctx.stroke();
-      continue;
-    }
-    for (const cmd of op.path) {
-      if (cmd[0] === "M") ctx.moveTo(cmd[1], cmd[2]);
-      else if (cmd[0] === "L") ctx.lineTo(cmd[1], cmd[2]);
-      else ctx.closePath();
-    }
-    if (op.kind === "fill") ctx.fill();
-    else ctx.stroke();
-  }
+  paintOps(ctx, arrowheadOps(kind, tip, direction, HEAD_SIZE));
 };
 
 const getArrowheadLine = (
