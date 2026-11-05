@@ -1,7 +1,6 @@
 import { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
 import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
-import { phaseCompleted, phaseStarted } from "@/features/ai/server/agents/types";
-import { createInitialAIFrame } from "@/features/ai/server/workflow";
+import { createInitialAIFrame, phaseCompleted, phaseStarted } from "./frame";
 import { documentFromParsedCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent } from "@/features/ai/types";
@@ -53,7 +52,7 @@ export async function* withLiveEvents<T>(work: (emit: (event: AIStreamEvent) => 
 }
 
 /**
- * The agent pipeline behind the same event contract as the legacy workflow:
+ * The agent pipeline's event contract:
  * frame.created -> phase events -> element.batch -> frame.done (or a thrown error, which the HTTP
  * handler turns into frame.error). The client needs no change.
  */

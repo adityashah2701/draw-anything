@@ -21,6 +21,21 @@ describe("addLines", () => {
     expect(second.added).toEqual(["Valid?", "Enter Credentials > Valid?"]);
   });
 
+  it("refuses adjust commands sent as diagram code instead of drawing them as nodes", () => {
+    const s = build("Success? > Dashboard\nSuccess? > Error");
+    const result = addLines(s, "label Success? > Dashboard: yes\nlabel Error > Open App: retry\nmove Error: left 40");
+    expect(result.errors).toHaveLength(3);
+    expect(result.errors[0]).toMatch(/line 1.*adjust command/);
+    expect(result.state).toBe(s);
+    expect(result.added).toEqual([]);
+  });
+
+  it("still reads a node whose name starts with a command word", () => {
+    const result = addLines(createState(), "Reset Password > Login\nLabel Printer > Login");
+    expect(result.errors).toEqual([]);
+    expect(result.state.parsed.nodes.map((n) => n.name)).toEqual(["Reset Password", "Login", "Label Printer"]);
+  });
+
   it("does not duplicate a connection that is added twice", () => {
     const s = build("A > B");
     expect(addLines(s, "A > B").state.parsed.edges).toHaveLength(1);

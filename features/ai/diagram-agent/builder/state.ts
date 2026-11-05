@@ -104,9 +104,19 @@ export interface AddResult {
   skipped: number;
 }
 
+// A model sometimes sends an `adjust` command (`label A > B: yes`) as diagram code, which would parse as a node
+// named "label A". Lowercase verbs only, so a node called "Reset Password" stays a node.
+const ADJUST_COMMAND = /^\s*(?:(?:label|sides|remove|reset)\s+[^>]+>[^>]+|move\s+.+:\s*(?:left|right|up|down)\b.*|align\s+.+\s+with\s+.+:\s*[xy]\s*)$/;
+
 /** Adds diagram code (nodes, connections, groups) to what exists. Atomic: any error leaves the state unchanged. */
 export const addLines = (state: BuilderState, text: string): AddResult => {
   const lines = text.replace(/\r/g, "").split("\n");
+  const misplaced = lines.flatMap((l, i) =>
+    ADJUST_COMMAND.test(l)
+      ? [`line ${i + 1}: \`${l.trim()}\` is an adjust command, not diagram code. Use the adjust tool for it, or put the text on the connection itself (\`A > B: text\`).`]
+      : [],
+  );
+  if (misplaced.length > 0) return { state, errors: misplaced, added: [], skipped: 0 };
   const headers = lines.filter((l) => HEADER.test(l));
   // Top-level units: one statement, or a whole group block. A step keeps the first few and never cuts a block in half.
   const units: string[][] = [];

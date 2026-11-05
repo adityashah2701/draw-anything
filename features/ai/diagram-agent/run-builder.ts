@@ -1,6 +1,5 @@
-import { phaseCompleted, phaseStarted } from "@/features/ai/server/agents/types";
 import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
-import { createInitialAIFrame } from "@/features/ai/server/workflow";
+import { createInitialAIFrame, phaseStarted } from "./frame";
 import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { graphFromElements } from "@/features/diagram-code/canvas";

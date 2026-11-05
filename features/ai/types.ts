@@ -299,13 +299,6 @@ export type AIWorkflowPhase =
   | "completenessCheck"
   | "canvasCompiler";
 
-export interface AIMissingComponent {
-  label: string;
-  kind: AISemanticNodeKind;
-  layer: "edge" | "application" | "data" | "observability" | "external";
-  reason: string;
-}
-
 export interface AIFrameCheckpoint {
   phase: AIWorkflowPhase;
   at: string;

@@ -2,11 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { describe, it } from "vitest";
 import { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
 import { createAIChatModel, createBaseChatModel } from "@/features/ai/server/model-providers";
-import { streamAIDiagramWorkflowEvents } from "@/features/ai/server/workflow";
 import { documentFromParsedCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
-import type { AIDiagramDocumentV1, AIModelProvider } from "@/features/ai/types";
-import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { AIModelProvider } from "@/features/ai/types";
 import { runDiagramAgent } from "../agent-loop";
 import { inferDiagramType } from "../prompt/prompt-context";
 import { buildSystemPrompt, buildUserPrompt } from "../prompt/system";
@@ -22,7 +20,6 @@ import { renderEvalReport, scoreDiagram, type EvalRow } from "./score";
  *
  *   AI_EVAL_PROVIDERS=groq,gemini   (default groq)
  *   AI_EVAL_TRANSPORTS=native,text  (default both; gemini is always text)
- *   AI_EVAL_LEGACY=1                also run the legacy 12-agent workflow for comparison
  *   AI_EVAL_LIMIT=4                 only the first N golden prompts
  *   AI_EVAL_DELAY_MS=30000          pause between runs (free tiers allow only a few thousand tokens a minute;
  *                                   default 20000 for groq, 0 otherwise)
@@ -73,24 +70,6 @@ describe.skipIf(process.env.AI_EVAL !== "1")("live AI diagram evaluation", () =>
               const { document } = documentFromParsedCode(parseDiagramCode(result.code), "eval", { prompt: golden.prompt, provider });
               const compiled = compileAIDiagramDetailed(document, "eval");
               rows.push({ pipeline, prompt: golden.id, ms: Date.now() - t0, score: scoreDiagram(document, compiled.elements, golden) });
-            } catch (error) {
-              rows.push({ pipeline, prompt: golden.id, ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error) });
-            }
-          }
-        }
-        if (process.env.AI_EVAL_LEGACY === "1") {
-          for (const golden of prompts) {
-            const pipeline = `legacy/${provider}`;
-            const t0 = Date.now();
-            try {
-              let document: AIDiagramDocumentV1 | undefined;
-              let elements: DrawingElement[] = [];
-              for await (const event of streamAIDiagramWorkflowEvents({ request: { prompt: golden.prompt, provider } })) {
-                if (event.type === "element.batch") elements = event.elements;
-                if (event.type === "frame.done") document = event.graph;
-              }
-              if (!document) throw new Error("no frame.done");
-              rows.push({ pipeline, prompt: golden.id, ms: Date.now() - t0, score: scoreDiagram(document, elements, golden) });
             } catch (error) {
               rows.push({ pipeline, prompt: golden.id, ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error) });
             }

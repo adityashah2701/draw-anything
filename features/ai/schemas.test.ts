@@ -3,15 +3,14 @@ import {
   MAX_GRAPH_EDGES,
   MAX_GRAPH_GROUPS,
   MAX_GRAPH_NODES,
-  aiSemanticNodeKindSchema,
-  normalizeModelGraphDraft,
   normalizeModelGraphDraftDetailed,
   normalizeModelPlan,
 } from "@/features/ai/schemas";
-import { NODE_KINDS } from "@/features/ai/server/prompts/constants";
 
 const nodes = (n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `n${i}`, label: `Node ${i}`, kind: "service" }));
+
+const normalizeModelGraphDraft = (value: unknown) => normalizeModelGraphDraftDetailed(value).graph;
 
 describe("normalizeModelGraphDraft – size limits clamp instead of failing", () => {
   it("accepts more nodes than the prompt asks for (26 used to throw)", () => {
@@ -154,14 +153,6 @@ describe("normalizeModelGraphDraft – unusable output fails clearly", () => {
     ["null", null],
   ])("throws a readable error for %s", (_name, value) => {
     expect(() => normalizeModelGraphDraft(value)).toThrow(/no usable nodes/i);
-  });
-});
-
-describe("prompt vocabulary", () => {
-  it("only offers node kinds the schema knows (auth/monitoring used to be silently 'generic')", () => {
-    const valid = new Set<string>(aiSemanticNodeKindSchema.options);
-    const offered = NODE_KINDS.split(", ");
-    expect(offered.filter((kind) => !valid.has(kind))).toEqual([]);
   });
 });
 

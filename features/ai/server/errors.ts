@@ -35,17 +35,6 @@ class ModelUnavailableError extends AIServiceError {
   }
 }
 
-export class SchemaValidationError extends AIServiceError {
-  constructor(agentName: string, cause?: unknown) {
-    super(
-      `Model "${agentName}" failed to produce valid structured output`,
-      "SCHEMA_VALIDATION_FAILED",
-      cause,
-    );
-    this.name = "SchemaValidationError";
-  }
-}
-
 export type UnparseableReason = "empty" | "truncated" | "not-json";
 
 /**
@@ -103,15 +92,6 @@ export const toUserFacingMessage = (error: unknown): string => {
   }
   if (error instanceof ModelUnavailableError) {
     return "Selected AI model is currently unavailable. Try a different provider.";
-  }
-  if (error instanceof SchemaValidationError) {
-    if (
-      error.cause instanceof UnparseableModelOutputError &&
-      error.cause.reason === "truncated"
-    ) {
-      return "The AI's answer was cut off before it finished. Try a simpler prompt.";
-    }
-    return "AI returned an invalid response. Please try again.";
   }
   if (error instanceof NetworkError) {
     return "Network error connecting to AI provider. Please check your connection.";

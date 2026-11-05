@@ -4,11 +4,8 @@ import { ChatGroq } from "@langchain/groq";
 import { ChatOpenAI } from "@langchain/openai";
 import { AIModelProvider } from "@/features/ai/types";
 import { DEFAULT_AI_PROVIDER } from "@/features/ai/default-provider";
-import { MODELS, ModelRole } from "./models";
 import { NVIDIA_DEFAULT_MODEL, isSelectableNvidiaModel, nvidiaModelInfo } from "@/features/ai/nvidia-models";
 import { GoogleGenAI, Content } from "@google/genai";
-import { z } from "zod";
-import { parseModelJson } from "./json-extract";
 
 export interface AIModelProviderConfig {
   provider: AIModelProvider;
@@ -16,7 +13,8 @@ export interface AIModelProviderConfig {
   displayName: string;
 }
 
-export type StructuredChatModel = Pick<BaseChatModel, "withStructuredOutput" | "invoke">;
+/** What the transports need from a model: plain `invoke`. */
+export type ChatModel = Pick<BaseChatModel, "invoke">;
 
 export class MissingAIProviderKeyError extends Error {
   constructor(provider: AIModelProvider, envName: string) {
@@ -157,80 +155,7 @@ class GeminiChatModel {
     const text = response.text ?? "";
     return { content: text };
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  withStructuredOutput<T extends Record<string, any>>(
-    schema: unknown,
-  ): { invoke: (input: unknown) => Promise<T> } {
-    const generate = this.generate.bind(this);
-    const model = this.model;
-    const temperature = this.temperature;
-    const maxOutputTokens = this.maxOutputTokens;
-
-    return {
-      invoke: async (input: unknown): Promise<T> => {
-        const messages = Array.isArray(input) ? input : [input];
-        const { systemInstruction, contents } = toGenAIMessages(messages);
-
-        const structuredPrompt: GenAIMessage = {
-          role: "user",
-          parts: [{ text: buildJsonInstruction(schema) }],
-        };
-
-        const response = await generate({
-          model,
-          contents: [...contents, structuredPrompt] as Content[],
-          config: {
-            temperature,
-            maxOutputTokens,
-            responseMimeType: "application/json",
-            ...(systemInstruction ? { systemInstruction } : {}),
-          },
-        });
-
-        return parseModelJson(response.text ?? "") as T;
-      },
-    };
-  }
 }
-
-// ---------------------------------------------------------------------------
-// Schema description
-// ---------------------------------------------------------------------------
-
-const isZodSchema = (schema: unknown): schema is z.ZodType =>
-  typeof schema === "object" &&
-  schema !== null &&
-  typeof (schema as { safeParse?: unknown }).safeParse === "function" &&
-  "_zod" in schema;
-
-/**
- * JSON Schema for a structured-output request, as text for the prompt.
- *
- * Zod 4 schemas expose a `.type` property, so the previous converter mistook
- * them for ready-made JSON Schema and ended up telling Gemini the answer was
- * `{"type":"STRING"}`. Use Zod's own converter, and accept plain JSON Schema
- * objects for callers that already have one.
- */
-export const describeSchemaForPrompt = (schema: unknown): string => {
-  let json: Record<string, unknown> = { type: "object" };
-  try {
-    if (isZodSchema(schema)) {
-      json = z.toJSONSchema(schema) as Record<string, unknown>;
-    } else if (typeof schema === "object" && schema !== null) {
-      json = schema as Record<string, unknown>;
-    }
-  } catch {
-    // Unrepresentable schema: fall back to "some object"; the caller validates anyway.
-  }
-  const { $schema: _ignored, ...rest } = json;
-  return JSON.stringify(rest);
-};
-
-/** The instruction appended to every structured request, for every provider. */
-const buildJsonInstruction = (schema: unknown): string =>
-  `Respond with ONLY a single JSON object that matches this JSON Schema:\n${describeSchemaForPrompt(schema)}\n` +
-  "Rules: no markdown code fences and no text before or after the JSON; leave out optional fields you do not need instead of sending null; keep to the length limits in the schema.";
 
 /** Plain text of a chat reply, whether `content` is a string or content blocks. */
 export const messageText = (message: unknown): string => {
@@ -247,43 +172,6 @@ export const messageText = (message: unknown): string => {
     )
     .join("");
 };
-
-const finishReasonOf = (message: unknown): string | undefined => {
-  const meta = (message as { response_metadata?: Record<string, unknown> } | null)
-    ?.response_metadata;
-  const reason = meta?.finish_reason ?? meta?.stop_reason;
-  return typeof reason === "string" ? reason : undefined;
-};
-
-/**
- * Structured output for any LangChain chat model, the same way for every
- * provider: the schema goes in the prompt, the reply is read as plain text and
- * parsed leniently here. The provider's own structured-output modes are
- * deliberately not used. They differ per model (Groq switches gpt-oss to strict
- * JSON-schema decoding, others use tool calling), validate against our strict
- * Zod schema before the lenient normaliser runs, and on failure left callers
- * with nothing to recover from.
- */
-export const createPromptedStructuredModel = (
-  base: Pick<BaseChatModel, "invoke">,
-): StructuredChatModel =>
-  ({
-    invoke: (input: unknown, options?: unknown) =>
-      base.invoke(input as never, options as never),
-    withStructuredOutput: (schema: unknown) => {
-      const instruction = buildJsonInstruction(schema);
-      return {
-        invoke: async (input: unknown) => {
-          const messages = [
-            ...(Array.isArray(input) ? input : [input]),
-            ["human", instruction],
-          ];
-          const response = await base.invoke(messages as never);
-          return parseModelJson(messageText(response), finishReasonOf(response));
-        },
-      };
-    },
-  }) as unknown as StructuredChatModel;
 
 // ---------------------------------------------------------------------------
 // Provider factory
@@ -498,7 +386,7 @@ export const createBaseChatModel = (
 export const createAIChatModel = (
   providerInput?: AIModelProvider,
   options: ModelOptions = {},
-): StructuredChatModel => {
+): ChatModel => {
   const config = getAIModelProviderConfig(providerInput, options);
   const base = createBaseChatModel(providerInput, options);
   if (!base) {
@@ -507,16 +395,7 @@ export const createAIChatModel = (
       model: config.modelName,
       temperature: 0,
       maxOutputTokens: 16384,
-    }) as unknown as StructuredChatModel;
+    });
   }
-  return createPromptedStructuredModel(base);
-};
-
-/**
- * Create a chat model from a named role in the model registry.
- * Agents should use this instead of calling createAIChatModel directly.
- */
-export const createAIChatModelFromRole = (role: ModelRole): StructuredChatModel => {
-  const entry = MODELS[role];
-  return createAIChatModel(entry.provider);
+  return base;
 };

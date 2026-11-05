@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   aiGraphDraftSchema,
-  modelGraphDraftSchema,
-  normalizeModelGraphDraft,
+  normalizeModelGraphDraftDetailed,
 } from "@/features/ai/schemas";
 import {
   buildAIDiagramDocument,
   sanitizeGraphDraft,
 } from "@/features/ai/server/validation";
+
+const normalizeModelGraphDraft = (value: unknown) => normalizeModelGraphDraftDetailed(value).graph;
 
 describe("AI graph validation", () => {
   it("repairs duplicate node ids and removes invalid edges", () => {
@@ -69,22 +70,6 @@ describe("AI graph validation", () => {
     expect(document.architecture).toHaveLength(2);
     expect(document.communicationProtocols).toHaveLength(1);
     expect(document.reasoningMetadata.requirementsSummary).toContain("Client calls API");
-  });
-
-  it("accepts model edges that omit optional style fields", () => {
-    const graph = modelGraphDraftSchema.parse({
-      nodes: [
-        { id: "frontend", label: "Frontend", kind: "browser" },
-        { id: "backend", label: "Backend", kind: "service" },
-      ],
-      edges: [{ from: "frontend", to: "backend", label: "API calls" }],
-    });
-
-    expect(graph.edges?.[0]).toMatchObject({
-      from: "frontend",
-      to: "backend",
-      label: "API calls",
-    });
   });
 
   it("normalizes unsupported model node kinds instead of failing", () => {

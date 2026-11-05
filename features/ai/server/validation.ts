@@ -62,24 +62,6 @@ const KIND_HINTS: Array<[RegExp, AIDiagramNode["kind"]]> = [
   [/\b(decision|if|approved|valid|success|fail|\?)\b/i, "decision"],
 ];
 
-export const createEmptyValidationReport = (): AIDiagramValidationReport => ({
-  valid: false,
-  repaired: false,
-  issues: [],
-  metrics: {
-    nodeCount: 0,
-    edgeCount: 0,
-    groupCount: 0,
-    disconnectedComponents: 0,
-    duplicateIds: 0,
-    invalidEdges: 0,
-    overlapCount: 0,
-    orphanNodes: 0,
-    oversizedRows: 0,
-    poorSpacing: 0,
-  },
-});
-
 export const slugId = (value: string, fallback: string) => {
   const slug = value
     .trim()

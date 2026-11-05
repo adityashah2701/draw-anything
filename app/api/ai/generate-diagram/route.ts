@@ -28,7 +28,7 @@ const handler = createGenerateDiagramHandler({
   getUserId,
   enabledProviders: () => getEnabledProviders(),
   limiter,
-  // AI_PIPELINE=agent switches to the single diagram agent; the default stays the legacy workflow.
+  // AI_PIPELINE=builder switches to the step-by-step builder; the default is the one-shot diagram agent.
   runWorkflow: (request) => selectPipeline()(request),
 });
 const providers = createProvidersHandler({
