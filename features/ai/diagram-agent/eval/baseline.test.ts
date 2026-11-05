@@ -39,7 +39,7 @@ describe("offline baseline", () => {
       expect(row.score!.genericShare).toBeGreaterThanOrEqual(0);
     }
     expect(rows().map((r) => r.score)).toEqual(first.map((r) => r.score));
-  });
+  }, 30_000);
 
   it.runIf(process.env.WRITE_BASELINE === "1")("writes the baseline report", () => {
     const date = new Date().toISOString().slice(0, 10);

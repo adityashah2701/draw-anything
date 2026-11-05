@@ -22,7 +22,7 @@ describe("the shape picker's list", () => {
     const offered = ids(pickerEntries());
     expect(offered).not.toContain("icon");
     for (const entry of VOCABULARY.filter((e) => e.status === "planned")) expect(offered).not.toContain(entry.id);
-    expect(offered.length).toBe(supportedEntries().filter((e) => e.representation.kind !== "element" && e.id !== "icon").length);
+    expect(offered.length).toBe(supportedEntries().filter((e) => e.id !== "icon").length);
   });
 
   it("finds an entry by its name, its id, an alias, in any case", () => {

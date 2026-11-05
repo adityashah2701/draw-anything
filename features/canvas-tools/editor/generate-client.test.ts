@@ -48,9 +48,42 @@ describe("generateElements", () => {
     expect(sent?.signal?.aborted).toBe(false);
   });
 
-  it("fails with the generator's message, and never returns a half result", async () => {
-    await expect(generateElements({ ...base, fetchImpl: responding(sse([{ type: "element.batch", frameId: "f", elements: [el("a")] }, { type: "frame.error", frameId: "f", message: "Model overloaded" }])) })).rejects.toThrow("Model overloaded");
-    await expect(generateElements({ ...base, fetchImpl: responding(sse([{ type: "element.batch", frameId: "f", elements: [el("a")] }])) })).rejects.toThrow(/stopped before it finished/);
+  it("keeps what was drawn when the generator fails or stops early, and says so", async () => {
+    const failed = await generateElements({ ...base, fetchImpl: responding(sse([{ type: "element.batch", frameId: "f", elements: [el("a")] }, { type: "frame.error", frameId: "f", message: "Model overloaded" }])) });
+    expect(failed.elements.map((e) => e.id)).toEqual(["a"]);
+    expect(failed.warnings?.[0]).toMatch(/Model overloaded.*What was drawn so far was kept/);
+    const cut = await generateElements({ ...base, fetchImpl: responding(sse([{ type: "element.batch", frameId: "f", elements: [el("a")] }])) });
+    expect(cut.elements.map((e) => e.id)).toEqual(["a"]);
+    expect(cut.warnings?.[0]).toMatch(/stopped before it finished/);
+  });
+
+  it("fails with the generator's message when nothing was drawn", async () => {
+    await expect(generateElements({ ...base, fetchImpl: responding(sse([{ type: "frame.error", frameId: "f", message: "Model overloaded" }])) })).rejects.toThrow("Model overloaded");
+  });
+
+  it("keeps what was drawn when the person stops it", async () => {
+    const controller = new AbortController();
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: "element.batch", frameId: "f", elements: [el("a")] })}\n\n`));
+        setTimeout(() => controller.abort(), 20);
+      },
+    });
+    const out = await generateElements({ ...base, signal: controller.signal, fetchImpl: responding(body) });
+    expect(out.elements.map((e) => e.id)).toEqual(["a"]);
+    expect(out.warnings?.[0]).toMatch(/^Stopped\. What was drawn so far was kept/);
+  });
+
+  it("keeps a partial drawing at the idle limit", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: "element.batch", frameId: "f", elements: [el("a")] })}\n\n`));
+      },
+    });
+    const out = await generateElements({ ...base, idleMs: 30, fetchImpl: responding(body) });
+    expect(out.elements.map((e) => e.id)).toEqual(["a"]);
+    expect(out.warnings?.[0]).toMatch(/no sign of progress.*What was drawn so far was kept/);
+    expect(out.warnings?.[0]).not.toMatch(/Nothing was added/);
   });
 
   it("turns HTTP failures into short messages without payloads", async () => {

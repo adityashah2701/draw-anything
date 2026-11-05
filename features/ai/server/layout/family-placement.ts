@@ -15,7 +15,7 @@ export const placementFromEngine =
   (input) => {
     const graph: LayoutGraph = {
       nodes: input.nodes.map((n) => ({ id: n.id, width: n.width, height: n.height })),
-      edges: input.edges.map((e, i) => ({ id: `e${i}`, from: e.from, to: e.to, ...(e.relation ? { relation: e.relation } : {}) })),
+      edges: input.edges.map((e, i) => ({ id: `e${i}`, from: e.from, to: e.to, ...(e.relation ? { relation: e.relation } : {}), ...(e.parent ? { parent: e.parent } : {}) })),
       containers: input.groups.map((g) => ({ id: g.id, kind: "group" as const, members: g.nodeIds })),
     };
     const defaults = engine.algorithms.find((a) => a.id === algorithm)?.defaults ?? {};

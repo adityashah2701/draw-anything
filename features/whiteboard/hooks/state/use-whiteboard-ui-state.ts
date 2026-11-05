@@ -41,6 +41,8 @@ export const useWhiteboardUiState = () => {
   // The Layout panel, and the layout it is previewing (drawn over the canvas, never written to the board).
   const [showLayoutPanel, setShowLayoutPanelOpen] = useState(false);
   const [layoutPreview, setLayoutPreview] = useState<LayoutPreview | null>(null);
+  // A diagram the agent is still generating, drawn over the board and never written to it.
+  const [generationPreview, setGenerationPreview] = useState<DrawingElement[] | null>(null);
   const setShowLayoutPanel = useCallback((open: boolean) => {
     setShowLayoutPanelOpen(open);
     if (!open) setLayoutPreview(null);
@@ -161,6 +163,8 @@ export const useWhiteboardUiState = () => {
     setShowLayoutPanel,
     layoutPreview,
     setLayoutPreview,
+    generationPreview,
+    setGenerationPreview,
     showIconPicker,
     setShowIconPicker,
     iconPickerMode,

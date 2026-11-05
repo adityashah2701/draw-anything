@@ -6,9 +6,10 @@ import { graphFromElements } from "@/features/diagram-code/canvas";
 import { serializeDiagramCode } from "@/features/diagram-code/serialize";
 import { iconHints, wantsBareIcons, wantsPlainBoxes } from "./builder/icon-hints";
 import { runDiagramBuilder } from "./builder/loop";
+import { prefersBareIcons } from "./builder/state";
 import { noteFor, summaryNote } from "./builder/notes";
 import { BUILDER_TOOL_SPECS, buildBuilderSystemPrompt } from "./builder/prompt";
-import { STRUCTURED_DIAGRAM_TYPES, inferDiagramType } from "./prompt/prompt-context";
+import { STRUCTURED_DIAGRAM_TYPES, inferDiagramType, isSystemDesign } from "./prompt/prompt-context";
 import { createGenerationId, withLiveEvents } from "./run";
 import { createToolTransport, supportsVision } from "./transports/create";
 import type { ToolTransport } from "./types";
@@ -93,9 +94,11 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
     const editing = existing !== undefined && existing.graph.nodes.length > 0;
     let pendingRemoval: string[] | undefined = editing ? existing.consumedIds : undefined;
 
-    const hints = await iconHints(request.prompt);
-    const bareIcons = wantsBareIcons(request.prompt);
+    const structuredType = ((t) => !!t && STRUCTURED_DIAGRAM_TYPES.has(t))(inferDiagramType(request.prompt));
+    // Tables, classes, lifelines and topics carry no icons, so no icon ids are offered (they made the model look some up).
+    const hints = structuredType ? undefined : await iconHints(request.prompt);
     const plainBoxes = wantsPlainBoxes(request.prompt);
+    const bareIcons = wantsBareIcons(request.prompt) || (!editing && prefersBareIcons(inferDiagramType(request.prompt), plainBoxes));
     const revealMs = options.revealMs ?? (Number(process.env.AI_REVEAL_MS ?? DEFAULT_REVEAL_MS) || 0);
     let drawnAnything = false;
     const result = yield* withLiveEvents(async (emit) =>
@@ -110,7 +113,8 @@ export async function* streamDiagramBuilderEvents(options: DiagramBuilderOptions
           bareIcons,
           plainBoxes,
         }),
-        structured: !editing && ((t) => !!t && STRUCTURED_DIAGRAM_TYPES.has(t))(inferDiagramType(request.prompt)),
+        structured: !editing && structuredType,
+        ...(!editing && isSystemDesign(request.prompt) ? { direction: "right" as const } : {}),
         goal: editing ? `Change the diagram that is already on the canvas: ${request.prompt}` : request.prompt,
         bareIcons,
         iconPriority: !bareIcons && !plainBoxes && !editing,

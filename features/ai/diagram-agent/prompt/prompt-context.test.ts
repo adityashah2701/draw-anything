@@ -4,7 +4,7 @@ import type { AIDiagramType } from "@/features/ai/types";
 import { EXAMPLES, examplesFor } from "./examples";
 import { iconVocabulary } from "./icon-vocabulary";
 import { PLAYBOOKS } from "./playbooks";
-import { iconCategoriesFor, inferDiagramType } from "./prompt-context";
+import { iconCategoriesFor, inferDiagramType, isSystemDesign } from "./prompt-context";
 import { buildSystemPrompt } from "./system";
 
 /** Estimated tokens: characters / 4. An estimate of any tokenizer, not a count. */
@@ -14,7 +14,20 @@ const TYPES = Object.keys(PLAYBOOKS) as AIDiagramType[];
 // Budgets are set from the measured sizes (see docs/superpowers/notes/2026-10-16-handoff-ai-shapes-colors.md)
 // with about 10% headroom, so growing a prompt on purpose is a visible decision.
 // Raised once for the structured-shape guidance (entity rows, class members, lifelines, relations) in the ER, class, sequence and mind-map playbooks.
-const BUDGET = { complete: 3_200, typeUnknown: 2_300, typeKnown: 1_500 };
+const BUDGET = { complete: 3_700, typeUnknown: 2_300, typeKnown: 1_500 };
+
+describe("system design requests", () => {
+  it("are architecture and get the checklist and the chat example", () => {
+    for (const prompt of ["Design WhatsApp", "How would you build Uber?", "system design of a video streaming platform", "Design a scalable URL shortener"]) {
+      expect(inferDiagramType(prompt), prompt).toBe("architecture");
+      expect(isSystemDesign(prompt), prompt).toBe(true);
+      expect(buildSystemPrompt("text", { diagramType: "architecture", prompt })).toContain("SYSTEM DESIGN");
+    }
+    expect(isSystemDesign("design a login flow")).toBe(false);
+    expect(inferDiagramType("design a database schema for a shop")).toBe("entity-relationship");
+    expect(buildSystemPrompt("text", { diagramType: "architecture", prompt: "Kafka pipeline" })).not.toContain("SYSTEM DESIGN");
+  });
+});
 
 describe("system prompt budget", () => {
   it.each(["native", "text"] as const)("%s: the complete prompt (no context) stays within its budget", (transport) => {

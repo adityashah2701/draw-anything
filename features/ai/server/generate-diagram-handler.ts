@@ -78,6 +78,7 @@ export const createGenerateDiagramHandler =
     const pacingMs = deps.pacingMs ?? 50;
     let cancelled = false;
 
+    const KEEP_ALIVE_MS = 15_000;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let activeFrameId = `ai_frame_error_${Date.now()}`;
@@ -86,9 +87,15 @@ export const createGenerateDiagramHandler =
           if (closed || cancelled) return;
           controller.enqueue(encoder.encode(encodeSse(event)));
         };
+        // A slow model can think for minutes between events: an SSE comment every 15 s tells the client (and any
+        // proxy) the generator is still working, so it is not cut off by an idle timeout.
+        const keepAlive = setInterval(() => {
+          if (!closed && !cancelled) controller.enqueue(encoder.encode(": keep-alive\n\n"));
+        }, KEEP_ALIVE_MS);
         const close = () => {
           if (closed) return;
           closed = true;
+          clearInterval(keepAlive);
           try {
             controller.close();
           } catch {

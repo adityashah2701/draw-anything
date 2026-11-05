@@ -75,6 +75,7 @@ export const WhiteboardCanvasStage = ({
     alignmentGuides: whiteboardDrawing.alignmentGuides,
     alignmentSpans: whiteboardDrawing.alignmentSpans,
     layoutPreview: controller.layoutPreview,
+    generationPreview: controller.generationPreview,
     selectionOverlay: controller.selectionOverlay,
     editingTextId: editingTextElement?.id || null,
     getElementBounds,
@@ -297,6 +298,7 @@ export const WhiteboardCanvasStage = ({
 
         {controller.isBoardReady &&
           elements.length === 0 &&
+          !controller.generationPreview?.length &&
           whiteboardAccess.status === "granted" && (
             <CanvasEmptyState
               canEdit={whiteboardAccess.hasEditAccess}

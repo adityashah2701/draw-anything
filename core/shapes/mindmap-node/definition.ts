@@ -13,7 +13,8 @@ const SIZE: Record<NonNullable<MindmapNodeShape["role"]>, { font: number; weight
 
 export const mindmapSize = (shape: Pick<MindmapNodeShape, "role" | "label">) => {
   const s = SIZE[shape.role ?? "sub"];
-  return { width: Math.max(80, Math.ceil(estimateTextWidth(shape.label || "Topic", s.font, String(s.weight)) + s.padX * 2)), height: s.height };
+  // 15% over the Inter estimate: the viewer's own font can be wider, and the label must stay inside its pill.
+  return { width: Math.max(80, Math.ceil(estimateTextWidth(shape.label || "Topic", s.font, String(s.weight)) * 1.15 + s.padX * 2)), height: s.height };
 };
 
 const render = (shape: MindmapNodeShape, { ctx, zoom, panOffset }: ShapeRenderCanvasContext) => {

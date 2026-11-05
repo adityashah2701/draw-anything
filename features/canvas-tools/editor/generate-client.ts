@@ -11,6 +11,8 @@ export interface GenerateClientOptions {
   fetchImpl?: typeof fetch;
   /** What the generator is doing now, for the panel: a phase, a note, how many elements have been drawn. */
   onProgress?: (text: string) => void;
+  /** Everything drawn so far, after each step, so the board can show the diagram while it is built. */
+  onElements?: (elements: DrawingElement[]) => void;
   /** The generator's own reasoning notes, as they arrive. */
   onThinking?: (text: string) => void;
   /** Longest wait with nothing at all from the generator (ms). */
@@ -53,9 +55,18 @@ export const generateElements = async (options: GenerateClientOptions): Promise<
     idle = setTimeout(() => expire(`The model gave no sign of progress for ${span(idleMs)}, so the generator was stopped. Nothing was added. Try again or pick another model.`), idleMs);
   };
   alive();
+  // Shared with the reader, so what was drawn before a time limit or a failure is still there to keep.
+  const drawn = new Map<string, DrawingElement>();
   try {
-    return await readGeneration({ ...options, signal: guard.signal }, alive);
+    return await readGeneration({ ...options, signal: guard.signal }, alive, drawn);
   } catch (error) {
+    const stoppedByPerson = signal?.aborted === true && !timedOut;
+    // A run that already drew something keeps it, whether a time limit, a late error or the person's Stop ended it:
+    // what is on the canvas when it ends is what stays (the tool places it as one undo step).
+    if (drawn.size > 0) {
+      const why = stoppedByPerson ? "Stopped." : timedOut ?? (error instanceof Error ? error.message : "The generator stopped early.");
+      return { elements: [...drawn.values()], warnings: [`${why.replace(/ Nothing was added\.?.*$/, "")} What was drawn so far was kept; ask to continue or to finish it.`] };
+    }
     if (timedOut) throw new Error(timedOut);
     throw error;
   } finally {
@@ -65,7 +76,7 @@ export const generateElements = async (options: GenerateClientOptions): Promise<
   }
 };
 
-const readGeneration = async ({ whiteboardId, provider, description, diagramType, signal, fetchImpl = fetch, onProgress, onThinking }: GenerateClientOptions, alive: () => void): Promise<GenerateOutcome> => {
+const readGeneration = async ({ whiteboardId, provider, description, diagramType, signal, fetchImpl = fetch, onProgress, onThinking, onElements }: GenerateClientOptions, alive: () => void, elements: Map<string, DrawingElement>): Promise<GenerateOutcome> => {
   const prompt = diagramType ? `${description}\n\nDiagram type: ${diagramType}.` : description;
   const response = await fetchImpl("/api/ai/generate-diagram", {
     method: "POST",
@@ -79,7 +90,6 @@ const readGeneration = async ({ whiteboardId, provider, description, diagramType
   }
   if (!response.body) throw new Error("The generator sent no response.");
 
-  const elements = new Map<string, DrawingElement>();
   const warnings: string[] = [];
   let finished = false;
 
@@ -95,12 +105,15 @@ const readGeneration = async ({ whiteboardId, provider, description, diagramType
       case "element.batch":
         for (const el of event.elements) elements.set(el.id, el);
         onProgress?.(`Drawing the diagram: ${elements.size} elements so far`);
+        onElements?.([...elements.values()]);
         break;
       case "element.update":
         for (const el of event.elements) if (elements.has(el.id)) elements.set(el.id, el);
+        onElements?.([...elements.values()]);
         break;
       case "element.remove":
         for (const id of event.elementIds) elements.delete(id);
+        onElements?.([...elements.values()]);
         break;
       case "validation.report":
         if (!event.report.valid) warnings.push(`The diagram check found ${event.report.issues.length} issue(s).`);

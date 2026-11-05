@@ -17,6 +17,7 @@ import type { Bounds, DrawingElement, StoredElement } from "@/features/whiteboar
 import { ToolError } from "../errors";
 import { SELECTION_TOKEN } from "../schemas";
 import type { ToolEnv } from "../types";
+import { writeRows } from "@/core/shapes/entity-table/rows";
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
@@ -29,6 +30,8 @@ export interface ElementSummary {
   id: string;
   type: string;
   label?: string;
+  /** What a table, class, lifeline or topic holds (its rows or members), so a reader knows it is already drawn. */
+  content?: string;
   text?: string;
   x?: number;
   y?: number;
@@ -55,11 +58,21 @@ export interface ElementSummary {
 
 const sideOf = (anchorId: string | undefined) => (anchorId ? anchorId.split("-").pop() : undefined);
 
+/** The rows of an entity table or the members of a class, as diagram code writes them. */
+const structuredContent = (shape: DrawingElement): string | undefined => {
+  if (shape.type === "entity-table") return shape.rows?.length ? `rows: ${writeRows(shape.rows)}` : "rows: (none)";
+  if (shape.type === "uml-classifier") return [shape.attributes?.length ? `attributes: ${shape.attributes.join("; ")}` : "", shape.operations?.length ? `operations: ${shape.operations.join("; ")}` : ""].filter(Boolean).join(" | ") || undefined;
+  return undefined;
+};
+
 export const summarize = (ctx: CommandContext, shape: DrawingElement): ElementSummary => {
   const out: ElementSummary = { id: shape.id, type: shape.type };
   const b = bounds(ctx, shape);
   if (b && !isArrowElement(shape)) Object.assign(out, { x: round(b.minX), y: round(b.minY), w: round(b.width), h: round(b.height) });
   if (typeof shape.label === "string" && shape.label !== "") out.label = shortText(shape.label);
+  else if (typeof (shape as { name?: unknown }).name === "string") out.label = shortText((shape as { name: string }).name);
+  const content = structuredContent(shape);
+  if (content) out.content = shortText(content, 240);
   if (shape.type === "text" && typeof shape.text === "string") out.text = shortText(shape.text);
   if (shape.type === "semantic-node" || shape.type === "icon") out.icon = iconForNode(shape.ai).id;
   const parent = ctx.index.parentOf.get(shape.id);

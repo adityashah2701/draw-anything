@@ -139,7 +139,7 @@ export const reportCanvas = (built: BuiltCanvas, state: BuilderState): CanvasRep
     ...backward,
     ...(metrics.labelsColliding > 0 ? [`${metrics.labelsColliding} connection label(s) overlap a node, a line or another label`] : []),
     ...(metrics.groupViolations > 0 || metrics.groupsDropped > 0 ? [`${metrics.groupViolations + metrics.groupsDropped} group frame problem(s): a frame is missing, or covers a node that is not in it`] : []),
-    ...lintDiagram(state.parsed, metrics).filter((f) => f.rule === "generic-icons" || f.rule === "long-label").map((f) => f.advice),
+    ...lintDiagram(state.parsed, metrics).filter((f) => f.rule === "generic-icons" || f.rule === "long-label" || f.rule === "family-shapes" || /^(er|sequence|hld)-/.test(f.rule)).map((f) => f.advice),
   ];
 
   const rows = [...nodes].sort((a, b) => a.points[0].y - b.points[0].y || a.points[0].x - b.points[0].x);

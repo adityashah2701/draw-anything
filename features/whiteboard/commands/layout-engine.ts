@@ -106,7 +106,8 @@ export const graphFromContext = (ctx: CommandContext, ids?: readonly string[] | 
     containers.push({ id: frame.ai?.semanticId ?? frame.id, label: title ? textOf(title) : undefined, kind: "group", members: members.map((m) => m.id) });
   }
   const diagramType = nodesEls.map((n) => n.ai?.diagramType).find(Boolean);
-  const graph: LayoutGraph = { nodes, edges, containers, ...(diagramType ? { diagramType } : {}) };
+  const direction = nodesEls.map((n) => n.ai?.diagramDirection).find(Boolean) as LayoutGraph["direction"];
+  const graph: LayoutGraph = { nodes, edges, containers, ...(diagramType ? { diagramType } : {}), ...(direction ? { direction } : {}) };
   return { graph, positions, nodeElements: new Map(nodesEls.map((n) => [n.id, n])) };
 };
 

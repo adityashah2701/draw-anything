@@ -419,7 +419,7 @@ suite("editor frames: moving, owning and deleting", () => {
     s = await openEditor({ elements: stored as never, dark: false });
     await s.dblclick({ x: 300, y: 76 });
     await s.page.getByLabel("Frame title").waitFor();
-    await s.press("Control+a");
+    await s.press("ControlOrMeta+a"); // Ctrl+A only moves the caret on macOS
     await s.press("Backspace");
     await s.press("Enter");
     expect(byId(await s.elements(), "F").title).toBeUndefined();

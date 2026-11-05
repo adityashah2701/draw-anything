@@ -70,6 +70,8 @@ interface CanvasEngineProps {
   iconLibraryVersion?: number;
   /** A layout being previewed: drawn over the board, never part of it. */
   layoutPreview?: LayoutPreview | null;
+  /** A diagram being generated, drawn like the board but not part of it. */
+  generationPreview?: DrawingElement[] | null;
 }
 
 const useCanvasEngine = ({
@@ -98,6 +100,7 @@ const useCanvasEngine = ({
   editingShapeLabelId,
   iconLibraryVersion,
   layoutPreview,
+  generationPreview,
 }: CanvasEngineProps & {
   getElementBounds: (
     element: DrawingElement,
@@ -169,6 +172,13 @@ const useCanvasEngine = ({
             : element;
       drawElement(ctx, renderElement, isSelected, renderCtx);
     });
+
+    if (generationPreview) {
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      for (const element of paintOrder(generationPreview)) drawElement(ctx, element, false, renderCtx);
+      ctx.restore();
+    }
 
     // Draw current element
     if (currentElement) {
@@ -339,6 +349,7 @@ const useCanvasEngine = ({
     alignmentGuides,
     alignmentSpans,
     layoutPreview,
+    generationPreview,
     selectionOverlay,
     zoom,
     panOffset,

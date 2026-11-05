@@ -23,6 +23,9 @@ export const NVIDIA_MODELS: readonly NvidiaModelInfo[] = [
   { id: NVIDIA_DEFAULT_MODEL, label: "NVIDIA · Nemotron", vision: true, experimental: false, thinking: "nemotron" },
   { id: "z-ai/glm-5.3", label: "NVIDIA · GLM 5.3 (experimental)", vision: false, experimental: true, thinking: "explicit" },
   { id: "z-ai/glm-5.3-flash", label: "NVIDIA · GLM 5.3 Flash (experimental)", vision: false, experimental: true, thinking: "explicit" },
+  // Smoke-tested 2026-11-07 (chat, tools, streaming, thinking kwargs and an image all answered 200). Not a reasoning
+  // model by default, so thinking kwargs are sent only when NVIDIA_ENABLE_THINKING is set.
+  { id: "mistralai/mistral-large-4-1t-a52b", label: "NVIDIA · Mistral Large 4 (experimental)", vision: true, experimental: true, thinking: "explicit" },
 ];
 
 /** What is known about `id`. The fallback Nemotron model and any NVIDIA_MODEL override keep the Nemotron behaviour. */

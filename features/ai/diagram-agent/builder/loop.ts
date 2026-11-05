@@ -7,7 +7,7 @@ import type { AgentMessage, ModelTurn, ToolCall, ToolTransport } from "../types"
 import { buildCanvas, diffElements, type BuiltCanvas, type CanvasDiff } from "./canvas";
 import { buildStateMessage } from "./prompt";
 import { reportCanvas, type CanvasReport } from "./report";
-import { addLines, adjust, createState, describeFlow, describeMoved, withBareIcons, withIconPriority, type BuilderState } from "./state";
+import { addLines, adjust, createState, describeFlow, describeMoved, withBareIcons, withDefaultDirection, withIconPriority, type BuilderState } from "./state";
 
 /** Each turn is a model call, and free tiers allow few calls a minute: keep the default small. */
 const DEFAULT_MAX_TURNS = 12;
@@ -55,6 +55,8 @@ export interface BuilderInput {
   maxReviews?: number;
   /** An ER, class, sequence or mind-map diagram: written whole in one add and not polished (a table or a lifeline has nothing to adjust). */
   structured?: boolean;
+  /** The direction a diagram reads in when its code names none (system designs: left to right). */
+  direction?: "right";
   /** Stop starting new steps after this many ms once something is drawn (default 240 s). */
   maxMs?: number;
   /** Undo an adjustment that made the picture worse (default on). */
@@ -103,7 +105,7 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
   let maxTurns = baseTurns;
   let lookupTurns = 0;
 
-  const bare = (s: BuilderState) => (input.bareIcons ? withBareIcons(s) : input.iconPriority ? withIconPriority(s) : s);
+  const bare = (s: BuilderState) => withDefaultDirection(input.bareIcons ? withBareIcons(s) : input.iconPriority ? withIconPriority(s) : s, input.direction);
   let state = bare(createState(input.initialCode ?? ""));
   // Set by `redraw`, so kept in one object that type narrowing cannot freeze at its initial value.
   const live: { built: BuiltCanvas | null; report: CanvasReport | undefined } = { built: null, report: undefined };

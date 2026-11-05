@@ -20,6 +20,7 @@ import { createCanvasTools } from "../runtime";
 import type { ExportRequest } from "../types";
 import { createEditorHost } from "./editor-host";
 import { generateElements } from "./generate-client";
+import { placePreview } from "./generation-preview";
 import { fromRows, toRow } from "./persisted-messages";
 
 export type AgentUiMessage =
@@ -195,8 +196,35 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
           downloadBlob(result.blob, filename);
           return { filename, mime: result.blob.type, bytes: result.blob.size, width: result.width, height: result.height };
         },
-        generate: (request: { description: string; diagramType?: string }) =>
-          generateElements({ whiteboardId: String(latest.current.whiteboard?._id ?? ""), provider: providerRef.current, description: request.description, diagramType: request.diagramType, signal: abortRef.current?.signal, onProgress: (text) => setActivity(text), onThinking: (text) => appendGeneratorThinking.current(text) }),
+        // The diagram is drawn on the board as a preview while it is generated (never stored), then placed by the tool in the same spot.
+        generate: async (request: { description: string; diagramType?: string }) => {
+          const c = latest.current;
+          const view = { zoom: c.canvasViewport.zoom, pan: c.canvasViewport.panOffset };
+          const existing = c.elements;
+          // A heartbeat: the last thing the generator said plus the time it has been working, so a slow model never looks frozen.
+          const started = Date.now();
+          let last = "Starting the diagram generator";
+          const beat = () => setActivity(`${last} · ${Math.round((Date.now() - started) / 1000)}s`);
+          const heartbeat = setInterval(beat, 1000);
+          try {
+            return await generateElements({
+              whiteboardId: String(c.whiteboard?._id ?? ""),
+              provider: providerRef.current,
+              description: request.description,
+              diagramType: request.diagramType,
+              signal: abortRef.current?.signal,
+              onProgress: (text) => {
+                last = text;
+                beat();
+              },
+              onThinking: (text) => appendGeneratorThinking.current(text),
+              onElements: (drawn) => latest.current.setGenerationPreview(placePreview(drawn, existing, view)),
+            });
+          } finally {
+            clearInterval(heartbeat);
+            latest.current.setGenerationPreview(null);
+          }
+        },
         remember: async (entry: { kind: "preference" | "correction" | "decision" | "fact"; text: string }) => {
           const saved = await convex.mutation(api.aiMemory.remember, { whiteboardId: String(latest.current.whiteboard?._id ?? ""), ...entry });
           return { duplicate: saved.duplicate };

@@ -35,6 +35,9 @@ export const SHAPE_CATEGORY_LABELS: Record<string, string> = {
   states: "States",
   er: "ER",
   bpmn: "BPMN",
+  uml: "UML",
+  sequence: "Sequence",
+  "mind-map": "Mind map",
 };
 
 const CATEGORY_ORDER = Object.keys(SHAPE_CATEGORY_LABELS);
@@ -123,9 +126,7 @@ export const buildShapeElement = (entry: VocabularyEntry, center: Point, id: str
     if (!made) return undefined;
     const [a, b] = made.points;
     const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
-    // A lifeline's box is its body, below its head: the box is centred a little lower so head and body are centred together.
-    const lift = type === "lifeline" ? 20 : 0;
-    return { ...made, points: [{ x: center.x - w / 2, y: center.y - h / 2 + lift }, { x: center.x + w / 2, y: center.y + h / 2 + lift }] } as DrawingElement;
+    return { ...made, points: [{ x: center.x - w / 2, y: center.y - h / 2 }, { x: center.x + w / 2, y: center.y + h / 2 }] } as DrawingElement;
   }
   const outline = outlinePropsOf(entry);
   const size = outline ? resolveOutlineVariant(outline.variant).defaultSize : entry.representation.kind === "shape" ? PLAIN_SIZES[entry.representation.shape] : undefined;

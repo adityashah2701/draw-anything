@@ -1,5 +1,8 @@
 import { iconVocabulary } from "../prompt/icon-vocabulary";
-import { STRUCTURED_DIAGRAM_TYPES, iconCategoriesFor, type PromptContext } from "../prompt/prompt-context";
+import { examplesFor } from "../prompt/examples";
+import { playbookFor } from "../prompt/playbooks";
+import { STRUCTURED_DIAGRAM_TYPES, iconCategoriesFor, isSystemDesign, type PromptContext } from "../prompt/prompt-context";
+import { SYSTEM_DESIGN_GUIDE } from "../prompt/system-design";
 import { LANGUAGE } from "../prompt/system";
 import type { ToolSpec, ToolTransport } from "../types";
 import { MAX_ADD_STATEMENTS } from "./state";
@@ -8,7 +11,7 @@ export const BUILDER_TOOL_SPECS: ToolSpec[] = [
   { name: "search_icons", description: "Find icon ids for technologies or concepts. Pass several at once, comma-separated: one call answers all of them. Returns ranked ids to use as `icon:`." },
   {
     name: "add",
-    description: `Add the next part of the diagram as diagram code: at most ${MAX_ADD_STATEMENTS} statements (nodes, connections, or one group block). It is drawn on the canvas immediately and you see the result before your next step. The first add may start with \`type ...\` and \`title ...\` lines.`,
+    description: `Add the next part of the diagram as diagram code: at most ${MAX_ADD_STATEMENTS} statements (nodes, connections, or one group block); an ER, class, sequence or mind-map diagram may send all of it at once (up to 48). It is drawn on the canvas immediately and you see the result before your next step. The first add may start with \`type ...\` and \`title ...\` lines.`,
   },
   {
     name: "adjust",
@@ -53,7 +56,7 @@ export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], conte
       ? "1. Write the WHOLE diagram in a single add: every table, class, lifeline or topic with its full content, and every connection with its relation (up to 48 statements). Rows are separated by `;`. Then call finish in the same reply. Do not adjust or polish unless the Problems list names an error."
       : `1. Build in steps. Each turn look at the canvas and add the NEXT part: several nodes with their connections, or a group (at most ${MAX_ADD_STATEMENTS} statements). Start at the entry point and follow the flow. Large diagrams take two or three steps, not one.`,
     context?.diagramType && STRUCTURED_DIAGRAM_TYPES.has(context.diagramType)
-      ? `2. This is a ${context.diagramType} diagram: draw every node as its own shape (ER table \`shape: entity\` with rows, class \`shape: class\` with attributes and operations, \`shape: lifeline\`, \`shape: topic\`), never as an icon or a plain box, and put the meaning on connections with \`relation:\`.`
+      ? `2. This is a ${context.diagramType} diagram: draw every node as its own shape (ER table \`shape: entity\` with rows, class \`shape: class\` with attributes and operations, \`shape: lifeline\`, \`shape: topic\`), never as an icon or a plain box, and put the meaning on connections with \`relation:\`. Do not call search_icons: these diagrams have no icons.`
       : "2. Icons first: draw recognisable things (services, databases, queues, caches, gateways, clients, users, devices, cloud parts) as bare icons with their name underneath (`shape: icon`, call search_icons once for all the ids you need). Use a box for what needs text or structure: steps, decisions, descriptions, long names. Mix both in one diagram when it has both kinds of part, giving them equal weight.",
     "3. When the structure is complete, polish. Read the Problems list: each names the connections or nodes involved. Fix them with adjust, for example:",
     "   - a connection runs along another one or has many bends: `sides A > B: right, right` loops it around the right side, `sides A > B: bottom, top` makes it direct;",
@@ -64,6 +67,10 @@ export const buildBuilderSystemPrompt = (transport: ToolTransport["kind"], conte
     "",
     `5. Big systems: a picture holds at most about 24 parts. For a larger system, draw the OVERVIEW first (3-6 groups, each group a few nodes), and leave the detail to focused views per group; never one flat diagram of 30+ nodes.`,
     "",
+    // The type's own playbook and one worked example, as the one-shot agent gets: without them the builder drew every type like a small architecture.
+    ...(context?.diagramType && playbookFor(context.diagramType) ? [`How to draw a ${context.diagramType} diagram: ${playbookFor(context.diagramType)}`, ""] : []),
+    ...(isSystemDesign(context?.prompt) && !context?.editing ? [SYSTEM_DESIGN_GUIDE, ""] : []),
+    ...(context && !context.editing && (context.diagramType || isSystemDesign(context.prompt)) ? ((e) => [`A good finished diagram of this kind (build yours step by step, in this order):\n\`\`\`diagram\n${e.code}\n\`\`\``, ""])(examplesFor(context.diagramType, context.prompt)[0]) : []),
     "Design rules: short names (1-4 words); every node connects to something; label a connection only when it adds information; group tightly coupled nodes; dashed (-->) for optional, async or feedback paths. y grows downward in positions.",
     "",
     categories ? "Icon ids (icon: or kind:), the common ones; search_icons finds any others:" : "Icon ids (icon: or kind:), by category:",

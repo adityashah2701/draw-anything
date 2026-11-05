@@ -6,7 +6,9 @@ import { documentFromParsedCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import type { AIGenerateDiagramRequest, AIModelProvider, AIStreamEvent } from "@/features/ai/types";
 import { runDiagramAgent, type AgentProgress } from "./agent-loop";
-import { inferDiagramType } from "./prompt/prompt-context";
+import { inferDiagramType, isSystemDesign } from "./prompt/prompt-context";
+import { bareIconNodes, prefersBareIcons } from "./builder/state";
+import { wantsPlainBoxes } from "./builder/icon-hints";
 import { buildSystemPrompt, buildUserPrompt } from "./prompt/system";
 import { createToolTransport } from "./transports/create";
 import type { ToolTransport } from "./types";
@@ -92,7 +94,11 @@ export async function* streamDiagramAgentEvents(options: DiagramAgentOptions): A
       }),
     );
 
-    const parsed = parseDiagramCode(result.code);
+    const written = parseDiagramCode(result.code);
+    // A new architecture is drawn as captioned icons (the person's boxes or an edited diagram stay as they are).
+    const iconic = !options.existingDiagram && prefersBareIcons(written.diagramType ?? inferDiagramType(request.prompt), wantsPlainBoxes(request.prompt)) ? { ...written, nodes: bareIconNodes(written.nodes) } : written;
+    // A system design reads left to right unless the code says otherwise.
+    const parsed = !options.existingDiagram && !iconic.direction && isSystemDesign(request.prompt) ? { ...iconic, direction: "right" as const } : iconic;
     const { document } = documentFromParsedCode(parsed, createGenerationId(), {
       prompt: request.prompt,
       provider,

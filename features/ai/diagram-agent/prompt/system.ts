@@ -3,7 +3,8 @@ import type { ToolTransport } from "../types";
 import { EXAMPLES, examplesFor } from "./examples";
 import { iconVocabulary } from "./icon-vocabulary";
 import { PLAYBOOKS } from "./playbooks";
-import { STRUCTURED_DIAGRAM_TYPES, iconCategoriesFor, type PromptContext } from "./prompt-context";
+import { STRUCTURED_DIAGRAM_TYPES, iconCategoriesFor, isSystemDesign, type PromptContext } from "./prompt-context";
+import { SYSTEM_DESIGN_GUIDE } from "./system-design";
 
 export const LANGUAGE = `Diagram code (one statement per line; // starts a comment):
   type architecture            header lines, before everything else: type, title, direction
@@ -38,7 +39,7 @@ export const buildSystemPrompt = (transport: ToolTransport["kind"], context?: Pr
     "",
     "How to work:",
     "1. Decide what the diagram must communicate and for whom. Include only what serves that: the smallest diagram that is complete. Never pad to reach a size.",
-    "2. Choose the structure: tiers or domains as groups, a clear main path, entry points first.",
+    "2. Choose the structure: tiers or domains as groups, a clear main path, entry points first. Write that plan in two to six short lines (each group and its components) before your first diagram code, then draw that plan.",
     type && STRUCTURED_DIAGRAM_TYPES.has(type)
       ? `3. This is a ${type} diagram: draw every node with the shape the playbook below names (a table, a class, a lifeline or a topic). Never use icon:, kind: or shape: icon here, and never plain boxes. Put the content in the shape (rows, attributes, operations) and the meaning on the connection (relation:). Use search_icons only if the person asked for icons.`
       : "3. Give every node an icon or kind that says what it is. Icons first: draw recognisable components (services, databases, clients, devices) as bare icons, shape: icon with a valid icon id; boxes for steps, decisions and long text; mix both equally. Asked for plain boxes or no icons: obey. Use search_icons when unsure of an id, with every term in ONE call (comma-separated); vendor and technology words (postgres, kafka, nginx, s3, esp32) work.",
@@ -52,6 +53,7 @@ export const buildSystemPrompt = (transport: ToolTransport["kind"], context?: Pr
     "- Declare nodes in flow order; connected nodes close together; group tightly coupled nodes.",
     "- Use dashed (-->) for optional, async or feedback paths.",
     "",
+    ...(isSystemDesign(context?.prompt) ? [SYSTEM_DESIGN_GUIDE, ""] : []),
     type ? `How to draw a ${type} diagram:` : "By diagram type:",
     ...playbooks.map(([name, text]) => `- ${name}: ${text}`),
     "",

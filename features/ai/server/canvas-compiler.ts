@@ -155,7 +155,7 @@ const structuredSize = (node: AIDiagramNode, shape: string | undefined): NodeSiz
   const data = node.data ?? {};
   if (shape === "entity") return { ...entityTableSize({ name: node.label, kind: data.variant as never, rows: parseRows(data.rows) }), fits: true } as NodeSize;
   if (shape === "class") return { ...classifierSize({ name: node.label, kind: data.variant as never, stereotype: data.stereotype, attributes: splitMembers(data.attributes), operations: splitMembers(data.operations) }), fits: true } as NodeSize;
-  if (shape === "topic") return { ...mindmapSize({ role: "sub", label: node.label }), fits: true } as NodeSize;
+  if (shape === "topic") return { ...mindmapSize({ role: (data.mindRole as "central" | "main" | "sub" | "leaf" | undefined) ?? "sub", label: node.label }), fits: true } as NodeSize;
   // The slot is as wide as the head plus room for the messages' labels; the drawn body is narrow and centred in it.
   if (shape === "lifeline") return { width: Math.max(LIFELINE_SLOT_WIDTH, headWidth({ name: node.label }) + 10), height: 120, fits: true } as NodeSize;
   return null;
@@ -518,6 +518,18 @@ export interface CompileResult {
  * icon's is not a straight edge. Ends are ordered by where the other end is, so lines do not cross at
  * the node.
  */
+const tableStem = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies|es|s)$/, "");
+const refersTo = (node: AIDiagramNode, other: AIDiagramNode) =>
+  [...(node.data?.rows ?? "").matchAll(/(?:->|references)\s*(\w+)/gi)].some((m) => [other.label, other.id].some((name) => tableStem(m[1]) === tableStem(name)));
+/** The parent end of a connection between two tables, from their foreign keys: the table that references the other is the child. */
+const foreignKeyParent = (from: AIDiagramNode | undefined, to: AIDiagramNode | undefined): "from" | "to" | undefined => {
+  if (!from || !to || from.shape !== "entity" || to.shape !== "entity") return undefined;
+  const fromRefs = refersTo(from, to), toRefs = refersTo(to, from);
+  return fromRefs && !toRefs ? "to" : toRefs && !fromRefs ? "from" : undefined;
+};
+
+const TABLE_TYPES: ReadonlySet<string> = new Set(["entity-table", "uml-classifier"]);
+
 const spreadPorts = (
   items: Array<{ source: PositionedNode; target: PositionedNode; handles: { from: ConnectionHandle; to: ConnectionHandle } }>,
 ): Array<{ from?: number; to?: number }> => {
@@ -536,10 +548,12 @@ const spreadPorts = (
 
   const result: Array<{ from?: number; to?: number }> = items.map(() => ({}));
   for (const { node, side, ends } of groups.values()) {
-    if (node.element.type !== "semantic-node" || ends.length < 2) continue;
+    // A table or a class spreads every end: each crow's foot or diamond needs its own point on the side.
+    const table = TABLE_TYPES.has(node.element.type);
+    if ((node.element.type !== "semantic-node" && !table) || ends.length < 2) continue;
     const arrivals = ends.filter((e) => e.role === "to").length;
     const departures = ends.length - arrivals;
-    if (!(arrivals >= 2 || (arrivals >= 1 && departures >= 1))) continue;
+    if (!table && !(arrivals >= 2 || (arrivals >= 1 && departures >= 1))) continue;
     const horizontal = side === "top" || side === "bottom";
     const along = (n: PositionedNode) => (horizontal ? (n.bounds.minX + n.bounds.maxX) / 2 : (n.bounds.minY + n.bounds.maxY) / 2);
     const ordered = [...ends].sort((a, b) => along(a.other) - along(b.other) || a.item - b.item);
@@ -626,6 +640,7 @@ export const prepareDiagram = (
         from: edge.from,
         to: edge.to,
         ...(edge.relation ? { relation: edge.relation } : {}),
+        ...((parent) => (parent ? { parent } : {}))(foreignKeyParent(document.nodes.find((n) => n.id === edge.from), document.nodes.find((n) => n.id === edge.to))),
         labelWidth: edge.label?.trim()
           ? Math.ceil(estimateTextWidth(edge.label.trim(), EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT))
           : undefined,
@@ -783,7 +798,7 @@ export const buildCanvas = (
   const ports = spread
     ? spreadPorts(pending.map(({ source, target, handles }) => ({ source, target, handles })))
     : pending.map(() => ({} as { from?: number; to?: number }));
-  const messageEdges = new Set<number>();
+  const straightEdges = new Set<number>();
   // Messages between lifelines sit at their own height on both, in the order they are written.
   const messages = pending.map((p, i) => ({ p, i })).filter(({ p }) => p.source.element.type === "lifeline" && p.target.element.type === "lifeline");
   messages.forEach(({ i }, k) => {
@@ -792,9 +807,19 @@ export const buildCanvas = (
     // A message runs level from the side of one body that faces the other.
     const rightward = pending[i].target.bounds.minX >= pending[i].source.bounds.minX;
     pending[i].handles = { from: rightward ? "right" : "left", to: rightward ? "left" : "right" };
-    messageEdges.add(i);
+    straightEdges.add(i);
+  });
+  // A mind-map branch leaves its topic on the side that faces the child, so the lines spread out like spokes.
+  pending.forEach((p) => {
+    if (p.source.element.type !== "mindmap-node" || p.target.element.type !== "mindmap-node") return;
+    const dx = (p.target.bounds.minX + p.target.bounds.maxX - p.source.bounds.minX - p.source.bounds.maxX) / 2;
+    const dy = (p.target.bounds.minY + p.target.bounds.maxY - p.source.bounds.minY - p.source.bounds.maxY) / 2;
+    p.handles = Math.abs(dx) > Math.abs(dy) * 1.2 ? (dx > 0 ? { from: "right", to: "left" } : { from: "left", to: "right" }) : dy > 0 ? { from: "bottom", to: "top" } : { from: "top", to: "bottom" };
   });
   pending.forEach(({ edge, index, source, target, handles }, i) => {
+    // A mind-map branch is a plain line in its branch's colour, straight from topic to topic.
+    const branch = source.element.type === "mindmap-node" && target.element.type === "mindmap-node";
+    if (branch) straightEdges.add(i);
     const fromPort = ports[i].from;
     const toPort = ports[i].to;
     const start = fromPort ? portPoint(source.bounds, handles.from, fromPort) : getConnectionHandlePoint(source.bounds, handles.from);
@@ -811,8 +836,8 @@ export const buildCanvas = (
       targetElementId: target.element.id,
       bidirectional: Boolean(edge.bidirectional),
       dashed: Boolean(edge.dashed),
-      plain: Boolean(edge.plain),
-      color: edge.color,
+      plain: Boolean(edge.plain) || branch,
+      color: edge.color ?? (branch ? (target.element as { branchColor?: string }).branchColor : undefined),
       relation: normalizeRelation(edge.relation),
       descriptor: {
         arrowId: edgeId,
@@ -822,7 +847,7 @@ export const buildCanvas = (
         end: { x: end.x, y: end.y },
         startHandle: handles.from,
         endHandle: handles.to,
-        routingMode: style === "straight" || messageEdges.has(i) ? "straight" : "orthogonal",
+        routingMode: style === "straight" || straightEdges.has(i) ? "straight" : "orthogonal",
         routePreference:
           handles.from === "top" || handles.from === "bottom" ? "vh" : "hv",
       },
@@ -844,8 +869,10 @@ export const buildCanvas = (
   });
 
   // Siblings leaving (or entering) one node side share a bus level where that is clear of nodes.
+  // Connectors of tables and classes are not merged into shared buses: a crow's foot on a shared line says nothing about which table it belongs to.
+  const tableIds = new Set(Array.from(positionedByNodeId.values()).filter((p) => TABLE_TYPES.has(p.element.type) || p.element.type === "mindmap-node").map((p) => p.element.id));
   const bundled = bundleFans(
-    arrowDrafts.map((draft) => ({
+    arrowDrafts.filter((draft) => !tableIds.has(draft.sourceElementId) && !tableIds.has(draft.targetElementId)).map((draft) => ({
       id: draft.edgeId,
       points: routed.get(draft.edgeId) ?? [draft.descriptor.start, draft.descriptor.end],
       sourceId: draft.sourceElementId,
@@ -861,7 +888,7 @@ export const buildCanvas = (
 
   const paths = new Map<string, Point[]>();
   arrowDrafts.forEach((draft) => {
-    const points = bundled.get(draft.edgeId)!;
+    const points = bundled.get(draft.edgeId) ?? routed.get(draft.edgeId) ?? [draft.descriptor.start, draft.descriptor.end];
     paths.set(draft.edgeId, points);
     elements.push({
       id: draft.edgeId,
@@ -1033,6 +1060,11 @@ export const compileAIDiagramDetailed = (
   if (!options.depthMode && document.groups.length >= 2) modes.push("stacked");
   // Connectors that share a side are given separate points (`spreadPorts`); where that makes the drawing
   // worse by the same measure, the middle-of-side drawing is kept instead.
+  // Topics are sized by their place in the tree (the centre is larger), which only the whole diagram knows.
+  if (document.nodes.some((n) => n.shape === "topic")) {
+    const mind = mindmapRoles(document);
+    document = { ...document, nodes: document.nodes.map((n) => (n.shape === "topic" ? { ...n, data: { ...n.data, mindRole: mind.role(n.id) } } : n)) };
+  }
   const compileMode = (mode: DepthMode): CompileResult => {
     const spread = compileWith(document, frameId, mode, options);
     if (options.spreadPorts === false || document.edges.length < 2) return spread;

@@ -50,14 +50,28 @@ const OWN_SHAPE_KINDS = new Set(["decision", "start", "end"]);
 
 /** Every node that has an icon (or a kind with one) becomes a bare icon: `shape: icon`. For "icons only" requests. */
 export const withBareIcons = (state: BuilderState): BuilderState => {
+  const nodes = bareIconNodes(state.parsed.nodes);
+  return nodes !== state.parsed.nodes ? stateFromParsed({ ...state.parsed, nodes }, state.offsets, state.edgeSides) : state;
+};
+
+/** The node list with every node that has an icon or a kind (and no shape of its own) drawn as a bare icon; the same list when nothing changes. */
+export const bareIconNodes = <N extends { shape?: string; kind?: string; icon?: string }>(nodes: N[]): N[] => {
   let changed = false;
-  const nodes = state.parsed.nodes.map((n) => {
+  const next = nodes.map((n) => {
     if (n.shape || OWN_SHAPE_KINDS.has((n.kind ?? "").toLowerCase()) || !(n.icon || n.kind)) return n;
     changed = true;
-    return { ...n, shape: "icon" as const };
+    return { ...n, shape: "icon" };
   });
-  return changed ? stateFromParsed({ ...state.parsed, nodes }, state.offsets, state.edgeSides) : state;
+  return changed ? next : nodes;
 };
+
+/** A diagram that names no direction reads in this one (a system design reads left to right). */
+export const withDefaultDirection = (state: BuilderState, direction: "right" | undefined): BuilderState =>
+  direction && !state.parsed.direction && state.parsed.nodes.length > 0 ? stateFromParsed({ ...state.parsed, direction }, state.offsets, state.edgeSides) : state;
+
+/** Architecture and network diagrams are drawn as captioned icons, not boxes, unless the person asked for boxes. */
+export const prefersBareIcons = (diagramType: string | undefined, plainBoxes: boolean): boolean =>
+  !plainBoxes && (diagramType === "architecture" || diagramType === "network");
 
 /** Kinds that name a step or a thought, not a thing: they keep their box. */
 const BOX_KINDS = new Set(["generic", "process", "step", "task", "action", "note", "document", "text", "concept", "idea"]);

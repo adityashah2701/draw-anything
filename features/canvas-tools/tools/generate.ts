@@ -5,6 +5,7 @@ import { ToolError } from "../errors";
 import type { ToolDefinition } from "../types";
 import { newDiagramPatch } from "@/features/whiteboard/commands/layout-engine";
 import { count, defaultOrigin, revealContent } from "./helpers";
+import { promoteGroupFrames } from "./promote-groups";
 
 /** Most elements one generated diagram may add (a large architecture is a few hundred). */
 export const MAX_GENERATED_ELEMENTS = 500;
@@ -47,7 +48,8 @@ export const generateDiagramTool: ToolDefinition<typeof generateInput> = {
       if (error instanceof Error && error.name === "AbortError") throw error;
       throw new ToolError("execution_failed", `The diagram could not be generated: ${error instanceof Error ? error.message.slice(0, 300) : "unknown error"}. Nothing was added.`);
     }
-    const elements = outcome.elements.filter(usable).filter((el) => el.isGuide !== true);
+    // Groups become real frames and connection labels stay; other guides (old-style helpers) are left out.
+    const elements = promoteGroupFrames(outcome.elements.filter(usable)).filter((el) => el.isGuide !== true || el.ai?.role === "edge-label");
     if (elements.length === 0) throw new ToolError("execution_failed", "The generator returned no elements, so nothing was added. Try a more specific description.");
     if (elements.length > MAX_GENERATED_ELEMENTS) throw new ToolError("limit_exceeded", `The generated diagram has ${elements.length} elements; at most ${MAX_GENERATED_ELEMENTS} can be added at once. Ask for a smaller diagram.`);
 
@@ -58,10 +60,11 @@ export const generateDiagramTool: ToolDefinition<typeof generateInput> = {
     const dy = origin.y - (box?.minY ?? 0);
     const moved = elements.map((el) => ({ ...structuredClone(el), points: el.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) })) as DrawingElement[];
     const nodes = moved.filter((el) => el.ai?.role === "node");
+    const frames = moved.filter((el) => el.type === "frame");
     const revealed = revealContent(env, unionBounds(moved.flatMap((el) => env.ctx.getBounds(el) ?? [])), keep_view);
     return {
-      summary: `Generated a diagram: ${count(nodes.length, "node")}, ${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements), placed beside the existing content.${revealed ? ` ${revealed}` : ""}`,
-      data: { created: moved.map((el) => el.id), ...(revealed ? { viewMoved: true } : {}), nodes: nodes.slice(0, 60).map((el) => ({ id: el.id, label: el.label })) },
+      summary: `Generated a diagram: ${count(nodes.length, "node")}, ${frames.length > 0 ? `${count(frames.length, "frame")}, ` : ""}${count(moved.filter((el) => el.type === "arrow").length, "connector")} (${moved.length} elements), placed beside the existing content.${revealed ? ` ${revealed}` : ""}`,
+      data: { created: moved.map((el) => el.id), ...(revealed ? { viewMoved: true } : {}), nodes: nodes.slice(0, 60).map((el) => ({ id: el.id, label: el.label })), ...(frames.length > 0 ? { frames: frames.map((el) => ({ id: el.id, title: (el as { title?: string }).title })) } : {}) },
       warnings: (outcome.warnings ?? []).slice(0, 8),
       // A generated diagram is placed by a layout (so its elements are `auto`) and is stored with its layout record.
       patch: newDiagramPatch(moved),

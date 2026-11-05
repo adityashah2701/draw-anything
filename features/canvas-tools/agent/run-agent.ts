@@ -224,6 +224,8 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
       onEvent?.({ type: "tool", step, call, result: stepResults[index] });
     });
 
+    // Generating a diagram can take minutes on a slow model; that time is work, not a stall, whatever its outcome.
+    if (calls.some((call) => call.name === "generate_diagram")) lastProgressAt = now();
     if (stepResults.some((r, index) => r.ok && executor.tools.get(calls[index].name)?.access === "write")) {
       wroteSinceCheck = true;
       lastProgressAt = now();

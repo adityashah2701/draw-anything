@@ -16,6 +16,7 @@ const ONE = new Set(["one", "exactly-one", "zero-or-one"]);
 const parentsFirst = (graph: LayoutGraph): LayoutGraph => ({
   ...graph,
   edges: graph.edges.map((e) => {
+    if (e.parent) return e.parent === "to" ? { ...e, from: e.to, to: e.from } : e;
     const start = e.relation?.start?.cardinality;
     const end = e.relation?.end?.cardinality;
     return start && end && MANY.has(start) && ONE.has(end) ? { ...e, from: e.to, to: e.from } : e;

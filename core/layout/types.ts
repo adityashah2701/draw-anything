@@ -43,6 +43,8 @@ export interface LayoutEdge {
   to: string;
   label?: string;
   relation?: ConnectorRelation;
+  /** Which end is the parent when the content says so (an ER table that holds the foreign key is the child). */
+  parent?: "from" | "to";
 }
 
 export interface LayoutContainer {
@@ -59,6 +61,8 @@ export interface LayoutGraph {
   containers: LayoutContainer[];
   /** The diagram's type, when it has one (`architecture`, `flowchart`, ...). */
   diagramType?: string;
+  /** The direction the diagram was drawn in, as diagram code writes it (`right`, `up`, `left`); absent = top to bottom. */
+  direction?: "right" | "up" | "left";
 }
 
 /** Where an existing node is, by its top-left corner, and who put it there. */

@@ -109,7 +109,9 @@ describe("NVIDIA GLM experimental models", () => {
 
   it("lists both GLM ids as experimental, text-only, and keeps Nemotron the default", async () => {
     const { NVIDIA_MODELS, nvidiaModelInfo, isSelectableNvidiaModel } = await import("@/features/ai/nvidia-models");
-    expect(NVIDIA_MODELS.filter((m) => m.experimental).map((m) => m.id)).toEqual([GLM, FLASH]);
+    expect(NVIDIA_MODELS.filter((m) => m.experimental).map((m) => m.id)).toEqual([GLM, FLASH, "mistralai/mistral-large-4-1t-a52b"]);
+    // Mistral Large 4 reads images and gets thinking kwargs only when asked for explicitly.
+    expect(nvidiaModelInfo("mistralai/mistral-large-4-1t-a52b")).toMatchObject({ vision: true, experimental: true, thinking: "explicit" });
     expect(nvidiaModelInfo(GLM)).toMatchObject({ vision: false, experimental: true });
     expect(nvidiaModelInfo(FLASH)).toMatchObject({ vision: false, experimental: true });
     expect(nvidiaModelInfo("nvidia/nemotron-3.5-super-vl-120b-a12b")).toMatchObject({ vision: true, experimental: false });

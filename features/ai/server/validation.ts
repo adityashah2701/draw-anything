@@ -182,7 +182,8 @@ export const sanitizeGraphDraft = (
       invalidEdges += 1;
       return;
     }
-    const key = `${from}->${to}`;
+    // Two connections between the same pair are kept when their labels differ (a request and a later cancel in a sequence).
+    const key = `${from}->${to}:${edge.label?.trim().toLowerCase() ?? ""}`;
     if (edgeKeys.has(key)) {
       invalidEdges += 1;
       return;

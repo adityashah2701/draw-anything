@@ -1,3 +1,4 @@
+import { isSystemDesign } from "./prompt-context";
 /** Worked diagrams the prompt shows. Each is asserted to parse and lay out cleanly in a test. */
 export interface WorkedExample {
   request: string;
@@ -10,7 +11,9 @@ export const examplesFor = (diagramType: string | undefined, prompt = ""): Worke
   if (diagramType === "entity-relationship") return pick("Library ER diagram");
   if (diagramType === "sequence") return pick("Login sequence");
   if (diagramType === "class") return pick("Payment classes");
+  if (diagramType === "mind-map") return pick("Product launch mind map");
   if (diagramType === "flowchart" || diagramType === "workflow") return pick("Login flow");
+  if (isSystemDesign(prompt) && (!diagramType || diagramType === "architecture")) return pick("Chat app system design (like WhatsApp)");
   if (diagramType === "architecture" && /ci\/cd|pipeline|deploy/i.test(prompt)) return pick("CI/CD pipeline with staging and production");
   return pick("Web app backend on AWS");
 };
@@ -160,5 +163,76 @@ CreditCard > PaymentMethod [relation: generalization]
 BankTransfer > PaymentMethod [relation: generalization]
 Order > PaymentMethod [relation: association, to: 1]
 Order > OrderItem [relation: composition, from: 1, to: 1..*]`,
+  },
+  {
+    request: "Product launch mind map",
+    code: `type mind-map
+title Product launch
+
+Product Launch [shape: topic]
+Product [shape: topic]
+Marketing [shape: topic]
+Sales [shape: topic]
+Support [shape: topic]
+Roadmap [shape: topic]
+Pricing [shape: topic]
+Landing Page [shape: topic]
+Launch Event [shape: topic]
+Demos [shape: topic]
+Partners [shape: topic]
+Help Center [shape: topic]
+On-call [shape: topic]
+
+Product Launch > Product, Marketing, Sales, Support
+Product > Roadmap, Pricing
+Marketing > Landing Page, Launch Event
+Sales > Demos, Partners
+Support > Help Center, On-call`,
+  },
+  {
+    request: "Chat app system design (like WhatsApp)",
+    code: `type architecture
+title Chat messaging system
+direction right
+
+Clients {
+  Mobile App [icon: mobile, shape: icon]
+  Web App [icon: browser, shape: icon]
+}
+
+Edge {
+  Load Balancer [icon: load-balancer, shape: icon]
+  Chat Servers [icon: server, shape: icon]
+}
+
+Realtime {
+  Presence Service [icon: service, shape: icon]
+  Connection Cache [icon: redis, shape: icon]
+}
+
+Messaging {
+  Message Queue [icon: kafka, shape: icon]
+  Message Service [icon: service, shape: icon]
+  Message DB [icon: database, shape: icon]
+  Notification Service [icon: notification, shape: icon]
+}
+
+Media {
+  Media Service [icon: service, shape: icon]
+  Blob Storage [icon: s3, shape: icon]
+  CDN [icon: cdn, shape: icon]
+}
+
+Push Provider [icon: external, shape: icon]
+
+Mobile App, Web App > Load Balancer: WebSocket
+Load Balancer > Chat Servers
+Chat Servers > Presence Service > Connection Cache
+Chat Servers > Message Queue: message sent
+Message Queue > Message Service > Message DB
+Message Queue --> Notification Service
+Notification Service > Push Provider: APNs / FCM
+Chat Servers > Media Service: media upload
+Media Service > Blob Storage > CDN`,
   },
 ];

@@ -31,6 +31,8 @@ const median = (values: number[]) => {
 };
 
 /** The diagram document the compiler lays out, from a layout graph. Nodes and groups get plain internal ids, mapped back by the caller. */
+const DIRECTION_HINT = { right: "left-to-right", up: "bottom-to-top", left: "right-to-left" } as const;
+
 const documentFromGraph = (graph: LayoutGraph, internal: { node: Map<string, string>; group: Map<string, string> }): AIDiagramDocumentV1 => {
   graph.nodes.forEach((node, i) => internal.node.set(node.id, `n${i}`));
   graph.containers.forEach((container, i) => internal.group.set(container.id, `g${i}`));
@@ -41,7 +43,8 @@ const documentFromGraph = (graph: LayoutGraph, internal: { node: Map<string, str
   });
   return buildAIDiagramDocument({
     prompt: "layout",
-    plan: normalizeModelPlan({ diagramType: graph.diagramType ?? "architecture", summary: "layout" }),
+    // The direction the diagram was drawn in, so laying it out again does not turn a left-to-right diagram on its side.
+    plan: normalizeModelPlan({ diagramType: graph.diagramType ?? "architecture", summary: "layout", ...(graph.direction ? { direction: DIRECTION_HINT[graph.direction] } : {}) }),
     graph: normalized,
     provider: "local",
     modelName: "layout",

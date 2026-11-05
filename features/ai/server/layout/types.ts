@@ -18,6 +18,8 @@ export interface PlacementEdge {
   labelWidth?: number;
   /** What the connection means, for engines that lay out by relation (inheritance above its subtypes). */
   relation?: import("@/features/whiteboard/types/whiteboard.types").ConnectorRelation;
+  /** Which end is the parent when the content says so (see `LayoutEdge.parent`). */
+  parent?: "from" | "to";
 }
 
 export interface PlacementGroup {

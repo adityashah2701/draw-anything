@@ -84,12 +84,99 @@ asked. Do not commit or push unless asked (the user commits). Type check with `n
 
 ---
 
+## 2.4 Done after the handoff was written (2026-11-07, second session)
+
+- **Why the agent drew icons for "ER diagram":** the phrase matched no diagram type, so the model got the
+  architecture "icons first" rule. `inferDiagramType` now also reads "ER diagram/model", "schema design",
+  "low-level design"/"LLD" (class) and "high-level design"/"HLD"/"system design" (architecture).
+  `STRUCTURED_DIAGRAM_TYPES` (`prompt/prompt-context.ts`) switches the agent and builder prompts to "draw every node
+  as its table/class/lifeline/topic"; the language block shows `shape: entity` and `relation:`; worked examples
+  `Library ER diagram`, `Login sequence`, `Payment classes` (appended to `EXAMPLES`; the legacy corpus keeps only the
+  first three). Prompt budgets raised to 3200 / 2300 / 1500 tokens and 14,500 characters.
+- **ER quality:** rows written with commas or newlines now parse (`entity-table/rows.ts`); structured shapes never
+  take a kind's colour; table columns have a 15% margin for the viewer's real font; the ER engine places the "one"
+  side above the "many" side whichever way a relation was written (`parentsFirst`, `core/layout/engines/er`).
+- **Builder speed for structured families:** one `add` of up to 48 statements, `finish` in the same reply, no polish
+  rounds (`maxReviews` 0), at most 4 steps (`BuilderInput.structured`).
+- **R8 (first part) live preview:** the diagram is drawn on the board while it is generated
+  (`generate-client.ts: onElements` -> `use-canvas-agent.ts` -> `ui-state.generationPreview`, drawn by
+  `use-canvas-engine.ts`, placed by `editor/generation-preview.ts: placePreview` where `generate_diagram` will put it).
+  The preview is never stored; the final patch still lands as one undo step. The builder streams per step, the
+  one-shot agent only at the end. Not checked in a browser.
+- **Issue 1 fixed:** two connections between the same pair are kept when their labels differ
+  (`features/ai/server/validation.ts`), so the destroy message is drawn.
+- **R4 (first part) family critic:** `tools/lint.ts: familyRules`: `er-no-primary-key`, `er-missing-cardinality`,
+  `er-many-to-many`, `er-fk-without-relation`, `sequence-no-return`, `flow-one-start`, `flow-dead-end`, plus
+  `family-shapes`. `generic-icons` is off for structured families and `label-heavy` off for sequences. The builder
+  report shows `family-shapes`, `er-*` and `sequence-*` (not the flow rules, so a plain chain still finishes).
+  Tests: `tools/lint.test.ts`.
+- **ER and class connectors (R6, part):** entity tables and classes spread every connector end over the side
+  (`canvas-compiler.ts: spreadPorts`, `TABLE_TYPES`) and are left out of the shared-bus merge (`bundleFans`), so
+  each crow's foot or diamond has its own line. Checked by rendering PNGs of the library ER, a mixed-direction ER,
+  the class and the sequence examples with `builder/render-png.ts` (no browser): one crossing left in the 7-table
+  case. A quick way to look at compiler output is a throwaway vitest that calls `elementsFromDiagramCode(code,
+  { familyEngine: true })` and `renderCanvasPng`.
+- **Stray "PK book_id" text boxes (fixed):** after `generate_diagram` the canvas agent read the tables back with
+  `get_element_details`, saw no rows (the inspect summary showed only `label`), and labelled the keys itself with
+  `create_text`. `summarize` (`canvas-tools/tools/helpers.ts`) now gives a table its name and `content` (rows) and a
+  class its members; the canvas agent prompt forbids text annotations for keys, columns and members.
+- **SQL-style rows:** `primary key (a, b)`, `foreign key (x) references t(y)`, inline `primary key`, `unique`,
+  `not null`, `references t(c)` are read as keys, not as columns (`entity-table/rows.ts`, `rows.test.ts`).
+- **Foreign keys decide ER placement:** the compiler marks a connection's parent from the tables' foreign keys
+  (`foreignKeyParent`, `LayoutEdge.parent`); the lint rule `er-cardinality-against-key` reports a cardinality written
+  the wrong way round.
+- **No icon work for structured families:** no icon hints in the builder prompt and an explicit "do not call
+  search_icons"; the `add` tool text mentions the 48-statement allowance.
+- **Live preview polish:** the empty-board card hides while a preview is drawn; the activity line shows the elapsed
+  seconds (a 1 s heartbeat in `use-canvas-agent.ts`).
+- **Mind maps:** topics are sized by their role (the centre was sized as a sub-topic and its label spilled out);
+  branches are plain lines in their branch colour, straight from the side that faces the child, and are not merged
+  into buses. Worked example `Product launch mind map`. Checked as a rendered PNG.
+- **System design (R1/R3, prompt part):** `isSystemDesign` (`prompt/prompt-context.ts`) recognises "design WhatsApp",
+  "how would you build Uber", "scalable ...", "system design of ..." (not flows, schemas, sequences); such requests
+  are architecture and get `prompt/system-design.ts: SYSTEM_DESIGN_GUIDE` (requirements first, one component per
+  responsibility, layers Clients/Edge/Services/Async/Data/External, one store per kind of data, 15-24 nodes in 4-6
+  groups) and the worked example `Chat app system design (like WhatsApp)` (22 nodes, 5 groups, rendered and checked:
+  0 lint findings, 3 crossings). The agent writes a 2-6 line plan (groups and components) before its first code.
+  **The builder now also gets the type's playbook, the guide and one worked example** (before this it had neither,
+  so it drew every type like a small architecture). Lint: `hld-no-entry`, `hld-idle-service` (also in the builder
+  report). The canvas agent passes system-design requests on in the person's words. No extra model call was added;
+  not run against a real model.
+- **Icons, not boxes, for architecture (user preference):** new architecture and network diagrams are drawn as
+  captioned icons (`shape: icon`) in both pipelines (`builder/state.ts: prefersBareIcons`, `bareIconNodes`; the
+  one-shot path converts in `run.ts`). "plain boxes" in the request and edits of an existing diagram keep boxes.
+  The chat-system example is now left to right (`direction right`) with captioned icons and domain groups (Clients,
+  Edge, Messaging, Media, Realtime), modelled on an Eraser-style reference: rendered, 0 crossings, 0 overlaps, all
+  groups drawn. The guide says: domain groups after the edge, one plural node for a scaled tier, `direction right`.
+  A horizontally scaled tier cannot be drawn stacked as an icon (`stack` only works on boxes).
+- **Layout panel kept left-to-right diagrams sideways (fixed):** the architecture engine now reads the diagram's
+  direction (`LayoutGraph.direction` from `ai.diagramDirection`), so re-laying out does not turn it.
+- **Groups and connection labels were thrown away on the board (fixed):** `generate_diagram` dropped every
+  `isGuide` element, which is how the compiler draws group frames, their headings and connection labels, so an AI
+  diagram arrived with no groups and no labels (seen on "Design Facebook"). Now `tools/promote-groups.ts:
+  promoteGroupFrames` turns each group rectangle into a first-class frame (heading as title, nested groups nested,
+  members adopted, frame stored below its members) and connection labels are kept. The live preview shows them too.
+  The canvas agent no longer adds its own frames when the result already has some. Test: `promote-groups.test.ts`;
+  checked as a rendered PNG.
+- **System designs read left to right by default** in both pipelines when the code names no direction
+  (`withDefaultDirection`, `BuilderInput.direction`, `run.ts`).
+- **Long generations no longer die or vanish (2026-11-07, "Design WhatsApp" on Nemotron: 5 minutes, then nothing):**
+  the route sends an SSE `: keep-alive` comment every 15 s (`generate-diagram-handler.ts`), so the client's 2-minute
+  idle limit only fires when the server is really gone; time spent in `generate_diagram` counts as progress for the
+  canvas agent's 5-minute no-change limit (`run-agent.ts`); and when a time limit or an error ends a generation that
+  already drew something, `generateElements` returns what was drawn with a warning instead of throwing it away (a
+  person's Stop still aborts). Open: a slow model can still spend minutes before its first `add` (the system-design
+  prompt is larger); `NVIDIA_MODEL` set to the Nano model is about 3x faster.
+- **Tests:** the full `npx vitest run` passes except a timing-sensitive baseline test that passes alone. Fixed: picker
+  categories for UML, Sequence and Mind map, lifeline centring on insert, architecture idempotence test limited to
+  non-structured examples.
+
 ## 3. Known issues and gaps (not fixed)
 
-1. **Destroy message vanishes.** In the checkout sequence example the 13th message
+1. **(Fixed, see 2.4)** **Destroy message vanishes.** In the checkout sequence example the 13th message
    (`Order Service > Payment Provider: Cancel hold [relation: destroy]`) is not drawn. The parser reports 13 edges, the
    canvas holds 12. Probably two edges between the same pair are merged in the compiler or the edge id. Unchecked.
-2. **ER connector routing is messy on big diagrams** (long detours, shared lines, lines through the layout). It is the
+2. **(Improved, see 2.4)** **ER connector routing is messy on big diagrams** (long detours, shared lines, lines through the layout). It is the
    ER engine's placement and routing (`core/layout/engines/er`) plus the router. The Layout panel's Compact and
    Hierarchical algorithms may look better.
 3. **No self-connections** (`A > A` is ignored with a warning). Self-references (category parent, recursion message)
@@ -105,7 +192,7 @@ asked. Do not commit or push unless asked (the user commits). Type check with `n
    no lifelines or class compartments); the plan's status for U11-U17 and U7-U9 was not updated. A docs test requires
    formatting and outline coverage.
 9. **Full test run pending** (see section 1).
-10. **No live progress: the agent works for minutes, the canvas stays empty, then one final result appears.** Seen
+10. **(Partly fixed, see 2.4: live preview)** **No live progress: the agent works for minutes, the canvas stays empty, then one final result appears.** Seen
     on the library ER prompt with NVIDIA Nemotron (slow: about 14 tokens/s): the panel shows "Thinking..." and
     "Undid an adjustment" while the board still says "Nothing here yet". Likely causes, to verify:
     - `generate_diagram` collects the pipeline's `element.batch` / `element.update` / `element.remove` events in

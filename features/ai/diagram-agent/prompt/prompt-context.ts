@@ -23,15 +23,23 @@ const TYPE_KEYWORDS: Array<[RegExp, AIDiagramType]> = [
   [/\b(flow ?chart|flow diagram|decision tree|login flow|user flow|process flow)\b/i, "flowchart"],
   [/\bworkflow\b/i, "workflow"],
   [/\bnetwork (diagram|topology)\b|\b(vlan|subnet|dmz)\b/i, "network"],
-  [/\b(architecture|high[- ]level design|hld|system design|infrastructure|aws|azure|gcp|kubernetes|microservices?|ci\/cd|backend|cloud)\b/i, "architecture"],
+  [/\b(architecture|system design|high[- ]level design|hld|system design|infrastructure|aws|azure|gcp|kubernetes|microservices?|ci\/cd|backend|cloud)\b/i, "architecture"],
 ];
+
+/**
+ * A request to design a product or a system ("design WhatsApp", "how would you build Uber", "scalable video
+ * platform"): it gets the system-design checklist and the chat-system example, which a plain architecture does not need.
+ */
+const SYSTEM_DESIGN = /\b(system design|design (a |an |the )?[\w-]+( app| system| platform| service| backend| clone)?|how (would|do|to) (you )?(build|design)|scal(e|able|ing)|clone of|like (whatsapp|uber|netflix|youtube|instagram|twitter|slack|zoom|airbnb|spotify|tiktok|amazon|google drive|dropbox))\b/i;
+const FLOW_OR_DATA = /\b(flow ?chart|flow|erd|er (diagram|model)|schema|sequence|class diagram|mind[- ]?map|org chart)\b/i;
+export const isSystemDesign = (prompt: string | undefined): boolean => !!prompt && SYSTEM_DESIGN.test(prompt) && !FLOW_OR_DATA.test(prompt);
 
 /** The diagram type the request or the existing diagram's `type` line names, if any. A guess; unknown is fine. */
 export const inferDiagramType = (prompt: string, existingDiagram?: string): AIDiagramType | undefined => {
   const header = existingDiagram ? /^\s*type\s+([\w -]+?)\s*$/im.exec(existingDiagram)?.[1] : undefined;
   const fromHeader = header ? parseDiagramType(header) : null;
   if (fromHeader) return fromHeader;
-  return TYPE_KEYWORDS.find(([regex]) => regex.test(prompt))?.[1];
+  return TYPE_KEYWORDS.find(([regex]) => regex.test(prompt))?.[1] ?? (isSystemDesign(prompt) ? "architecture" : undefined);
 };
 
 const ALL: IconCategory[] = ["client", "network", "compute", "data", "security", "devops", "observability", "ai"];

@@ -17,6 +17,8 @@ const ctxOf = (stored: StoredElement[]) => {
 };
 const readme = readFileSync(join(process.cwd(), "docs/diagram-code/README.md"), "utf8");
 const examples = [...readme.matchAll(/```diagram-code\n([\s\S]*?)```/g)].map((m) => m[1]);
+// ER, sequence and class examples are placed by their family engine, not the architecture one this checks.
+const STRUCTURED_TYPE = /^type (entity-relationship|sequence|class|mind-map)\b/m;
 const draw = (code: string, stamp?: "auto" | "user") =>
   elementsFromDiagramCode(code, { generationId: "g1", frameId: "f" }).elements.map((el) => (stamp && el.ai?.role === "node" ? ({ ...el, placement: stamp } as DrawingElement) : el));
 
@@ -27,7 +29,7 @@ const link = (id: string, from: string, to: string): DrawingElement =>
 const pointsOf = (list: readonly StoredElement[], id: string) => JSON.stringify((list.find((e) => e.id === id) as DrawingElement).points);
 
 describe("laying out a diagram that has not been touched", () => {
-  it.each([...examples.map((code, i) => [`readme ${i + 1}`, code] as const), ...EXAMPLES.map((e, i) => [`prompt ${i + 1}`, e.code] as const)])("%s: its own layout moves nothing (idempotent)", (_name, code) => {
+  it.each([...examples.map((code, i) => [`readme ${i + 1}`, code] as const), ...EXAMPLES.filter((e) => !STRUCTURED_TYPE.test(e.code)).map((e, i) => [`prompt ${i + 1}`, e.code] as const)])("%s: its own layout moves nothing (idempotent)", (_name, code) => {
     const stored = draw(code, "auto");
     const nodes = stored.filter((e) => e.ai?.role === "node").length;
     if (nodes < 2) return;
