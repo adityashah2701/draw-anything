@@ -165,3 +165,17 @@ describe("themes", () => {
   });
 });
 
+
+describe("stacked semantic node", () => {
+  const node = (nodeStyle?: unknown) => ({ id: "n", type: "semantic-node", color: "#000000", strokeWidth: 2, fill: "#eeeeee", points: [{ x: 0, y: 0 }, { x: 160, y: 80 }], ...(nodeStyle ? { nodeStyle } : {}) }) as never;
+  const fills = (shape: never) => {
+    let count = 0;
+    const ctx = new Proxy({}, { get: (_t, name: string) => (...a: unknown[]) => { if (name === "fill") count += 1; return name === "measureText" ? { width: 0 } : a[0]; }, set: () => true }) as unknown as CanvasRenderingContext2D;
+    try { renderSemanticNodeToCanvas(shape, { ctx, zoom: 1, panOffset: { x: 0, y: 0 } } as never); } catch { /* label and icon drawing is not under test */ }
+    return count;
+  };
+
+  it("draws two copies behind a stacked node and none otherwise", () => {
+    expect(fills(node({ stack: true }))).toBe(fills(node()) + 2);
+  });
+});

@@ -49,6 +49,31 @@ export const curveCorners = (points: readonly Point[]): CurveCorner[] => {
   return corners;
 };
 
+/**
+ * Soft corners for an orthogonal route: each bend becomes a short quadratic arc that starts and ends on
+ * the two segments around it. The arc never reaches past half of the shorter neighbouring segment, so
+ * two bends that share a short leg meet in the middle of it and their arcs cannot overlap. Collinear
+ * points are not corners, and the path's two ends are never touched.
+ *
+ * shortcut: half-leg clamp. A pair of bends on a leg could split it unevenly and let the larger corner
+ * use more; revisit only if golden diagrams show corners that look too tight.
+ */
+export const roundedCorners = (points: readonly Point[], radius: number): CurveCorner[] => {
+  const corners: CurveCorner[] = [];
+  if (!(radius > 0)) return corners;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const [before, bend, after] = [points[i - 1], points[i], points[i + 1]];
+    const incoming = length(before, bend);
+    const outgoing = length(bend, after);
+    const cross = (bend.x - before.x) * (after.y - bend.y) - (bend.y - before.y) * (after.x - bend.x);
+    if (incoming === 0 || outgoing === 0 || Math.abs(cross) < 1e-6) continue;
+    const reach = Math.min(radius, incoming / 2, outgoing / 2);
+    if (reach <= 0.01) continue;
+    corners.push({ enter: lerp(bend, before, reach), control: { ...bend }, exit: lerp(bend, after, reach) });
+  }
+  return corners;
+};
+
 /** Traces `points` as a smooth path on a canvas context (coordinates already in the context's space). */
 export const traceCurve = (ctx: CanvasRenderingContext2D, points: readonly Point[]) => {
   if (points.length === 0) return;

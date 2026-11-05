@@ -4,7 +4,7 @@ import { bundleFans } from "@/features/ai/server/layout/bus";
 import {
   FRAME_NEST_STEP,
   FRAME_PADDING,
-  FRAME_STROKE_WIDTH,
+  groupFrameStyle,
   FRAME_TITLE_FONT_SIZE,
   FRAME_TITLE_FONT_WEIGHT,
   FRAME_TITLE_HEIGHT,
@@ -18,6 +18,11 @@ import { placeGrid } from "@/features/ai/server/layout/grid-placement";
 import { placeLayered } from "@/features/ai/server/layout/layered-placement";
 import { placeGroupHeadings, type HeadingRequest } from "@/features/ai/server/layout/group-headings";
 import { measureLayout } from "@/features/ai/server/layout/metrics";
+import { DEFAULT_ARROW_CORNER_RADIUS } from "@/core/shapes/arrow/corner-radius";
+import { portAnchorId, portPoint, spreadFractions } from "@/core/anchors/ports";
+import { profileFor, type ConnectorStyle } from "@/features/ai/diagram-agent/profiles";
+import { codeDirectionOf, withDirection } from "@/features/ai/server/layout/direction";
+import { verticalGapsByDepth } from "@/features/ai/server/layout/channels";
 import { withOffsets, withPins, type NodeOffset, type NodePin } from "@/features/ai/server/layout/pins";
 import type {
   Placement,
@@ -40,7 +45,7 @@ import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { tint } from "@/core/color/named-colors";
 import { sizeDiamondNode, sizeIconNode, sizeOutlineNode, sizePillNode, sizeSemanticNode, type NodeSize } from "@/core/text/node-size";
-import { isOutlineVariantId } from "@/core/shapes/outline/variants";
+import { isOutlineVariantId, outlineForParams } from "@/core/shapes/outline/variants";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import {
   AIDiagramDocumentV1,
@@ -128,7 +133,11 @@ const shapeOf = (node: AIDiagramNode): "diamond" | "pill" | "icon" | (string & {
   // `shape: icon` draws just the glyph, so it needs one: a named icon, or a kind that has its own (the
   // normaliser drops an `icon:` equal to the kind's, so `[kind: database, shape: icon]` is enough).
   if (node.shape === "icon") return node.icon || node.kind !== "generic" ? "icon" : undefined;
-  return node.shape ?? (node.kind === "decision" ? "diamond" : node.kind === "start" || node.kind === "end" ? "pill" : undefined);
+  const shape = node.shape ?? (node.kind === "decision" ? "diamond" : node.kind === "start" || node.kind === "end" ? "pill" : undefined);
+  // A border or marker is a parameter of an outline, so the plain shape is drawn by its base outline. A stack is
+  // too, except on a plain node, where it is a modifier that keeps the icon (see `nodeStyle` below).
+  const stackedOutline = node.stack && shape !== undefined && shape !== "rectangle";
+  return node.border || node.marker || stackedOutline ? (outlineForParams(shape) ?? shape) : shape;
 };
 const ICON_NODE_FONT_SIZE = 14;
 const DECISION_NODE_HEIGHT = 92;
@@ -415,9 +424,8 @@ const buildGroupFrames = (
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },
       ],
-      // Black and white by theme (the renderer swaps them), like every other line the agent draws.
-      color: "#000000",
-      strokeWidth: FRAME_STROKE_WIDTH,
+      // An accent by nesting level with a translucent tint of it (hit-tested on its border only, see the rectangle).
+      ...groupFrameStyle(accepted.filter((other) => other.box !== box && contains(other.bounds, bounds)).length),
       isGuide: true,
       ai: { ...ai, role: "group" },
     };
@@ -459,8 +467,55 @@ export interface CompileResult {
   diagnostics: CompileDiagnostics;
 }
 
+/**
+ * Which connector ends get their own point on a node side. A side that carries both arrivals and
+ * departures, or several arrivals, is spread so the lines and arrowheads do not pile onto one point;
+ * several departures from one side keep sharing a point, which is what makes them read as one trunk
+ * (`bundleFans`). Only plain boxes are spread: a diamond's side point is its corner, a pill's and an
+ * icon's is not a straight edge. Ends are ordered by where the other end is, so lines do not cross at
+ * the node.
+ */
+const spreadPorts = (
+  items: Array<{ source: PositionedNode; target: PositionedNode; handles: { from: ConnectionHandle; to: ConnectionHandle } }>,
+): Array<{ from?: number; to?: number }> => {
+  type End = { item: number; role: "from" | "to"; other: PositionedNode };
+  const groups = new Map<string, { node: PositionedNode; side: ConnectionHandle; ends: End[] }>();
+  items.forEach(({ source, target, handles }, item) => {
+    const add = (node: PositionedNode, side: ConnectionHandle, role: "from" | "to", other: PositionedNode) => {
+      const key = `${node.element.id}.${side}`;
+      const group = groups.get(key) ?? { node, side, ends: [] };
+      group.ends.push({ item, role, other });
+      groups.set(key, group);
+    };
+    add(source, handles.from, "from", target);
+    add(target, handles.to, "to", source);
+  });
+
+  const result: Array<{ from?: number; to?: number }> = items.map(() => ({}));
+  for (const { node, side, ends } of groups.values()) {
+    if (node.element.type !== "semantic-node" || ends.length < 2) continue;
+    const arrivals = ends.filter((e) => e.role === "to").length;
+    const departures = ends.length - arrivals;
+    if (!(arrivals >= 2 || (arrivals >= 1 && departures >= 1))) continue;
+    const horizontal = side === "top" || side === "bottom";
+    const along = (n: PositionedNode) => (horizontal ? (n.bounds.minX + n.bounds.maxX) / 2 : (n.bounds.minY + n.bounds.maxY) / 2);
+    const ordered = [...ends].sort((a, b) => along(a.other) - along(b.other) || a.item - b.item);
+    const length = horizontal ? node.bounds.maxX - node.bounds.minX : node.bounds.maxY - node.bounds.minY;
+    const fractions = spreadFractions(ordered.length, length);
+    ordered.forEach((end, i) => {
+      result[end.item][end.role] = fractions[i];
+    });
+  }
+  return result;
+};
+
 /** Sizes, graph and gaps for a layout engine; everything an engine may use, nothing it must not. */
-export const prepareDiagram = (document: AIDiagramDocumentV1, mode: DepthMode = "layers") => {
+export const prepareDiagram = (
+  document: AIDiagramDocumentV1,
+  mode: DepthMode = "layers",
+  /** Widen the rows that many connectors cross. Opt-in: a drawing being edited must not stretch when a connection is added. */
+  channelGaps = false,
+) => {
   const depthByNodeId = getDepths(document, mode);
   const density = document.styleHints.density;
   const groups = usableGroups(
@@ -534,6 +589,8 @@ export const prepareDiagram = (document: AIDiagramDocumentV1, mode: DepthMode = 
     groups: groups.map(({ group, members }) => ({ id: group.id, nodeIds: members.map((m) => m.node.id) })),
     gaps: { horizontal: horizontalGap, vertical: verticalGap, groupRoom: frameRoom },
   };
+  // Rows that many (or labelled) connectors cross get a wider gap; the rest keep the plain one.
+  if (channelGaps) input.gaps.verticalByDepth = verticalGapsByDepth(input.edges, depthByNodeId, verticalGap);
   return { input, sizes };
 };
 
@@ -544,6 +601,8 @@ export const buildCanvas = (
   prepared: ReturnType<typeof prepareDiagram>,
   placement: Placement,
   edgeSides?: EdgeSides,
+  spread = true,
+  connector?: ConnectorStyle,
 ): CompileResult => {
   const { input, sizes } = prepared;
   const nodeById = new Map(document.nodes.map((node) => [node.id, node]));
@@ -581,7 +640,9 @@ export const buildCanvas = (
     const element = {
       id: `${document.metadata.generationId}-${node.id}`,
       type: shape && isOutlineVariantId(shape) ? "outline" : ((shape ?? "semantic-node") as "diamond" | "pill" | "icon" | "semantic-node"),
-      ...(shape && isOutlineVariantId(shape) ? { variant: shape } : {}),
+      ...(shape && isOutlineVariantId(shape)
+        ? { variant: shape, ...(node.border ? { border: node.border } : {}), ...(node.marker ? { marker: node.marker } : {}), ...(node.stack ? { stack: true } : {}) }
+        : {}),
       points: [
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.maxY },
@@ -591,7 +652,9 @@ export const buildCanvas = (
       // A bare icon has no box to fill.
       ...(isIcon ? {} : { fill: style.fill }),
       // A step with no icon and no kind would otherwise show the placeholder cube: let its label have the whole box.
-      ...(!shape && !node.icon && node.kind === "generic" ? { nodeStyle: { iconHidden: true } } : {}),
+      ...(!shape && (node.stack || (!node.icon && node.kind === "generic"))
+        ? { nodeStyle: { ...(!node.icon && node.kind === "generic" ? { iconHidden: true } : {}), ...(node.stack ? { stack: true } : {}) } }
+        : {}),
       label: node.label,
       fontSize: isIcon ? ICON_NODE_FONT_SIZE : NODE_FONT_SIZE,
       fontWeight: NODE_FONT_WEIGHT,
@@ -602,6 +665,7 @@ export const buildCanvas = (
         semanticKind: node.kind,
         ...(node.icon ? { icon: node.icon } : {}),
         diagramType: document.diagramType,
+        ...(codeDirectionOf(document.layoutHints.direction) ? { diagramDirection: codeDirectionOf(document.layoutHints.direction)! } : {}),
         role: "node",
       },
     } as DrawingElement;
@@ -619,6 +683,9 @@ export const buildCanvas = (
     descriptor: RouteArrowDescriptor;
     fromHandle: ConnectionHandle;
     toHandle: ConnectionHandle;
+    /** Position along its side (0 to 1) when the connector has its own point there, else it uses the middle. */
+    fromPort?: number;
+    toPort?: number;
     sourceElementId: string;
     targetElementId: string;
     bidirectional: boolean;
@@ -631,6 +698,15 @@ export const buildCanvas = (
   const outDegree = new Map<string, number>();
   document.edges.forEach((edge) => outDegree.set(edge.from, (outDegree.get(edge.from) ?? 0) + 1));
   const usedOutHandles = new Set<string>();
+  // First every connector's sides, then the points on those sides: a side that several connectors share
+  // is spread (see `spreadPorts`), so the points can only be chosen once all sides are known.
+  const pending: Array<{
+    edge: (typeof document.edges)[number];
+    index: number;
+    source: PositionedNode;
+    target: PositionedNode;
+    handles: { from: ConnectionHandle; to: ConnectionHandle };
+  }> = [];
   document.edges.forEach((edge, index) => {
     const source = positionedByNodeId.get(edge.from);
     const target = positionedByNodeId.get(edge.to);
@@ -648,14 +724,26 @@ export const buildCanvas = (
     const handles =
       edgeSides?.get(`${edge.from}>${edge.to}`) ??
       (edge.fromSide || edge.toSide ? { from: edge.fromSide ?? automatic.from, to: edge.toSide ?? automatic.to } : automatic);
-    const start = getConnectionHandlePoint(source.bounds, handles.from);
-    const end = getConnectionHandlePoint(target.bounds, handles.to);
+    pending.push({ edge, index, source, target, handles });
+  });
+
+  const style = connector ?? profileFor(document.diagramType).connector;
+  const ports = spread
+    ? spreadPorts(pending.map(({ source, target, handles }) => ({ source, target, handles })))
+    : pending.map(() => ({} as { from?: number; to?: number }));
+  pending.forEach(({ edge, index, source, target, handles }, i) => {
+    const fromPort = ports[i].from;
+    const toPort = ports[i].to;
+    const start = fromPort ? portPoint(source.bounds, handles.from, fromPort) : getConnectionHandlePoint(source.bounds, handles.from);
+    const end = toPort ? portPoint(target.bounds, handles.to, toPort) : getConnectionHandlePoint(target.bounds, handles.to);
     const edgeId = `${document.metadata.generationId}-${edge.id || `edge-${index + 1}`}`;
     arrowDrafts.push({
       edgeId,
       label: edge.label?.trim() || undefined,
       fromHandle: handles.from,
       toHandle: handles.to,
+      fromPort,
+      toPort,
       sourceElementId: source.element.id,
       targetElementId: target.element.id,
       bidirectional: Boolean(edge.bidirectional),
@@ -670,7 +758,7 @@ export const buildCanvas = (
         end: { x: end.x, y: end.y },
         startHandle: handles.from,
         endHandle: handles.to,
-        routingMode: "orthogonal",
+        routingMode: style === "straight" ? "straight" : "orthogonal",
         routePreference:
           handles.from === "top" || handles.from === "bottom" ? "vh" : "hv",
       },
@@ -721,16 +809,17 @@ export const buildCanvas = (
       dashed: draft.dashed,
       arrowHeadStart: draft.bidirectional && !draft.plain,
       arrowHeadEnd: !draft.plain,
-      routingMode: "orthogonal",
+      routingMode: style === "straight" ? "straight" : style === "curved" ? "curved" : "orthogonal",
+      ...(style === "elbow" ? { cornerRadius: DEFAULT_ARROW_CORNER_RADIUS } : {}),
       routePreference: draft.descriptor.routePreference,
       isManuallyRouted: false,
       startConnection: {
         elementId: draft.sourceElementId,
-        anchorId: buildAnchorId(draft.sourceElementId, draft.fromHandle),
+        anchorId: draft.fromPort !== undefined ? portAnchorId(draft.sourceElementId, draft.fromHandle, draft.fromPort) : buildAnchorId(draft.sourceElementId, draft.fromHandle),
       },
       endConnection: {
         elementId: draft.targetElementId,
-        anchorId: buildAnchorId(draft.targetElementId, draft.toHandle),
+        anchorId: draft.toPort !== undefined ? portAnchorId(draft.targetElementId, draft.toHandle, draft.toPort) : buildAnchorId(draft.targetElementId, draft.toHandle),
       },
       ai: {
         frameId,
@@ -814,16 +903,23 @@ export interface CompileOptions {
   edgeSides?: EdgeSides;
   /** Nodes (by diagram node id) that must keep their centre; everything else is laid out around them. */
   pins?: Map<string, NodePin>;
+  /** False draws every connector on the middle of its side (the compiler otherwise also tries separate points and keeps the better drawing). */
+  spreadPorts?: boolean;
+  /** Give rows that many (or labelled) connectors cross a wider gap. For drawings generated from scratch; editing an existing one leaves its spacing alone. */
+  channelGaps?: boolean;
+  /** How connectors are drawn; the caller's choice beats the diagram profile's. */
+  connectors?: ConnectorStyle;
 }
 
 const compileWith = (
   document: AIDiagramDocumentV1,
   frameId: string,
   mode: DepthMode,
-  { engine = placeLayered, pins, offsets, edgeSides }: CompileOptions,
+  { engine = placeLayered, pins, offsets, edgeSides, spreadPorts: spread, channelGaps, connectors }: CompileOptions,
 ): CompileResult => {
-  const prepared = prepareDiagram(document, mode);
-  const offsetEngine = offsets && offsets.size > 0 ? withOffsets(engine, offsets) : engine;
+  const prepared = prepareDiagram(document, mode, channelGaps === true);
+  const directed = withDirection(engine, document.layoutHints.direction);
+  const offsetEngine = offsets && offsets.size > 0 ? withOffsets(directed, offsets) : directed;
   // Nodes whose code gives x and y sit exactly there (x, y is the top-left corner); the rest are laid out around them.
   const fixed = new Map(pins ?? []);
   for (const node of document.nodes) {
@@ -840,7 +936,7 @@ const compileWith = (
     layoutFallback = error instanceof Error ? error.message : String(error);
     placement = placeGrid(prepared.input);
   }
-  const result = buildCanvas(document, frameId, prepared, placement, edgeSides);
+  const result = buildCanvas(document, frameId, prepared, placement, edgeSides, spread !== false, connectors);
   return layoutFallback ? { ...result, diagnostics: { ...result.diagnostics, layoutFallback } } : result;
 };
 
@@ -867,11 +963,19 @@ export const compileAIDiagramDetailed = (
   const modes: DepthMode[] = ["layers"];
   if (document.diagramType === "architecture" && document.nodes.length >= 2) modes.push("flow");
   if (document.groups.length >= 2) modes.push("stacked");
-  let best = compileWith(document, frameId, modes[0], options);
+  // Connectors that share a side are given separate points (`spreadPorts`); where that makes the drawing
+  // worse by the same measure, the middle-of-side drawing is kept instead.
+  const compileMode = (mode: DepthMode): CompileResult => {
+    const spread = compileWith(document, frameId, mode, options);
+    if (options.spreadPorts === false || document.edges.length < 2) return spread;
+    const plain = compileWith(document, frameId, mode, { ...options, spreadPorts: false });
+    return cheaper(layoutCost(plain, document), layoutCost(spread, document)) ? plain : spread;
+  };
+  let best = compileMode(modes[0]);
   if (modes.length === 1) return best;
   let bestCost = layoutCost(best, document);
   for (const mode of modes.slice(1)) {
-    const candidate = compileWith(document, frameId, mode, options);
+    const candidate = compileMode(mode);
     const cost = layoutCost(candidate, document);
     // Stacked rows are a repair for what is broken (a dropped frame); on soft measures alone they are not preferred.
     const better = mode === "stacked" ? cost[0] < bestCost[0] : cheaper(cost, bestCost);

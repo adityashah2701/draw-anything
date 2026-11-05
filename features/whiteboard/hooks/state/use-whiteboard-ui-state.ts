@@ -36,6 +36,7 @@ export const useWhiteboardUiState = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showShapePicker, setShowShapePicker] = useState(false);
   const [showIconPicker, setShowIconPickerOpen] = useState(false);
   // "insert" adds an icon to the board; "replace" changes the icon of the selected semantic nodes.
   const [iconPickerMode, setIconPickerMode] = useState<"insert" | "replace">("insert");
@@ -146,6 +147,8 @@ export const useWhiteboardUiState = () => {
     setShowCommandMenu,
     showExport,
     setShowExport,
+    showShapePicker,
+    setShowShapePicker,
     showIconPicker,
     setShowIconPicker,
     iconPickerMode,

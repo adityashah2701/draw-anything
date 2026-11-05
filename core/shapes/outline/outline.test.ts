@@ -32,8 +32,11 @@ afterEach(() => {
 });
 
 describe("variant registry", () => {
-  it("lists the five outlines, with unique ids and the data every consumer needs", () => {
-    expect(outlineVariantIds()).toEqual(["cylinder", "cloud", "document", "hexagon", "parallelogram"]);
+  it("lists the outlines, with unique ids and the data every consumer needs", () => {
+    expect(outlineVariantIds()).toEqual([
+      "cylinder", "cloud", "document", "hexagon", "parallelogram",
+      "queue", "package", "component", "person", "note", "callout", "step", "predefined-process", "documents", "manual-input", "manual-operation", "delay",
+    ]);
     expect(new Set(outlineVariantIds()).size).toBe(VARIANTS.length);
     for (const v of VARIANTS) {
       expect(v.label).not.toBe("");
@@ -132,7 +135,9 @@ describe.each(VARIANTS.map((v) => v.id))("outline variant %s", (id) => {
 
   it("leaves the bounding-box corners to the shapes that really are empty there", () => {
     const corner = { x: 101, y: 51 };
-    const emptyCorner = id !== "document";
+    // Outlines that really do have a square top-left corner; every other one is empty there.
+    const squareTopLeft = ["document", "package", "note", "step", "predefined-process", "manual-operation", "delay"];
+    const emptyCorner = !squareTopLeft.includes(id);
     expect(shapeContainsPoint(asEl(outline(id)), corner)).toBe(!emptyCorner);
   });
 

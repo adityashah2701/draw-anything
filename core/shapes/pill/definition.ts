@@ -18,7 +18,7 @@ export const pillDefinition = createShapeDefinition<PillShape>({
     id: props.id ?? "",
     type: "pill",
     points: props.points ?? [{ x: 0, y: 0 }, { x: 160, y: 60 }],
-    color: props.color ?? "#1f2937",
+    color: props.color ?? "#000000",
     strokeWidth: props.strokeWidth ?? 2,
     fill: props.fill,
     label: props.label,

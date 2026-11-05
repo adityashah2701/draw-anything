@@ -3,6 +3,7 @@ import { FrameTitleEditor } from "@/features/whiteboard/components/overlays/fram
 import { MAX_FRAME_TITLE_LENGTH } from "@/core/frames/frame-model";
 import { renameFrame } from "@/core/frames/frame-api";
 import { IconPicker } from "@/features/whiteboard/components/overlays/icon-picker";
+import { ShapePicker } from "@/features/whiteboard/components/overlays/shape-picker";
 import { WhiteboardPageController } from "@/features/whiteboard/hooks/controller/use-whiteboard-page-controller";
 import CanvasTextBlock from "@/features/whiteboard/components/canvas/canvas-text-block";
 import KeyboardShortcuts from "@/features/whiteboard/components/overlays/keyboard-shortcuts";
@@ -383,6 +384,8 @@ export const WhiteboardEditingOverlays = ({
         onCancelExport={boardExport.cancel}
         onCopySvg={boardExport.copySvg}
       />
+
+      <ShapePicker open={controller.showShapePicker} onOpenChange={controller.setShowShapePicker} onPick={controller.insertShape} />
 
       <IconPicker
         open={controller.showIconPicker}

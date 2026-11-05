@@ -33,6 +33,7 @@ export const normalizeNodeStyle = (value: unknown): SemanticNodeStyle => {
   if (v.iconPlacement === "left" || v.iconPlacement === "right" || v.iconPlacement === "top") out.iconPlacement = v.iconPlacement;
   if (typeof v.iconColor === "string" && HEX.test(v.iconColor)) out.iconColor = v.iconColor.toLowerCase();
   if (finite(v.cornerRadius)) out.cornerRadius = clamp(v.cornerRadius, CORNER_RADIUS_LIMITS.min, CORNER_RADIUS_LIMITS.max);
+  if (v.stack === true) out.stack = true;
   if (v.originalIcon === null) out.originalIcon = null;
   else if (typeof v.originalIcon === "string" && v.originalIcon.length > 0 && v.originalIcon.length <= 64) out.originalIcon = v.originalIcon;
   return out;

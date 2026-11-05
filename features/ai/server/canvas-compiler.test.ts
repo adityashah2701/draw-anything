@@ -197,7 +197,8 @@ describe("AI canvas compiler", () => {
     const els = compileAIDiagramToCanvas(doc, "f");
     const [frame] = frames(els);
     expect(frame).toBeDefined();
-    expect(frame.fill).toBeUndefined();
+    // A translucent tint of the accent, never an opaque fill: the nodes and connectors read through it.
+    expect(frame.fill).toMatch(/^rgba\(\d+, \d+, \d+, 0\.1\)$/);
     expect((frame as { isGuide?: boolean }).isGuide).toBe(true);
 
     const f = box(frame);

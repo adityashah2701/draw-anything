@@ -10,6 +10,8 @@ import { DEFAULT_LABEL_FONT_SIZE, defaultLabelWeight } from "@/core/text/label-l
 import { normalizeRichTextInput } from "@/features/whiteboard/utils/rich-text-renderer";
 import type { IconDef } from "@/core/icons/registry";
 import { buildIconElement } from "@/features/whiteboard/utils/icon-picker";
+import { buildShapeElement } from "@/features/whiteboard/utils/shape-picker";
+import type { VocabularyEntry } from "@/core/shapes/vocabulary";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { LiveList, LiveObject } from "@liveblocks/client";
@@ -611,6 +613,19 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [addElement, canvasViewport.viewportBounds, generateId, uiState],
   );
 
+  // A shape from the picker lands the same way an icon does: in the middle of the view, selected, ready to label.
+  const insertShape = useCallback(
+    (entry: VocabularyEntry) => {
+      const { minX, minY, maxX, maxY } = canvasViewport.viewportBounds;
+      const node = buildShapeElement(entry, { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, generateId());
+      if (!node) return;
+      addElement(node as unknown as DrawingElementJson);
+      setSelectedElements([node.id]);
+      uiState.setCurrentTool("select");
+    },
+    [addElement, canvasViewport.viewportBounds, generateId, uiState],
+  );
+
   /** Opens the right editor for `element` (standalone text or a shape's label); false when it has no text. */
   const beginEditing = useCallback(
     (element: DrawingElement): boolean => {
@@ -918,6 +933,9 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
         case "insert-icon":
           uiState.setShowIconPicker(true);
           break;
+        case "insert-shape":
+          uiState.setShowShapePicker(true);
+          break;
         case "open-agent":
           uiState.setShowAIModal(true);
           break;
@@ -1122,6 +1140,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     handleCommandAction,
     beginEditing,
     insertIcon,
+    insertShape,
     pickIcon,
     semanticNodes,
     boardExport,

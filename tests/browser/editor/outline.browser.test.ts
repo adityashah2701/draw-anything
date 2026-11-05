@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { outlineVariantIds } from "@/core/shapes/outline/variants";
 import { hasChrome, openEditor, type EditorSession, type Point } from "./open-editor";
 import type { El } from "./group-fixtures";
 
@@ -32,11 +31,11 @@ suite("editor outline shapes", () => {
 
   it("draws every variant from the picker, picks it by its outline and styles it from the bar", async () => {
     s = await openEditor({ dark: false });
-    const labels = await s.page.evaluate((ids) => ids, outlineVariantIds());
-    expect(labels).toHaveLength(5);
-    const names: Record<string, string> = { cylinder: "Cylinder", cloud: "Cloud", document: "Document", hexagon: "Hexagon", parallelogram: "Parallelogram" };
+    // The flyout keeps six outlines one click away; the others come from the shape picker.
+    const names: Record<string, string> = { cylinder: "Cylinder", queue: "Queue", cloud: "Cloud", document: "Document", hexagon: "Hexagon", parallelogram: "Parallelogram" };
+    const flyout = Object.keys(names);
     let y = 80;
-    for (const id of outlineVariantIds()) {
+    for (const id of flyout) {
       await pick(s, names[id]);
       expect(await s.tool()).toBe(`outline:${id}`);
       await s.drag({ x: 300, y }, { x: 500, y: y + 100 });
@@ -44,7 +43,7 @@ suite("editor outline shapes", () => {
       y += 130;
     }
     const outlines = (await s.elements()).filter((e) => e.type === "outline");
-    expect(outlines.map((e) => (e as El).variant)).toEqual(outlineVariantIds());
+    expect(outlines.map((e) => (e as El).variant)).toEqual(flyout);
     for (const el of outlines) {
       const [a, b] = el.points;
       const centre = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };

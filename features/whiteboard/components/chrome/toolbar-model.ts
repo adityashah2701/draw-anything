@@ -24,6 +24,15 @@ export interface ToolbarLayout {
 /** Not a drawing tool: opens the icon picker. Lives in the Insert group beside Text. */
 export const ICON_PICKER_TOOL: ToolDefinition = { name: "icon-picker", icon: null, label: "Icon", shortcut: "I", group: "tools", order: 100, allowInReadOnly: false };
 
+/** Not a drawing tool: opens the shape picker, the last entry of the Shapes flyout. */
+export const SHAPE_PICKER_TOOL: ToolDefinition = { name: "shape-picker", icon: null, label: "More shapes…", group: "shapes", order: 1000, allowInReadOnly: false };
+
+/**
+ * The outlines the Shapes flyout keeps one click away. The rest are reached through "More shapes…" (the picker, with
+ * search and categories): a flyout with every outline in it ran off the screen. Their tools stay registered.
+ */
+export const FLYOUT_OUTLINES: readonly string[] = ["outline:cylinder", "outline:queue", "outline:cloud", "outline:document", "outline:hexagon", "outline:parallelogram"];
+
 const byOrder = (a: ToolDefinition, b: ToolDefinition) => a.order - b.order;
 
 /**
@@ -46,7 +55,11 @@ export function buildToolbar(defs: ToolDefinition[]): ToolbarLayout {
   const single = (tool: ToolDefinition | undefined): ToolbarEntry[] => take(tool).map((t) => ({ kind: "tool" as const, tool: t }));
 
   const navigate = [...single(named("select")), ...single(named("hand"))];
-  const shapes = take(...defs.filter((d) => d.group === "shapes" || d.group === "outline"));
+  const outlines = defs.filter((d) => d.group === "outline");
+  const shapes = take(...defs.filter((d) => d.group === "shapes" || (d.group === "outline" && FLYOUT_OUTLINES.includes(d.name))));
+  // Picker-only outlines are placed nowhere in the toolbar, and must not fall through to the utility tools either.
+  outlines.forEach((d) => placed.add(d.name));
+  if (shapes.length) shapes.push(SHAPE_PICKER_TOOL);
   const insert = take(named("text"));
   if (insert.length) insert.push(ICON_PICKER_TOOL);
   const connectors = take(...defs.filter((d) => d.group === "connectors"));

@@ -32,6 +32,12 @@ export interface ParsedNode {
   dashed?: boolean;
   /** `diamond` or `pill` (`oval`/`ellipse` read as pill); other Eraser shapes are reported and ignored. */
   shape?: string;
+  /** A second line inside the outline (double) or a heavier one (thick). */
+  border?: "double" | "thick";
+  /** A glyph drawn inside the shape (core/shapes/outline/markers.ts). */
+  marker?: string;
+  /** Drawn as a stack of three. */
+  stack?: boolean;
   /** #rrggbb */
   color?: string;
   /** Top-left corner and size in canvas units; when given, the node is drawn exactly there. */
@@ -87,7 +93,7 @@ export interface ParsedFrame {
 export interface ParsedDiagramCode {
   title?: string;
   diagramType?: AIDiagramType;
-  direction?: "down" | "right";
+  direction?: "down" | "right" | "up" | "left";
   nodes: ParsedNode[];
   edges: ParsedEdge[];
   groups: ParsedGroup[];

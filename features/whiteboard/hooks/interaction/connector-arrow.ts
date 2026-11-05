@@ -43,7 +43,7 @@ export const buildConnectorArrow = ({
       endHandle: to.side,
       routingMode: "orthogonal",
     }),
-    color: "#475569",
+    color: "#000000",
     strokeWidth: 2,
     routingMode: "orthogonal",
     isManuallyRouted: false,

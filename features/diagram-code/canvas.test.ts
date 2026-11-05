@@ -321,19 +321,27 @@ describe("code with layout: exact position, size and sides", () => {
 });
 
 describe("how the agent's drawing looks", () => {
-  it("draws a group with a bold border and a big bold heading, in black (white in the dark theme)", () => {
+  it("draws a group as a rounded, tinted frame in an accent colour, with a clear heading in black (white in the dark theme)", () => {
     const { elements } = compile(SHOP);
     const frame = elements.find((e) => e.ai?.role === "group")!;
     const heading = elements.find((e) => e.ai?.role === "group-label")!;
-    expect(frame).toMatchObject({ color: "#000000", strokeWidth: 3 });
-    expect(heading).toMatchObject({ color: "#000000", fontSize: 24, fontWeight: "800", text: "Backend" });
+    expect(frame).toMatchObject({ color: "#f59e0b", strokeWidth: 2, cornerRadius: 16, fill: "rgba(245, 158, 11, 0.1)" });
+    expect(heading).toMatchObject({ color: "#000000", fontSize: 16, fontWeight: "700", text: "Backend" });
+  });
+
+  it("colours a nested frame by how many frames enclose it: the outermost first", () => {
+    const { elements } = compile("type architecture\nOuter {\n  Inner {\n    A\n    B\n  }\n  C\n}\nA > B\nB > C");
+    const frames = elements.filter((e) => e.ai?.role === "group");
+    const byGroup = Object.fromEntries(frames.map((f) => [f.ai?.semanticId, f.color]));
+    expect(byGroup.outer).toBe("#f59e0b");
+    expect(byGroup.inner).toBe("#a855f7");
   });
 
   it("makes room for the heading: nothing inside the frame sits under it", () => {
     const { elements } = compile(SHOP);
     const frame = elements.find((e) => e.ai?.role === "group")!;
     const heading = elements.find((e) => e.ai?.role === "group-label")!;
-    const headingBottom = heading.points[0].y + 24 * 1.2;
+    const headingBottom = heading.points[0].y + 16 * 1.2;
     const nodeTops = elements.filter((e) => e.ai?.role === "node" && e.points[0].x >= frame.points[0].x && e.points[1].x <= frame.points[1].x && e.points[0].y >= frame.points[0].y && e.points[1].y <= frame.points[1].y).map((e) => Math.min(e.points[0].y, e.points[1].y));
     expect(nodeTops.length).toBeGreaterThan(0);
     for (const top of nodeTops) expect(top).toBeGreaterThanOrEqual(headingBottom);
@@ -374,8 +382,8 @@ Orders > Orders DB: SQL`);
     const box = {
       minX: heading.points[0].x,
       minY: heading.points[0].y,
-      maxX: heading.points[0].x + estimateTextWidth(heading.text ?? "", 24, "800"),
-      maxY: heading.points[0].y + 24 * 1.2,
+      maxX: heading.points[0].x + estimateTextWidth(heading.text ?? "", 16, "700"),
+      maxY: heading.points[0].y + 16 * 1.2,
     };
     for (const arrow of elements.filter((e) => e.type === "arrow")) {
       const hit = arrow.points.slice(0, -1).some((p, i) => segmentHitsBox(p, arrow.points[i + 1], box));

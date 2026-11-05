@@ -122,4 +122,41 @@ describe("drawing a frame", () => {
     def().renderToCanvas(frame("f", 0, 0, 400, 300, { title: "Auth" }), { ctx: svg as unknown as CanvasRenderingContext2D, zoom: 1, panOffset: { x: 0, y: 0 }, getElementBounds: () => null });
     expect(svg.markup().body).toContain("Auth");
   });
+  it("never cuts a title short when the font in use is wider than the estimate: the tab grows to fit", () => {
+    // 20 units per character is far wider than any real font at 13px, so the modelled tab is much too small.
+    const wide = { font: "", measureText: (t: string) => ({ width: t.length * 20, fontBoundingBoxAscent: 8, fontBoundingBoxDescent: 2 }) };
+    const svg = new SvgContext(wide);
+    svg.strokeStyle = "#475569";
+    def().renderToCanvas(frame("f", 0, 100, 600, 300, { title: "Deployment" }), { ctx: svg as unknown as CanvasRenderingContext2D, zoom: 1, panOffset: { x: 0, y: 0 }, getElementBounds: () => null });
+    const body = svg.markup().body;
+    expect(body).toContain("Deployment");
+    expect(body).not.toContain("…");
+  });
+
+  it("still shortens a title that cannot fit even the whole box", () => {
+    const wide = { font: "", measureText: (t: string) => ({ width: t.length * 20, fontBoundingBoxAscent: 8, fontBoundingBoxDescent: 2 }) };
+    const svg = new SvgContext(wide);
+    svg.strokeStyle = "#475569";
+    def().renderToCanvas(frame("f", 0, 100, 60, 300, { title: "Deployment" }), { ctx: svg as unknown as CanvasRenderingContext2D, zoom: 1, panOffset: { x: 0, y: 0 }, getElementBounds: () => null });
+    expect(svg.markup().body).toContain("…");
+  });
+  it("applies a frame's opacity to its background only: the border and the title are drawn solid", () => {
+    const alphaAt: Record<string, number[]> = { fill: [], stroke: [], fillText: [] };
+    let alpha = 1;
+    const stack: number[] = [];
+    const ctx = new Proxy({}, {
+      get: (_t, name: string) => {
+        if (name === "globalAlpha") return alpha;
+        if (name === "save") return () => stack.push(alpha);
+        if (name === "restore") return () => { alpha = stack.pop() ?? alpha; };
+        if (name === "measureText") return (t: string) => ({ width: t.length * 6 });
+        return () => alphaAt[name]?.push(alpha);
+      },
+      set: (_t, name: string, value: number) => { if (name === "globalAlpha") alpha = value; return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    def().renderToCanvas(frame("f", 0, 100, 400, 300, { title: "Deployment", fill: "#8b5cf6", opacity: 0.25 }), { ctx, zoom: 1, panOffset: { x: 0, y: 0 }, getElementBounds: () => null });
+    expect(alphaAt.fill).toContain(0.25);
+    expect(alphaAt.stroke.every((a) => a === 1)).toBe(true);
+    expect(alphaAt.fillText.every((a) => a === 1)).toBe(true);
+  });
 });

@@ -1,4 +1,5 @@
 import { iconForNode } from "@/core/icons/registry";
+import { measureAesthetics, type Aesthetics } from "@/features/ai/server/layout/aesthetics";
 import { measureLayout } from "@/features/ai/server/layout/metrics";
 import type { AIDiagramDocumentV1 } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
@@ -17,6 +18,9 @@ export interface Score {
   groupsDropped: number;
   /** Share of the expected words found in node labels. */
   mentionCoverage: number;
+  /** Share of nodes drawn with the generic block that are not a start, end or decision (no meaning was found for them). */
+  genericShare: number;
+  aesthetics: Aesthetics;
   /** Quality gate: drew something, no overlapping nodes, no dropped groups, no through-node connectors. */
   clean: boolean;
 }
@@ -33,6 +37,7 @@ export const scoreDiagram = (document: AIDiagramDocumentV1, elements: DrawingEle
 
   const nodeEls = elements.filter((el) => el.ai?.role === "node");
   const iconed = nodeEls.filter((el) => iconForNode(el.ai).id !== "generic").length;
+  const meaningless = nodeEls.filter((el) => iconForNode(el.ai).id === "generic" && !["start", "end", "decision"].includes(el.ai?.semanticKind ?? "")).length;
   const labelText = document.nodes.map((n) => n.label.toLowerCase()).join(" | ");
   const mentions = golden?.mentions ?? [];
   const found = mentions.filter((w) => labelText.includes(w.toLowerCase())).length;
@@ -48,6 +53,8 @@ export const scoreDiagram = (document: AIDiagramDocumentV1, elements: DrawingEle
     groups: document.groups.length,
     groupsDropped: metrics.groupsDropped,
     mentionCoverage: mentions.length > 0 ? found / mentions.length : 1,
+    genericShare: nodeEls.length > 0 ? meaningless / nodeEls.length : 0,
+    aesthetics: measureAesthetics(elements, document.groups),
     clean: nodeEls.length > 0 && metrics.nodeOverlaps === 0 && metrics.groupsDropped === 0 && metrics.edgeThroughNodes === 0,
   };
 };
@@ -61,18 +68,22 @@ export interface EvalRow {
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
+const clearance = (scores: Score[]) => {
+  const values = scores.map((x) => x.aesthetics.minClearance).filter((v): v is number => v !== null);
+  return values.length ? String(Math.round(Math.min(...values))) : "-";
+};
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
 /** One markdown table per pipeline plus a summary line, for the report file. */
 export const renderEvalReport = (rows: EvalRow[], meta: { date: string; note?: string }): string => {
   const pipelines = [...new Set(rows.map((r) => r.pipeline))];
-  const out = [`# AI diagram evaluation (${meta.date})`, "", meta.note ?? "", "## Summary", "", "| pipeline | runs | failed | clean | icon coverage | in range | crossings (mean) | longest edge (mean px) | label collisions (mean) | mentions | ms (mean) |", "|---|---|---|---|---|---|---|---|---|---|---|"];
+  const out = [`# AI diagram evaluation (${meta.date})`, "", meta.note ?? "", "## Summary", "", "| pipeline | runs | failed | clean | icon coverage | in range | crossings (mean) | longest edge (mean px) | label collisions (mean) | mentions | ms (mean) | clearance (min px) | bends (mean) | alignment | reading | generic |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"];
   for (const p of pipelines) {
     const mine = rows.filter((r) => r.pipeline === p);
     const ok = mine.filter((r) => r.score);
     const s = ok.map((r) => r.score!);
     out.push(
-      `| ${p} | ${mine.length} | ${mine.length - ok.length} | ${pct(mean(s.map((x) => (x.clean ? 1 : 0))))} | ${pct(mean(s.map((x) => x.iconCoverage)))} | ${pct(mean(s.map((x) => (x.inRange ? 1 : 0))))} | ${mean(s.map((x) => x.crossings)).toFixed(1)} | ${Math.round(mean(s.map((x) => x.longestEdge)))} | ${mean(s.map((x) => x.labelCollisions)).toFixed(1)} | ${pct(mean(s.map((x) => x.mentionCoverage)))} | ${Math.round(mean(mine.map((r) => r.ms)))} |`,
+      `| ${p} | ${mine.length} | ${mine.length - ok.length} | ${pct(mean(s.map((x) => (x.clean ? 1 : 0))))} | ${pct(mean(s.map((x) => x.iconCoverage)))} | ${pct(mean(s.map((x) => (x.inRange ? 1 : 0))))} | ${mean(s.map((x) => x.crossings)).toFixed(1)} | ${Math.round(mean(s.map((x) => x.longestEdge)))} | ${mean(s.map((x) => x.labelCollisions)).toFixed(1)} | ${pct(mean(s.map((x) => x.mentionCoverage)))} | ${Math.round(mean(mine.map((r) => r.ms)))} | ${clearance(s)} | ${mean(s.map((x) => x.aesthetics.meanBends)).toFixed(1)} | ${pct(mean(s.map((x) => x.aesthetics.alignment)))} | ${pct(mean(s.map((x) => x.aesthetics.readingConsistency)))} | ${pct(mean(s.map((x) => x.genericShare)))} |`,
     );
   }
   out.push("", "## Runs", "", "| pipeline | prompt | nodes | clean | icons | crossings | longest | collisions | groups dropped | error |", "|---|---|---|---|---|---|---|---|---|---|");

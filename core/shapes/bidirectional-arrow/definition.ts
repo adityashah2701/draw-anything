@@ -1,4 +1,5 @@
 import { createShapeDefinition } from "@/core/shapes/base/create-shape-definition";
+import { DEFAULT_ARROW_CORNER_RADIUS } from "@/core/shapes/arrow/corner-radius";
 import { movable } from "@/core/shapes/capabilities/movable";
 import { BidirectionalArrowShape } from "@/core/shapes/bidirectional-arrow/types";
 import { getBidirectionalArrowBounds } from "@/core/shapes/bidirectional-arrow/geometry";
@@ -19,12 +20,15 @@ export const bidirectionalArrowDefinition =
       id: props.id ?? "",
       type: "arrow-bidirectional",
       points: props.points ?? [{ x: 0, y: 0 }, { x: 120, y: 0 }],
-      color: props.color ?? "#475569",
+      color: props.color ?? "#000000",
       strokeWidth: props.strokeWidth ?? 2,
       dashed: props.dashed,
       arrowHeadStart: props.arrowHeadStart ?? true,
       arrowHeadEnd: props.arrowHeadEnd ?? true,
       routingMode: props.routingMode ?? "orthogonal",
+      cornerRadius: props.cornerRadius ?? DEFAULT_ARROW_CORNER_RADIUS,
+      headStart: props.headStart,
+      headEnd: props.headEnd,
       routePreference: props.routePreference,
       isManuallyRouted: props.isManuallyRouted ?? false,
       startConnection: props.startConnection,

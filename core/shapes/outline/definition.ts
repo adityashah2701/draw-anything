@@ -31,13 +31,17 @@ export const outlineDefinition = createShapeDefinition<OutlineShape>({
       type: "outline",
       variant: typeof (props as { variant?: unknown }).variant === "string" ? (props as { variant: string }).variant : OUTLINE_VARIANTS[0].id,
       points: props.points ?? [{ x: 0, y: 0 }, { x: variant.defaultSize.width, y: variant.defaultSize.height }],
-      color: props.color ?? "#1f2937",
+      color: props.color ?? "#000000",
       strokeWidth: props.strokeWidth ?? 2,
       fill: props.fill,
       label: props.label,
       fontSize: props.fontSize,
       fontWeight: props.fontWeight,
       fontStyle: props.fontStyle,
+      // Stored only when set, so a plain outline is saved exactly as before.
+      ...(props.border ? { border: props.border } : {}),
+      ...(props.marker ? { marker: props.marker } : {}),
+      ...(props.stack ? { stack: true } : {}),
     };
   },
   render: () => null,

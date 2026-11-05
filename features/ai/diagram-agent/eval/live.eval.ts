@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "vitest";
 import { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
 import { createAIChatModel, createBaseChatModel } from "@/features/ai/server/model-providers";
@@ -20,6 +21,7 @@ import { renderEvalReport, scoreDiagram, type EvalRow } from "./score";
  *
  *   AI_EVAL_PROVIDERS=groq,gemini   (default groq)
  *   AI_EVAL_TRANSPORTS=native,text  (default both; gemini is always text)
+ *   AI_EVAL_SAVE=1                  keep each run's diagram code under eval/fixtures for offline replay
  *   AI_EVAL_LIMIT=4                 only the first N golden prompts
  *   AI_EVAL_DELAY_MS=30000          pause between runs (free tiers allow only a few thousand tokens a minute;
  *                                   default 20000 for groq, 0 otherwise)
@@ -67,8 +69,13 @@ describe.skipIf(process.env.AI_EVAL !== "1")("live AI diagram evaluation", () =>
                 system: buildSystemPrompt(transport.kind, { diagramType: inferDiagramType(golden.prompt), prompt: golden.prompt }),
                 user: buildUserPrompt(golden.prompt),
               });
+              if (process.env.AI_EVAL_SAVE === "1") {
+                const dir = join(__dirname, "fixtures");
+                mkdirSync(dir, { recursive: true });
+                writeFileSync(join(dir, `${pipeline.replace(/\//g, "-")}-${golden.id}.diagram`), result.code);
+              }
               const { document } = documentFromParsedCode(parseDiagramCode(result.code), "eval", { prompt: golden.prompt, provider });
-              const compiled = compileAIDiagramDetailed(document, "eval");
+              const compiled = compileAIDiagramDetailed(document, "eval", { channelGaps: true });
               rows.push({ pipeline, prompt: golden.id, ms: Date.now() - t0, score: scoreDiagram(document, compiled.elements, golden) });
             } catch (error) {
               rows.push({ pipeline, prompt: golden.id, ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error) });

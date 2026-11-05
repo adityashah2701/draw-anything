@@ -5,7 +5,8 @@ import {
   normalizeModelPlan,
 } from "@/features/ai/schemas";
 import type { AIDiagramType, AIModelProvider } from "@/features/ai/types";
-import { isOutlineVariantId } from "@/core/shapes/outline/variants";
+import { isOutlineVariantId, shapeForBase } from "@/core/shapes/outline/variants";
+import { entryForOutline } from "@/core/shapes/vocabulary";
 import type { DrawingElement, FrameShape } from "@/features/whiteboard/types/whiteboard.types";
 import { tint } from "@/core/color/named-colors";
 import { parseAnchorSide } from "@/core/anchors/generate-anchors";
@@ -27,6 +28,8 @@ export interface CodeToCanvasResult {
 }
 
 
+const PLAN_DIRECTION = { down: "top-to-bottom", right: "left-to-right", up: "bottom-to-top", left: "right-to-left" } as const;
+
 export const documentFromParsedCode = (
   parsed: ReturnType<typeof parseDiagramCode>,
   generationId: string,
@@ -34,7 +37,7 @@ export const documentFromParsedCode = (
   meta: { prompt?: string; provider?: AIModelProvider; modelName?: string } = {},
 ) => {
   const { graph, warnings } = normalizeModelGraphDraftDetailed({
-    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon, shape: node.shape, color: node.color, x: node.x, y: node.y, width: node.width, height: node.height })),
+    nodes: parsed.nodes.map((node) => ({ id: node.id, label: node.label, kind: node.kind ?? node.icon, icon: node.icon, shape: node.shape, border: node.border, marker: node.marker, stack: node.stack, color: node.color, x: node.x, y: node.y, width: node.width, height: node.height })),
     edges: parsed.edges.map((edge) => ({
       id: edge.id,
       from: edge.from,
@@ -54,6 +57,7 @@ export const documentFromParsedCode = (
     plan: normalizeModelPlan({
       diagramType: parsed.diagramType ?? "flowchart",
       summary: parsed.title ?? "Diagram from code",
+      direction: parsed.direction ? PLAN_DIRECTION[parsed.direction] : undefined,
     }),
     graph,
     provider: meta.provider ?? "local",
@@ -109,8 +113,22 @@ const NODE_TYPES = new Set(["semantic-node", "rectangle", "circle", "ellipse", "
 const isDiagramNode = (el: DrawingElement) => NODE_TYPES.has(el.type) && (el.type !== "icon" || el.ai?.role === "node");
 
 /** The `shape:` an element is written with. An outline whose variant is unknown reads back as a plain box. */
-const shapeOfElement = (el: DrawingElement): string | undefined =>
-  el.type === "diamond" || el.type === "pill" || el.type === "icon" ? el.type : el.type === "outline" && isOutlineVariantId(el.variant) ? el.variant : undefined;
+const shapeOfElement = (el: DrawingElement): string | undefined => {
+  if (el.type === "diamond" || el.type === "pill" || el.type === "icon") return el.type;
+  if (el.type !== "outline" || !isOutlineVariantId(el.variant)) return undefined;
+  // A picture with its own name (a timer event, a parallel gateway) is written by that name.
+  return entryForOutline(el.variant, el.border, el.marker, el.stack)?.id ?? shapeForBase(el.variant);
+};
+
+/** The parameters an outline element carries, as the diagram code writes them; none when its shape name says them. */
+const paramsOfElement = (el: DrawingElement) =>
+  el.type === "outline" && entryForOutline(el.variant, el.border, el.marker, el.stack)
+    ? {}
+    : el.type === "outline"
+    ? { ...(el.border ? { border: el.border } : {}), ...(el.marker ? { marker: el.marker } : {}), ...(el.stack ? { stack: true } : {}) }
+    : el.type === "semantic-node" && el.nodeStyle?.stack
+      ? { stack: true }
+      : {};
 
 const boundsOf = (element: DrawingElement) => ({
   minX: Math.min(...element.points.map((p) => p.x)),
@@ -203,6 +221,7 @@ export const graphFromElements = (
       kind: el.ai?.semanticKind ?? (el.type === "diamond" ? "decision" : undefined),
       icon: el.ai?.icon,
       shape: shapeOfElement(el),
+      ...paramsOfElement(el),
       color: customColorOf(el),
       ...(layout ? layoutOf(el) : {}),
     };
@@ -313,12 +332,13 @@ export const graphFromElements = (
     .map((el) => el.ai?.diagramType)
     .filter((type): type is string => Boolean(type));
   const diagramType = types.length > 0 ? (types[0] as AIDiagramType) : undefined;
+  const direction = nodeElements.map((el) => el.ai?.diagramDirection).find(Boolean);
 
   const nodeSources = new Map<string, string>();
   for (const el of nodeElements) nodeSources.set(idOfElement.get(el.id)!, el.id);
 
   return {
-    graph: { diagramType, nodes, edges, groups, frames: graphFrames },
+    graph: { diagramType, direction, nodes, edges, groups, frames: graphFrames },
     consumedIds: [...consumed],
     provenance: { nodes: nodeSources, edges: edgeSources, groups: groupSources, frames: frameSources },
   };

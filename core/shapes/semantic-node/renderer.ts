@@ -11,6 +11,9 @@ import { SemanticNodeShape } from "@/core/shapes/semantic-node/types";
 import { isDarkRender } from "@/core/theme/render-theme";
 import { readableOnDark } from "@/core/color/adaptive-color";
 
+/** How far each stacked copy sits from the next, in world units. */
+const STACK_OFFSET = 6;
+
 /** A `#rrggbb` fill: the only kind whose brightness we can judge, so the only one that counts as a surface. */
 const hasReadableFill = (fill: string | undefined) => !!fill && /^#[0-9a-f]{6}$/i.test(fill);
 
@@ -33,8 +36,21 @@ export const renderSemanticNodeToCanvas = (
   const height = bounds.height * zoom;
 
   const dark = isDarkRender();
+  const radius = screenCornerRadius(layout.radius, zoom, width, height);
+  if (normalizeNodeStyle(shape.nodeStyle).stack) {
+    // Copies behind the node, up and to the right, back to front; the node itself covers their lower left.
+    for (const step of [2, 1]) {
+      ctx.beginPath();
+      ctx.roundRect(left + step * STACK_OFFSET * zoom, top - step * STACK_OFFSET * zoom, width, height, radius);
+      if (shape.fill) {
+        ctx.fillStyle = shape.fill;
+        ctx.fill();
+      }
+      ctx.stroke();
+    }
+  }
   ctx.beginPath();
-  ctx.roundRect(left, top, width, height, screenCornerRadius(layout.radius, zoom, width, height));
+  ctx.roundRect(left, top, width, height, radius);
   if (shape.fill) {
     ctx.fillStyle = shape.fill;
     ctx.fill();

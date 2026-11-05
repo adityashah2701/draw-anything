@@ -97,6 +97,7 @@ export const WhiteboardChrome = ({ controller }: WhiteboardChromeProps) => {
           onOpenAIPanel={handleGenerateDiagram}
           onOpenCodePanel={() => controller.setShowCodePanel(true)}
           onOpenIconPicker={() => controller.setShowIconPicker(true)}
+          onOpenShapePicker={() => controller.setShowShapePicker(true)}
         />
       )}
     </>

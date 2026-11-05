@@ -1,4 +1,5 @@
 import { COLOR_NAMES } from "@/core/color/named-colors";
+import { MARKER_IDS } from "@/core/shapes/outline/markers";
 import { writeName } from "../../serialize";
 import {
   BLOCK_KEYWORDS,
@@ -45,7 +46,7 @@ export interface CompletionContext {
   inHeader: boolean;
 }
 
-const MAX_ITEMS = 40;
+const MAX_ITEMS = 80;
 const WORD = /[A-Za-z0-9_-]/;
 
 interface LineState {
@@ -137,6 +138,12 @@ const valueItems = (type: string, iconIds: readonly string[]): CompletionItem[] 
       return iconIds.map((id) => ({ label: id, insert: id, kind: "icon" as const }));
     case "shape":
       return shapeNames().map((s) => ({ label: s, insert: s, kind: "value" as const }));
+    case "border":
+      return ["double", "thick"].map((b) => ({ label: b, insert: b, kind: "value" as const }));
+    case "status":
+      return ["error", "warning", "success", "info"].map((b) => ({ label: b, insert: b, kind: "value" as const }));
+    case "marker":
+      return MARKER_IDS.map((m) => ({ label: m, insert: m, kind: "value" as const }));
     case "color":
       return COLOR_NAMES.map((c) => ({ label: c, insert: c, kind: "value" as const }));
     case "boolean":

@@ -28,7 +28,7 @@ export const semanticNodeDefinition = createShapeDefinition<SemanticNodeShape>({
     id: props.id ?? crypto.randomUUID(),
     type: "semantic-node",
     points: props.points ?? [],
-    color: props.color ?? "#1f2937",
+    color: props.color ?? "#000000",
     strokeWidth: props.strokeWidth ?? 2,
     fill: props.fill ?? "#eef2ff",
     label: props.label ?? "Node",

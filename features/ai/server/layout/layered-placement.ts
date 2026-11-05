@@ -48,20 +48,27 @@ const placeComponent = (input: PlacementInput, ids: string[]): { placement: Plac
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const placement: Placement = new Map();
   let top = 0;
-  [...rows.keys()]
-    .sort((a, b) => a - b)
-    .forEach((depth) => {
-      const rowIds = rows.get(depth)!;
-      const rowHeight = Math.max(...rowIds.map((id) => byId.get(id)!.height));
-      rowIds.forEach((id) => {
-        const node = byId.get(id)!;
-        placement.set(id, {
-          x: (centers.get(id) ?? 0) - node.width / 2,
-          y: top + (rowHeight - node.height) / 2, // centre each node on its row
-        });
+  const depths = [...rows.keys()].sort((a, b) => a - b);
+  /** The gap below this row: the widest any boundary down to the next row asks for, else the plain gap. */
+  const gapBelow = (depth: number, next: number | undefined) => {
+    const byDepth = input.gaps.verticalByDepth;
+    if (!byDepth || next === undefined) return input.gaps.vertical;
+    let gap = input.gaps.vertical;
+    for (let boundary = depth; boundary < next; boundary += 1) gap = Math.max(gap, byDepth.get(boundary) ?? 0);
+    return gap;
+  };
+  depths.forEach((depth, index) => {
+    const rowIds = rows.get(depth)!;
+    const rowHeight = Math.max(...rowIds.map((id) => byId.get(id)!.height));
+    rowIds.forEach((id) => {
+      const node = byId.get(id)!;
+      placement.set(id, {
+        x: (centers.get(id) ?? 0) - node.width / 2,
+        y: top + (rowHeight - node.height) / 2, // centre each node on its row
       });
-      top += rowHeight + input.gaps.vertical;
     });
+    top += rowHeight + gapBelow(depth, depths[index + 1]);
+  });
 
   const minX = Math.min(...[...placement.values()].map((p) => p.x));
   const maxX = Math.max(...[...placement.entries()].map(([id, p]) => p.x + byId.get(id)!.width));

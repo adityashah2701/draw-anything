@@ -18,7 +18,7 @@ export const freehandDefinition = createShapeDefinition<FreehandShape>({
     id: props.id ?? "",
     type: "freehand",
     points: props.points ?? [{ x: 0, y: 0 }],
-    color: props.color ?? "#1f2937",
+    color: props.color ?? "#000000",
     strokeWidth: props.strokeWidth ?? 2,
   }),
   render: () => null,

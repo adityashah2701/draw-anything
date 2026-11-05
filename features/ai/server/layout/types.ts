@@ -31,7 +31,13 @@ export interface PlacementInput {
    * `horizontal`/`vertical` already include `groupRoom` (space reserved so group frames fit between
    * nodes). An engine that pads groups itself should subtract it.
    */
-  gaps: { horizontal: number; vertical: number; groupRoom: number };
+  gaps: {
+    horizontal: number;
+    vertical: number;
+    groupRoom: number;
+    /** Gap to leave below the row at each depth where connectors need more than `vertical` (see `channels.ts`). */
+    verticalByDepth?: ReadonlyMap<number, number>;
+  };
 }
 
 /** Top-left corner of every node. Must be deterministic for identical input. */

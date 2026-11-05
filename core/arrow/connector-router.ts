@@ -12,6 +12,7 @@ import {
   generateAnchorsForElement,
   parseAnchorSide,
 } from "@/core/anchors/generate-anchors";
+import { parsePortAnchorId, portPoint } from "@/core/anchors/ports";
 import type { RouteArrowDescriptor } from "@/core/routing/orthogonal-router";
 import {
   routeWithEngine,
@@ -264,6 +265,19 @@ export const createConnectorRouter = ({ elements, state, anchorIndex, getElement
     return AdjacencyMap.fromEdges(edges);
   })();
 
+  const shapeBoundsById = new Map(anchorIndex.shapes.map((shape) => [shape.id, shape.bounds]));
+
+  /** A port anchor (see `core/anchors/ports.ts`) computed from the shape's current box. */
+  const resolvePort = (
+    connection: ArrowConnection,
+    bounds: { minX: number; minY: number; maxX: number; maxY: number } | undefined,
+  ): Anchor | null => {
+    const port = connection.anchorId ? parsePortAnchorId(connection.anchorId) : null;
+    if (!port || !bounds) return null;
+    const point = portPoint(bounds, port.side, port.fraction);
+    return { id: connection.anchorId!, x: point.x, y: point.y, side: port.side };
+  };
+
   const resolveAnchor = (connection?: ArrowConnection): Anchor | null => {
     if (!connection) return null;
     if (connection.anchorId) {
@@ -271,6 +285,12 @@ export const createConnectorRouter = ({ elements, state, anchorIndex, getElement
         createAnchorLookupKey(connection.elementId, connection.anchorId),
       );
       if (match) return match;
+      const shape = shapeBoundsById.get(connection.elementId);
+      const port = resolvePort(
+        connection,
+        shape && { minX: shape.x, minY: shape.y, maxX: shape.x + shape.width, maxY: shape.y + shape.height },
+      );
+      if (port) return port;
     }
 
     if (connection.handle) {
@@ -298,6 +318,11 @@ export const createConnectorRouter = ({ elements, state, anchorIndex, getElement
           (anchor) => anchor.id === connection.anchorId,
         );
         if (matchedById) return matchedById;
+        // A port: the shape's new box is the box its four moved side anchors span.
+        const xs = overrideAnchors.map((anchor) => anchor.x);
+        const ys = overrideAnchors.map((anchor) => anchor.y);
+        const port = resolvePort(connection, { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) });
+        if (port) return port;
       }
       const fallbackSide =
         connection.handle ??

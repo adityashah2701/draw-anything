@@ -1,4 +1,5 @@
 import { listIcons } from "@/core/icons/registry";
+import { MARKER_IDS, isMarkerId } from "@/core/shapes/outline/markers";
 import { normalizeColor } from "@/core/color/named-colors";
 import { normalizeSemanticKind, parseDiagramType } from "@/features/ai/schemas";
 import { slugId } from "@/features/ai/server/validation";
@@ -22,6 +23,7 @@ import {
   propertyDoc,
   propertyNames,
   resolveDirection,
+  parametricShape,
   resolveShape,
   shapeNames,
   type ElementKind,
@@ -39,6 +41,11 @@ interface Props {
   icon?: string;
   label?: string;
   dashed?: boolean;
+  stack?: boolean;
+  border?: "double" | "thick";
+  marker?: string;
+  /** What a parametric shape name (`shape: timer-event`) stands for; explicit properties win over it. */
+  entry?: { border?: "double" | "thick"; marker?: string; stack?: boolean };
   shape?: string;
   color?: string;
   x?: number;
@@ -49,6 +56,9 @@ interface Props {
   from?: EdgeSide;
   to?: EdgeSide;
 }
+
+/** A status is a colour with a meaning; it is stored as that colour, so it needs no field of its own. */
+const STATUS_COLORS: Record<string, string> = { error: "#dc2626", warning: "#ea580c", success: "#16a34a", info: "#2563eb" };
 
 const NUMBER_FIELD: Record<string, "x" | "y" | "width" | "height" | "padding"> = {
   x: "x",
@@ -132,7 +142,11 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
             `Shape "${value}" is not a known shape; the shapes are ${shapeNames().join(", ")} (icon needs an icon: id). It was ignored and the node is drawn as a rectangle.${hint ? ` ${hint}` : near ? ` Did you mean "${near}"?` : ""}`,
             near,
           );
-        } else if (shape !== "rectangle") props.shape = shape;
+        } else if (shape !== "rectangle") {
+          const parametric = parametricShape(shape);
+          props.shape = parametric ? parametric.base : shape;
+          if (parametric) props.entry = { border: parametric.border, marker: parametric.marker, stack: parametric.stack };
+        }
         return;
       }
       case "color": {
@@ -155,9 +169,27 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
         }
         return;
       }
+      case "border": {
+        const v = value.trim().toLowerCase();
+        if (v === "double" || v === "thick") props.border = v;
+        else if (v !== "single" && v !== "none") sink.warn("property/invalid-value", entry.valueSpan, `"border: ${value}" is not a border (use double or thick); it was ignored.`, closest(v, ["double", "thick"]));
+        return;
+      }
+      case "status": {
+        const color = STATUS_COLORS[value.trim().toLowerCase()];
+        if (color) props.color = color;
+        else sink.warn("property/invalid-value", entry.valueSpan, `"status: ${value}" is not a status (use ${Object.keys(STATUS_COLORS).join(", ")}); it was ignored.`, closest(value.trim().toLowerCase(), Object.keys(STATUS_COLORS)));
+        return;
+      }
+      case "marker": {
+        const v = value.trim().toLowerCase();
+        if (isMarkerId(v)) props.marker = v;
+        else if (v !== "none") sink.warn("property/invalid-value", entry.valueSpan, `"marker: ${value}" is not a marker (use ${MARKER_IDS.join(", ")}); it was ignored.`, closest(v, MARKER_IDS));
+        return;
+      }
       case "boolean": {
         const v = value.trim().toLowerCase();
-        if (v === "true" || v === "false") props.dashed = v === "true";
+        if (v === "true" || v === "false") props[doc.key === "stack" ? "stack" : "dashed"] = v === "true";
         else sink.warn("property/invalid-value", entry.valueSpan, `"${key}" needs true or false; it was ignored.`, "true");
         return;
       }
@@ -196,6 +228,12 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
     if (props.label !== undefined) node.label = props.label;
     if (props.dashed !== undefined) node.dashed = props.dashed;
     if (props.shape !== undefined) node.shape = props.shape;
+    const border = props.border ?? props.entry?.border;
+    const marker = props.marker ?? props.entry?.marker;
+    const stack = props.stack ?? props.entry?.stack;
+    if (border !== undefined) node.border = border;
+    if (marker !== undefined) node.marker = marker;
+    if (stack !== undefined) node.stack = stack;
     if (props.color !== undefined) node.color = props.color;
     for (const field of ["x", "y", "width", "height"] as const) if (props[field] !== undefined) node[field] = props[field];
   };
@@ -292,7 +330,7 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
         } else {
           const direction = resolveDirection(statement.value);
           if (direction) ir.direction = direction;
-          else sink.warn("header/unknown-direction", statement.valueSpan, `Unknown direction "${statement.value}" was ignored.`, closest(statement.value, ["down", "right"]));
+          else sink.warn("header/unknown-direction", statement.valueSpan, `Unknown direction "${statement.value}" was ignored.`, closest(statement.value, ["down", "right", "up", "left"]));
         }
         break;
       }

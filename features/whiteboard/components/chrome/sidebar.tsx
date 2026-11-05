@@ -21,12 +21,13 @@ import {
   Pencil,
   Type,
   Frame,
+  Search,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
-import { buildToolbar, ICON_PICKER_TOOL, type ToolbarGroup } from "./toolbar-model";
+import { buildToolbar, ICON_PICKER_TOOL, SHAPE_PICKER_TOOL, type ToolbarGroup } from "./toolbar-model";
 
 interface SidebarProps {
   currentTool: Tool;
@@ -35,6 +36,7 @@ interface SidebarProps {
   onOpenAIPanel?: () => void;
   onOpenCodePanel?: () => void;
   onOpenIconPicker?: () => void;
+  onOpenShapePicker?: () => void;
 }
 
 const FALLBACK_ICONS: Record<string, React.ElementType> = {
@@ -54,6 +56,7 @@ const FALLBACK_ICONS: Record<string, React.ElementType> = {
   pen: Pencil,
   text: Type,
   "icon-picker": Shapes,
+  "shape-picker": Search,
   frame: Frame,
 };
 const getToolIcon = (tool: ToolDefinition) => (tool.icon as React.ElementType | null) ?? FALLBACK_ICONS[tool.name] ?? MousePointer;
@@ -68,7 +71,7 @@ const ShortcutHint = ({ children }: { children: React.ReactNode }) => (
 
 const LONG_PRESS_MS = 450;
 
-const Sidebar: React.FC<SidebarProps> = ({ currentTool, onToolChange, disabled = false, onOpenAIPanel, onOpenCodePanel, onOpenIconPicker }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentTool, onToolChange, disabled = false, onOpenAIPanel, onOpenCodePanel, onOpenIconPicker, onOpenShapePicker }) => {
   const layout = React.useMemo(() => buildToolbar(getToolDefinitions()), []);
   // The tool each group shows when none of its tools is active: whatever was used last.
   const [lastUsed, setLastUsed] = useState<Record<string, string>>({});
@@ -118,6 +121,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentTool, onToolChange, disabled =
     };
     const choose = (tool: ToolDefinition) => {
       if (tool.name === ICON_PICKER_TOOL.name) return onOpenIconPicker?.();
+      if (tool.name === SHAPE_PICKER_TOOL.name) return onOpenShapePicker?.();
       setLastUsed((prev) => ({ ...prev, [group.id]: tool.name }));
       onToolChange(tool.name);
     };

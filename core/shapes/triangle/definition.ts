@@ -27,7 +27,7 @@ export const triangleDefinition = createShapeDefinition<TriangleShape>({
     id: props.id ?? "",
     type: "triangle",
     points: props.points ?? [{ x: 0, y: 0 }, { x: 100, y: 100 }],
-    color: props.color ?? "#1f2937",
+    color: props.color ?? "#000000",
     strokeWidth: props.strokeWidth ?? 2,
     fill: props.fill,
     label: props.label,

@@ -16,7 +16,7 @@ export interface FormatResult {
 const INDENT = "  ";
 
 /** Canonical property order: identity first, then look, then geometry, then label, then connection sides. */
-const ORDER = ["kind", "icon", "shape", "color", "dashed", "x", "y", "w", "h", "padding", "label", "from", "to"];
+const ORDER = ["kind", "icon", "shape", "border", "marker", "stack", "status", "color", "dashed", "x", "y", "w", "h", "padding", "label", "from", "to"];
 
 const rank = (key: string): number => {
   const canonical = PROPERTIES.find((p) => p.key === key || p.aliases?.includes(key))?.key;

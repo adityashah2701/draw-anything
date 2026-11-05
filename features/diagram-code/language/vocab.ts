@@ -1,5 +1,7 @@
 import { resolveIconId } from "@/core/icons/registry";
+import { MARKER_IDS } from "@/core/shapes/outline/markers";
 import { listOutlineVariants } from "@/core/shapes/outline/variants";
+import { aliasesForOutline, parametersOf, supportedEntries } from "@/core/shapes/vocabulary";
 import CATALOG from "@/core/icons/catalog.json";
 import { DIAGRAM_TYPE_ALIASES, KIND_ALIASES, aiDiagramTypeSchema, aiSemanticNodeKindSchema, normalizeSemanticKind } from "@/features/ai/schemas";
 
@@ -14,7 +16,7 @@ function shapeListText() {
 }
 
 export type ElementKind = "node" | "group" | "frame" | "edge";
-export type ValueType = "text" | "kind" | "icon" | "shape" | "color" | "boolean" | "number" | "side";
+export type ValueType = "text" | "kind" | "icon" | "shape" | "border" | "marker" | "status" | "color" | "boolean" | "number" | "side";
 
 export interface PropertyDoc {
   /** Canonical key; `aliases` are accepted spellings. */
@@ -31,6 +33,10 @@ export const PROPERTIES: PropertyDoc[] = [
   { key: "icon", value: "icon", summary: "An icon id or alias from the icon registry.", example: "icon: postgres", appliesTo: ["node"] },
   { key: "label", value: "text", summary: "The text shown on the canvas when it should differ from the name.", example: 'label: "Public API"', appliesTo: ["node", "group", "frame"] },
   { key: "shape", value: "shape", summary: `How the node is drawn: ${shapeListText()}.`, example: "shape: diamond", appliesTo: ["node"] },
+  { key: "border", value: "border", summary: "A second line inside the outline (double) or a heavier one (thick). A plain rectangle, diamond or pill is then drawn as a box, rhombus or ring.", example: "border: double", appliesTo: ["node"] },
+  { key: "marker", value: "marker", summary: `A small glyph inside the shape: ${MARKER_IDS.join(", ")}.`, example: "marker: clock", appliesTo: ["node"] },
+  { key: "stack", value: "boolean", summary: "Draw the shape as a stack of three (true or false).", example: "stack: true", appliesTo: ["node"] },
+  { key: "status", value: "status", summary: "A meaning in colour: error (red), warning (orange), success (green) or info (blue). Same as color, for what the node is telling.", example: "status: error", appliesTo: ["node"] },
   { key: "color", aliases: ["colour"], value: "color", summary: "Outline colour (a name such as blue, or #rrggbb). The fill is a tint of it.", example: "color: blue", appliesTo: ["node", "frame", "edge"] },
   { key: "dashed", value: "boolean", summary: "Draw the outline dashed (true or false).", example: "dashed: true", appliesTo: ["node"] },
   { key: "x", value: "number", summary: "Left edge in canvas units. With y, pins the element exactly there.", example: "x: 120", appliesTo: ["node", "frame"] },
@@ -79,8 +85,18 @@ export const SHAPES: ShapeEntry[] = [
   { name: "diamond", aliases: [], summary: "A decision. Also what `kind: decision` draws." },
   { name: "pill", aliases: ["oval", "ellipse"], summary: "A terminator with fully rounded ends. Also what `kind: start` and `kind: end` draw." },
   { name: "icon", aliases: [], summary: "A bare icon with its label underneath; needs `icon:` or a kind." },
-  ...listOutlineVariants().map((variant) => ({ name: variant.id, aliases: [], summary: `${variant.description} Resizable like any node.` })),
+  ...listOutlineVariants().map((variant) => ({ name: variant.id, aliases: aliasesForOutline(variant.id), summary: `${variant.description} Resizable like any node.` })),
+  // Outlines with a border, a marker or a stack: each is one name here, drawn as its base outline with those parameters.
+  ...supportedEntries()
+    .filter((entry) => entry.representation.kind === "parametric")
+    .map((entry) => ({ name: entry.id, aliases: [...entry.aliases], summary: entry.guidance })),
 ];
+
+/** What a parametric shape name draws: the base outline and its parameters. Undefined for any other shape. */
+export const parametricShape = (name: string) => {
+  const entry = supportedEntries().find((e) => e.id === name);
+  return entry ? parametersOf(entry) : undefined;
+};
 
 /**
  * Shapes people ask for that the renderer cannot draw. They are reported, never silently dropped,
@@ -105,12 +121,16 @@ export const KIND_ALIAS_NAMES: string[] = Object.keys(KIND_ALIASES);
 export const DIAGRAM_TYPES: string[] = [...aiDiagramTypeSchema.options];
 export const DIAGRAM_TYPE_ALIAS_NAMES: string[] = Object.keys(DIAGRAM_TYPE_ALIASES);
 
-export const DIRECTIONS: Array<{ name: "down" | "right"; aliases: string[] }> = [
+export type CodeDirection = "down" | "right" | "up" | "left";
+
+export const DIRECTIONS: Array<{ name: CodeDirection; aliases: string[] }> = [
   { name: "down", aliases: ["tb", "top-to-bottom", "vertical"] },
   { name: "right", aliases: ["lr", "left-to-right", "horizontal"] },
+  { name: "up", aliases: ["bt", "bottom-to-top"] },
+  { name: "left", aliases: ["rl", "right-to-left"] },
 ];
 
-export const resolveDirection = (value: string): "down" | "right" | undefined => {
+export const resolveDirection = (value: string): CodeDirection | undefined => {
   const v = value.trim().toLowerCase();
   return DIRECTIONS.find((d) => d.name === v || d.aliases.includes(v))?.name;
 };
