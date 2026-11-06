@@ -13,6 +13,8 @@ export interface CanvasReport {
   summary: string;
   /** Where every node is and which sides every connection uses (for the `view` tool). */
   detail: string;
+  /** Problems that are real faults (overlapping nodes, a connector through a node, a broken rule of the diagram family): only these keep `finish` from being accepted. Crossings, long or bendy connectors are advice. */
+  blocking: number;
   /** For comparing two versions of the picture: fewer problems first, then shorter connectors. */
   score: { problems: number; connectorLength: number };
 }
@@ -141,6 +143,7 @@ export const reportCanvas = (built: BuiltCanvas, state: BuilderState): CanvasRep
     ...(metrics.groupViolations > 0 || metrics.groupsDropped > 0 ? [`${metrics.groupViolations + metrics.groupsDropped} group frame problem(s): a frame is missing, or covers a node that is not in it`] : []),
     ...lintDiagram(state.parsed, metrics).filter((f) => f.rule === "generic-icons" || f.rule === "long-label" || f.rule === "family-shapes" || /^(er|sequence|hld)-/.test(f.rule)).map((f) => f.advice),
   ];
+  const familyFaults = lintDiagram(state.parsed, metrics).filter((f) => f.rule === "family-shapes" || /^(er|sequence|hld)-/.test(f.rule)).length;
 
   const rows = [...nodes].sort((a, b) => a.points[0].y - b.points[0].y || a.points[0].x - b.points[0].x);
   const nodeLines = rows.map((n) => {
@@ -161,6 +164,7 @@ export const reportCanvas = (built: BuiltCanvas, state: BuilderState): CanvasRep
     problems: problems.slice(0, MAX_PROBLEMS),
     summary: `${nodes.length} nodes, ${list.length} connections, ${metrics.edgeCrossings} crossings, longest connector ${Math.round(metrics.longestEdge)}px`,
     detail,
+    blocking: overlapsNodes.length + through.length + familyFaults,
     score: { problems: problems.length, connectorLength: metrics.totalEdgeLength },
   };
 };

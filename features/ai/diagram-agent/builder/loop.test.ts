@@ -87,34 +87,42 @@ describe("runDiagramBuilder", () => {
     expect(result.state.parsed.nodes.map((n) => n.name)).toEqual(["A", "B"]);
   });
 
-  it("does not accept finish while problems remain, and accepts once the agent fixes them", async () => {
+  it("accepts finish when only advice remains (crossings, shared or bendy lines)", async () => {
+    const m = scripted([turn(call("add", LOGIN.join("\n"))), turn(call("add", LOGIN_EDGES.join("\n"))), turn(call("finish"))]);
+    const result = await run(m.transport);
+    expect(result.finished).toBe(true);
+    expect(result.reviews).toBe(0);
+    expect(m.turns()).toBe(3);
+  });
+
+  // A real fault: in an ER diagram every node must be a table.
+  const FAULTY_ER = 'type entity-relationship\nUsers [icon: user]\nOrders [shape: entity, rows: "id int pk; user_id int -> users.id"]\nUsers > Orders [relation: er-relationship, from: one, to: zero-or-many]';
+
+  it("does not accept finish while a real fault remains, and accepts once the agent fixes it", async () => {
     const m = scripted([
-      turn(call("add", LOGIN.join("\n"))),
-      turn(call("add", LOGIN_EDGES.join("\n"))),
+      turn(call("add", FAULTY_ER)),
       turn(call("finish")),
-      turn(call("adjust", "sides Show Error > Enter Credentials: right, right\nsides Valid? > Show Error: right, top")),
+      turn(call("adjust", "remove Users")),
+      turn(call("add", 'Users [shape: entity, rows: "id int pk"]\nUsers > Orders [relation: er-relationship, from: one, to: zero-or-many]')),
       turn(call("finish")),
     ]);
     const result = await run(m.transport);
-    // The first finish is refused with the problems named; the agent then fixes them and finishes.
-    expect(m.shown[3]).toContain("You asked to finish but problems remain");
-    expect(m.shown[3]).toMatch(/Show Error > Enter Credentials/);
-    expect(result.reviews).toBeGreaterThanOrEqual(1);
+    expect(m.shown[2]).toContain("You asked to finish but problems remain");
+    expect(result.reviews).toBe(1);
     expect(result.finished).toBe(true);
-    expect(result.state.edgeSides.size).toBe(2);
+    expect(result.state.parsed.nodes.every((n) => n.shape === "entity")).toBe(true);
   });
 
   it("accepts a finish that is repeated with nothing changed, and stops reviewing when the budget is spent", async () => {
-    const setup = [turn(call("add", LOGIN.join("\n"))), turn(call("add", LOGIN_EDGES.join("\n")))];
-    const again = scripted([...setup, turn(call("finish")), turn(call("finish"))]);
+    const again = scripted([turn(call("add", FAULTY_ER)), turn(call("finish")), turn(call("finish"))]);
     const r1 = await run(again.transport);
     expect(r1.finished).toBe(true);
-    expect(again.turns()).toBe(4);
+    expect(again.turns()).toBe(3);
 
-    const noReviews = scripted([...setup, turn(call("finish"))]);
+    const noReviews = scripted([turn(call("add", FAULTY_ER)), turn(call("finish"))]);
     const r2 = await run(noReviews.transport, { maxReviews: 0 });
     expect(r2.finished).toBe(true);
-    expect(noReviews.turns()).toBe(3);
+    expect(noReviews.turns()).toBe(2);
   });
 
   it("treats a diagram in a fence as an add", async () => {

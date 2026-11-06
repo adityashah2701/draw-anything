@@ -300,7 +300,8 @@ export const runDiagramBuilder = async (input: BuilderInput): Promise<BuilderRes
         notes.push("Nothing is on the canvas yet. Add the diagram first.");
       } else {
         const key = `${state.code}|${[...state.offsets].join(";")}|${[...state.edgeSides].join(";")}`;
-        const clean = report.problems.length === 0;
+        // Only real faults keep the agent polishing; crossings and long lines are advice, and hand moves made them worse.
+        const clean = report.blocking === 0;
         // Asking again with nothing changed means the agent has judged the rest acceptable.
         if (clean || reviews >= maxReviews || key === lastFinishKey) {
           finished = true;

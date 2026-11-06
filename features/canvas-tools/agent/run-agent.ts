@@ -116,6 +116,8 @@ const straightenWhatWasMade = async (executor: ToolExecutor, id: string): Promis
 };
 
 const BLOCKING = new Set(["dangling_connector", "stale_connector", "connector_through_node", "overlap", "invalid_geometry", "duplicate_id", "bad_anchor"]);
+/** After generate_diagram the layout is the compiler's own: only parts that are actually broken are sent back to fix. */
+const BROKEN = new Set(["dangling_connector", "stale_connector", "invalid_geometry", "duplicate_id", "bad_anchor"]);
 
 const tally = (results: readonly ToolResult[]) => ({
   calls: results.length,
@@ -195,10 +197,12 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
       if (wroteSinceCheck && verifyRounds < budget.verifyRounds) {
         verifyRounds += 1;
         wroteSinceCheck = false;
-        const straightened = options.autoTidy === false ? undefined : await straightenWhatWasMade(executor, `${step}_${verifyRounds}`);
+        // A generated diagram was laid out and routed by the compiler; the simple tidy and hand moves only make it worse.
+        const generated = results.some((r) => r.ok && r.tool === "generate_diagram");
+        const straightened = options.autoTidy === false || generated ? undefined : await straightenWhatWasMade(executor, `${step}_${verifyRounds}`);
         if (straightened) onEvent?.({ type: "notice", text: straightened });
         const check = await executor.execute({ id: `verify_${step}_${verifyRounds}`, name: "validate_diagram", args: {} });
-        const issues = check.ok ? (((check.data as { issues?: Array<{ code: string; severity: string; message: string; ids: string[] }> } | undefined)?.issues) ?? []).filter((issue) => BLOCKING.has(issue.code)) : [];
+        const issues = check.ok ? (((check.data as { issues?: Array<{ code: string; severity: string; message: string; ids: string[] }> } | undefined)?.issues) ?? []).filter((issue) => (generated ? BROKEN : BLOCKING).has(issue.code)) : [];
         remaining = issues.map((issue) => `${issue.message} (${issue.ids.slice(0, 5).join(", ")})`);
         if (issues.length > 0) {
           executor.enable(["edit", "arrange", "connect"]);

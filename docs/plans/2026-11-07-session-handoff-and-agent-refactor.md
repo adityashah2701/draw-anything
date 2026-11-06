@@ -167,6 +167,16 @@ asked. Do not commit or push unless asked (the user commits). Type check with `n
   already drew something, `generateElements` returns what was drawn with a warning instead of throwing it away (a
   person's Stop still aborts). Open: a slow model can still spend minutes before its first `add` (the system-design
   prompt is larger); `NVIDIA_MODEL` set to the Nano model is about 3x faster.
+- **The agent no longer "improves" a generated diagram into a worse one:** three post-draw passes moved nodes by
+  hand or by a simple tidy over the compiler's layout. (1) The canvas agent's automatic `tidy_diagram`
+  (`run-agent.ts: straightenWhatWasMade`) is skipped when the run used `generate_diagram`. (2) Its final check sends
+  back only truly broken parts after a generation (`BROKEN`: dangling, stale, invalid geometry, duplicate id, bad
+  anchor), not overlaps or connectors through nodes. (3) The builder refuses `finish` only for real faults
+  (`CanvasReport.blocking`: overlapping nodes, a connector through a node, family rules); crossings, shared, long or
+  bendy lines stay in the report as advice. Fewer model calls per run as a result. Builder tests rewritten for the rule.
+- **Stop keeps the preview:** a person's Stop now also keeps what was drawn (`generate-client.ts`).
+- **Mistral Large 4** (`mistralai/mistral-large-4-1t-a52b`) is in `NVIDIA_MODELS` (vision on, thinking only when
+  `NVIDIA_ENABLE_THINKING` is set); smoke test passed on 2026-11-07.
 - **Tests:** the full `npx vitest run` passes except a timing-sensitive baseline test that passes alone. Fixed: picker
   categories for UML, Sequence and Mind map, lifeline centring on insert, architecture idempotence test limited to
   non-structured examples.
