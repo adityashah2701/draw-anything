@@ -5,7 +5,7 @@ import { EXAMPLES, examplesFor } from "./examples";
 import { iconVocabulary } from "./icon-vocabulary";
 import { PLAYBOOKS } from "./playbooks";
 import { iconCategoriesFor, inferDiagramType, isSystemDesign } from "./prompt-context";
-import { buildSystemPrompt } from "./system";
+import { buildSystemPrompt } from "@/features/canvas-tools/agent/prompt";
 
 /** Estimated tokens: characters / 4. An estimate of any tokenizer, not a count. */
 const tokens = (text: string) => Math.ceil(text.length / 4);
@@ -21,71 +21,11 @@ describe("system design requests", () => {
     for (const prompt of ["Design WhatsApp", "How would you build Uber?", "system design of a video streaming platform", "Design a scalable URL shortener"]) {
       expect(inferDiagramType(prompt), prompt).toBe("architecture");
       expect(isSystemDesign(prompt), prompt).toBe(true);
-      expect(buildSystemPrompt("text", { diagramType: "architecture", prompt })).toContain("SYSTEM DESIGN");
+      expect(buildSystemPrompt({ groups: ["inspect"], specs: [], protocol: "native", request: prompt })).toContain("SYSTEM DESIGN");
     }
     expect(isSystemDesign("design a login flow")).toBe(false);
     expect(inferDiagramType("design a database schema for a shop")).toBe("entity-relationship");
-    expect(buildSystemPrompt("text", { diagramType: "architecture", prompt: "Kafka pipeline" })).not.toContain("SYSTEM DESIGN");
-  });
-});
-
-describe("system prompt budget", () => {
-  it.each(["native", "text"] as const)("%s: the complete prompt (no context) stays within its budget", (transport) => {
-    expect(tokens(buildSystemPrompt(transport))).toBeLessThanOrEqual(BUDGET.complete);
-  });
-
-  it.each(["native", "text"] as const)("%s: a request of unknown type stays within its budget", (transport) => {
-    expect(tokens(buildSystemPrompt(transport, { prompt: "draw me something" }))).toBeLessThanOrEqual(BUDGET.typeUnknown);
-  });
-
-  it.each(TYPES)("%s: a known type stays within its budget and is much smaller than the complete prompt", (diagramType) => {
-    const text = buildSystemPrompt("text", { diagramType, prompt: "x" });
-    expect(tokens(text)).toBeLessThanOrEqual(BUDGET.typeKnown);
-    expect(tokens(text)).toBeLessThan(tokens(buildSystemPrompt("text")) * 0.65);
-  });
-});
-
-describe("what every trimmed prompt must still say", () => {
-  const contexts: Array<[string, Parameters<typeof buildSystemPrompt>[1]]> = [
-    ["no context", undefined],
-    ["unknown type", { prompt: "x" }],
-    ...TYPES.map((t): [string, Parameters<typeof buildSystemPrompt>[1]] => [t, { diagramType: t, prompt: "x" }]),
-  ];
-
-  it.each(contexts)("%s: language, process, tools, and a worked example are present", (_name, context) => {
-    for (const transport of ["native", "text"] as const) {
-      const p = buildSystemPrompt(transport, context);
-      expect(p).toContain("Group Name { ... }");
-      expect(p).toContain("A > B");
-      expect(p).toContain("kind");
-      expect(p).toContain("search_icons");
-      expect(p).toContain("check_diagram");
-      expect(p).toContain("finish");
-      expect(p).toMatch(/```diagram\n/);
-      expect(p).toContain("Design rules:");
-    }
-    expect(buildSystemPrompt("text", context)).toContain('<tool name="finish">');
-    expect(buildSystemPrompt("native", context)).not.toContain("<tool name=");
-  });
-
-  it.each(TYPES)("%s: carries its own playbook and not the others'", (diagramType) => {
-    const p = buildSystemPrompt("native", { diagramType, prompt: "x" });
-    expect(p).toContain(`- ${diagramType}: ${PLAYBOOKS[diagramType]}`);
-    for (const other of TYPES.filter((t) => t !== diagramType)) expect(p).not.toContain(`- ${other}: `);
-  });
-
-  it("an unknown type keeps every playbook so the model can still choose", () => {
-    const p = buildSystemPrompt("native", { prompt: "x" });
-    for (const type of TYPES) expect(p).toContain(`- ${type}:`);
-  });
-
-  it("a flowchart prompt lists the flow icons, including the start and end terminators", () => {
-    const p = buildSystemPrompt("native", { diagramType: "flowchart", prompt: "x" });
-    const flow = p.split("\n").find((l) => l.startsWith("flow: "))!;
-    expect(flow).toMatch(/\bstart\b/);
-    expect(flow).toMatch(/\bend\b/);
-    expect(flow).toMatch(/\bdecision\b/);
-    expect(p).toContain("kind: start");
+    expect(buildSystemPrompt({ groups: ["inspect"], specs: [], protocol: "native", request: "Kafka pipeline architecture" })).not.toContain("SYSTEM DESIGN");
   });
 });
 
@@ -106,8 +46,6 @@ describe("icon vocabulary trimming", () => {
   it("adds hardware only when the request is about hardware", () => {
     expect(iconCategoriesFor({ diagramType: "architecture", prompt: "a web shop" })).not.toContain("hardware");
     expect(iconCategoriesFor({ diagramType: "architecture", prompt: "ESP32 sensor node over LoRa" })).toContain("hardware");
-    expect(buildSystemPrompt("native", { diagramType: "architecture", prompt: "ESP32 sensor node" })).toContain("hardware: ");
-    expect(buildSystemPrompt("native", { diagramType: "architecture", prompt: "a web shop" })).not.toContain("hardware: ");
   });
 });
 

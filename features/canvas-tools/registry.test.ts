@@ -77,9 +77,9 @@ describe("tool registry", () => {
   it("keeps the schemas offered to the model within a token budget (size is measured, not guessed)", () => {
     const chars = (names: string[]) => JSON.stringify(tools.filter((t) => names.includes(t.name)).map(toolSpec)).length;
     const perGroup = Object.fromEntries(TOOL_GROUPS.map((g) => [g, chars(tools.filter((t) => t.group === g).map((t) => t.name))]));
-    // ~3.6 characters per token: each group stays under ~4k tokens, and everything together under ~16.5k (the eight frame tools and two code tools are about 2k of that; plan_layout, review_layout and create_nodes about 2.3k; the connector `relation` field, carried by create_connector and update_connector, about 2.5k; the layout_diagram tool, about 1.1k).
+    // ~3.6 characters per token: each group stays under ~4k tokens, and everything together under ~16.5k (the eight frame tools and two code tools are about 2k of that; plan_layout, review_layout and create_nodes about 2.3k; the connector `relation` field, carried by create_connector and update_connector, about 2.5k; the layout_diagram tool, about 1.1k; the builder tools set_plan, add_to_diagram, adjust_diagram and finish, about 1.4k).
     for (const [group, size] of Object.entries(perGroup)) expect(size, group).toBeLessThan(15_000);
-    expect(JSON.stringify(specsFor(tools, TOOL_GROUPS)).length).toBeLessThan(67_000);
+    expect(JSON.stringify(specsFor(tools, TOOL_GROUPS)).length).toBeLessThan(70_000);
   });
 
   it("only offers the tools of the enabled groups", () => {

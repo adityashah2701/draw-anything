@@ -226,7 +226,7 @@ export const createNvidiaModel = (model: string): BaseChatModel =>
     modelKwargs: nvidiaThinking(model) ? { chat_template_kwargs: nvidiaThinking(model) } : {},
   });
 
-type Runner = Pick<BaseChatModel, "invoke"> & { bindTools?: (tools: never[]) => Runner };
+type Runner = Pick<BaseChatModel, "invoke"> & Partial<Pick<BaseChatModel, "stream">> & { bindTools?: (tools: never[]) => Runner };
 
 /** `primary`, and `secondary` for any call that fails in a way another model could answer. Also after `bindTools`. */
 export const withNvidiaFallback = (primary: Runner, secondary: Runner): BaseChatModel =>
@@ -238,6 +238,22 @@ export const withNvidiaFallback = (primary: Runner, secondary: Runner): BaseChat
         if (!isNvidiaRetryable(e)) throw e;
         console.warn("[nvidia] primary model failed, using the fallback model:", e instanceof Error ? e.message.slice(0, 120) : e);
         return secondary.invoke(input, options);
+      }
+    },
+    // Streams from the primary; a failure before anything arrived is retried on the fallback, as with invoke.
+    stream: async (input: never, options?: never) => {
+      const open = async (runner: Runner) => (runner.stream ? runner.stream(input, options) : (async function* () { yield await runner.invoke(input, options); })());
+      try {
+        const it = (await open(primary))[Symbol.asyncIterator]();
+        const first = await it.next();
+        return (async function* () {
+          if (!first.done) yield first.value;
+          for (let next = await it.next(); !next.done; next = await it.next()) yield next.value;
+        })();
+      } catch (e) {
+        if (!isNvidiaRetryable(e)) throw e;
+        console.warn("[nvidia] primary model failed, using the fallback model:", e instanceof Error ? e.message.slice(0, 120) : e);
+        return open(secondary);
       }
     },
     bindTools: (tools: never[]) => withNvidiaFallback(primary.bindTools!(tools), secondary.bindTools!(tools)),

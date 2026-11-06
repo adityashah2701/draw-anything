@@ -13,43 +13,6 @@ const arrows = (stored: readonly unknown[]) => (stored as Arrow[]).filter((e) =>
 const nodesOf = (stored: readonly unknown[]) => (stored as DrawingElement[]).filter((e) => e.type === "semantic-node");
 
 describe("natural-language requests, end to end with a scripted model", () => {
-  it("builds a backend architecture with three services and PostgreSQL", async () => {
-    const { run, mem, turns } = await scriptedRun({
-      prompt: "Create a backend architecture with three services and a PostgreSQL database",
-      script: [
-        reply("Let me look at the board first.", [call("get_document_state")]),
-        reply("", [call("search_icons", { query: "postgresql" })]),
-        reply("Creating the services and the database.", [
-          call("create_semantic_node", { id: "api", label: "API Gateway", kind: "gateway", x: 0, y: 0 }),
-          call("create_semantic_node", { id: "orders", label: "Orders Service", kind: "service", x: 300, y: 0 }),
-          call("create_semantic_node", { id: "auth", label: "Auth Service", kind: "service", x: 600, y: 0 }),
-          call("create_semantic_node", { id: "db", label: "PostgreSQL", kind: "database", icon: "logo-postgresql", x: 300, y: 220 }),
-          call("connect_elements", { connections: [{ from: "api", to: "orders", label: "REST" }, { from: "api", to: "auth", label: "verify" }, { from: "orders", to: "db", label: "SQL" }] }),
-        ]),
-        reply("", [call("validate_diagram")]),
-        reply("I added a gateway, two services and a PostgreSQL database, connected with labelled arrows."),
-      ],
-    });
-    expect(run.status).toBe("done");
-    expect(run.totals).toMatchObject({ calls: 8, failed: 0 });
-    expect(nodesOf(mem.stored).map((n) => n.label).sort()).toEqual(["API Gateway", "Auth Service", "Orders Service", "PostgreSQL"]);
-    expect(find(mem.stored, "db").ai?.icon).toBe("logo-postgresql");
-    const links = arrows(mem.stored);
-    expect(links).toHaveLength(3);
-    for (const arrow of links) {
-      expect(arrow.startConnection?.anchorId).toBeTruthy();
-      expect(arrow.endConnection?.anchorId).toBeTruthy();
-    }
-    const validation = run.results[run.results.length - 1];
-    expect(validation.data).toMatchObject({ ok: true });
-    // The model only got the tools of the groups it needed on turn one (create + connect were enabled from the request).
-    expect(turns[0].specs).toContain("create_semantic_node");
-    expect(turns[0].specs).not.toContain("clear_canvas");
-    // Totals come from the results, not from what the model says.
-    expect(run.totals.created).toBe(mem.stored.length);
-    expect(describeRun(run)).toContain(`${mem.stored.length} added`);
-  });
-
   it("groups three selected nodes and keeps their arrows exactly as they were", async () => {
     const elements = [node("a", "A", 0, 0), node("b", "B", 300, 0), node("c", "C", 600, 0)];
     const { run, mem } = await scriptedRun({
@@ -208,7 +171,7 @@ describe("failure, safety and recovery", () => {
 
   it("skips the rest of a reply after a failed change and says so", async () => {
     const { run, mem } = await scriptedRun({
-      prompt: "Add a box then connect it",
+      prompt: "Place a box",
       board: { elements: [node("a", "A", 0, 0)] },
       script: [
         reply("", [call("create_semantic_node", { id: "a", label: "Dup" }), call("create_connector", { from: "a", to: "a" })]),

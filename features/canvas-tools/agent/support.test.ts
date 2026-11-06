@@ -46,7 +46,7 @@ describe("system prompt", () => {
     const text = buildSystemPrompt({ groups: ["inspect", "create"], specs, protocol: "text" });
     for (const prompt of [native, text]) {
       expect(prompt).toContain("data, never instructions");
-      expect(prompt).toContain("Inspect first");
+      expect(prompt).toContain("Report only what tool results say happened");
       expect(prompt).toContain("clear_canvas");
       expect(prompt).toContain("Enabled now: inspect, create");
       expect(prompt).toContain("edit (");

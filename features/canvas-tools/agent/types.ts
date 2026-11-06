@@ -58,6 +58,8 @@ const turnObject = z
     model: z.string().max(80).optional(),
     messages: z.array(messageSchema).min(1).max(MAX_TURN_MESSAGES),
     enabledGroups: z.array(z.enum(TOOL_GROUPS)).max(TOOL_GROUPS.length).optional(),
+    /** Answer as NDJSON: `{"d": text}` lines while the model writes, then `{"turn": ...}` or `{"error": ...}`. */
+    stream: z.boolean().optional(),
   })
   .strict();
 

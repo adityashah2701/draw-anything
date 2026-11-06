@@ -107,7 +107,7 @@ describe("the agent's own placement", () => {
 
   it("a run that places nodes by hand gets them straightened once before the final check, and only those nodes move", async () => {
     const { run, mem } = await scriptedRun({
-      prompt: "Add a Cache and a Database under the Gateway",
+      prompt: "Place a Cache box and a Database box under the Gateway",
       board: { elements: [node("gw", "Gateway", 300, 0), node("keep", "Untouched", 900, 7), node("keep2", "Also untouched", 912, 190)] },
       script: [
         reply("", [call("create_semantic_node", { id: "cache", label: "Cache", x: 322, y: 150, width: 120, height: 70 })]),

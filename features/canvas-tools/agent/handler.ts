@@ -10,7 +10,7 @@ import { buildTools, specsFor } from "../registry";
 import { describeIssues } from "../schemas";
 import { TOOL_GROUPS, toolEnabled, type ToolDefinition, type ToolGroup } from "../types";
 import { buildSystemPrompt, type MemoryNote } from "./prompt";
-import type { CanvasTransport, ModelReply } from "./transport";
+import type { CanvasTransport, ModelReply, SystemFor } from "./transport";
 import { MAX_TOTAL_IMAGE_CHARS, countImages } from "./images";
 import { MAX_CALLS_PER_TURN, MAX_THINKING_CHARS, MAX_TURN_CHARS, messageChars, turnRequestSchema, type CanvasTurn } from "./types";
 
@@ -170,8 +170,11 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
       }
     }
 
-    const groups = new Set<ToolGroup>(["inspect", ...(request.enabledGroups ?? [])].filter((group): group is ToolGroup => TOOL_GROUPS.includes(group as ToolGroup)));
-    const specs = specsFor(tools, groups);
+    // The person's current request (not the board-state message the browser adds each turn), for the family guidance.
+    const currentRequest = [...request.messages].reverse().find((m) => m.role === "user" && !m.content.startsWith("<board_state>"))?.content;
+    const groups = new Set<ToolGroup>(["inspect", "generate", ...(request.enabledGroups ?? [])].filter((group): group is ToolGroup => TOOL_GROUPS.includes(group as ToolGroup)));
+    // Diagram code is written in the reply text (it streams to the board as it is written), not as a tool argument.
+    const specs = specsFor(tools, groups).filter((spec) => spec.name !== "add_to_diagram");
 
     let memories: readonly MemoryNote[] = [];
     if (deps.loadMemories) {
@@ -191,15 +194,39 @@ export const createCanvasAgentHandler = (deps: CanvasAgentHandlerDeps) => {
       }
     }
 
+    const system: SystemFor = (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind, memories, summary, request: currentRequest });
+    const toTurn = (reply: Awaited<ReturnType<CanvasTransport["complete"]>>, kind: CanvasTransport["kind"]): CanvasTurn => {
+      const calls = checkModelCalls(reply, tools, groups, () => `call_${now().toString(36)}_${(counter += 1).toString(36)}`);
+      return { text: reply.text, calls, transport: kind, ...(reply.thinking ? { thinking: reply.thinking.slice(0, MAX_THINKING_CHARS) } : {}), ...(notice ? { notice } : {}) };
+    };
+
+    if (request.stream) {
+      // The reply is written to the browser as it arrives, so diagram code shows while the model is still writing it.
+      const encoder = new TextEncoder();
+      const body = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const send = (value: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`));
+          try {
+            const transport = deps.createTransport(provider, specs, request.model, images > 0);
+            const reply = await transport.complete(system, request.messages, { signal: req.signal, onDelta: (d) => send({ d }) });
+            const turn = toTurn(reply, transport.kind);
+            send({ turn });
+            done(new Response(null, { status: 200 }), { provider, ...(request.model ? { model: request.model } : {}), transport: transport.kind, calls: turn.calls.map((c) => c.name) });
+          } catch (error) {
+            console.error("[canvas-agent] model turn failed:", error);
+            send({ error: publicMessage(error), status: 502 });
+            done(new Response(null, { status: 502 }), { provider });
+          }
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200, headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+    }
+
     try {
       const transport = deps.createTransport(provider, specs, request.model, images > 0);
-      const reply = await transport.complete(
-        (kind) => buildSystemPrompt({ groups: [...groups], specs, protocol: kind, memories, summary }),
-        request.messages,
-      );
-      const calls = checkModelCalls(reply, tools, groups, () => `call_${now().toString(36)}_${(counter += 1).toString(36)}`);
-      const turn: CanvasTurn = { text: reply.text, calls, transport: transport.kind, ...(reply.thinking ? { thinking: reply.thinking.slice(0, MAX_THINKING_CHARS) } : {}), ...(notice ? { notice } : {}) };
-      return done(json(200, turn), { provider, ...(request.model ? { model: request.model } : {}), transport: transport.kind, calls: calls.map((call) => call.name) });
+      const turn = toTurn(await transport.complete(system, request.messages), transport.kind);
+      return done(json(200, turn), { provider, ...(request.model ? { model: request.model } : {}), transport: transport.kind, calls: turn.calls.map((call) => call.name) });
     } catch (error) {
       console.error("[canvas-agent] model turn failed:", error);
       return done(fail(502, publicMessage(error)), { provider });

@@ -19,10 +19,29 @@ export type SystemFor = (kind: "native" | "text") => string;
 
 export interface CanvasTransport {
   kind: "native" | "text";
-  complete(system: SystemFor, messages: readonly CanvasMessage[], options?: { signal?: AbortSignal }): Promise<ModelReply>;
+  complete(system: SystemFor, messages: readonly CanvasMessage[], options?: CompleteOptions): Promise<ModelReply>;
 }
 
-type Invokable = Pick<BaseChatModel, "invoke">;
+export interface CompleteOptions {
+  signal?: AbortSignal;
+  /** Receives the reply's text as the model writes it; the full reply is still returned at the end. */
+  onDelta?: (text: string) => void;
+}
+
+type Invokable = Pick<BaseChatModel, "invoke"> & Partial<Pick<BaseChatModel, "stream">>;
+
+/** One model call: streamed (chunks joined into one message) when someone listens for deltas, else a plain invoke. */
+const call = async (model: Invokable, input: BaseMessage[], options?: CompleteOptions): Promise<unknown> => {
+  const config = options?.signal ? { signal: options.signal } : undefined;
+  if (!options?.onDelta || !model.stream) return model.invoke(input, config);
+  let joined: { concat(other: unknown): unknown } | undefined;
+  for await (const chunk of await model.stream(input, config)) {
+    const text = messageText(chunk);
+    if (text) options.onDelta(text);
+    joined = joined ? (joined.concat(chunk) as typeof joined) : (chunk as unknown as typeof joined);
+  }
+  return joined ?? { content: "" };
+};
 
 // ── text protocol ────────────────────────────────────────────────────────────
 
@@ -155,7 +174,7 @@ const toTextMessages = (system: string, messages: readonly CanvasMessage[]): Bas
 export const createTextCanvasTransport = (model: Invokable): CanvasTransport => ({
   kind: "text",
   async complete(system, messages, options) {
-    const reply = await model.invoke(toTextMessages(system("text"), messages), options?.signal ? { signal: options.signal } : undefined);
+    const reply = await call(model, toTextMessages(system("text"), messages), options);
     const { text, thinking } = splitThinking(messageText(reply));
     const parsed = parseTextReply(cleanModelText(text));
     const reasoning = join(reasoningOf(reply), thinking);
@@ -186,7 +205,7 @@ export const createNativeCanvasTransport = (model: BaseChatModel, specs: readonl
   return {
     kind: "native",
     async complete(system, messages, options) {
-      const reply = (await bound.invoke(toNativeMessages(system("native"), messages), options?.signal ? { signal: options.signal } : undefined)) as {
+      const reply = (await call(bound, toNativeMessages(system("native"), messages), options)) as {
         tool_calls?: Array<{ id?: string; name?: string; args?: unknown }>;
         invalid_tool_calls?: Array<{ id?: string; name?: string; args?: unknown }>;
       };

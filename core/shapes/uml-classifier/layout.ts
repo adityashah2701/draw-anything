@@ -27,7 +27,8 @@ export const stereotypeOf = (shape: Pick<UmlClassifierShape, "kind" | "stereotyp
 export const layoutClassifier = (shape: Pick<UmlClassifierShape, "kind" | "stereotype" | "name" | "attributes" | "operations" | "collapsed">): ClassifierLayout => {
   const attrs = lines(shape.attributes);
   const ops = lines(shape.operations);
-  const showAttributes = !shape.collapsed?.attributes;
+  // An interface with no attributes shows only its operations, as UML draws it, instead of an empty box.
+  const showAttributes = !shape.collapsed?.attributes && !(shape.kind === "interface" && attrs.length === 0);
   const showOperations = !shape.collapsed?.operations && shape.kind !== "enumeration";
   const header = (stereotypeOf(shape) ? LINE : 0) + 28;
   const attributes = showAttributes ? Math.max(attrs.length, 1) * LINE + 8 : 0;

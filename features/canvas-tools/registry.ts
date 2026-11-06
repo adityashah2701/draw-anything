@@ -10,7 +10,8 @@ import { DOCUMENT_TOOLS } from "./tools/document";
 import { CODE_TOOLS } from "./tools/code";
 import { EDIT_TOOLS } from "./tools/edit";
 import { FRAME_TOOLS } from "./tools/frames";
-import { GENERATE_TOOLS, MEMORY_TOOLS } from "./tools/generate";
+import { BUILDER_TOOLS } from "./tools/builder";
+import { MEMORY_TOOLS } from "./tools/memory";
 import { enableTools, INSPECT_TOOLS } from "./tools/inspect";
 import { ORGANIZE_TOOLS } from "./tools/organize";
 import { TOOL_GROUPS, toolEnabled, type ToolDefinition, type ToolGroup } from "./types";
@@ -28,7 +29,7 @@ export const STATIC_TOOLS: readonly ToolDefinition[] = [
   ...ORGANIZE_TOOLS,
   ...FRAME_TOOLS,
   ...DOCUMENT_TOOLS,
-  ...GENERATE_TOOLS,
+  ...BUILDER_TOOLS,
   ...CODE_TOOLS,
   ...MEMORY_TOOLS,
 ] as unknown as readonly ToolDefinition[];

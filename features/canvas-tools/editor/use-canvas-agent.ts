@@ -1,5 +1,10 @@
 "use client";
 
+import { elementsFromDiagramCode } from "@/features/diagram-code/canvas";
+import { expandInlineBlocks, withDefaultShapes } from "../tools/builder";
+import { placePreview } from "./generation-preview";
+import { codeSoFar } from "./live-code";
+import { scheduleReveal } from "./reveal";
 import { useConvex, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -19,8 +24,6 @@ import { revisionOf } from "../revision";
 import { createCanvasTools } from "../runtime";
 import type { ExportRequest } from "../types";
 import { createEditorHost } from "./editor-host";
-import { generateElements } from "./generate-client";
-import { placePreview } from "./generation-preview";
 import { fromRows, toRow } from "./persisted-messages";
 
 export type AgentUiMessage =
@@ -84,20 +87,6 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
   const [, forceTick] = useState(0);
   const counter = useRef(0);
   const nextId = () => `agent-${(counter.current += 1)}`;
-  // The generator's reasoning notes arrive while one generate_diagram call runs: they grow one block, not one block each.
-  const generatorThinkingId = useRef<string | null>(null);
-  const appendGeneratorThinking = useRef<(text: string) => void>(() => {});
-  appendGeneratorThinking.current = (text: string) => {
-    const id = generatorThinkingId.current;
-    if (id) {
-      setMessages((prev) => prev.map((m) => (m.id === id && m.kind === "thinking" ? { ...m, text: capThinking(`${m.text}\n\n${text}`) } : m)));
-      return;
-    }
-    const created = nextId();
-    generatorThinkingId.current = created;
-    setMessages((prev) => [...prev, { id: created, kind: "thinking", text: capThinking(text), source: "generator" }]);
-  };
-
   const resolveConfirmation = useCallback((approved: boolean) => {
     confirmRef.current?.(approved);
     confirmRef.current = null;
@@ -143,7 +132,10 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     () =>
       createEditorHost({
         stored: () => latest.current.readLiveStored(),
-        applyPatch: (patch) => latest.current.applyDocPatch(patch),
+        applyPatch: (patch) => {
+          scheduleReveal(patch.add);
+          return latest.current.applyDocPatch(patch);
+        },
         selection: {
           get: () => selectionRef.current,
           set: (ids) => {
@@ -196,35 +188,6 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
           downloadBlob(result.blob, filename);
           return { filename, mime: result.blob.type, bytes: result.blob.size, width: result.width, height: result.height };
         },
-        // The diagram is drawn on the board as a preview while it is generated (never stored), then placed by the tool in the same spot.
-        generate: async (request: { description: string; diagramType?: string }) => {
-          const c = latest.current;
-          const view = { zoom: c.canvasViewport.zoom, pan: c.canvasViewport.panOffset };
-          const existing = c.elements;
-          // A heartbeat: the last thing the generator said plus the time it has been working, so a slow model never looks frozen.
-          const started = Date.now();
-          let last = "Starting the diagram generator";
-          const beat = () => setActivity(`${last} · ${Math.round((Date.now() - started) / 1000)}s`);
-          const heartbeat = setInterval(beat, 1000);
-          try {
-            return await generateElements({
-              whiteboardId: String(c.whiteboard?._id ?? ""),
-              provider: providerRef.current,
-              description: request.description,
-              diagramType: request.diagramType,
-              signal: abortRef.current?.signal,
-              onProgress: (text) => {
-                last = text;
-                beat();
-              },
-              onThinking: (text) => appendGeneratorThinking.current(text),
-              onElements: (drawn) => latest.current.setGenerationPreview(placePreview(drawn, existing, view)),
-            });
-          } finally {
-            clearInterval(heartbeat);
-            latest.current.setGenerationPreview(null);
-          }
-        },
         remember: async (entry: { kind: "preference" | "correction" | "decision" | "fact"; text: string }) => {
           const saved = await convex.mutation(api.aiMemory.remember, { whiteboardId: String(latest.current.whiteboard?._id ?? ""), ...entry });
           return { duplicate: saved.duplicate };
@@ -256,21 +219,20 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
     } else if (event.type === "finished") {
       stopWaiting();
     } else if (event.type === "thinking") {
-      generatorThinkingId.current = null;
       setMessages((prev) => [...prev, { id: nextId(), kind: "thinking", text: event.text, source: "model" }]);
     } else if (event.type === "notice") {
       setMessages((prev) => [...prev, { id: nextId(), kind: "status", tone: "warn", text: event.text }]);
     } else if (event.type === "calling") {
       stopWaiting();
-      generatorThinkingId.current = null;
       const names = event.calls.map((c) => c.name);
-      setActivity(names.includes("generate_diagram") ? "Generating the diagram…" : names.length === 1 ? `Running ${names[0]}…` : `Running ${names.length} steps…`);
+      setActivity(names.length === 1 ? `Running ${names[0]}…` : `Running ${names.length} steps…`);
     } else if (event.type === "assistant") {
       setActivity(null);
       setMessages((prev) => [...prev, { id: nextId(), kind: "assistant", text: event.text }]);
     } else if (event.type === "tool") {
       const { result } = event;
       setActivity(null);
+      latest.current.setGenerationPreview(null);
       setMessages((prev) => [
         ...prev,
         {
@@ -362,13 +324,42 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
         session: { log: (event) => console.info("[canvas-agent]", JSON.stringify({ tool: event.tool, ok: event.ok, code: event.code, ms: event.ms, created: event.created, updated: event.updated, removed: event.removed })) },
       });
       const startRevision = revisionOf(host.getStored());
+      // Live diagram code: the reply streams in, and the diagram written so far is drawn as a preview (not stored)
+      // until the finished block is drawn for real.
+      let draft = "";
+      let previewAt = 0;
+      const turnClient = createTurnClient({
+        whiteboardId,
+        provider,
+        model,
+        signal: abort.signal,
+        onDelta: (delta) => {
+          draft += delta;
+          const live = codeSoFar(draft);
+          if (!live) return;
+          stopWaiting();
+          setActivity(`Writing diagram code · ${live.lines} line${live.lines === 1 ? "" : "s"}`);
+          if (executor.session.builder?.mode === "edit" || (Date.now() - previewAt < 250 && !live.closed)) return;
+          previewAt = Date.now();
+          try {
+            const { elements } = elementsFromDiagramCode(withDefaultShapes(expandInlineBlocks(live.code)), { generationId: "live-preview", frameId: "frame-live-preview", familyEngine: true });
+            const { zoom, panOffset } = latest.current.canvasViewport;
+            if (elements.length > 0) latest.current.setGenerationPreview(placePreview(elements, host.getStored() as DrawingElement[], { zoom, pan: panOffset }));
+          } catch {
+            // A half-written line can fail to compile; the last good preview stays.
+          }
+        },
+      });
       try {
         const run = await runCanvasAgent({
           prompt: text,
           images,
           history: historyRef.current,
           executor,
-          callTurn: createTurnClient({ whiteboardId, provider, model, signal: abort.signal }),
+          callTurn: async (input) => {
+            draft = "";
+            return turnClient(input);
+          },
           signal: abort.signal,
           onEvent: record,
         });
@@ -387,6 +378,7 @@ export const useCanvasAgent = (controller: WhiteboardPageController) => {
       } finally {
         abortRef.current = null;
         setActivity(null);
+        latest.current.setGenerationPreview(null);
         clearInterval(renew);
         await persistRun(whiteboardId);
         // After the transcript is saved, so the next person starts from the finished conversation.

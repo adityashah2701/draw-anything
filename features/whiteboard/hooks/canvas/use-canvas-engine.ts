@@ -1,4 +1,5 @@
 import { withHiddenTitle } from "@/core/shapes/frame/renderer";
+import { isRevealed, revealPending } from "@/features/canvas-tools/editor/reveal";
 import { selectionInk } from "@/core/theme/selection-ink";
 import { paintOrder } from "@/core/frames/paint-order";
 import { useCallback, useEffect, useRef } from "react";
@@ -70,7 +71,7 @@ interface CanvasEngineProps {
   iconLibraryVersion?: number;
   /** A layout being previewed: drawn over the board, never part of it. */
   layoutPreview?: LayoutPreview | null;
-  /** A diagram being generated, drawn like the board but not part of it. */
+  /** A diagram the agent is still writing, drawn like the board but not part of it. */
   generationPreview?: DrawingElement[] | null;
 }
 
@@ -156,9 +157,11 @@ const useCanvasEngine = ({
     // Draw all elements with selection state. When an overlay stands in for the per-shape box and
     // handles (a group or several shapes), the shapes themselves are drawn unselected.
     const selectedSet = new Set(selectedElements);
+    const frameTime = performance.now();
     const shapeChrome = !selectionOverlay?.replacesShapeChrome;
     paintOrder(elements).forEach((element) => {
       const selected = selectedSet.has(element.id);
+      if (!isRevealed(element.id, frameTime)) return;
       if (!isVisible(element) && !selected) {
         return;
       }
@@ -374,10 +377,11 @@ const useCanvasEngine = ({
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
     }
-    rafRef.current = requestAnimationFrame(() => {
+    const frame = () => {
       forceRender();
-      rafRef.current = null;
-    });
+      rafRef.current = revealPending() ? requestAnimationFrame(frame) : null;
+    };
+    rafRef.current = requestAnimationFrame(frame);
 
     return () => {
       if (rafRef.current !== null) {

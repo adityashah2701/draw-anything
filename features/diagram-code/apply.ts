@@ -333,7 +333,7 @@ const growAutoFrames = (canvas: readonly DrawingElement[], patch: ApplyPatch, au
     for (const el of held) {
       const b = boundsOf(el.points);
       minX = Math.min(minX, b.minX - padding);
-      minY = Math.min(minY, b.minY - padding - FRAME_DEFAULTS.headerHeight);
+      minY = Math.min(minY, b.minY - padding);
       maxX = Math.max(maxX, b.maxX + padding);
       maxY = Math.max(maxY, b.maxY + padding);
     }

@@ -1,8 +1,9 @@
 import type { ToolExecutor } from "../executor";
 import type { ToolGroup, ToolResult } from "../types";
 import { formatResultForModel } from "./format";
-import { suggestGroups } from "./groups";
+import { CHANGE_WORDS, DIAGRAM_WORDS, GROW_WORDS, suggestGroups } from "./groups";
 import { stripImages } from "./images";
+import { buildStateMessage, windowMessages } from "./state-message";
 import type { CanvasMessage, CanvasToolCall, CanvasTurn } from "./types";
 
 export type AgentEvent =
@@ -116,7 +117,7 @@ const straightenWhatWasMade = async (executor: ToolExecutor, id: string): Promis
 };
 
 const BLOCKING = new Set(["dangling_connector", "stale_connector", "connector_through_node", "overlap", "invalid_geometry", "duplicate_id", "bad_anchor"]);
-/** After generate_diagram the layout is the compiler's own: only parts that are actually broken are sent back to fix. */
+/** After the builder drew, the layout is the compiler's own: only parts that are actually broken are sent back to fix. */
 const BROKEN = new Set(["dangling_connector", "stale_connector", "invalid_geometry", "duplicate_id", "bad_anchor"]);
 
 const tally = (results: readonly ToolResult[]) => ({
@@ -142,7 +143,18 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
   let wroteSinceCheck = false;
   const messages: CanvasMessage[] = [...(options.history ?? []), { role: "user", content: options.prompt, ...(options.images?.length ? { images: options.images } : {}) }];
   const results: ToolResult[] = [];
-  executor.enable(suggestGroups(options.prompt));
+  // The builder tools are always on, as the server always offers them (a follow-up edit may name no diagram word).
+  executor.enable(["generate", ...suggestGroups(options.prompt)]);
+  const hasDiagram = executor.host.getStored().some((el) => (el as { ai?: { role?: string } }).ai?.role === "node");
+  // With a diagram on the board, a request to add to it or change it edits that diagram; "new", "another" or a
+  // request with neither (Design WhatsApp) draws a new one beside it. A selection at the start always means an edit.
+  const fresh = /\b(new|another|second|separate|fresh|from scratch)\b/i.test(options.prompt);
+  const selected = executor.host.getSelection().length > 0;
+  const grows = hasDiagram && !fresh && (selected || GROW_WORDS.test(options.prompt) || CHANGE_WORDS.test(options.prompt));
+  executor.session.builder = { ...executor.session.builder, diagramRequest: DIAGRAM_WORDS.test(options.prompt) || (hasDiagram && !fresh && GROW_WORDS.test(options.prompt)), mode: executor.session.builder?.mode ?? (grows ? "edit" : "new") };
+  // Where this request starts in the message list, and one line per earlier request, for the state message.
+  const runStart = messages.length - 1;
+  const earlier = (options.history ?? []).filter((m) => m.role === "user").map((m) => m.content.replace(/\s+/g, " ").slice(0, 160));
 
   let remaining: string[] = [];
   let limit: AgentRun["limit"];
@@ -176,7 +188,10 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
 
     let turn: CanvasTurn;
     try {
-      turn = await withDeadline(callTurn({ messages: [...messages], enabledGroups: [...executor.session.enabledGroups] }), budget.turnMs, `The model took longer than ${Math.round(budget.turnMs / 60_000)} minutes to answer step ${step}. The changes so far are on the board; say "continue" to pick up from there.`);
+      // Builder turns: a short window of the conversation plus one state message rebuilt from the live board (goal,
+      // plan, the diagram as code, its faults, the budget), so the cost per turn stays flat and nothing is forgotten.
+      const state = buildStateMessage(executor, { goal: options.prompt, earlier, step, maxSteps: budget.turns, secondsLeft: (budget.maxMs - (now() - startedAt)) / 1000 });
+      turn = await withDeadline(callTurn({ messages: [...windowMessages(messages, runStart), { role: "user", content: state }], enabledGroups: [...executor.session.enabledGroups] }), budget.turnMs, `The model took longer than ${Math.round(budget.turnMs / 60_000)} minutes to answer step ${step}. The changes so far are on the board; say "continue" to pick up from there.`);
     } catch (error) {
       if (signal?.aborted) return finish("aborted", "", undefined, step - 1);
       return finish("error", "", error instanceof Error ? error.message : "The assistant could not be reached.", step - 1);
@@ -190,15 +205,19 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
 
     // Ids are made unique across turns (providers may reuse "call_1"), so a retried id is never mistaken for a replay.
     const calls: CanvasToolCall[] = turn.calls.map((call, index) => ({ id: `s${step}_${index}_${call.id}`.slice(0, 80), name: call.name, args: call.args }));
+    // The agent may simply write the diagram: a fenced diagram code block in a reply without calls is drawn as a builder step.
+    const written = calls.length === 0 ? /```(?:diagram(?:-code)?|eraser)?[^\n]*\n([\s\S]*?)```/.exec(turn.text)?.[1]?.trim() : undefined;
+    if (written && /[>\[{]/.test(written)) calls.push({ id: `s${step}_code`, name: "add_to_diagram", args: { code: written } });
     messages.push({ role: "assistant", content: turn.text, ...(calls.length > 0 ? { toolCalls: calls } : {}) });
-    if (turn.text.trim()) onEvent?.({ type: "assistant", text: turn.text });
+    const shown = turn.text.replace(/```[\s\S]*?```/g, "").trim();
+    if (shown) onEvent?.({ type: "assistant", text: shown });
     if (calls.length === 0) {
       // Never report success from tool responses alone: look at the board once the model says it is finished.
       if (wroteSinceCheck && verifyRounds < budget.verifyRounds) {
         verifyRounds += 1;
         wroteSinceCheck = false;
         // A generated diagram was laid out and routed by the compiler; the simple tidy and hand moves only make it worse.
-        const generated = results.some((r) => r.ok && r.tool === "generate_diagram");
+        const generated = results.some((r) => r.ok && (r.tool === "add_to_diagram" || r.tool === "adjust_diagram"));
         const straightened = options.autoTidy === false || generated ? undefined : await straightenWhatWasMade(executor, `${step}_${verifyRounds}`);
         if (straightened) onEvent?.({ type: "notice", text: straightened });
         const check = await executor.execute({ id: `verify_${step}_${verifyRounds}`, name: "validate_diagram", args: {} });
@@ -228,8 +247,8 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
       onEvent?.({ type: "tool", step, call, result: stepResults[index] });
     });
 
-    // Generating a diagram can take minutes on a slow model; that time is work, not a stall, whatever its outcome.
-    if (calls.some((call) => call.name === "generate_diagram")) lastProgressAt = now();
+    // The builder said the diagram is done and the finish gate accepted it.
+    if (executor.session.builder?.finished) return finish("done", turn.text, undefined, step);
     if (stepResults.some((r, index) => r.ok && executor.tools.get(calls[index].name)?.access === "write")) {
       wroteSinceCheck = true;
       lastProgressAt = now();

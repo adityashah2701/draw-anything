@@ -147,6 +147,14 @@ const familyRules = (parsed: ParsedDiagramCode, idOf: (ref: string) => string | 
     if (fkOnly.length > 0) add("er-fk-without-relation", `Tables with foreign keys but no relationship line: ${fkOnly.slice(0, 4).join(", ")}. Connect each to the table it references.`);
   }
 
+  if (diagramType === "class") {
+    const blank = (text: string | undefined) => !text || !text.split(";").some((m) => m.trim());
+    const emptyEnums = nodes.filter((n) => (n.shape === "enum" || n.data?.variant === "enumeration") && blank(n.data?.attributes));
+    if (emptyEnums.length > 0) add("class-empty-enum", `Enums with no values: ${emptyEnums.slice(0, 4).map((n) => n.label).join(", ")}. List the literals in attributes: \`SpotType [shape: enum, attributes: "COMPACT; LARGE; HANDICAPPED"]\`.`);
+    const emptyClasses = nodes.filter((n) => n.shape === "class" && !["enumeration", "interface"].includes(n.data?.variant ?? "") && blank(n.data?.attributes) && blank(n.data?.operations));
+    if (emptyClasses.length > 0) add("class-empty-class", `Classes with no members: ${emptyClasses.slice(0, 4).map((n) => n.label).join(", ")}. Give each its key fields and methods.`);
+  }
+
   if (diagramType === "sequence") {
     const unanswered = ends.filter(({ e, from, to }, i) => e.relation?.kind === "sync-message" && !ends.slice(i + 1).some((r) => r.from === to && r.to === from && r.e.relation?.kind === "return-message"));
     if (unanswered.length > 0) add("sequence-no-return", `Synchronous calls with no return after them: ${unanswered.slice(0, 4).map(({ e }) => `${nameOf(e.from)} > ${nameOf(e.to)}`).join(", ")}. Add the reply (\`[relation: return]\`), or make the call async.`);
@@ -161,6 +169,16 @@ const familyRules = (parsed: ParsedDiagramCode, idOf: (ref: string) => string | 
     const idle = nodes.filter((n) => /\bservice\b/.test(what(n)) && !leaving.has(n.id)).map((n) => n.label);
     if (idle.length > 0) add("hld-idle-service", `Services that call nothing: ${idle.slice(0, 4).join(", ")}. Connect each to the store, queue or service it uses.`);
   }
+
+  // Structure: a design with several layers is read through its frames (or groups); a frame around one node says nothing.
+  const containers = [...parsed.frames.map((f) => ({ title: f.title, nodeIds: f.nodeIds, top: !f.parentId })), ...parsed.groups.map((g) => ({ title: g.label, nodeIds: g.nodeIds, top: !g.parentId }))];
+  if ((diagramType === "architecture" || diagramType === "network") && nodes.length >= 8 && containers.length === 0) {
+    add("structure-no-frames", `${nodes.length} parts and no frames: put the layers or domains in frames (\`frame Clients { ... }\`, \`frame Data { ... }\`), externals outside.`);
+  }
+  const lonely = containers.filter((c) => c.nodeIds.length === 1).map((c) => c.title);
+  if (lonely.length > 0) add("structure-single-member", `Frames or groups around a single node: ${lonely.slice(0, 4).join(", ")}. Take the node out, or put its neighbours in with it.`);
+  const tops = containers.filter((c) => c.top).length;
+  if (tops > 6) add("structure-too-many-frames", `${tops} top-level frames or groups: merge them into 3-6 layers or domains.`);
 
   if (diagramType === "flowchart" || diagramType === "workflow") {
     const starts = nodes.filter((n) => n.kind === "start");

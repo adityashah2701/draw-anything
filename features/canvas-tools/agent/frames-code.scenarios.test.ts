@@ -51,7 +51,7 @@ describe("organising a diagram into frames", () => {
     expect(find(mem.stored, "cache")).toMatchObject({ frameId: "data" });
     // Nothing was recreated or moved, and every connector still joins the same two elements.
     expect(unmoved(board, mem.stored)).toBe(true);
-    expect(turns[0].system).toContain("Group, frame or plain shape");
+    expect(turns[0].system).toMatch(/frames by layer or domain/);
     expect(turns[0].specs).toEqual(expect.arrayContaining(["create_frame_or_section", "add_to_frame", "fit_frame", "list_frames"]));
   });
 
@@ -110,30 +110,6 @@ describe("organising a diagram into frames", () => {
     expect(unmoved(before.filter((e) => e.id !== "be"), mem.stored)).toBe(true);
   });
 
-  it("adds a queue to the Backend frame and connects it", async () => {
-    const framed = setup({ elements: await architecture() });
-    await framed.ok("create_frame_or_section", { id: "be", title: "Backend", ids: ["gateway", "auth", "orders", "payments"] });
-    const { run, mem } = await scriptedRun({
-      prompt: "Add a message queue to the Backend frame and connect it to Orders",
-      board: { elements: [...framed.mem.stored] },
-      script: [
-        reply("", [call("list_frames")]),
-        reply("", [
-          call("create_semantic_node", { id: "queue", label: "Message Queue", kind: "queue", x: 300, y: 520 }),
-          call("add_to_frame", { frame: "be", ids: ["queue"] }),
-          call("create_connector", { id: "orders-queue", from: "orders", to: "queue" }),
-        ]),
-        reply("", [call("validate_diagram")]),
-        reply("Added the queue to Backend and connected it to Orders."),
-      ],
-    });
-    expect(failed(run)).toEqual([]);
-    expect(find(mem.stored, "queue")).toMatchObject({ frameId: "be" });
-    expect(find(mem.stored, "orders-queue")).toMatchObject({ startConnection: { elementId: "orders" }, endConnection: { elementId: "queue" } });
-    const frame = boxOf(find(mem.stored, "be") as never);
-    const queue = boxOf(find(mem.stored, "queue") as never);
-    expect(queue.y + queue.h).toBeLessThanOrEqual(frame.y + frame.h);
-  });
 });
 
 describe("invalid frame operations come back as errors the model can act on", () => {

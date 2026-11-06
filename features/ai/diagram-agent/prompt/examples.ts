@@ -195,29 +195,29 @@ Support > Help Center, On-call`,
 title Chat messaging system
 direction right
 
-Clients {
+frame Clients {
   Mobile App [icon: mobile, shape: icon]
   Web App [icon: browser, shape: icon]
 }
 
-Edge {
+frame Edge {
   Load Balancer [icon: load-balancer, shape: icon]
   Chat Servers [icon: server, shape: icon]
 }
 
-Realtime {
+frame Realtime {
   Presence Service [icon: service, shape: icon]
   Connection Cache [icon: redis, shape: icon]
 }
 
-Messaging {
+frame Messaging {
   Message Queue [icon: kafka, shape: icon]
   Message Service [icon: service, shape: icon]
   Message DB [icon: database, shape: icon]
   Notification Service [icon: notification, shape: icon]
 }
 
-Media {
+frame Media {
   Media Service [icon: service, shape: icon]
   Blob Storage [icon: s3, shape: icon]
   CDN [icon: cdn, shape: icon]

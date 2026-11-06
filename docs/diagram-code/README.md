@@ -53,7 +53,7 @@ Properties go in square brackets after a name. Hover a property in the editor fo
 
 Kinds: service, database, server, api, queue, cache, storage, cdn, dns, firewall, waf, load-balancer, internet, kubernetes, pod, cluster, container, worker, service-mesh, deployment, namespace, region, availability-zone, vm, user, mobile, browser, lambda, event-bus, secrets, authentication, gateway, message-broker, ai-model, agent, tool, memory, knowledge-base, vector-store, dashboard, alerting, config, cicd, workflow, start, end, decision, parallel, retry, loop, external, generic.
 
-Header lines (`title`, `type`, `direction`) come first. `type` is one of `architecture`, `flowchart`, `concept`, `mind-map`, `sequence`, `network`, `entity-relationship`, `workflow`, `class`, `organization`, `dependency`. **Limit:** `type` is recorded, but every type is laid out by the same graph layout. There are no sequence lifelines, mind-map radial layout or UML class compartments; do not expect them. `direction` is accepted and has **no effect** on the layout yet.
+Header lines (`title`, `type`, `direction`) come first. `type` is one of `architecture`, `flowchart`, `concept`, `mind-map`, `sequence`, `network`, `entity-relationship`, `workflow`, `class`, `organization`, `dependency`; a typed diagram is placed by its family's layout engine (mind-map radial, ER and class engines, sequence lifelines, BPMN). `direction` is `down`, `right`, `up` or `left` and sets the reading direction of the layout.
 
 ## Groups and frames
 
@@ -109,20 +109,30 @@ Back-order > Approved: later
 
 ### Database (entity-relationship)
 
-Entities are nodes; relationships are labelled lines. There are no crow's-foot symbols or column lists.
+Entities are tables (`shape: entity`) with one row per column; relationships carry their cardinality as a relation, drawn with crow's-foot ends.
 
 ```diagram-code
 type entity-relationship
 title Library
-Member [kind: database]
-Loan [kind: database]
-Book [kind: database]
-Author [kind: database]
+Member [shape: entity, rows: "id int pk; name text; email text uq"]
+Book [shape: entity, rows: "id int pk; title text"]
+Loan [shape: entity, variant: junction, rows: "id int pk; member_id int fk -> member.id; book_id int fk -> book.id; due date"]
 
-Member - Loan: borrows
-Loan - Book: of
-Book - Author: written by
+Member > Loan: borrows [relation: er-relationship, from: one, to: zero-or-many]
+Book > Loan: lent in [relation: er-relationship, from: one, to: zero-or-many]
 ```
+
+## Structured shapes
+
+| `shape:` | Draws | Content properties |
+|---|---|---|
+| `entity` (`table`) | an ER table: header plus one line per column | `rows: "id int pk; team_id int fk -> teams.id"`, `variant: weak\|associative\|junction` |
+| `class` | a UML class with compartments | `attributes: "-total: Money"`, `operations: "+pay(m: Method): Receipt"` (`;` between members), `variant`, `stereotype`, `template` |
+| `interface`, `enum` | a UML interface, or an enumeration (literals in `attributes`) | as `class` |
+| `lifeline` | a sequence participant with its lifeline; messages are connections in order | |
+| `topic` (`branch`) | a mind-map topic; its role and colour follow from where it sits in the tree | |
+
+Rectangles, semantic nodes, tables and classes have three connection points per side (25 %, 50 %, 75 %); `from`/`to` sides still name a side.
 
 ### Cloud / backend architecture
 

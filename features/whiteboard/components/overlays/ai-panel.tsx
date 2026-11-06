@@ -78,7 +78,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
   React.useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
-    fetch("/api/ai/generate-diagram")
+    fetch("/api/ai/canvas-agent")
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { providers?: AIModelProvider[] } | null) => {
         if (cancelled || !Array.isArray(data?.providers)) return;

@@ -307,7 +307,8 @@ export const createFrame = (stored: readonly StoredElement[], input: CreateFrame
     strokeWidth: FRAME_DEFAULTS.strokeWidth,
     ...(parent ? { frameId: parent } : {}),
   };
-  const styled = applyChanges(base, { ...(input.style ?? {}), title: input.title });
+  // New frames carry their title on a tab above the border; frames saved before keep the inside header they were drawn with.
+  const styled = applyChanges(base, { titlePlacement: "above", ...(input.style ?? {}), title: input.title });
   if (isFailure(styled)) return styled;
   let frame = withBox(styled, enforceMinimumSize(styled, input.box));
 

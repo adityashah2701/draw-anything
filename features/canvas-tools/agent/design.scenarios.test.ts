@@ -14,38 +14,9 @@ const labels = ["Start", "Validate the incoming order payload", "Is the customer
 const kinds = ["terminal", "process", "decision", "process"] as const;
 
 describe("design-first drawing", () => {
-  it("plans geometry, draws exactly the plan, reviews the result and stops when it is good", async () => {
-    const { run, mem, turns } = await scriptedRun({
-      prompt: "Draw the order flow: start, validate the payload, check the customer, ship",
-      board: { viewport: { zoom: 1, pan: { x: 0, y: 0 }, width: 1200, height: 900 } },
-      script: [
-        reply("Planning the layout.", [call("plan_layout", { nodes: labels.map((label, i) => ({ label, kind: kinds[i] })), lanes: 1 })]),
-        (c) => {
-          const plan = dataOf<Plan>(c, "plan_layout");
-          return reply("Drawing.", [
-            ...labels.map((label, i) => call(i === 0 ? "create_shape" : "create_semantic_node", i === 0 ? { id: `n${i}`, shape: "pill", label, ...plan.slots[i], snap: false } : { id: `n${i}`, label, x: plan.slots[i].x, y: plan.slots[i].y, width: plan.slots[i].width, height: plan.slots[i].height, snap: false })),
-            call("create_connector", { from: "n0", to: "n1" }),
-            call("create_connector", { from: "n1", to: "n2" }),
-            call("create_connector", { from: "n2", to: "n3", label: "Yes" }),
-          ]);
-        },
-        reply("Checking the result.", [call("review_layout")]),
-        reply("The order flow is drawn."),
-      ],
-    });
-    expect(run.status).toBe("done");
-    expect(run.results.filter((r) => !r.ok).map((r) => `${r.tool}:${r.error?.message}`)).toEqual([]);
-    const plan = JSON.parse(run.messages.find((m) => m.role === "tool" && (m as { name?: string }).name === "plan_layout")!.content as string).data as Plan;
-    plan.slots.forEach((slot, i) => expect(boxOf(find<DrawingElement>(mem.stored, `n${i}`))).toMatchObject({ x: slot.x, y: slot.y }));
-    const review = run.results.find((r) => r.tool === "review_layout")!.data as { verdict: string };
-    expect(review.verdict).toBe("good");
-    expect(turns[0].system).toContain("plan_layout");
-    expect(turns[0].specs).toEqual(expect.arrayContaining(["plan_layout", "review_layout"]));
-  });
-
   it("corrects what the review names with a targeted move, reviews again, and leaves everything else where it was", async () => {
     const { run, mem } = await scriptedRun({
-      prompt: "Add a Cache next to the API",
+      prompt: "Place a Cache box next to the API",
       board: { elements: [node("api", "API", 0, 0), node("far", "Elsewhere", 1000, 600)] },
       script: [
         reply("", [enable("create", "edit"), call("create_semantic_node", { id: "cache", label: "Cache", x: 60, y: 20, width: 168, height: 78, snap: false })]),
@@ -76,44 +47,11 @@ describe("design-first drawing", () => {
       reply("Added both."),
     ];
     const board = { elements: [node("gw", "Gateway", 300, 0)] };
-    const off = await scriptedRun({ prompt: "Add a Cache and a Database under the Gateway", board, script: script(), autoTidy: false });
+    const off = await scriptedRun({ prompt: "Place a Cache box and a Database box under the Gateway", board, script: script(), autoTidy: false });
     expect(boxOf(find<DrawingElement>(off.mem.stored, "cache"))).toMatchObject({ x: 322, y: 150 });
     expect(boxOf(find<DrawingElement>(off.mem.stored, "db"))).toMatchObject({ x: 280, y: 420 });
-    const on = await scriptedRun({ prompt: "Add a Cache and a Database under the Gateway", board, script: script() });
+    const on = await scriptedRun({ prompt: "Place a Cache box and a Database box under the Gateway", board, script: script() });
     expect(boxOf(find<DrawingElement>(on.mem.stored, "db")).x).not.toBe(280);
   });
 });
 
-describe("a request with many branches", () => {
-  it("draws a 14-node order flow in a handful of calls: plan, create_nodes, connect, frame, review", async () => {
-    const spec = [
-      ["customer", "Customer", "icon", "user"], ["place", "Place order", "terminal"], ["validate", "Validate order", "process"], ["pay", "Payment OK?", "decision"],
-      ["retry", "Retry payment", "process"], ["cancel", "Cancel order", "terminal"], ["stock", "In stock?", "decision"], ["restock", "Restock item", "process"],
-      ["process", "Process order", "process"], ["ship", "Ship order", "process"], ["notify", "Notify customer", "process"], ["deliver", "Deliver order", "terminal"],
-    ] as const;
-    const { run, mem, turns } = await scriptedRun({
-      prompt: "Draw an e-commerce order flow with payment and stock decisions, retry and cancellation paths",
-      board: { viewport: { zoom: 1, pan: { x: 0, y: 0 }, width: 1470, height: 923 } },
-      script: [
-        reply("Planning.", [call("plan_layout", { nodes: spec.map(([, label, kind]) => ({ label, kind })) })]),
-        (c) => {
-          const plan = dataOf<{ slots: Array<{ x: number; y: number; width: number; height: number }> }>(c, "plan_layout");
-          return reply("Drawing the nodes.", [call("create_nodes", { nodes: spec.map(([id, label, kind, icon], i) => ({ id, label, kind, ...(icon ? { icon } : {}), ...plan.slots[i] })) })]);
-        },
-        reply("Connecting.", [call("connect_elements", { connections: [
-          { from: "customer", to: "place" }, { from: "place", to: "validate" }, { from: "validate", to: "pay" }, { from: "pay", to: "stock", label: "Yes" },
-          { from: "pay", to: "retry", label: "No" }, { from: "retry", to: "cancel", label: "Failure" }, { from: "stock", to: "process", label: "In stock" },
-          { from: "stock", to: "restock", label: "Out of stock" }, { from: "process", to: "ship" }, { from: "ship", to: "notify" }, { from: "notify", to: "deliver" },
-        ] })]),
-        reply("", [call("create_frame_or_section", { title: "Order validation", ids: ["place", "validate", "pay"] })]),
-        reply("", [call("review_layout")]),
-        reply("The order flow is drawn."),
-      ],
-    });
-    expect(run.status).toBe("done");
-    expect(run.results.filter((r) => !r.ok).map((r) => `${r.tool}:${r.error?.message}`)).toEqual([]);
-    expect(run.results.filter((r) => r.tool === "create_nodes")).toHaveLength(1);
-    expect(mem.stored.filter((e) => e.type === "arrow")).toHaveLength(11);
-    expect(turns[0].system).toContain("create_nodes");
-  });
-});

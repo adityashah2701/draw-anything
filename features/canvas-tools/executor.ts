@@ -35,6 +35,9 @@ const isAbortError = (error: unknown): boolean => typeof error === "object" && e
 
 const argumentNames = (tool: ToolDefinition): string[] => Object.keys((tool.input as unknown as { shape?: Record<string, unknown> }).shape ?? {});
 
+/** Tools that draw a diagram piece by piece; while a diagram is being drawn the builder's code tools are used instead. */
+const PIECEWISE_TOOLS = new Set(["create_semantic_node", "create_nodes", "create_connector", "create_shape", "create_icon", "plan_layout", "review_layout", "import_diagram"]);
+
 export interface ToolExecutorOptions {
   host: CanvasHost;
   tools: readonly ToolDefinition[];
@@ -63,6 +66,7 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     replay: given?.replay ?? new Map(),
     touched: given?.touched ?? new Set<string>(),
     autoApproveDestructive: given?.autoApproveDestructive,
+    builder: given?.builder ?? {},
     log: given?.log,
   };
 
@@ -100,6 +104,10 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
       // The model named a real tool: switch its group on now (what enable_tools would do) so the next call just works.
       session.enabledGroups.add(tool.group);
       return failure(tool.name, { code: "tool_not_enabled", message: notEnabledMessage(tool, argumentNames(tool), tools.filter((t) => t.group === tool.group).map((t) => t.name)), details: { group: tool.group, enabled: true } }, started, call.id);
+    }
+
+    if (session.builder?.diagramRequest && !session.builder.finished && PIECEWISE_TOOLS.has(tool.name)) {
+      return failure(tool.name, { code: "invalid_state", message: `${tool.name} is not used for diagrams: write the diagram as code. Call set_plan, then add_to_diagram with diagram code (for example \`frame Edge {\` / \`Load Balancer [icon: load-balancer, shape: icon]\` / \`}\` / \`Load Balancer > API Gateway: HTTPS\`); change it with adjust_diagram.` }, started, call.id);
     }
 
     if (call.id && tool.access === "write") {
@@ -246,7 +254,7 @@ export const createToolExecutor = ({ host, tools, session: given, now = Date.now
     for (const group of groups) if ((TOOL_GROUPS as readonly string[]).includes(group)) session.enabledGroups.add(group);
   };
 
-  return { execute, executeAll, enable, session, tools: byName };
+  return { execute, executeAll, enable, session, tools: byName, host };
 };
 
 export type ToolExecutor = ReturnType<typeof createToolExecutor>;

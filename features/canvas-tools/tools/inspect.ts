@@ -338,7 +338,7 @@ export const GROUP_DESCRIPTIONS: Record<ToolGroup, string> = {
   arrange: "align, distribute, space, layout, tidy",
   organize: "group, ungroup, frames (create, fit, resize, delete)",
   document: "undo, redo, clear, export, save, load",
-  generate: "draw a new diagram from a description",
+  generate: "the builder: plan, draw and adjust a diagram in steps, finish",
   code: "check, format, apply diagram code",
   memory: "remember a preference or decision",
 };

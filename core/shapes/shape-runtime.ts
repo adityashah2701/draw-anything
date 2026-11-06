@@ -14,6 +14,10 @@ import {
 } from "@/core/shapes/base/base-shape-definition";
 import { initializeShapeRegistry } from "@/core/shapes/register-shapes";
 import { centerOf, normalizeDegrees, rotatedBoundsAabb, rotatePoint } from "@/core/geometry/box";
+import { buildAnchorId } from "@/core/anchors/anchor-geometry";
+import { portAnchorId, portPoint } from "@/core/anchors/ports";
+import { layoutEntityTable, rowsOf } from "@/core/shapes/entity-table/layout";
+import { LINE as CLASS_LINE, layoutClassifier, memberLines } from "@/core/shapes/uml-classifier/layout";
 
 const registry = initializeShapeRegistry();
 
@@ -74,21 +78,65 @@ const SIDE_AT: AnchorSide[] = ["right", "bottom", "left", "top"];
 const rotatedSide = (side: AnchorSide, degrees: number): AnchorSide =>
   SIDE_AT[((Math.round((SIDE_ANGLE[side] + degrees) / 90) % 4) + 4) % 4];
 
+/** Shapes whose sides are straight lines of their box, so a point a quarter along a side lies on the outline. */
+const PORTED_TYPES: ReadonlySet<string> = new Set(["rectangle", "semantic-node", "entity-table", "uml-classifier"]);
+const SIDE_PORTS = [0.25, 0.75];
+
+/**
+ * Three connection points per side on box-like shapes: the side's middle anchor (its id unchanged, so old boards
+ * keep their connections) and two ports a quarter in from each corner. Ports use the port id form
+ * (`core/anchors/ports.ts`), which the router and `parseAnchorSide` already read.
+ */
+/**
+ * Where each member of a class or row of a table sits, as a fraction of the box height: a connector can attach
+ * beside the very line it is about (a foreign key, a field). Empty for other shapes.
+ */
+const memberFractions = (shape: DrawingElement, height: number): number[] => {
+  if (height <= 0) return [];
+  if (shape.type === "entity-table") {
+    const l = layoutEntityTable(shape);
+    const rows = rowsOf(shape).filter((r) => shape.kind !== "junction" || r.keys?.includes("fk"));
+    return rows.map((_, i) => (l.headerHeight + (i + 0.5) * l.rowHeight) / height);
+  }
+  if (shape.type === "uml-classifier") {
+    const l = layoutClassifier(shape);
+    const at = (start: number, count: number) => Array.from({ length: count }, (_, i) => (start + 4 + (i + 0.5) * CLASS_LINE) / height);
+    return [
+      ...(l.showAttributes ? at(l.header, memberLines(shape.attributes).length) : []),
+      ...(l.showOperations ? at(l.header + l.attributes, memberLines(shape.operations).length) : []),
+    ];
+  }
+  return [];
+};
+
+const withSidePorts = (shape: DrawingElement, anchors: Anchor[], box: Bounds | null): Anchor[] => {
+  if (!box || !PORTED_TYPES.has(shape.type)) return anchors;
+  const members = [...new Set(memberFractions(shape, box.maxY - box.minY).filter((f) => f > 0 && f < 1).map((f) => Math.round(f * 100) / 100))];
+  const ports = anchors.flatMap((anchor) => {
+    if (anchor.id !== buildAnchorId(shape.id, anchor.side)) return [];
+    // Tables and classes connect beside their rows on the left and right; everything else at a quarter and three quarters.
+    const fractions = members.length > 0 && (anchor.side === "left" || anchor.side === "right") ? members.filter((f) => f !== 0.5) : SIDE_PORTS;
+    return fractions.map((f) => ({ ...portPoint(box, anchor.side, f), id: portAnchorId(shape.id, anchor.side, f), side: anchor.side }));
+  });
+  return [...anchors, ...ports];
+};
+
 export const getShapeAnchors = (
   shape: DrawingElement,
   bounds?: Bounds | null,
 ): Anchor[] => {
   const definition = getShapeDefinition(shape.type);
   if (!definition) return [];
+  const anchorsIn = (box: Bounds | null) => withSidePorts(shape, definition.getAnchors(shape, box), box);
   const rotation = getShapeRotation(shape);
-  if (!rotation) return definition.getAnchors(shape, bounds ?? definition.getBounds(shape));
+  if (!rotation) return anchorsIn(bounds ?? definition.getBounds(shape));
 
   // Anchors keep their ids (a connector stays on the same logical point when the shape turns) but
   // move with the outline, and report the side they now face so routes leave and arrive sensibly.
   const local = definition.getBounds(shape);
   if (!local) return [];
   const center = centerOf(local);
-  return definition.getAnchors(shape, local).map((anchor) => {
+  return anchorsIn(local).map((anchor) => {
     const moved = rotatePoint(anchor, center, rotation);
     return { ...anchor, x: moved.x, y: moved.y, side: rotatedSide(anchor.side, rotation) };
   });

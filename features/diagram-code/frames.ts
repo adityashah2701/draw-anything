@@ -120,7 +120,7 @@ export const drawFrames = (ir: DiagramIR, elements: DrawingElement[], { source, 
     const padding = frame.padding ?? FRAME_DEFAULTS.padding;
     const content = contentOf(frame);
     const minX = frame.x ?? (content ? content.minX - padding : 0);
-    const minY = frame.y ?? (content ? content.minY - padding - FRAME_DEFAULTS.headerHeight : 0);
+    const minY = frame.y ?? (content ? content.minY - padding : 0);
     const maxX = frame.width !== undefined ? minX + frame.width : content ? content.maxX + padding : minX + FALLBACK_SIZE.width;
     const maxY = frame.height !== undefined ? minY + frame.height : content ? content.maxY + padding : minY + FALLBACK_SIZE.height;
     const box = makeBounds(minX, minY, Math.max(maxX, minX + 1), Math.max(maxY, minY + 1));
@@ -128,6 +128,37 @@ export const drawFrames = (ir: DiagramIR, elements: DrawingElement[], { source, 
     return box;
   };
   const depthOf = (frame: IRFrame) => frameChain(frame.id).length;
+
+  // Sibling frames that the layout packed closer than two paddings and a title band would overlap: the padding on
+  // their facing sides is trimmed (never into the contents, and leaving room for the title tab) until 8 units separate them.
+  for (const frame of ir.frames) boxOf(frame);
+  const siblings = new Map<string, IRFrame[]>();
+  for (const frame of ir.frames) if (frame.x === undefined && frame.y === undefined) siblings.set(frame.parent?.id ?? "", [...(siblings.get(frame.parent?.id ?? "") ?? []), frame]);
+  for (const group of siblings.values()) {
+    for (let i = 0; i < group.length; i += 1) for (let j = i + 1; j < group.length; j += 1) {
+      const [p, q] = [group[i], group[j]];
+      const [bp, bq] = [boxes.get(p.id)!, boxes.get(q.id)!];
+      const [cp, cq] = [contentOf(p), contentOf(q)];
+      if (!cp || !cq) continue;
+      const ox = Math.min(bp.maxX, bq.maxX) - Math.max(bp.minX, bq.minX);
+      const oy = Math.min(bp.maxY, bq.maxY) - Math.max(bp.minY, bq.minY);
+      if (ox <= 0 || oy <= 0) continue;
+      const vertical = oy <= ox;
+      const pFirst = vertical ? bp.minY + bp.maxY < bq.minY + bq.maxY : bp.minX + bp.maxX < bq.minX + bq.maxX;
+      const [first, second, cFirst, cSecond] = pFirst ? [bp, bq, cp, cq] : [bq, bp, cq, cp];
+      // The second frame's title tab sits above its box, so a frame below needs room for it too.
+      let need = (vertical ? first.maxY - second.minY + FRAME_DEFAULTS.tabHeight : first.maxX - second.minX) + 8;
+      const end = vertical ? first.maxY : first.maxX;
+      const cut = Math.max(0, Math.min(need, end - ((vertical ? cFirst.maxY : cFirst.maxX) + 4)));
+      need -= cut;
+      const start = vertical ? second.minY : second.minX;
+      const push = Math.max(0, Math.min(need, (vertical ? cSecond.minY - 4 : cSecond.minX - 4) - start));
+      const trimmedFirst = vertical ? makeBounds(first.minX, first.minY, first.maxX, end - cut) : makeBounds(first.minX, first.minY, end - cut, first.maxY);
+      const trimmedSecond = vertical ? makeBounds(second.minX, start + push, second.maxX, second.maxY) : makeBounds(start + push, second.minY, second.maxX, second.maxY);
+      boxes.set(pFirst ? p.id : q.id, trimmedFirst);
+      boxes.set(pFirst ? q.id : p.id, trimmedSecond);
+    }
+  }
 
   let stored: StoredElement[] = [...elements] as unknown as StoredElement[];
   const created = new Map<string, string>(); // code frame id -> element id

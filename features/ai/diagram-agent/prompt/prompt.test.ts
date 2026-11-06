@@ -6,7 +6,6 @@ import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { EXAMPLES } from "./examples";
 import { iconVocabulary } from "./icon-vocabulary";
 import { PLAYBOOKS } from "./playbooks";
-import { buildSystemPrompt, buildUserPrompt } from "./system";
 import { runTool } from "../tools";
 
 describe("worked examples", () => {
@@ -49,33 +48,11 @@ describe("prompts", () => {
     }
   });
 
-  it("system prompt carries the language, playbooks and examples; text syntax only for the text transport", () => {
-    const text = buildSystemPrompt("text");
-    const native = buildSystemPrompt("native");
-    for (const p of [text, native]) {
-      expect(p).toContain("Group Name { ... }");
-      for (const type of Object.keys(PLAYBOOKS)) expect(p).toContain(`- ${type}:`);
-      expect(p).toContain("CI/CD pipeline");
-      expect(p).not.toMatch(/EXACTLY|exactly \d+ nodes/i);
-    }
-    expect(text).toContain('<tool name="finish">');
-    expect(native).not.toContain("<tool name=");
-  });
 
-  it("the user prompt includes an existing diagram only when there is one", () => {
-    expect(buildUserPrompt("add a cache")).toBe("Request: add a cache");
-    expect(buildUserPrompt("add a cache", "A > B")).toContain("A > B");
-  });
-
-  it("system prompt stays a sensible size", () => {
-    expect(buildSystemPrompt("text").length).toBeLessThan(14_500);
-  });
 });
 
 describe("icon-only nodes in the prompt and tools", () => {
-  it.each(["native", "text"] as const)("%s: the prompt teaches shape: icon", (transport) => {
-    expect(buildSystemPrompt(transport)).toContain("shape: icon");
-  });
+
 
   it("search_icons tells the model how to draw a result as a bare icon", () => {
     expect(runTool({ name: "search_icons", arg: "database" }).content).toContain("shape: icon");

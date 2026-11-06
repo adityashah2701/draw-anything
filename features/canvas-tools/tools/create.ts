@@ -21,6 +21,7 @@ import { color, coordinate, fill, label, length, MAX_ELEMENTS_PER_CALL, MAX_POIN
 import type { ToolDefinition } from "../types";
 import { newDiagramPatch } from "@/features/whiteboard/commands/layout-engine";
 import { claimId, count, defaultOrigin, listIds, overlapWarnings, resolveIcon, resolveTargets, revealContent, snapPlacement } from "./helpers";
+import { promoteGroupFrames } from "./promote-groups";
 
 const normalizeText = (value: string) => value.replace(/\r\n?/g, "\n");
 
@@ -435,7 +436,8 @@ export const importDiagramTool: ToolDefinition<typeof importInput> = {
     const box = unionBounds(result.elements.flatMap((el) => env.ctx.getBounds(el) ?? []));
     const dx = (x ?? origin.x) - (box?.minX ?? 0);
     const dy = (y ?? origin.y) - (box?.minY ?? 0);
-    const moved = result.elements.map((el) => ({ ...el, points: el.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) })) as DrawingElement[];
+    // Groups arrive as real frames (they own their nodes and move with them), as on any generated diagram.
+    const moved = promoteGroupFrames(result.elements).map((el) => ({ ...el, points: el.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) })) as DrawingElement[];
     const taken = moved.filter((el) => env.ctx.index.shapes.has(el.id) || env.ctx.index.groups.has(el.id));
     if (taken.length > 0) throw new ToolError("conflict", "The imported elements collide with ids already on the board; try again.", { ids: taken.map((el) => el.id).slice(0, 5) });
     const nodes = moved.filter((el) => el.ai?.role === "node");

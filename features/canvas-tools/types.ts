@@ -131,6 +131,23 @@ export interface ToolLogger {
 }
 
 /** Per-run state shared by the calls of one agent run. */
+export interface BuilderSession {
+  /** The plan the agent wrote with set_plan, shown back to it every turn. */
+  plan?: string;
+  /** new: draw a new diagram beside what is there; edit: change the diagram on the board. */
+  mode?: "new" | "edit";
+  /** The selection when the builder started: the diagram to edit when the board has several. */
+  startSelection?: string[];
+  /** The new diagram has been created (later steps extend it). */
+  created?: boolean;
+  /** Revision at the last refused finish: a second finish on an unchanged board is accepted. */
+  refusedAt?: string;
+  /** The request draws or grows a diagram: it is built as diagram code, so the shape-by-shape tools are refused. */
+  diagramRequest?: boolean;
+  /** Set when finish was accepted; the run ends after this step. */
+  finished?: boolean;
+}
+
 export interface ToolSession {
   runId: string;
   enabledGroups: Set<ToolGroup>;
@@ -144,6 +161,8 @@ export interface ToolSession {
   reviews?: number;
   /** True in tests: destructive tools proceed without a person to ask. */
   autoApproveDestructive?: boolean;
+  /** What the builder tools remember across the steps of one run: the plan, and which diagram they work on. */
+  builder?: BuilderSession;
   log?: ToolLogger;
 }
 

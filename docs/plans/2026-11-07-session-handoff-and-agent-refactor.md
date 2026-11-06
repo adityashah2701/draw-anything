@@ -181,6 +181,18 @@ asked. Do not commit or push unless asked (the user commits). Type check with `n
   categories for UML, Sequence and Mind map, lifeline centring on insert, architecture idempotence test limited to
   non-structured examples.
 
+## 2.5 One builder agent (2026-11-06, plan `~/.claude/plans/pure-whistling-hanrahan.md`)
+
+Done, written without a live model run; tsc, lint and the unit tests were not run after the last edits.
+- The canvas agent is now the builder. New tools `set_plan`, `add_to_diagram`, `adjust_diagram`, `finish` (`features/canvas-tools/tools/builder.ts`); every other canvas tool kept; `remember` moved to `tools/memory.ts`.
+- Each turn gets a rebuilt `<board_state>` message (`agent/state-message.ts`) and a windowed history; `finish` is gated by `agent/report.ts`.
+- Frame rules in `tools/lint.ts`: `structure-no-frames` (blocking), `structure-single-member`, `structure-too-many-frames`.
+- `agent/prompt.ts` rewritten: loop, edit rules, generated language reference, frame rules, family playbook, example, system-design guide.
+- 3 connection points per side for rectangles, semantic nodes, tables and classes (`shape-runtime.ts: withSidePorts`).
+- Deleted: `generate_diagram`, `generate-client.ts`, `generation-preview.ts` and the stage preview, `/api/ai/generate-diagram`, `generate-diagram-handler.ts`, `sse.ts`, `diagram-agent/{agent-loop,pipeline,run,run-builder}.ts`, `builder/{loop,notes,prompt,canvas,state,report,views,testing}.ts`, `prompt/system.ts`, the live evals (`npm run eval:ai` now finds no eval files).
+- Providers for the panel come from `GET /api/ai/canvas-agent`.
+- Section 4 below (the refactor proposal) is superseded by this.
+
 ## 3. Known issues and gaps (not fixed)
 
 1. **(Fixed, see 2.4)** **Destroy message vanishes.** In the checkout sequence example the 13th message

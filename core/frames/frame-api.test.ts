@@ -94,7 +94,7 @@ describe("createFrame", () => {
   it("fits an auto-fit frame to what it adopts", () => {
     const stored = twoNodes();
     const next = apply(stored, createFrame(stored, { id: "f", box: box(0, 0, 600, 600), adopt: true, style: { autoFit: true, padding: 10 } }));
-    expect(frameBox(byId(next, "f") as FrameShape)).toMatchObject({ minX: 90, maxX: 410, maxY: 170, minY: 100 - 10 - FRAME_DEFAULTS.headerHeight });
+    expect(frameBox(byId(next, "f") as FrameShape)).toMatchObject({ minX: 90, maxX: 410, maxY: 170, minY: 100 - 10 });
   });
 
   it("refuses bad input with a reason", () => {

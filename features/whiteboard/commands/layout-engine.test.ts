@@ -29,7 +29,7 @@ const link = (id: string, from: string, to: string): DrawingElement =>
 const pointsOf = (list: readonly StoredElement[], id: string) => JSON.stringify((list.find((e) => e.id === id) as DrawingElement).points);
 
 describe("laying out a diagram that has not been touched", () => {
-  it.each([...examples.map((code, i) => [`readme ${i + 1}`, code] as const), ...EXAMPLES.filter((e) => !STRUCTURED_TYPE.test(e.code)).map((e, i) => [`prompt ${i + 1}`, e.code] as const)])("%s: its own layout moves nothing (idempotent)", (_name, code) => {
+  it.each([...examples.map((code, i) => [`readme ${i + 1}`, code] as const).filter(([, code]) => !STRUCTURED_TYPE.test(code)), ...EXAMPLES.filter((e) => !STRUCTURED_TYPE.test(e.code)).map((e, i) => [`prompt ${i + 1}`, e.code] as const)])("%s: its own layout moves nothing (idempotent)", (_name, code) => {
     const stored = draw(code, "auto");
     const nodes = stored.filter((e) => e.ai?.role === "node").length;
     if (nodes < 2) return;

@@ -1,7 +1,14 @@
 import type { ToolGroup } from "../types";
 
+/** Words of a request to draw a diagram: such a request is drawn as diagram code (set_plan, add_to_diagram), never shape by shape. */
+export const DIAGRAM_WORDS = /\b(diagrams?|flow ?charts?|flows?|architecture|topology|mind ?maps?|sequence|design|hld|lld|er|erd|schema|uml|class diagram)\b/i;
+/** Words that grow an existing diagram (an edit that the builder makes as code too). */
+export const GROW_WORDS = /\b(add|create|insert|connect|link|extend|include|attach)\b/i;
+/** Words that change what a diagram already shows: with a diagram on the board, such a request edits it. */
+export const CHANGE_WORDS = /\b(rename|change|update|modify|edit|remove|delete|drop|replace|swap|move|fix|make|turn|convert|split|merge|reorder|recolou?r|colou?r|label|relabel|reconnect|attribute|method|field|column|member|property)s?\b/i;
+
 const RULES: Array<[ToolGroup[], RegExp]> = [
-  [["create", "connect"], /\b(add|create|make|draw|build|design|generate|insert|new|duplicate|copy|clone|import)\b/i],
+  [["create", "connect"], /\b(add|create|make|draw|build|design|generate|insert|place|put|new|duplicate|copy|clone|import)\b/i],
   [["edit"], /\b(change|rename|recolou?r|colou?r|fill|stroke|opacity|transparent|rotate|resize|size|bigger|smaller|move|shift|nudge|delete|remove|erase|lock|unlock|hide|show|text|label|icon|font|bold|italic|update|replace|swap|front|back|style|shape|diamond|circle|ellipse|oval|pill|rectangle|rounded|convert|turn)(?:s|ed)?\b/i],
   [["connect"], /\b(connect|connector|arrow|link|edge|reroute|route|disconnect|line between|join)\b/i],
   [["arrange"], /\b(align|distribute|space|spacing|gap|layout|tidy|clean( up)?|arrange|organi[sz]e|grid|row|column|stack|even(ly)?|equal|line up|neat)\b|\blay\b[^.]*\bout\b/i],

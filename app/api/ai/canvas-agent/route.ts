@@ -69,3 +69,9 @@ const handler = createCanvasAgentHandler({
 export async function POST(req: Request) {
   return handler(req);
 }
+
+/** Which providers this server can call, for the panel's model picker. Sign-in required. */
+export async function GET() {
+  if (!(await auth()).userId) return new Response(JSON.stringify({ error: "Sign in to use the assistant." }), { status: 401, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify({ providers: getEnabledProviders() }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}

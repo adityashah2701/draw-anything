@@ -224,12 +224,12 @@ describe("stalls, budgets and continuation", () => {
 describe("results are checked, not assumed", () => {
   it("a final check of the board sends the agent back to fix overlapping nodes, and the board ends clean", async () => {
     const { run, mem, turns } = await scriptedRun({
-      prompt: "Add a cache",
+      prompt: "Place a cache box",
       board: { elements: column() },
       script: [
         reply("", [call("create_semantic_node", { id: "cache2", label: "Cache 2", x: 100, y: 470 })]),
         reply("Added the cache."),
-        ({ messages }) => (JSON.stringify(messages.at(-1)).includes("found problems") ? reply("", [call("move_elements", { ids: ["cache2"], dx: 300 })]) : reply("no check seen")),
+        ({ messages }) => (JSON.stringify(messages.slice(-2)).includes("found problems") ? reply("", [call("move_elements", { ids: ["cache2"], dx: 300 })]) : reply("no check seen")),
         reply("Tidied."),
       ],
     });
@@ -245,7 +245,7 @@ describe("results are checked, not assumed", () => {
 
   it("when problems remain after the allowed rounds the run reports them instead of success", async () => {
     const { run } = await scriptedRun({
-      prompt: "Add a cache",
+      prompt: "Place a cache box",
       board: { elements: column() },
       script: [reply("", [call("create_semantic_node", { id: "cache2", label: "Cache 2", x: 100, y: 470 })]), reply("Added."), reply("Fine as is."), reply("Still fine.")],
       budget: { verifyRounds: 1 },

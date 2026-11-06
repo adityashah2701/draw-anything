@@ -29,7 +29,7 @@ const Step: React.FC<{ message: Extract<AgentUiMessage, { kind: "tool" }>; actio
           {warning}
         </p>
       ))}
-      {message.tool === "generate_diagram" && message.ok && actions && (
+      {message.tool === "finish" && message.ok && actions && (
         <div className="mt-1.5 flex gap-1.5">
           {actions.onOpenCode && (
             <button type="button" data-testid="agent-open-code" onClick={actions.onOpenCode} className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted">
