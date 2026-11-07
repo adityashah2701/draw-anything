@@ -1,18 +1,7 @@
-import { buildFrameIndex } from "@/core/frames/frame-index";
-import { frameRegions } from "@/core/frames/frame-model";
-import { makeBounds } from "@/core/geometry/box";
-import { frameForBounds } from "@/core/frames/containment";
-import { createFrame, fitFrames, planAutoFit, reparentMoved, updateFrames, type FrameChanges } from "@/core/frames/frame-api";
 import { applyPatch as applyStoredPatch } from "@/core/groups/patch";
 import { pushElement, writeElement } from "./storage-writes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { shapeRegistry } from "@/core/shapes/shape-registry";
-import { DEFAULT_LABEL_FONT_SIZE, defaultLabelWeight } from "@/core/text/label-layout";
-import { normalizeRichTextInput } from "@/features/whiteboard/utils/rich-text-renderer";
 import type { IconDef } from "@/core/icons/registry";
-import { buildIconElement } from "@/features/whiteboard/utils/icon-picker";
-import { buildShapeElement } from "@/features/whiteboard/utils/shape-picker";
-import type { VocabularyEntry } from "@/core/shapes/vocabulary";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { LiveList, LiveObject } from "@liveblocks/client";
@@ -44,7 +33,7 @@ import { buildSelectionOverlay } from "@/features/whiteboard/utils/selection-ove
 import { useSelectionInspector } from "./use-selection-inspector";
 import { isStructured, planStructured, readStructured } from "@/features/whiteboard/utils/structured-edit";
 import { useGroupCommands } from "@/features/whiteboard/hooks/interaction/use-group-commands";
-import { effectiveContext, resolveDoubleClick, resolveGroupClick, resolveMarquee } from "@/features/whiteboard/hooks/interaction/group-selection";
+import { effectiveContext, resolveGroupClick, resolveMarquee } from "@/features/whiteboard/hooks/interaction/group-selection";
 import { useMagneticSnap } from "@/core/snap/use-magnetic-snap";
 import { useArrowConnections } from "@/core/arrow/use-arrow-connections";
 import { useBoardExport } from "@/features/whiteboard/hooks/export/use-board-export";
@@ -52,8 +41,6 @@ import { useWhiteboardAccess } from "@/features/whiteboard/hooks/access/use-whit
 import { useCanvasViewport } from "@/features/whiteboard/hooks/canvas/use-canvas-viewport";
 import { useWhiteboardUtils } from "@/features/whiteboard/hooks/utils/use-whiteboard-utils";
 import { useWhiteboardDrawing } from "@/features/whiteboard/hooks/interaction/use-whiteboard-drawing";
-import { useWhiteboardKeyboard } from "@/features/whiteboard/hooks/interaction/use-whiteboard-keyboard";
-import type { ShortcutCommand } from "@/features/whiteboard/hooks/interaction/keyboard-policy";
 import { useFrameCommands } from "@/features/whiteboard/hooks/interaction/use-frame-commands";
 import { useOrganizeCommands } from "@/features/whiteboard/hooks/interaction/use-organize-commands";
 import { useElementCommands } from "@/features/whiteboard/hooks/interaction/use-element-commands";
@@ -63,8 +50,6 @@ import { planRemove } from "@/features/whiteboard/commands/remove";
 import { useWhiteboardAutoSave } from "@/features/whiteboard/hooks/data/use-whiteboard-auto-save";
 import { useWhiteboardUiState } from "@/features/whiteboard/hooks/state/use-whiteboard-ui-state";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import { planDiagramCode, shiftElement } from "./diagram-placement";
-import { newDiagramPatch, planEngineLayout, type EngineLayoutInput, type EngineLayoutPlan } from "@/features/whiteboard/commands/layout-engine";
 import { useEditingText } from "./use-editing-text";
 import { coveredByPanels } from "@/features/whiteboard/components/overlays/panel-layout";
 import { useSelectedArrow } from "./use-selected-arrow";
@@ -72,17 +57,13 @@ import { useSelectionStyle } from "./use-selection-style";
 import { useConnectorStyle } from "./use-connector-style";
 import { readPropertiesBar } from "@/features/whiteboard/utils/properties-bar-model";
 import { useSemanticNodeCommands } from "@/features/whiteboard/hooks/interaction/use-semantic-node-commands";
-import { semanticZoneAt } from "@/core/shapes/semantic-node/layout";
-import { getShapeLocalBounds, getShapeRotation } from "@/core/shapes/shape-runtime";
-import { centerOf, rotatePoint } from "@/core/geometry/box";
 import { createGestureHistory } from "@/features/whiteboard/hooks/interaction/gesture-history";
-import type { ApplyDiagramCodePayload } from "@/features/diagram-code/types";
 import { parseSavedContent } from "@/features/whiteboard/hooks/data/saved-content";
+import { useFrameOperations } from "./use-frame-operations";
+import { useElementInsertion } from "./use-element-insertion";
+import { useDiagramCodeSync } from "./use-diagram-code-sync";
+import { useKeyboardShortcuts } from "./use-keyboard-shortcuts";
 
-/**
- * LiveObject.update ignores keys whose value is undefined, so a cleared field (an arrow end
- * disconnected from its shape) would silently keep its old value. Delete those keys instead.
- */
 /** Moves list items into `orderedIds`; does nothing unless that is exactly a permutation of the list (a stale view must not scramble it). */
 const restackList = (list: LiveList<LiveObject<DrawingElementJson>>, orderedIds: readonly string[]) => {
   const current: string[] = [];
@@ -188,28 +169,6 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
    */
   const readLiveStored = useLiveblocksM(({ storage }) => storage.get("elements").toImmutable() as unknown as StoredElement[], []);
 
-  /**
-   * After a drag: shapes dropped into (or out of) a frame change owner, and auto-fit frames follow what
-   * they now hold. Runs inside the drag's undo step, so it is never a step of its own.
-   */
-  const commitFrameOwnership = useCallback(
-    (movedIds: string[]) => {
-      const stored = readLiveStored();
-      if (!stored.some((item) => item.type === "frame")) return;
-      const before = buildFrameIndex(stored);
-      const leftFrames = movedIds.flatMap((id) => before.parentOf.get(id) ?? []);
-      let working = stored;
-      const reparent = reparentMoved(stored, movedIds);
-      if (reparent?.ok) {
-        applyDocPatch(reparent.patch);
-        working = applyStoredPatch(stored, reparent.patch);
-      }
-      const fit = planAutoFit(working, movedIds, leftFrames);
-      if (fit) applyDocPatch(fit);
-    },
-    [applyDocPatch, readLiveStored],
-  );
-
   const seedElements = useLiveblocksM(
     ({ storage }, initial: DrawingElementJson[]) => {
       const list = storage.get("elements");
@@ -237,8 +196,7 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     while (list.length > 0) list.delete(0);
   }, []);
 
-  const [currentElement, setCurrentElement] =
-    useState<DrawingElement | null>(null);
+  const [currentElement, setCurrentElement] = useState<DrawingElement | null>(null);
   const [selectedElements, setSelectedElements] = useState<string[]>([]);
   // The group the user has stepped into to edit its children; null = top level (see group-selection.ts).
   const [enteredGroupId, setEnteredGroupId] = useState<string | null>(null);
@@ -362,52 +320,18 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     [allShapes, groupIndex, enteredGroupId, selectionOverlay],
   );
 
-  /**
-   * The frame tool: the drawn box becomes a frame that takes over what its box covers and sits inside
-   * the frame it was drawn in. One patch, so one undo step.
-   */
-  const commitDrawnFrame = useCallback(
-    (draft: DrawingElement) => {
-      const [a, b] = draft.points;
-      if (!a || !b) return;
-      const box = makeBounds(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y));
-      const stored = readLiveStored();
-      const frameIndex = buildFrameIndex(stored);
-      // A locked frame cannot take a new one in: draw beside it, at the level above.
-      const lockIndex = buildGroupIndex(stored);
-      const lockedFrames = new Set([...frameIndex.frames.keys()].filter((id) => isEffectivelyLocked(lockIndex, id)));
-      const parent = frameForBounds(frameIndex, box, lockedFrames);
-      const created = createFrame(stored, { id: draft.id, box, parent, adopt: true });
-      if (!created.ok) {
-        toast(created.message);
-        return;
-      }
-      applyDocPatch(created.patch);
-      setSelectedElements([created.frameId]);
-      uiState.setCurrentTool("select");
-    },
-    [applyDocPatch, readLiveStored, setSelectedElements, uiState],
-  );
-
-  /** Properties-bar edits that only frames have (title, header, padding, auto-fit), as one undo step. */
-  const updateFrameProps = useCallback(
-    (ids: readonly string[], changes: FrameChanges) => {
-      if (!whiteboardAccess.hasEditAccess) return;
-      const result = updateFrames(readLiveStored(), ids, changes);
-      if (result.ok && result.changed.length > 0) applyDocPatch(result.patch);
-    },
-    [applyDocPatch, readLiveStored, whiteboardAccess.hasEditAccess],
-  );
-
-  /** Sizes the frames to wrap what they hold. */
-  const fitFramesToContent = useCallback(
-    (ids: readonly string[]) => {
-      if (!whiteboardAccess.hasEditAccess) return;
-      const result = fitFrames(readLiveStored(), ids);
-      if (result.ok && result.changed.length > 0) applyDocPatch(result.patch);
-    },
-    [applyDocPatch, readLiveStored, whiteboardAccess.hasEditAccess],
-  );
+  const {
+    commitFrameOwnership,
+    commitDrawnFrame,
+    updateFrameProps,
+    fitFramesToContent,
+  } = useFrameOperations({
+    readLiveStored,
+    applyDocPatch,
+    setSelectedElements,
+    setCurrentTool: uiState.setCurrentTool,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+  });
 
   const completeCurrentElement = useCallback(() => {
     if (currentElement) {
@@ -598,90 +522,27 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     applyPatch: applyDocPatch,
   });
 
-  // The icon lands in the middle of what the user is looking at, selected, ready to drag or label.
-  const insertIcon = useCallback(
-    (icon: IconDef) => {
-      const { minX, minY, maxX, maxY } = canvasViewport.viewportBounds;
-      const node = buildIconElement(icon, { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, generateId());
-      addElement(node as unknown as DrawingElementJson);
-      setSelectedElements([node.id]);
-      uiState.setCurrentTool("select");
-      // A table, class, topic or lifeline is empty until it is filled in: open its editor straight away.
-      if (isStructured(node)) uiState.setEditingShapeLabelId(node.id);
-    },
-    [addElement, canvasViewport.viewportBounds, generateId, uiState],
-  );
-
-  // Layout through the engines: a plan is computed against the board as it is now and nothing is written until it is applied (one undo step).
-  const planLayout = useCallback((input: EngineLayoutInput) => planEngineLayout(commandContextRef.current!, input), []);
-  const applyLayoutPlan = useCallback(
-    (plan: EngineLayoutPlan) => {
-      if (!whiteboardAccess.hasEditAccess || !plan.patch) return false;
-      gestureHistory.begin();
-      try {
-        applyDocPatch(plan.patch);
-      } finally {
-        gestureHistory.end();
-      }
-      toast.success(plan.preview.moves.length === 0 ? "Layout saved." : `Laid out: ${plan.preview.moves.length} element${plan.preview.moves.length === 1 ? "" : "s"} moved.`);
-      return true;
-    },
-    [applyDocPatch, gestureHistory, whiteboardAccess.hasEditAccess],
-  );
-
-  // A shape from the picker lands the same way an icon does: in the middle of the view, selected, ready to label.
-  const insertShape = useCallback(
-    (entry: VocabularyEntry) => {
-      const { minX, minY, maxX, maxY } = canvasViewport.viewportBounds;
-      const node = buildShapeElement(entry, { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, generateId());
-      if (!node) return;
-      addElement(node as unknown as DrawingElementJson);
-      setSelectedElements([node.id]);
-      uiState.setCurrentTool("select");
-    },
-    [addElement, canvasViewport.viewportBounds, generateId, uiState],
-  );
-
-  /** Opens the right editor for `element` (standalone text or a shape's label); false when it has no text. */
-  const beginEditing = useCallback(
-    (element: DrawingElement): boolean => {
-      if (!whiteboardAccess.hasEditAccess) return false;
-      // Locked shapes can be selected but not changed, and typing into one is a change.
-      if (isEffectivelyLocked(groupIndex, element.id)) return false;
-      if (element.type === "text") {
-        uiState.setEditingTextElement(element);
-        uiState.setCurrentTool("select");
-        return true;
-      }
-      if (element.type === "frame") {
-        // The title is a field of the frame, edited in place; a frame with its header hidden has none to edit.
-        if (!frameRegions(element)?.header) return false;
-        uiState.setEditingShapeLabelId(element.id);
-        setSelectedElements([element.id]);
-        uiState.setCurrentTool("select");
-        return true;
-      }
-      if (isStructured(element)) {
-        // Entity tables, classes, topics and lifelines edit their content in a card over the shape.
-        uiState.setEditingShapeLabelId(element.id);
-        setSelectedElements([element.id]);
-        uiState.setCurrentTool("select");
-        return true;
-      }
-      if (shapeRegistry.get(element.type)?.labelConfig?.anchor !== "center") return false;
-      uiState.setEditingShapeLabelId(element.id);
-      uiState.setEditingShapeLabelDraft(normalizeRichTextInput(element.label ?? ""));
-      // Same fallbacks the canvas renderer uses, so opening the editor changes nothing.
-      const labelSize = element.fontSize || DEFAULT_LABEL_FONT_SIZE;
-      uiState.setEditingShapeLabelFontSize(labelSize);
-      uiState.setEditingShapeLabelFontWeight(element.fontWeight || defaultLabelWeight(labelSize));
-      uiState.setEditingShapeLabelFontStyle(element.fontStyle || "normal");
-      setSelectedElements([element.id]);
-      uiState.setCurrentTool("select");
-      return true;
-    },
-    [groupIndex, uiState, whiteboardAccess.hasEditAccess],
-  );
+  const {
+    insertIcon,
+    insertShape,
+    beginEditing,
+    planLayout,
+    applyLayoutPlan,
+    handleShapeDoubleClick,
+  } = useElementInsertion({
+    viewportBounds: canvasViewport.viewportBounds,
+    generateId,
+    addElement,
+    setSelectedElements,
+    uiState,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    groupIndex,
+    enteredGroupId,
+    setEnteredGroupId,
+    commandContextRef,
+    gestureHistory,
+    applyDocPatch,
+  });
 
   const deleteSelectedElements = useCallback(() => {
     if (selectedElements.length > 0) {
@@ -691,105 +552,31 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     }
   }, [deleteElementsWithConnectedArrows, groupSelection, selectedElements]);
 
-  /**
-   * Double-click on a shape. In a group it steps into the group (selecting the child under the
-   * pointer); on an ordinary shape, or inside the group that holds it, it edits the text.
-   */
-  const handleShapeDoubleClick = useCallback(
-    (element: DrawingElement, point?: Point) => {
-      const action = resolveDoubleClick(groupIndex, element.id, enteredGroupId);
-      if (action.kind === "enter") {
-        setEnteredGroupId(action.group);
-        setSelectedElements(action.select);
-        return true;
-      }
-      // Double-clicking a semantic node's icon replaces the icon; anywhere else edits the label.
-      if (point && element.type === "semantic-node" && whiteboardAccess.hasEditAccess && !isEffectivelyLocked(groupIndex, element.id)) {
-        const local = getShapeLocalBounds(element);
-        if (local) {
-          const inFrame = rotatePoint(point, centerOf(local), -getShapeRotation(element));
-          if (semanticZoneAt(local, element.nodeStyle, inFrame) === "icon") {
-            setSelectedElements([element.id]);
-            uiState.openReplaceIconPicker();
-            return true;
-          }
-        }
-      }
-      return beginEditing(element);
-    },
-    [beginEditing, enteredGroupId, groupIndex, uiState, whiteboardAccess.hasEditAccess],
-  );
-
-  const runShortcut = useCallback(
-    (command: ShortcutCommand) => {
-      switch (command.type) {
-        case "undo": return handleUndo();
-        case "redo": return handleRedo();
-        case "save": return whiteboardAutoSave.saveWhiteboard();
-        case "select-all": return setSelectedElements(elements.map((el) => el.id));
-        case "copy": return elementCommands.copy();
-        case "cut": return elementCommands.cut();
-        case "paste": return elementCommands.paste();
-        case "duplicate": return elementCommands.duplicate();
-        case "group": return groupCommands.group();
-        case "ungroup": return groupCommands.ungroup();
-        case "lock-toggle": return groupCommands.toggleLock();
-        case "hide": return void organizeCommands.hide();
-        case "frame-selection": return void frameCommands.frameSelection();
-        case "align": return elementCommands.align(command.mode);
-        case "distribute": return elementCommands.distribute(command.axis);
-        case "nudge": return elementCommands.nudge(command.dx, command.dy);
-        case "z-order": return elementCommands.zOrder(command.move);
-        case "delete":
-          return deleteSelectedElements();
-        // Escape: abandon a half-made shape or connector first; then step out of an entered group; then
-        // clear the selection; then leave a drawing tool.
-        case "escape":
-          if (whiteboardDrawing.cancelDrawing()) return;
-          if (groupCommands.exit()) return;
-          if (selectedElements.length > 0) return setSelectedElements([]);
-          return uiState.setCurrentTool("select");
-        case "zoom-in": return canvasViewport.handleZoomIn();
-        case "zoom-out": return canvasViewport.handleZoomOut();
-        case "zoom-reset": return canvasViewport.handleResetZoom();
-        case "fit": return handleFitToScreen();
-        case "toggle-grid": return canvasViewport.toggleGrid();
-        case "toggle-help": return uiState.setShowCommandMenu((prev) => !prev);
-        case "export": return uiState.setShowExport(true);
-        case "icon-picker": return uiState.setShowIconPicker(true);
-        // Enter on a selected group steps into it; on a selected shape it edits its text, like double-clicking it.
-        case "edit": {
-          if (groupCommands.enter()) return;
-          const only = selectedElements.length === 1 ? elements.find((el) => el.id === selectedElements[0]) : undefined;
-          if (only) beginEditing(only);
-          return;
-        }
-      }
-    },
-    [
-      canvasViewport,
-      deleteSelectedElements,
-      elementCommands,
-      elements,
-      groupCommands,
-      organizeCommands,
-      frameCommands,
-      handleFitToScreen,
-      handleRedo,
-      handleUndo,
-      selectedElements,
-      uiState,
-      whiteboardAutoSave.saveWhiteboard,
-      whiteboardDrawing,
-    ],
-  );
-
-  useWhiteboardKeyboard({
+  useKeyboardShortcuts({
     currentTool: uiState.currentTool,
     setCurrentTool: uiState.setCurrentTool,
     hasEditAccess: whiteboardAccess.hasEditAccess,
-    hasSelection: selectedElements.length > 0,
-    onCommand: runShortcut,
+    selectedElements,
+    setSelectedElements,
+    elements,
+    handleUndo,
+    handleRedo,
+    saveWhiteboard: whiteboardAutoSave.saveWhiteboard,
+    elementCommands,
+    groupCommands,
+    organizeCommands,
+    frameCommands,
+    deleteSelectedElements,
+    cancelDrawing: whiteboardDrawing.cancelDrawing,
+    handleZoomIn: canvasViewport.handleZoomIn,
+    handleZoomOut: canvasViewport.handleZoomOut,
+    handleResetZoom: canvasViewport.handleResetZoom,
+    toggleGrid: canvasViewport.toggleGrid,
+    handleFitToScreen,
+    setShowCommandMenu: uiState.setShowCommandMenu,
+    setShowExport: uiState.setShowExport,
+    setShowIconPicker: uiState.setShowIconPicker,
+    beginEditing,
   });
 
   useEffect(() => {
@@ -1071,58 +858,17 @@ export const useWhiteboardPageController = (whiteboardId: string) => {
     uiState.setShowAIModal(true);
   }, [uiState]);
 
-  /**
-   * Draw diagram code on the canvas as one undo step. When updating, the
-   * diagram it was loaded from is removed and the new one takes its place, so
-   * editing code feels like editing the diagram.
-   */
-  const applyDiagramCode = useCallback(
-    ({ elements: next, replaceIds, anchored, patch, placements, familyEngine }: ApplyDiagramCodePayload) => {
-      if (!whiteboardAccess.hasEditAccess) return;
-
-      // An update planned against the board: same elements, only what changed, one undo step.
-      if (patch) {
-        if (patch.add.length === 0 && patch.update.length === 0 && patch.remove.length === 0) return;
-        gestureHistory.begin();
-        try {
-          applyDocPatch({ add: patch.add, update: patch.update, remove: patch.remove, origin: "layout", placements } as unknown as DocPatch);
-        } finally {
-          gestureHistory.end();
-        }
-        if (patch.remove.length > 0) setSelectedElements((prev) => prev.filter((id) => !patch.remove.includes(id)));
-        return;
-      }
-
-      if (next.length === 0) return;
-
-      const replaced = elements.filter((element) => replaceIds.includes(element.id));
-      const { shift, fit } = planDiagramCode({ next, replaced, anchored: Boolean(anchored), viewport: canvasViewport });
-
-      gestureHistory.begin();
-      try {
-        if (replaced.length > 0) deleteElementsLive(replaced.map((element) => element.id));
-        // One patch: a diagram the code laid out is `auto` (explicit positions in the code are `user`), and is stored with its layout record.
-        const placed = next.map((element) => ({ ...element, points: shiftElement(element, shift).points }) as DrawingElement);
-        applyDocPatch({ ...newDiagramPatch(placed, undefined, familyEngine === true), placements } as unknown as DocPatch);
-      } finally {
-        gestureHistory.end();
-      }
-
-      setSelectedElements((prev) => prev.filter((id) => !replaceIds.includes(id)));
-      if (fit) setTimeout(() => canvasViewport.fitToBounds(fit, { rightInset: coveredByPanels(uiState.showAIModal, uiState.showCodePanel) }), 0);
-    },
-    [
-      addElement,
-      applyDocPatch,
-      canvasViewport,
-      deleteElementsLive,
-      elements,
-      gestureHistory,
-      whiteboardAccess.hasEditAccess,
-      uiState.showAIModal,
-      uiState.showCodePanel,
-    ],
-  );
+  const { applyDiagramCode } = useDiagramCodeSync({
+    elements,
+    hasEditAccess: whiteboardAccess.hasEditAccess,
+    gestureHistory,
+    applyDocPatch,
+    deleteElementsLive,
+    setSelectedElements,
+    canvasViewport,
+    showAIModal: uiState.showAIModal,
+    showCodePanel: uiState.showCodePanel,
+  });
 
   const { handleEditingTextChange, handleEditingTextCommit, handleEditingTextMove } = useEditingText({
     uiState,
