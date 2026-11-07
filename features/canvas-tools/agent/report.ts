@@ -2,7 +2,7 @@ import { graphFromElements } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { serializeDiagramCode } from "@/features/diagram-code/serialize";
 import { lintDiagram } from "@/features/ai/diagram-agent/tools/lint";
-import { measureLayout } from "@/features/ai/server/layout/metrics";
+import { measureLayout } from "@/features/ai/layout/metrics";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 
 /** Lint rules that are faults of the drawing (the agent must fix them before it finishes); the rest are advice. */

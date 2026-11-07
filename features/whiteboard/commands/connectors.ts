@@ -2,8 +2,8 @@ import { buildAnchorId } from "@/core/anchors/anchor-geometry";
 import { ArrowElement, getArrowHeadVisibility, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { normalizeRelation } from "@/core/shapes/arrow/relations";
 import { getShapeAnchors, getShapeDefinition } from "@/core/shapes/shape-runtime";
-import { EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT, placeEdgeLabels } from "@/features/ai/server/layout/edge-labels";
-import type { Box } from "@/features/ai/server/layout/geometry";
+import { EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_WEIGHT, placeEdgeLabels } from "@/features/ai/layout/edge-labels";
+import type { Box } from "@/features/ai/layout/geometry";
 import { buildConnectorArrow, type ConnectorEnd } from "@/features/whiteboard/hooks/interaction/connector-arrow";
 import type {
   AnchorSide,

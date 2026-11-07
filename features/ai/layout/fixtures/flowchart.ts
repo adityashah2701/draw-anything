@@ -1,0 +1,40 @@
+import { fixtureDocument } from "./base";
+
+/** Login flow: three decisions, yes/no branches, a retry back-edge, multiline and long labels. */
+export const flowchartFixture = fixtureDocument({
+  id: "flowchart",
+  diagramType: "flowchart",
+  prompt: "User authentication with success, failure and retry paths",
+  nodes: [
+    { id: "start", label: "User opens the login page", kind: "user" },
+    { id: "submit", label: "Submit email\nand password", kind: "browser" },
+    { id: "valid-format", label: "Is the input well formed?", kind: "decision" },
+    { id: "lookup", label: "Look up account in the user database", kind: "database" },
+    { id: "exists", label: "Account exists?", kind: "decision" },
+    { id: "check-pw", label: "Verify password hash", kind: "authentication" },
+    { id: "pw-ok", label: "Password correct?", kind: "decision" },
+    { id: "mfa", label: "Send one-time code\nby SMS or authenticator app", kind: "mobile" },
+    { id: "session", label: "Issue session token", kind: "service" },
+    { id: "dashboard", label: "Show dashboard", kind: "dashboard" },
+    { id: "error", label: "Show a validation error", kind: "alerting" },
+    { id: "attempts", label: "Attempts left?", kind: "decision" },
+    { id: "lock", label: "Lock account for 15 minutes and notify the user by email", kind: "firewall" },
+  ],
+  edges: [
+    { from: "start", to: "submit" },
+    { from: "submit", to: "valid-format" },
+    { from: "valid-format", to: "lookup", label: "yes" },
+    { from: "valid-format", to: "error", label: "no" },
+    { from: "lookup", to: "exists" },
+    { from: "exists", to: "check-pw", label: "yes" },
+    { from: "exists", to: "error", label: "no" },
+    { from: "check-pw", to: "pw-ok" },
+    { from: "pw-ok", to: "mfa", label: "yes" },
+    { from: "pw-ok", to: "attempts", label: "no" },
+    { from: "mfa", to: "session" },
+    { from: "session", to: "dashboard" },
+    { from: "attempts", to: "submit", label: "yes, retry", dashed: true },
+    { from: "attempts", to: "lock", label: "no" },
+    { from: "error", to: "submit", dashed: true },
+  ],
+});

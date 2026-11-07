@@ -1,8 +1,8 @@
 import { unionBounds } from "@/core/geometry/box";
 import { expandUnits, selectionUnits } from "@/core/groups/group-index";
 import type { DocPatch } from "@/core/groups/patch";
-import { FRAME_PADDING, groupFrameStyle } from "@/features/ai/server/layout/frame-constants";
-import { pathHitsBox } from "@/features/ai/server/layout/geometry";
+import { FRAME_PADDING, groupFrameStyle } from "@/features/ai/layout/frame-constants";
+import { pathHitsBox } from "@/features/ai/layout/geometry";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { LINE_HEIGHT_RATIO } from "@/core/text/typography";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";

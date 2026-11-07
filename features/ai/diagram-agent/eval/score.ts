@@ -1,6 +1,6 @@
 import { iconForNode } from "@/core/icons/registry";
-import { measureAesthetics, type Aesthetics } from "@/features/ai/server/layout/aesthetics";
-import { measureLayout } from "@/features/ai/server/layout/metrics";
+import { measureAesthetics, type Aesthetics } from "@/features/ai/layout/aesthetics";
+import { measureLayout } from "@/features/ai/layout/metrics";
 import type { AIDiagramDocumentV1 } from "@/features/ai/types";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import type { GoldenPrompt } from "./golden-prompts";

@@ -16,7 +16,7 @@ import { BPMN_GATEWAYS, BPMN_POSITIONS, BPMN_TASKS, BPMN_TRIGGERS, expandBpmn } 
 import type { ConnectorEnd, ConnectorRelation, RelationKind, RelationNotation } from "@/features/whiteboard/types/whiteboard.types";
 import { normalizeColor } from "@/core/color/named-colors";
 import { normalizeSemanticKind, parseDiagramType } from "@/features/ai/schemas";
-import { slugId } from "@/features/ai/server/validation";
+import { slugId } from "@/features/ai/compiler/validation";
 import type { ConnectStatement, DocumentNode, PropEntry, PropList, Ref } from "./ast";
 import { DiagnosticSink, type Diagnostic } from "./diagnostics";
 import { emptyIR, type ContainerRef, type DiagramIR, type EdgeSide, type IREdge, type IRFrame, type IRGroup, type IRNode, type SymbolReference } from "./ir";

@@ -1,6 +1,6 @@
 // The Phase 1 baseline set from MASTER_PROMPT.md that features/ai/server/layout/fixtures does not already
 // cover. Kept next to the browser tests that use them; the older five stay where they are.
-import { fixtureDocument } from "@/features/ai/server/layout/fixtures/base";
+import { fixtureDocument } from "@/features/ai/layout/fixtures/base";
 
 export const simpleFlow = fixtureDocument({
   id: "simple-flow",

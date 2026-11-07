@@ -4,7 +4,7 @@ import type { DocPatch } from "@/core/groups/patch";
 import { isHiddenByFlag } from "@/core/groups/visibility";
 import { isArrowElement, type ArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { getShapeAnchors, getShapeDefinition } from "@/core/shapes/shape-runtime";
-import { pathHitsBox } from "@/features/ai/server/layout/geometry";
+import { pathHitsBox } from "@/features/ai/layout/geometry";
 import { labelKeyOf, planDetach, planReroute } from "@/features/whiteboard/commands/connectors";
 import type { CommandContext } from "@/features/whiteboard/commands/context";
 import { analyzeStraightness, isLayoutNode } from "@/features/whiteboard/commands/layout";

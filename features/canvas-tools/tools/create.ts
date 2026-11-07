@@ -9,7 +9,7 @@ import { describeOutlineVariants, getOutlineVariant, outlineVariantIds } from "@
 import { createShape, getShapeDefinition, isRotatable } from "@/core/shapes/shape-runtime";
 import { ICON_NODE_GLYPH } from "@/core/shapes/icon/caption";
 import { sizeIconNode, sizeSemanticNode } from "@/core/text/node-size";
-import { kindColors } from "@/features/ai/server/canvas-compiler";
+import { kindColors } from "@/features/ai/compiler/canvas-compiler";
 import { elementsFromDiagramCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { planDuplicate } from "@/features/whiteboard/commands/duplicate";

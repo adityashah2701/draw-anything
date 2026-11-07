@@ -1,5 +1,5 @@
-import { compileAIDiagramDetailed } from "@/features/ai/server/canvas-compiler";
-import { measureLayout, type LayoutMetrics } from "@/features/ai/server/layout/metrics";
+import { compileAIDiagramDetailed } from "@/features/ai/compiler/canvas-compiler";
+import { measureLayout, type LayoutMetrics } from "@/features/ai/layout/metrics";
 import { documentFromParsedCode } from "@/features/diagram-code/canvas";
 import { parseDiagramCode } from "@/features/diagram-code/parse";
 import type { DiagramCodeIssue, ParsedDiagramCode } from "@/features/diagram-code/types";

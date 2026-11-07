@@ -1,5 +1,5 @@
-import { compileAIDiagramToCanvas } from "@/features/ai/server/canvas-compiler";
-import type { NodePin } from "@/features/ai/server/layout/pins";
+import { compileAIDiagramToCanvas } from "@/features/ai/compiler/canvas-compiler";
+import type { NodePin } from "@/features/ai/layout/pins";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { documentFromParsedCode, graphFromElements } from "./canvas";
 import { parseDiagramCode } from "./parse";

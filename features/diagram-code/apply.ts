@@ -1,5 +1,5 @@
 import { parseAnchorSide, buildAnchorId } from "@/core/anchors/generate-anchors";
-import type { NodePin } from "@/features/ai/server/layout/pins";
+import type { NodePin } from "@/features/ai/layout/pins";
 import type { DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
 import { elementsFromDiagramCode, graphFromElements } from "./canvas";
 import { FRAME_DEFAULTS } from "@/core/frames/frame-model";

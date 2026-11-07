@@ -1,5 +1,5 @@
-import { buildAIDiagramDocument } from "@/features/ai/server/validation";
-import { compileAIDiagramToCanvas, kindColors } from "@/features/ai/server/canvas-compiler";
+import { buildAIDiagramDocument } from "@/features/ai/compiler/validation";
+import { compileAIDiagramToCanvas, kindColors } from "@/features/ai/compiler/canvas-compiler";
 import {
   normalizeModelGraphDraftDetailed,
   normalizeModelPlan,
@@ -9,7 +9,7 @@ import { isOutlineVariantId, shapeForBase } from "@/core/shapes/outline/variants
 import { normalizeRelation, reverseRelation } from "@/core/shapes/arrow/relations";
 import { entryForOutline } from "@/core/shapes/vocabulary";
 import { writeRows } from "@/core/shapes/entity-table/rows";
-import { familyCompileOptions } from "@/features/ai/server/layout/family-placement";
+import { familyCompileOptions } from "@/features/ai/layout/family-placement";
 import type { DrawingElement, FrameShape } from "@/features/whiteboard/types/whiteboard.types";
 import { tint } from "@/core/color/named-colors";
 import { parseAnchorSide } from "@/core/anchors/generate-anchors";
@@ -17,7 +17,7 @@ import { drawFrames } from "./frames";
 import { compileDiagramCode } from "./language/compile";
 import { parseDiagramCode } from "./parse";
 import type { SerializableGraph } from "./serialize";
-import type { NodePin } from "@/features/ai/server/layout/pins";
+import type { NodePin } from "@/features/ai/layout/pins";
 import type { DiagramCodeIssue } from "./types";
 
 /** The colour a frame has unless one is chosen. */

@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { LAYOUT_FIXTURES } from "@/features/ai/server/layout/fixtures";
-import { compileAIDiagramToCanvas } from "@/features/ai/server/canvas-compiler";
+import { LAYOUT_FIXTURES } from "@/features/ai/layout/fixtures";
+import { compileAIDiagramToCanvas } from "@/features/ai/compiler/canvas-compiler";
 import { EXAMPLES } from "@/features/ai/diagram-agent/prompt/examples";
 import { elementsFromDiagramCode } from "@/features/diagram-code/canvas";
-import * as baseline from "../../tests/browser/baseline-fixtures";
+import * as baseline from "../browser/baseline-fixtures";
 import type { DrawingElement } from "@/core/model";
 
 const LEGACY_EXAMPLE_COUNT = 3;
@@ -35,3 +35,4 @@ const round = (n: number) => Math.round(n * 1000) / 1000 + 0;
 /** The part of a drawing the foundations must not change: which elements exist, their types, and every point. */
 export const summarize = (elements: readonly DrawingElement[]) =>
   elements.map((element) => ({ id: element.id, type: element.type, points: element.points.map((p) => [round(p.x), round(p.y)]) }));
+
