@@ -1,11 +1,6 @@
-import type { Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Point, Box } from "@/core/model";
 
-export interface Box {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
+export type { Box };
 
 const EPS = 1e-6;
 

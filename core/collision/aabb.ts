@@ -1,11 +1,6 @@
-import { Point } from "@/core/model";
+import { Point, type Aabb } from "@/core/model";
 
-export interface Aabb {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
+export type { Aabb };
 
 const EPSILON = 0.0001;
 

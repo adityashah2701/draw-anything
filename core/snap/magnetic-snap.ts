@@ -1,14 +1,9 @@
-import { Anchor, Point } from "@/core/model";
+import { Anchor, Point, type BoundsLike } from "@/core/model";
 import { AnchorIndex } from "@/core/anchors/generate-anchors";
 import { squaredDistance } from "@/core/utils/distance";
 import { isValidPoint } from "@/core/routing/routing-guards";
 
-export interface BoundsLike {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
+export type { BoundsLike };
 
 export interface MagneticSnapMatch {
   elementId: string;

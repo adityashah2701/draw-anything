@@ -6,11 +6,13 @@ import {
   LiveObject,
 } from "@liveblocks/client";
 import { createRoomContext } from "@liveblocks/react";
-import {
+import type {
   ArrowRoutePreference,
   ArrowRoutingMode,
   ArrowConnection,
-} from "@/features/whiteboard/types/whiteboard.types";
+  ArrowheadKind,
+  ConnectorRelation,
+} from "@/core/model";
 
 const client = createClient({
   authEndpoint: "/api/liveblocks-auth",
@@ -38,6 +40,9 @@ export type DrawingElementJson = JsonObject & {
   fontSize?: number;
   fontWeight?: string | number;
   fontStyle?: string;
+  isGuide?: boolean;
+  placement?: "auto" | "user";
+  frameId?: string;
   ai?: JsonObject;
   /** Semantic nodes: icon size, placement, colour, visibility and corner radius (see SemanticNodeStyle). */
   nodeStyle?: JsonObject;
@@ -52,11 +57,41 @@ export type DrawingElementJson = JsonObject & {
   dashed?: boolean;
   arrowHeadStart?: boolean;
   arrowHeadEnd?: boolean;
+  headStart?: ArrowheadKind;
+  headEnd?: ArrowheadKind;
+  relation?: ConnectorRelation;
   routingMode?: ArrowRoutingMode;
   routePreference?: ArrowRoutePreference;
   isManuallyRouted?: boolean;
   startConnection?: ArrowConnection;
   endConnection?: ArrowConnection;
+  variant?: string;
+  border?: "double" | "thick";
+  marker?: string;
+  stack?: boolean;
+  kind?: string;
+  rows?: JsonObject[] | unknown[];
+  stereotype?: string;
+  template?: string;
+  attributes?: string[];
+  operations?: string[];
+  collapsed?: JsonObject | boolean;
+  role?: string;
+  parentId?: string;
+  branchColor?: string;
+  head?: string;
+  activations?: JsonObject[] | unknown[];
+  title?: string;
+  padding?: number;
+  titlePlacement?: string;
+  headerVisible?: boolean;
+  autoFit?: boolean;
+  minWidth?: number;
+  minHeight?: number;
+  preset?: string;
+  operator?: string;
+  orientation?: "horizontal" | "vertical";
+  dividers?: number[];
 };
 
 // Storage: the shared document — all connected users read/write to this
