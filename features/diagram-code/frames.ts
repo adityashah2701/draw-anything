@@ -171,6 +171,11 @@ export const drawFrames = (ir: DiagramIR, elements: DrawingElement[], { source, 
   };
 
   for (const frame of [...ir.frames].sort((a, b) => depthOf(a) - depthOf(b))) {
+    const content = contentOf(frame);
+    if (!content && frame.x === undefined && frame.y === undefined) {
+      warn(frame, "frame/not-drawn", `The frame "${frame.title}" has no members, so it was not drawn.`);
+      continue;
+    }
     const box = boxOf(frame);
     const elementId = frameElementId(generationId, frame.id);
     const result = createFrame(stored, {
@@ -192,7 +197,6 @@ export const drawFrames = (ir: DiagramIR, elements: DrawingElement[], { source, 
     created.set(frame.id, elementId);
 
     // An explicit box that misses its contents is the author's choice; say so rather than moving anything.
-    const content = contentOf(frame);
     if (content && (content.minX < box.minX || content.minY < box.minY || content.maxX > box.maxX || content.maxY > box.maxY)) {
       warn(frame, "frame/contents-outside", `Some of what is inside "${frame.title}" sticks out of the box x/y/w/h give it.`);
     }

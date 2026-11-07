@@ -205,9 +205,19 @@ export const runCanvasAgent = async (options: RunAgentOptions): Promise<AgentRun
 
     // Ids are made unique across turns (providers may reuse "call_1"), so a retried id is never mistaken for a replay.
     const calls: CanvasToolCall[] = turn.calls.map((call, index) => ({ id: `s${step}_${index}_${call.id}`.slice(0, 80), name: call.name, args: call.args }));
-    // The agent may simply write the diagram: a fenced diagram code block in a reply without calls is drawn as a builder step.
-    const written = calls.length === 0 ? /```(?:diagram(?:-code)?|eraser)?[^\n]*\n([\s\S]*?)```/.exec(turn.text)?.[1]?.trim() : undefined;
-    if (written && /[>\[{]/.test(written)) calls.push({ id: `s${step}_code`, name: "add_to_diagram", args: { code: written } });
+    // The agent may simply write the diagram: a fenced diagram code block in the reply text is drawn as a builder step.
+    // Also checked when there ARE tool calls: some models (e.g. Nemotron) emit the diagram block in text AND call finish
+    // in the same turn, skipping the actual draw. We inject add_to_diagram before finish in that case.
+    const writtenMatch = /```(?:diagram(?:-code)?|eraser)?[^\n]*\n([\s\S]*?)```/.exec(turn.text);
+    const written = writtenMatch?.[1]?.trim();
+    const hasWriteCall = calls.some((c) => c.name !== "finish" && c.name !== "set_plan" && executor.tools.get(c.name)?.access === "write");
+    if (written && /[>\[{]/.test(written) && !hasWriteCall) {
+      // Insert before finish so the diagram is drawn first, then the finish gate checks it.
+      const finishIdx = calls.findIndex((c) => c.name === "finish");
+      const codeCall: CanvasToolCall = { id: `s${step}_code`, name: "add_to_diagram", args: { code: written } };
+      if (finishIdx >= 0) calls.splice(finishIdx, 0, codeCall);
+      else calls.push(codeCall);
+    }
     messages.push({ role: "assistant", content: turn.text, ...(calls.length > 0 ? { toolCalls: calls } : {}) });
     const shown = turn.text.replace(/```[\s\S]*?```/g, "").trim();
     if (shown) onEvent?.({ type: "assistant", text: shown });

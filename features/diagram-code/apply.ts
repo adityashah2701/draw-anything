@@ -218,6 +218,7 @@ const mergeElement = (
     else if (same(n, b)) take = "canvas";
     else if (same(c, b)) take = "code";
     else if (resolve) take = resolve;
+    else if (n === undefined && c !== undefined) take = "canvas";
     else {
       conflicts.push({ elementId: current.id, key, field, canvas: c, code: n });
       continue;

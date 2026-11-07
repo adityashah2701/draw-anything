@@ -221,10 +221,19 @@ export const deriveContext = (env: ToolEnv, patch: DocPatch) =>
 /**
  * The top-left corner for something new when the caller gave no position: beside the existing content,
  * level with its top (or near the visible corner of an empty board), so a new element never lands on one.
+ *
+ * Uses the live board via `host.getStored()` rather than the per-call snapshot in `ctx`, because the tool
+ * executor serialises writes but rebuilds `ctx` from the board state at the START of each call. When an
+ * agent turn creates several frames back-to-back (or when Liveblocks propagation lags behind optimistic
+ * writes), `ctx` may not yet reflect the previous frame, causing every new frame to land at the same
+ * origin. Reading `host.getStored()` after each `applyPatch` gives the true post-write position.
  */
 export const defaultOrigin = (env: ToolEnv, gap = 64): { x: number; y: number } => {
-  const { ctx, host } = env;
-  const box = unionBounds(ctx.shapes.flatMap((shape) => (shape.isGuide ? [] : (ctx.getBounds(shape) ?? []))));
+  const { host } = env;
+  // Prefer the live store (reflects all applied patches so far) over the per-call snapshot.
+  const liveShapes = host.getStored() as unknown as Parameters<typeof createCommandContext>[0];
+  const liveCtx = createCommandContext(liveShapes, { newId: env.ctx.newId, getBounds: host.getBounds });
+  const box = unionBounds(liveCtx.shapes.flatMap((shape) => (shape.isGuide ? [] : (liveCtx.getBounds(shape) ?? []))));
   if (box) return { x: Math.round(box.maxX + gap), y: Math.round(box.minY) };
   const view = host.getViewport();
   if (view && view.zoom > 0) return { x: Math.round(-view.pan.x / view.zoom + 80), y: Math.round(-view.pan.y / view.zoom + 80) };

@@ -347,6 +347,9 @@ export const resolveDocument = (doc: DocumentNode): ResolveResult => {
         const original = containerOf.get(node.id);
         if (current && original && current.id !== original.id) {
           sink.warn("node/other-parent", ref.name.span, `"${ref.name.text}" already belongs to "${original.label}"; it was not moved.`);
+        } else if (current && !original) {
+          node.parent = currentRef();
+          containerOf.set(node.id, current);
         }
       }
     } else {

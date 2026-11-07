@@ -2,6 +2,7 @@ import { parseDiagramCode } from "@/features/diagram-code/parse";
 import { z } from "zod";
 import { graphFromElements } from "@/features/diagram-code/canvas";
 import { serializeDiagramCode, type SerializableGraph } from "@/features/diagram-code/serialize";
+import { createCommandContext } from "@/features/whiteboard/commands/context";
 import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
 import { reportBoard } from "../agent/report";
 import { ToolError } from "../errors";
@@ -182,7 +183,15 @@ export const addToDiagramTool: ToolDefinition<typeof addInput> = {
     if (graph.nodes.length === 0) throw new ToolError("invalid_state", "There is no diagram to extend here. Set the plan with new_diagram true to draw a new one.");
     // The board's own code first, then the new statements: names match, so what is there stays where it is.
     const merged = `${serializeDiagramCode(graph)}\n${code.split("\n").filter((line) => !HEADER.test(line)).join("\n")}`;
-    const result = await applyDiagramCodeTool.run({ code: merged, ids: existing.map((el) => el.id) }, env);
+    // Use a live env so applyDiagramCodeTool sees the board AFTER any previous add_to_diagram patches in
+    // this turn (the executor freezes ctx at call-start; host.getStored() reflects all applied patches).
+    // resolve:"canvas" means any style the board already has (fills, icons set by the compiler) wins over
+    // what the merged code doesn't explicitly declare — this prevents spurious conflict errors when the
+    // serialised code omits properties that were applied programmatically.
+    const liveStored = env.host.getStored();
+    const liveCtx = createCommandContext(liveStored, { newId: () => env.host.newId(), getBounds: env.host.getBounds });
+    const liveEnv = { ...env, ctx: liveCtx };
+    const result = await applyDiagramCodeTool.run({ code: merged, ids: existing.map((el) => el.id), resolve: "canvas" }, liveEnv);
     return { ...result, summary: `Step drawn: ${result.summary}` };
   },
 };
@@ -318,7 +327,15 @@ export const finishTool: ToolDefinition<typeof finishInput> = {
   access: "read",
   run: ({ summary }, env) => {
     const b = remember(env);
-    const report = reportBoard(builderScope(env));
+    // Guard: refuse finish when this run has drawn nothing at all yet. Some models (e.g. Nemotron) call
+    // finish in the same turn as the diagram code block before add_to_diagram has run. If we detect no
+    // touched elements AND no diagram scope yet, tell the model to draw first.
+    const scope = builderScope(env);
+    const hasDiagramContent = scope.some((el) => el.ai?.role === "node") || env.session.touched.size > 0;
+    if (!hasDiagramContent && b.mode === "new" && !b.created) {
+      return { summary: "Nothing has been drawn yet. Write the diagram as a fenced diagram code block first, then call finish.", data: { accepted: false, reason: "no_content" } };
+    }
+    const report = reportBoard(scope);
     if (report.blocking.length > 0 && b.refusedAt !== env.revision) {
       b.refusedAt = env.revision;
       return { summary: `Not finished: ${report.blocking.length} fault(s) to fix first.`, data: { accepted: false, faults: report.blocking } };
