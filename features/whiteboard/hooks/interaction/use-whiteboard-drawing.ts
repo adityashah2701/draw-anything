@@ -10,7 +10,7 @@ import {
   Bounds,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import { MagneticSnapMatch } from "@/core/snap/magnetic-snap";
 import { createShape } from "@/core/shapes/shape-runtime";
 import type { ClickOutcome } from "@/features/whiteboard/hooks/interaction/group-selection";
 import { shapeRegistry } from "@/core/shapes/shape-registry";

@@ -5,7 +5,7 @@ import type {
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import type { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import type { MagneticSnapMatch } from "@/core/snap/magnetic-snap";
 import type { Gesture } from "@/features/whiteboard/hooks/interaction/gesture-state";
 import { minimumScale } from "@/core/groups/transform";
 import { frameHandleAt } from "@/features/whiteboard/utils/selection-overlay";

@@ -372,8 +372,9 @@ export const routeArrowBatch = ({
   const safeObstacles = sanitizeObstacles(obstacles);
 
   const routableArrows = arrows.filter((arrow) => {
+    if (!arrow) return false;
     if (!arrow.sourceId || !arrow.targetId || !arrow.start || !arrow.end) return false;
-    if (arrow.existingPoints && arrow.existingPoints.length < 2) return false;
+    if (arrow.existingPoints && (!Array.isArray(arrow.existingPoints) || arrow.existingPoints.length < 2)) return false;
 
     return (
       isNonEmptyString(arrow.arrowId) &&
@@ -481,46 +482,55 @@ export const routeArrowBatch = ({
     routed.delete(arrow.arrowId);
   }
 
-  // Post-routing: apply lane assignments to separate collinear segments.
-  const routeEntries = Array.from(routed.entries()).map(
-    ([arrowId, points]) => ({
-      arrowId,
-      points,
-    }),
-  );
-  const laneAssignments = computeLaneAssignments(routeEntries, {
-    laneSpacing: parallelSpacing,
-    maxLanes: 4,
-  });
-  if (laneAssignments.length > 0) {
-    const laneAdjusted = applyLaneOffsets(routed, laneAssignments);
-    laneAdjusted.forEach((points, arrowId) => {
-      routed.set(arrowId, points);
+  try {
+    // Post-routing: apply lane assignments to separate collinear segments.
+    const routeEntries = Array.from(routed.entries()).map(
+      ([arrowId, points]) => ({
+        arrowId,
+        points,
+      }),
+    );
+    const laneAssignments = computeLaneAssignments(routeEntries, {
+      laneSpacing: parallelSpacing,
+      maxLanes: 4,
     });
-  }
-
-  // ── Final stage: Path Normalization ──
-  // Runs after all routing stages to enforce pixel-perfect Manhattan alignment,
-  // grid snapping, shared corridor unification, and stub straightening.
-  if (arrows.length > 0) {
-    const ignoreObstacleIdsByArrow = new Map<string, Set<string>>();
-    for (const arrow of arrows) {
-      const ids = new Set<string>();
-      if (arrow.sourceId) ids.add(arrow.sourceId);
-      if (arrow.targetId) ids.add(arrow.targetId);
-      if (ids.size > 0) ignoreObstacleIdsByArrow.set(arrow.arrowId, ids);
+    if (laneAssignments.length > 0) {
+      const laneAdjusted = applyLaneOffsets(routed, laneAssignments);
+      laneAdjusted.forEach((points, arrowId) => {
+        routed.set(arrowId, points);
+      });
     }
-    const normalizerOptions: PathNormalizerOptions = {
-      gridSize: 16,
-      snapToGrid: true,
-      corridorTolerance: 2,
-      minStubLength: 24,
-      obstacles: safeObstacles,
-      ignoreObstacleIdsByArrow,
-      obstaclePadding,
-    };
-    const normalized = normalizeRoutes(routed, normalizerOptions);
-    normalized.forEach((points, arrowId) => routed.set(arrowId, points));
+
+    // ── Final stage: Path Normalization ──
+    // Runs after all routing stages to enforce pixel-perfect Manhattan alignment,
+    // grid snapping, shared corridor unification, and stub straightening.
+    if (arrows.length > 0) {
+      const ignoreObstacleIdsByArrow = new Map<string, Set<string>>();
+      for (const arrow of arrows) {
+        const ids = new Set<string>();
+        if (arrow.sourceId) ids.add(arrow.sourceId);
+        if (arrow.targetId) ids.add(arrow.targetId);
+        if (ids.size > 0) ignoreObstacleIdsByArrow.set(arrow.arrowId, ids);
+      }
+      const normalizerOptions: PathNormalizerOptions = {
+        gridSize: 16,
+        snapToGrid: true,
+        corridorTolerance: 2,
+        minStubLength: 24,
+        obstacles: safeObstacles,
+        ignoreObstacleIdsByArrow,
+        obstaclePadding,
+      };
+      const normalized = normalizeRoutes(routed, normalizerOptions);
+      normalized.forEach((points, arrowId) => routed.set(arrowId, points));
+    }
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        "[routeArrowBatch] Post-routing normalization failed, keeping raw routes:",
+        err,
+      );
+    }
   }
 
   straightRoutes.forEach((points, arrowId) => routed.set(arrowId, points));

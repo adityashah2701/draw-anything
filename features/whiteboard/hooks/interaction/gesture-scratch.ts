@@ -1,5 +1,5 @@
 import type { Bounds, DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
-import type { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import type { MagneticSnapMatch } from "@/core/snap/magnetic-snap";
 import type { DragSession } from "./drag-session";
 
 interface EndSnaps {

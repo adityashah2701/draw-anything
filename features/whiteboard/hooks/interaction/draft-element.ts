@@ -1,6 +1,6 @@
 import type { DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import type { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import type { MagneticSnapMatch } from "@/core/snap/magnetic-snap";
 
 /** The element being drawn after the pointer moves to `point`; `endSnap` is the anchor a new connector end is snapped to. */
 export const growDraftElement = (

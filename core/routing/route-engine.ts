@@ -66,6 +66,7 @@ import {
   sanitizeRoutes,
   isFullyConnectedEdge,
   isValidPoint,
+  isNonEmptyString,
 } from "@/core/routing/routing-guards";
 
 // ─────────────────── Types ───────────────────
@@ -344,7 +345,7 @@ export const routeWithEngine = (
   );
 
   // ── Stage 1: Parallel offset computation ──
-  const parallelInputs: ParallelEdgeDescriptor[] =
+  const parallelInputs: ParallelEdgeDescriptor[] = (
     allParallelCandidates ??
     safeEdges.map((edge) => ({
       arrowId: edge.arrowId,
@@ -354,7 +355,15 @@ export const routeWithEngine = (
       end: edge.end,
       startHandle: edge.startHandle,
       endHandle: edge.endHandle,
-    }));
+    }))
+  ).filter(
+    (edge) =>
+      isNonEmptyString(edge.arrowId) &&
+      isNonEmptyString(edge.sourceId) &&
+      isNonEmptyString(edge.targetId) &&
+      isValidPoint(edge.start) &&
+      isValidPoint(edge.end),
+  );
   const offsets = computeParallelOffsets(parallelInputs, parallelSpacing);
 
   // ── Stage 2: Build spatial index from existing + cached routes ──
@@ -505,49 +514,8 @@ export const routeWithEngine = (
     routed.delete(edge.arrowId);
   }
 
-  // ── Stage 5: Lane assignment ──
-  const routeEntries = Array.from(routed.entries()).map(
-    ([arrowId, points]) => ({
-      arrowId,
-      points,
-    }),
-  );
-  const mergedLaneOptions: LaneManagerOptions = {
-    laneSpacing: parallelSpacing,
-    maxLanes: 4,
-    snapToGrid: true,
-    gridSize: 16,
-    ...laneOptions,
-  };
-  const laneAssignments = computeLaneAssignments(
-    routeEntries,
-    mergedLaneOptions,
-  );
-  if (laneAssignments.length > 0) {
-    const laneAdjusted = applyLaneOffsets(routed, laneAssignments);
-    laneAdjusted.forEach((points, arrowId) => {
-      routed.set(arrowId, points);
-    });
-  }
-
-  // ── Stage 6: Crossing minimization (lightweight post-pass) ──
+  // ── Stage 5: Lane assignment & Crossing minimization ──
   let finalRoutes = routed;
-  if (enableCrossingMinimization) {
-    const allIgnoreIds = new Set<string>();
-    for (const edge of safeEdges) {
-      if (edge.sourceId) allIgnoreIds.add(edge.sourceId);
-      if (edge.targetId) allIgnoreIds.add(edge.targetId);
-    }
-    finalRoutes = minimizeCrossings(
-      routed,
-      obstacles,
-      allIgnoreIds,
-      crossingOptions,
-    );
-  }
-
-  // ── Stage 7: Final validation (hard overlap guarantee) ──
-  // Build per-edge ignore IDs for normalizer safety checks
   const ignoreObstacleIdsByArrow = new Map<string, Set<string>>();
   for (const edge of safeEdges) {
     const ids = new Set<string>();
@@ -556,19 +524,65 @@ export const routeWithEngine = (
     if (ids.size > 0) ignoreObstacleIdsByArrow.set(edge.arrowId, ids);
   }
 
-  // ── Stage 7.5: Path Normalization ──
-  // Enforces pixel-perfect Manhattan alignment, grid snapping (16px),
-  // shared corridor unification, and stub straightening. Safety-guarded:
-  // any transform that introduces obstacle intersection or extra crossings is reverted.
-  finalRoutes = normalizeRoutes(finalRoutes, {
-    obstacles,
-    ignoreObstacleIdsByArrow,
-    obstaclePadding,
-    gridSize: 16,
-    snapToGrid: true,
-    corridorTolerance: 2,
-    minStubLength: 24,
-  });
+  try {
+    const routeEntries = Array.from(routed.entries()).map(
+      ([arrowId, points]) => ({
+        arrowId,
+        points,
+      }),
+    );
+    const mergedLaneOptions: LaneManagerOptions = {
+      laneSpacing: parallelSpacing,
+      maxLanes: 4,
+      snapToGrid: true,
+      gridSize: 16,
+      ...laneOptions,
+    };
+    const laneAssignments = computeLaneAssignments(
+      routeEntries,
+      mergedLaneOptions,
+    );
+    if (laneAssignments.length > 0) {
+      const laneAdjusted = applyLaneOffsets(routed, laneAssignments);
+      laneAdjusted.forEach((points, arrowId) => {
+        routed.set(arrowId, points);
+      });
+    }
+
+    // ── Stage 6: Crossing minimization (lightweight post-pass) ──
+    if (enableCrossingMinimization) {
+      const allIgnoreIds = new Set<string>();
+      for (const edge of safeEdges) {
+        if (edge.sourceId) allIgnoreIds.add(edge.sourceId);
+        if (edge.targetId) allIgnoreIds.add(edge.targetId);
+      }
+      finalRoutes = minimizeCrossings(
+        routed,
+        obstacles,
+        allIgnoreIds,
+        crossingOptions,
+      );
+    }
+
+    // ── Stage 7.5: Path Normalization ──
+    finalRoutes = normalizeRoutes(finalRoutes, {
+      obstacles,
+      ignoreObstacleIdsByArrow,
+      obstaclePadding,
+      gridSize: 16,
+      snapToGrid: true,
+      corridorTolerance: 2,
+      minStubLength: 24,
+    });
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        "[routeWithEngine] Post-processing optimization failed, using basic routes:",
+        err,
+      );
+    }
+    finalRoutes = routed;
+  }
 
   const stabilizedRoutes = new Map<string, Point[]>();
   finalRoutes.forEach((points, arrowId) => {

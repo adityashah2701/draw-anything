@@ -7,7 +7,7 @@ import type {
   Tool,
 } from "@/features/whiteboard/types/whiteboard.types";
 import { getConnectionHandles } from "@/features/whiteboard/utils/canvas-render-utils";
-import type { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import type { MagneticSnapMatch } from "@/core/snap/magnetic-snap";
 import {
   buildConnectorArrow,
   handleUnderPoint,

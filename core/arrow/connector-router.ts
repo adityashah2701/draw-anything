@@ -25,7 +25,7 @@ import { AdjacencyMap } from "@/core/routing/adjacency-map";
 import { RoutingObstacle } from "@/core/routing/obstacle-avoidance";
 import { recordPath } from "@/core/routing/congestion-map";
 import { ArrowElement, isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import { MagneticSnapMatch } from "@/core/snap/magnetic-snap";
 import { globalPathCache } from "@/core/routing/path-cache";
 import {
   isNonEmptyString,
@@ -349,8 +349,19 @@ export const createConnectorRouter = ({ elements, state, anchorIndex, getElement
       ? resolveAnchorFromOverrides(arrow.endConnection, overrides)
       : resolveAnchor(arrow.endConnection);
 
-    const startPoint = startAnchor ?? arrow.points[0];
-    const endPoint = endAnchor ?? arrow.points[Math.max(1, arrow.points.length - 1)];
+    const firstPoint =
+      Array.isArray(arrow.points) && arrow.points.length > 0 && isValidPoint(arrow.points[0])
+        ? arrow.points[0]
+        : undefined;
+    const lastPoint =
+      Array.isArray(arrow.points) &&
+      arrow.points.length > 1 &&
+      isValidPoint(arrow.points[arrow.points.length - 1])
+        ? arrow.points[arrow.points.length - 1]
+        : firstPoint;
+
+    const startPoint = startAnchor ?? firstPoint ?? { x: 0, y: 0 };
+    const endPoint = endAnchor ?? lastPoint ?? startPoint;
 
     return {
       arrowId: arrow.id,
@@ -360,7 +371,7 @@ export const createConnectorRouter = ({ elements, state, anchorIndex, getElement
       endHandle: getSideFromConnection(arrow.endConnection, endAnchor),
       routePreference: arrow.routePreference,
       routingMode: arrow.routingMode ?? "orthogonal",
-      existingPoints: arrow.points,
+      existingPoints: Array.isArray(arrow.points) ? arrow.points : [],
       preserveManualBends: Boolean(arrow.isManuallyRouted),
       sourceId: arrow.startConnection?.elementId,
       targetId: arrow.endConnection?.elementId,
@@ -411,6 +422,9 @@ export const createConnectorRouter = ({ elements, state, anchorIndex, getElement
   };
 
   const routeArrowByConnections = (arrow: ArrowElement): ArrowElement => {
+    if (!arrow || !Array.isArray(arrow.points) || arrow.points.length < 2) {
+      return arrow;
+    }
     const descriptor = buildRouteDescriptor(arrow);
     if (!isRouteDescriptorReady(descriptor)) {
       return arrow;

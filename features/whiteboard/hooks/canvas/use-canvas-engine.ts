@@ -13,7 +13,7 @@ import {
   DrawingElement,
   Point,
 } from "@/features/whiteboard/types/whiteboard.types";
-import { MagneticSnapMatch } from "@/core/snap/use-magnetic-snap";
+import { MagneticSnapMatch } from "@/core/snap/magnetic-snap";
 import { drawGuides, drawSpans } from "@/features/whiteboard/utils/draw-guides";
 import { drawLayoutPreview } from "@/features/whiteboard/utils/draw-layout-preview";
 import type { LayoutPreview } from "@/features/whiteboard/commands/layout-engine";
