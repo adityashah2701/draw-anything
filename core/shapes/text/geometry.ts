@@ -4,8 +4,8 @@ import { TextShape } from "@/core/shapes/text/types";
 import {
   measureRichTextLineWidth,
   parseMarkdownRichText,
-  RichTextSpan,
-} from "@/features/whiteboard/utils/rich-text-renderer";
+  type RichTextSpan,
+} from "@/core/text/rich-text-layout";
 import { resolveTextStyle, computeTextBlockHeight } from "./text-metrics";
 
 const splitMarkdownLines = (text: string) => {

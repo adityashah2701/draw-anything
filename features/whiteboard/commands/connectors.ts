@@ -154,8 +154,8 @@ export const planCreateConnector = (ctx: CommandContext, input: NewConnector): C
 
 // ── connector labels ────────────────────────────────────────────────────────────────────────────
 
-/** The key an arrow's label is linked by: diagram arrows use their `semanticId`, hand-made ones their id. */
-export const labelKeyOf = (arrow: DrawingElement) => `${arrow.ai?.semanticId ?? arrow.id}-label`;
+import { labelKeyOf } from "@/core/frames/internal-connectors";
+export { labelKeyOf };
 
 /** The text element that labels `arrow`, if it has one. */
 export const labelOf = (ctx: Pick<CommandContext, "shapes">, arrow: DrawingElement): DrawingElement | undefined =>

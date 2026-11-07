@@ -5,7 +5,7 @@ import { applyPatch, emptyPatch, isEmptyPatch, type DocPatch } from "@/core/grou
 import { getShapeBounds, moveShape } from "@/core/shapes/shape-runtime";
 import { partitionConnectors } from "@/core/groups/transform";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
-import { withInternalConnectors } from "@/features/whiteboard/utils/move-plan";
+import { withInternalConnectors } from "./internal-connectors";
 import type { Bounds, DrawingElement, FragmentOperator, FramePreset, FrameShape, FrameTitlePlacement, StoredElement } from "@/core/model";
 import { frameForBounds, fitsDepth, orderFramesBelowContents } from "./containment";
 import { buildFrameIndex, commonFrame, frameAncestors, frameDescendants, isInsideFrame, type FrameIndex } from "./frame-index";

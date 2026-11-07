@@ -2,8 +2,8 @@ import { isDarkRender } from "@/core/theme/render-theme";
 import { getAdaptiveColor, readableOnDark } from "@/core/color/adaptive-color";
 import {
   measureRichTextLineWidth,
-  RichTextSpan,
-} from "@/features/whiteboard/utils/rich-text-renderer";
+  type RichTextSpan,
+} from "@/core/text/rich-text-layout";
 import { LABEL_PADDING, layoutShapeLabel } from "@/core/text/label-layout";
 import { FONT_FAMILY, makeFontString } from "@/core/text/typography";
 

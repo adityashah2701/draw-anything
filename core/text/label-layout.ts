@@ -2,8 +2,8 @@ import {
   layoutRichTextLines,
   longestWordWidth,
   measureRichTextLineWidth,
-  RichTextSpan,
-} from "@/features/whiteboard/utils/rich-text-renderer";
+  type RichTextSpan,
+} from "./rich-text-layout";
 import type { MeasureContext } from "./measure-context";
 import { LINE_HEIGHT_RATIO, MIN_FONT_SIZE, makeFontString } from "./typography";
 

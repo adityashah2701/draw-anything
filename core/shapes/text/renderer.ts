@@ -1,7 +1,7 @@
 import { isDarkRender } from "@/core/theme/render-theme";
 import { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
 import { getAdaptiveColor } from "@/core/color/adaptive-color";
-import { renderRichTextLines } from "@/features/whiteboard/utils/rich-text-renderer";
+import { renderRichTextLines } from "@/core/text/rich-text-layout";
 import { TextShape } from "@/core/shapes/text/types";
 
 import { firstBaselineOffset } from "@/core/text/baseline";

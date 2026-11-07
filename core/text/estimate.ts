@@ -1,4 +1,4 @@
-import { layoutRichTextLines } from "@/features/whiteboard/utils/rich-text-renderer";
+import { layoutRichTextLines } from "./rich-text-layout";
 import { INTER_ADVANCES } from "./inter-advances";
 import { LABEL_PADDING } from "./label-layout";
 import type { MeasureContext } from "./measure-context";
