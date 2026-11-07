@@ -1,8 +1,8 @@
 import {
   ArrowRoutePreference,
   ConnectionHandle,
-} from "@/features/whiteboard/types/whiteboard.types";
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
+import { Point } from "@/core/model";
 import { compressOrthogonalPath } from "@/core/routing/routing-utils";
 import { findGridRoute } from "@/core/routing/grid-route";
 import {

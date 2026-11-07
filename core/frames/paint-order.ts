@@ -1,4 +1,4 @@
-import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, StoredElement } from "@/core/model";
 import { orderFramesBelowContents } from "./containment";
 
 const memo = new WeakMap<readonly DrawingElement[], readonly DrawingElement[]>();

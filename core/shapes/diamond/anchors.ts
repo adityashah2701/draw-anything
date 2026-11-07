@@ -1,4 +1,4 @@
-import { Anchor, Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Anchor, Bounds } from "@/core/model";
 import { generateAnchorsForShape } from "@/core/anchors/anchor-geometry";
 import { DiamondShape } from "@/core/shapes/diamond/types";
 

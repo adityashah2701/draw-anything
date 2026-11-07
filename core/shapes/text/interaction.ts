@@ -1,4 +1,4 @@
-import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds, Point } from "@/core/model";
 import { TextShape } from "@/core/shapes/text/types";
 import { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
 

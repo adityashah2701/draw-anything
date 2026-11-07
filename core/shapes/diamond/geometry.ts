@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { DiamondShape } from "@/core/shapes/diamond/types";
 
 export const getDiamondBounds = (shape: DiamondShape): Bounds | null => {

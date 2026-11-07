@@ -1,4 +1,4 @@
-import type { Bounds, DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, DrawingElement, Point } from "@/core/model";
 import { centerOf, makeBounds, normalizeDegrees, rotatePoint } from "@/core/geometry/box";
 
 /** Smallest extent a scaled shape is allowed to shrink to, in world units. */

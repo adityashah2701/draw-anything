@@ -1,4 +1,4 @@
-import type { IconDef } from "./registry";
+import type { IconDef } from "./types";
 
 /**
  * User-supplied icons. They are stored inside the element that uses them (`ai.customIcon`), so a board

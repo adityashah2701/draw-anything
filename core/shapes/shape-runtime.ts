@@ -4,7 +4,7 @@ import {
   Bounds,
   DrawingElement,
   Point,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 import {
   ShapeHitTestOptions,
   ShapeResizeHandle,

@@ -12,7 +12,7 @@
  * crossing count. If a transform introduces regression, it reverts.
  */
 
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 import {
   RoutingObstacle,
   pathIntersectsObstacles,

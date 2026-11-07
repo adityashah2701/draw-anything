@@ -1,4 +1,4 @@
-import type { AnchorSide } from "@/features/whiteboard/types/whiteboard.types";
+import type { AnchorSide } from "@/core/model";
 import { KAPPA, type OutlinePath, type PathCommand } from "@/core/shapes/outline/path";
 
 /**

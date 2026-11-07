@@ -6,7 +6,7 @@ import { unionBounds } from "@/core/geometry/box";
 import { frameBox, frameRegions, hasValidBox } from "@/core/frames/frame-model";
 import { containsPointInFrame, getFrameResizeHandles, resizeFrameShape } from "@/core/shapes/frame/interaction";
 import { renderFrameToCanvas } from "@/core/shapes/frame/renderer";
-import type { FrameShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { FrameShape } from "@/core/model";
 
 /**
  * The frame's shape definition. It is deliberately not `connectable` (no anchors, so connectors

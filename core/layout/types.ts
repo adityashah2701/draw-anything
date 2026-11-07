@@ -1,4 +1,4 @@
-import type { ConnectorRelation } from "@/features/whiteboard/types/whiteboard.types";
+import type { ConnectorRelation } from "@/core/model";
 
 /**
  * The contract every layout engine implements. An engine places nodes and says what it did; it never writes the

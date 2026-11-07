@@ -1,4 +1,4 @@
-import type { Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Point } from "@/core/model";
 
 /** A path in a variant's own units: world units from the shape's top-left corner. */
 export type PathCommand =

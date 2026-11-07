@@ -1,4 +1,4 @@
-import { Anchor } from "@/features/whiteboard/types/whiteboard.types";
+import { Anchor } from "@/core/model";
 import { BidirectionalArrowShape } from "@/core/shapes/bidirectional-arrow/types";
 
 export const getBidirectionalArrowAnchors = (

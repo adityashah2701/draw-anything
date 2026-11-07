@@ -1,4 +1,4 @@
-import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, StoredElement } from "@/core/model";
 import { flaggedByFrame, ancestorsOf, type GroupIndex } from "./group-index";
 
 type Connected = DrawingElement & {

@@ -17,7 +17,7 @@ import type {
 } from "@/features/whiteboard/types/whiteboard.types";
 import type { DocPatch } from "@/core/groups/patch";
 import { editableIds } from "./editable";
-import type { CommandContext } from "./context";
+import type { CommandContext } from "./types";
 
 /** What a person changes on a selected connector, and what the AI's connector tools change. */
 export interface ArrowChange {

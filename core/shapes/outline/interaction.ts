@@ -1,4 +1,4 @@
-import type { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, Point } from "@/core/model";
 import { resizePaddedBox } from "@/core/shapes/base/resize-box";
 import type { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
 import { distanceToPolygonEdge, flattenPath, pointInPolygon } from "@/core/shapes/outline/path";

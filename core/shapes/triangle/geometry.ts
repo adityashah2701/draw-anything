@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { TriangleShape } from "@/core/shapes/triangle/types";
 
 export const getTriangleBounds = (shape: TriangleShape): Bounds | null => {

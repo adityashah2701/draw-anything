@@ -1,4 +1,4 @@
-import type { Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Point } from "@/core/model";
 
 export interface BoxEdges {
   minX: number;

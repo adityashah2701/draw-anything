@@ -9,7 +9,7 @@
  * for O(1) per-query performance.
  */
 
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 import { Aabb, expandAabb, segmentBounds } from "@/core/collision/aabb";
 
 // ─────────────────── Types ───────────────────

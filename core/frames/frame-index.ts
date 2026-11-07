@@ -1,5 +1,5 @@
 import { splitStored } from "@/core/groups/group-index";
-import type { DrawingElement, FrameShape, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, FrameShape, StoredElement } from "@/core/model";
 import { MAX_FRAME_DEPTH, isFrameShape } from "./frame-model";
 
 /**

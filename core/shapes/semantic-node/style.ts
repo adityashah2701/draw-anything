@@ -1,4 +1,4 @@
-import type { SemanticIconPlacement, SemanticNodeStyle } from "@/features/whiteboard/types/whiteboard.types";
+import type { SemanticIconPlacement, SemanticNodeStyle } from "@/core/model";
 
 /*
  * What a semantic node stores beyond fill/stroke/text. The stored object comes from older builds,

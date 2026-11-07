@@ -1,4 +1,4 @@
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 
 const distanceToSegment = (point: Point, from: Point, to: Point): number => {
   const dx = to.x - from.x;

@@ -1,7 +1,7 @@
 import { ICON_CAPTION_HEIGHT } from "@/core/shapes/icon/caption";
 import { layoutSemanticNode } from "@/core/shapes/semantic-node/layout";
 import { resolveOutlineVariant } from "@/core/shapes/outline/variants";
-import type { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds } from "@/core/model";
 
 export { SEMANTIC_INSET_WIDTH, SEMANTIC_MAX_LINES } from "@/core/shapes/semantic-node/layout";
 

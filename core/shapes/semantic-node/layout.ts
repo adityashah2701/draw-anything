@@ -1,6 +1,6 @@
 import { CORNER_RADIUS } from "@/core/shapes/base/geometry-tokens";
 import { LABEL_PADDING } from "@/core/text/label-layout";
-import type { Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Point } from "@/core/model";
 import { normalizeNodeStyle } from "./style";
 
 /*

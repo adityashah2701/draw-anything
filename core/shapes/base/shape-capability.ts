@@ -2,7 +2,7 @@ import {
   Bounds,
   DrawingElement,
   Point,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 import { ResizeHandle } from "@/core/shapes/base/base-shape-definition";
 
 export interface ShapeCapability<T extends DrawingElement> {

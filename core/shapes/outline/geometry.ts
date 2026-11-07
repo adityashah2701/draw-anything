@@ -1,4 +1,4 @@
-import type { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds } from "@/core/model";
 import type { OutlineShape } from "@/core/shapes/outline/types";
 
 export const getOutlineBounds = (shape: OutlineShape): Bounds | null => {

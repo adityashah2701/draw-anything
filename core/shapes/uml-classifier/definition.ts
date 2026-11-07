@@ -1,7 +1,7 @@
 import type { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
 import { boxDefinition, boxOf } from "@/core/shapes/structured/box-definition";
 import { FONT_FAMILY } from "@/core/text/typography";
-import type { UmlClassifierShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { UmlClassifierShape } from "@/core/model";
 import { LINE, PAD, layoutClassifier, memberLines, stereotypeOf } from "./layout";
 import { parseMember } from "./members";
 

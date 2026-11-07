@@ -3,7 +3,7 @@ import {
   Bounds,
   DrawingElement,
   Point,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 
 export type ResizeHandle = string;
 

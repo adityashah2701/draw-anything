@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { SemanticNodeShape } from "@/core/shapes/semantic-node/types";
 
 export const getSemanticNodeBounds = (

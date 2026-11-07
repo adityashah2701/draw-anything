@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { Anchor, DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Anchor, DrawingElement, Point } from "@/core/model";
 import {
   AnchorIndex,
   createAnchorIndex,

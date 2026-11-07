@@ -1,7 +1,7 @@
 import {
   ConnectionHandle,
   Point,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 import {
   isNonEmptyString,
   isValidPoint,

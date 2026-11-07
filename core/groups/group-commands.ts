@@ -1,4 +1,4 @@
-import type { DrawingElement, GroupRecord, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, GroupRecord, StoredElement } from "@/core/model";
 import {
   ancestorsOf,
   buildGroupIndex,

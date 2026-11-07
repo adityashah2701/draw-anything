@@ -1,3 +1,3 @@
-import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { DrawingElement } from "@/core/model";
 
 export type TriangleShape = Extract<DrawingElement, { type: "triangle" }>;

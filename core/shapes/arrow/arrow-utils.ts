@@ -9,7 +9,7 @@ import {
   ConnectionHandle,
   DrawingElement,
   Point,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 import { roundedCorners, traceCurve } from "@/core/routing/curve";
 import { arrowheadOps, headTrim, paintOps, type HeadSize } from "@/core/shapes/arrow/arrowhead";
 import { parseAnchorSide } from "@/core/anchors/anchor-geometry";

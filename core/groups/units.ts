@@ -1,4 +1,4 @@
-import type { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds } from "@/core/model";
 import { unionBounds } from "@/core/geometry/box";
 import { isEffectivelyLocked, leavesOfUnit, selectionUnits, type GroupIndex } from "./group-index";
 

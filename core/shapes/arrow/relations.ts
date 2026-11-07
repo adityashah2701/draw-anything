@@ -5,7 +5,7 @@ import type {
   ConnectorRelation,
   RelationKind,
   RelationNotation,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 
 /**
  * What a connector means, as data. A relation names a kind (generalization, ER relationship, sync message, ...),

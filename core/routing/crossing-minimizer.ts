@@ -9,7 +9,7 @@
  * - All operations are deterministic
  */
 
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 import { expandAabb, segmentBounds } from "@/core/collision/aabb";
 import {
   RoutingObstacle,

@@ -1,4 +1,4 @@
-import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds, Point } from "@/core/model";
 import { resizeBox } from "@/core/shapes/base/resize-box";
 import { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
 import { semanticMinSize } from "@/core/shapes/semantic-node/layout";

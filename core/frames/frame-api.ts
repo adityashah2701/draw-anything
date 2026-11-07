@@ -6,7 +6,7 @@ import { getShapeBounds, moveShape } from "@/core/shapes/shape-runtime";
 import { partitionConnectors } from "@/core/groups/transform";
 import { isArrowElement } from "@/core/shapes/arrow/arrow-utils";
 import { withInternalConnectors } from "@/features/whiteboard/utils/move-plan";
-import type { Bounds, DrawingElement, FragmentOperator, FramePreset, FrameShape, FrameTitlePlacement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, DrawingElement, FragmentOperator, FramePreset, FrameShape, FrameTitlePlacement, StoredElement } from "@/core/model";
 import { frameForBounds, fitsDepth, orderFramesBelowContents } from "./containment";
 import { buildFrameIndex, commonFrame, frameAncestors, frameDescendants, isInsideFrame, type FrameIndex } from "./frame-index";
 import {

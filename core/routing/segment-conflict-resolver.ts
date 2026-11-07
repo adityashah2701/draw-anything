@@ -14,7 +14,7 @@ import {
   EPSILON,
 } from "@/core/routing/routing-utils";
 import { isValidPoint } from "@/core/routing/routing-guards";
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 
 type SegmentOrientation = "horizontal" | "vertical";
 

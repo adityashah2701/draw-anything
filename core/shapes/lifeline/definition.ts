@@ -2,7 +2,7 @@ import type { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-def
 import { boxDefinition, boxOf } from "@/core/shapes/structured/box-definition";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { FONT_FAMILY } from "@/core/text/typography";
-import type { LifelineShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { LifelineShape } from "@/core/model";
 
 export const HEAD_HEIGHT = 48;
 export const BODY_WIDTH = 16;

@@ -1,4 +1,4 @@
-import type { AnchorSide } from "@/features/whiteboard/types/whiteboard.types";
+import type { AnchorSide } from "@/core/model";
 import type { BoundsLike } from "./anchor-geometry";
 
 /**

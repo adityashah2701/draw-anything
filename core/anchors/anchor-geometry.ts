@@ -1,7 +1,7 @@
 import {
   Anchor,
   AnchorSide,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 
 export interface ShapeBounds {
   x: number;

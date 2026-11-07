@@ -1,4 +1,4 @@
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 
 interface CachedPath {
   points: Point[];

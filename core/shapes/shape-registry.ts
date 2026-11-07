@@ -1,4 +1,4 @@
-import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { DrawingElement } from "@/core/model";
 import { BaseShapeDefinition } from "@/core/shapes/base/base-shape-definition";
 
 type ShapeType = DrawingElement["type"];

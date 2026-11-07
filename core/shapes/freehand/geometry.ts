@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { FreehandShape } from "@/core/shapes/freehand/types";
 
 export const getFreehandBounds = (shape: FreehandShape): Bounds | null => {

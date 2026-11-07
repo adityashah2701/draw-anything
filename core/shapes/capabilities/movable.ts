@@ -1,4 +1,4 @@
-import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { DrawingElement } from "@/core/model";
 import { ShapeCapability } from "@/core/shapes/base/shape-capability";
 
 export const movable = <T extends DrawingElement>(): ShapeCapability<T> => ({

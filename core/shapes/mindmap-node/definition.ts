@@ -2,7 +2,7 @@ import type { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-def
 import { boxDefinition, boxOf } from "@/core/shapes/structured/box-definition";
 import { estimateTextWidth } from "@/core/text/estimate";
 import { FONT_FAMILY } from "@/core/text/typography";
-import type { MindmapNodeShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { MindmapNodeShape } from "@/core/model";
 
 const SIZE: Record<NonNullable<MindmapNodeShape["role"]>, { font: number; weight: number; padX: number; height: number }> = {
   central: { font: 20, weight: 700, padX: 28, height: 64 },

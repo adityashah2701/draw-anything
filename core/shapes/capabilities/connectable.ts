@@ -2,7 +2,7 @@ import {
   Anchor,
   Bounds,
   DrawingElement,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 import { ShapeCapability } from "@/core/shapes/base/shape-capability";
 
 export type AnchorResolver<T extends DrawingElement> = (

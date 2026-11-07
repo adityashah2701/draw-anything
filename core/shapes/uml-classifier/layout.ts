@@ -1,5 +1,5 @@
 import { estimateTextWidth } from "@/core/text/estimate";
-import type { UmlClassifierShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { UmlClassifierShape } from "@/core/model";
 import { canonicalMember } from "./members";
 
 export const LINE = 18;

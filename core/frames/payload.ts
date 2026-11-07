@@ -1,4 +1,4 @@
-import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement } from "@/core/model";
 import { buildFrameIndex, frameDescendants } from "./frame-index";
 
 /**

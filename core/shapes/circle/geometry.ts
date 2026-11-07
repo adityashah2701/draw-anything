@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { CircleShape } from "@/core/shapes/circle/types";
 
 export const getCircleRadius = (shape: CircleShape): number => {

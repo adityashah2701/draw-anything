@@ -1,4 +1,4 @@
-import { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds, Point } from "@/core/model";
 import { BidirectionalArrowShape } from "@/core/shapes/bidirectional-arrow/types";
 import { resizeArrowElement } from "@/core/shapes/arrow/interaction";
 

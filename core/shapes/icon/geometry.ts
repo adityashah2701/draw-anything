@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { IconShape } from "@/core/shapes/icon/types";
 
 export const getIconBounds = (shape: IconShape): Bounds | null => {

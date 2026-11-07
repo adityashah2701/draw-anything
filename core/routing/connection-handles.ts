@@ -1,4 +1,4 @@
-import { ConnectionHandle } from "@/features/whiteboard/types/whiteboard.types";
+import { ConnectionHandle } from "@/core/model";
 
 export type { ConnectionHandle };
 

@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { ArrowShape } from "@/core/shapes/arrow/types";
 
 export const getArrowBounds = (shape: ArrowShape): Bounds | null => {

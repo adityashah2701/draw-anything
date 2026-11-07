@@ -5,7 +5,7 @@ import { compileAIDiagramToCanvas } from "@/features/ai/server/canvas-compiler";
 import { EXAMPLES } from "@/features/ai/diagram-agent/prompt/examples";
 import { elementsFromDiagramCode } from "@/features/diagram-code/canvas";
 import * as baseline from "../../tests/browser/baseline-fixtures";
-import type { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement } from "@/core/model";
 
 const LEGACY_EXAMPLE_COUNT = 3;
 

@@ -1,4 +1,4 @@
-import type { Bounds, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, Point } from "@/core/model";
 
 export const makeBounds = (minX: number, minY: number, maxX: number, maxY: number): Bounds => ({
   minX,

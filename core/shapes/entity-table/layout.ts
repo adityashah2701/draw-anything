@@ -1,5 +1,5 @@
 import { estimateTextWidth } from "@/core/text/estimate";
-import type { EntityRow, EntityTableShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { EntityRow, EntityTableShape } from "@/core/model";
 
 /**
  * Where everything sits in an entity table, in world units. Pure: the canvas, the export and the AI sizing all

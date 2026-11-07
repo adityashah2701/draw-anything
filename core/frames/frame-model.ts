@@ -1,7 +1,7 @@
 import { estimateTextWidth } from "@/core/text/estimate";
 import { CORNER_RADIUS } from "@/core/shapes/base/geometry-tokens";
 import { makeBounds } from "@/core/geometry/box";
-import type { Bounds, DrawingElement, FramePreset, FrameShape, FrameTitlePlacement } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, DrawingElement, FramePreset, FrameShape, FrameTitlePlacement } from "@/core/model";
 
 /** Design defaults, in world units. An absent field on a stored frame means one of these. */
 export const FRAME_DEFAULTS = {

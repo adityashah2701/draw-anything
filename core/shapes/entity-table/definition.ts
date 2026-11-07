@@ -1,7 +1,7 @@
 import type { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-definition";
 import { boxDefinition, boxOf } from "@/core/shapes/structured/box-definition";
 import { FONT_FAMILY } from "@/core/text/typography";
-import type { EntityTableShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { EntityTableShape } from "@/core/model";
 import { PAD_X, layoutEntityTable, markerText, rowsOf } from "./layout";
 
 const render = (shape: EntityTableShape, { ctx, zoom, panOffset }: ShapeRenderCanvasContext) => {

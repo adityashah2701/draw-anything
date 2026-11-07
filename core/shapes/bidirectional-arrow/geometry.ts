@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { BidirectionalArrowShape } from "@/core/shapes/bidirectional-arrow/types";
 
 export const getBidirectionalArrowBounds = (

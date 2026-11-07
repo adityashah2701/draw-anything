@@ -1,5 +1,5 @@
 import { stampForAdd, stampForUpdate, withStamp, withUpdateStamp } from "@/core/layout/placement";
-import type { DrawingElement, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, StoredElement } from "@/core/model";
 
 /**
  * One atomic change to the stored list. Commands compute it as a pure value; the editor applies it in

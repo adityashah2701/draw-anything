@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { LineShape } from "@/core/shapes/line/types";
 
 export const getLineBounds = (shape: LineShape): Bounds | null => {

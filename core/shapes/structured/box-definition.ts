@@ -7,7 +7,7 @@ import { getRectangleAnchors } from "@/core/shapes/rectangle/anchors";
 import { getRectangleBounds } from "@/core/shapes/rectangle/geometry";
 import { containsPointInRectangle, getRectangleResizeHandles, resizeRectangle } from "@/core/shapes/rectangle/interaction";
 import type { RectangleShape } from "@/core/shapes/rectangle/types";
-import type { Bounds, DrawingElement, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, DrawingElement, Point } from "@/core/model";
 
 /**
  * The shared body of the structured box elements (entity table, classifier, mind-map topic, lifeline): a box with

@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { ShapeGeometryContext } from "@/core/shapes/base/base-shape-definition";
 import { TextShape } from "@/core/shapes/text/types";
 import {

@@ -2,7 +2,7 @@ import {
   Anchor,
   AnchorSide,
   DrawingElement,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 import {
   ANCHOR_SIDES,
   BoundsLike,

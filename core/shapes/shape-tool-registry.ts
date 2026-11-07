@@ -1,7 +1,7 @@
 import { shapeRegistry } from "./shape-registry";
 import { OUTLINE_VARIANTS, outlineToolName } from "@/core/shapes/outline/variants";
 import { outlineIconComponent } from "@/core/shapes/outline/icon";
-import { Tool } from "@/features/whiteboard/types/whiteboard.types";
+import { Tool } from "@/core/model";
 
 export interface ToolDefinition {
   name: Tool;

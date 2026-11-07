@@ -1,5 +1,5 @@
 import { centerOf } from "@/core/geometry/box";
-import type { Bounds, DrawingElement, FrameShape, Point, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, DrawingElement, FrameShape, Point, StoredElement } from "@/core/model";
 import { buildFrameIndex, frameAncestors, type FrameIndex } from "./frame-index";
 import { MAX_FRAME_DEPTH, frameBox } from "./frame-model";
 

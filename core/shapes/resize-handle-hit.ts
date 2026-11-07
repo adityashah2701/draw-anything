@@ -1,4 +1,4 @@
-import type { Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Point } from "@/core/model";
 import type { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
 import { rotatePoint } from "@/core/geometry/box";
 

@@ -1,4 +1,4 @@
-import type { AgentUiMessage } from "./use-canvas-agent";
+import type { AgentUiMessage } from "./types";
 
 export interface StoredRow {
   role: "user" | "assistant" | "tool" | "status";

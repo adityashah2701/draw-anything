@@ -1,4 +1,4 @@
-import type { EntityRow } from "@/features/whiteboard/types/whiteboard.types";
+import type { EntityRow } from "@/core/model";
 
 /**
  * Entity rows as text, for diagram code and the AI: `id int pk; email text uq; team_id int fk -> teams.id; note text nullable`.

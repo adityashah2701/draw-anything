@@ -1,4 +1,4 @@
-import type { DrawingElement, Point, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, Point, StoredElement } from "@/core/model";
 
 /**
  * Who placed an element, as data. One rule, implemented once, applied where the document is written (the

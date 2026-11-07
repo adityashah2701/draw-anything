@@ -1,7 +1,7 @@
 import { buildAnchorId } from "@/core/anchors/anchor-geometry";
 import type { DocPatch } from "@/core/groups/patch";
 import { mindmapSize } from "@/core/shapes/mindmap-node/definition";
-import type { DrawingElement, MindmapNodeShape, MindmapRole, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, MindmapNodeShape, MindmapRole, StoredElement } from "@/core/model";
 
 /**
  * The mind-map tree as a pure API over the stored list: add a topic, add a sibling, collapse and expand, move a branch,

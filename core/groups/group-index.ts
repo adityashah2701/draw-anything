@@ -1,5 +1,5 @@
 import { isLayoutRecord } from "@/core/layout/record";
-import type { DrawingElement, GroupRecord, LayoutRecord, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, GroupRecord, LayoutRecord, StoredElement } from "@/core/model";
 
 /** True for a stored composite-group record (never for a drawable shape). */
 export const isGroupRecord = (value: unknown): value is GroupRecord =>

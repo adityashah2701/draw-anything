@@ -2,7 +2,7 @@ import type { ShapeRenderCanvasContext } from "@/core/shapes/base/base-shape-def
 import { resolveTextColor } from "@/core/shapes/base/shape-label-renderer";
 import { FONT_FAMILY } from "@/core/text/typography";
 import { PRESET_LOOKS, frameRegions, resolveFrame } from "@/core/frames/frame-model";
-import type { FrameShape } from "@/features/whiteboard/types/whiteboard.types";
+import type { FrameShape } from "@/core/model";
 
 export const TITLE_SIZE = 13;
 export const TITLE_INSET = 10;

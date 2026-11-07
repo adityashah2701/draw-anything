@@ -1,4 +1,4 @@
-import { DrawingElement } from "@/features/whiteboard/types/whiteboard.types";
+import { DrawingElement } from "@/core/model";
 
 export type LineShape = Extract<DrawingElement, { type: "line" }>;
 

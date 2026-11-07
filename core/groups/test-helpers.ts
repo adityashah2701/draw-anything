@@ -1,4 +1,4 @@
-import type { DrawingElement, GroupRecord, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, GroupRecord, StoredElement } from "@/core/model";
 
 type Extra = Partial<DrawingElement> & Record<string, unknown>;
 

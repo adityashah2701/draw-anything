@@ -1,4 +1,4 @@
-import type { ArrowRoutePreference, ConnectionHandle, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { ArrowRoutePreference, ConnectionHandle, Point } from "@/core/model";
 import {
   compressOrthogonalPath,
   isOrthogonalPath,

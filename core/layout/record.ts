@@ -1,4 +1,4 @@
-import type { DrawingElement, LayoutRecord, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, LayoutRecord, StoredElement } from "@/core/model";
 
 /**
  * The one place layout configuration lives. A record says which engine and algorithm lay out a scope (the

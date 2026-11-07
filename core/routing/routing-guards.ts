@@ -5,7 +5,7 @@
  * Used to ensure defensive routing — no crash even under partial edge state.
  */
 
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 import type { RouteEngineEdge, RoutingObstacle } from "@/core/routing/types";
 
 // ─────────────────── Type Guards ───────────────────

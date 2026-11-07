@@ -1,4 +1,4 @@
-import type { DrawingElement, FrameShape, StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { DrawingElement, FrameShape, StoredElement } from "@/core/model";
 
 /** A frame from its top-left corner and size. */
 export const frame = (id: string, x: number, y: number, w = 400, h = 300, extra: Partial<FrameShape> = {}): FrameShape => ({

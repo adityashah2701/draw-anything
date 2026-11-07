@@ -1,4 +1,4 @@
-import type { ArrowheadKind, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { ArrowheadKind, Point } from "@/core/model";
 
 /**
  * How the end of a connector is finished, as plain drawing instructions. Pure: the canvas and the

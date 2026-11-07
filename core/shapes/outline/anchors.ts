@@ -1,4 +1,4 @@
-import type { Anchor, AnchorSide, Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import type { Anchor, AnchorSide, Bounds } from "@/core/model";
 import { buildAnchorId, generateAnchorsForShape } from "@/core/anchors/anchor-geometry";
 import type { OutlineShape } from "@/core/shapes/outline/types";
 import { resolveOutlineVariant } from "@/core/shapes/outline/variants";

@@ -1,4 +1,4 @@
-import type { Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Point } from "@/core/model";
 
 /** Longest the curve is allowed to cut a corner short, in world units. */
 const MAX_CORNER_REACH = 96;

@@ -11,7 +11,7 @@
  * - All validation is pure and deterministic
  */
 
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 import {
   Aabb,
   expandAabb,

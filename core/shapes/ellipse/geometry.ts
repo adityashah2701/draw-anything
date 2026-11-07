@@ -1,4 +1,4 @@
-import { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Bounds } from "@/core/model";
 import { EllipseShape } from "@/core/shapes/ellipse/types";
 
 export const getEllipseBounds = (shape: EllipseShape): Bounds | null => {

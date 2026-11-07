@@ -1,4 +1,4 @@
-import { Anchor, Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import { Anchor, Bounds } from "@/core/model";
 import { generateAnchorsForShape } from "@/core/anchors/anchor-geometry";
 import { EllipseShape } from "@/core/shapes/ellipse/types";
 

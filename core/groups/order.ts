@@ -1,4 +1,4 @@
-import type { StoredElement } from "@/features/whiteboard/types/whiteboard.types";
+import type { StoredElement } from "@/core/model";
 import { isStoredRecord } from "./group-index";
 
 /**

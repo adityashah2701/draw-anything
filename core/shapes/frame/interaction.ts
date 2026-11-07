@@ -1,4 +1,4 @@
-import type { Bounds, FrameShape, Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds, FrameShape, Point } from "@/core/model";
 import type { ShapeResizeHandle } from "@/core/shapes/base/base-shape-definition";
 import { resizeBox } from "@/core/shapes/base/resize-box";
 import { frameBox, frameRegions, resolveFrame } from "@/core/frames/frame-model";

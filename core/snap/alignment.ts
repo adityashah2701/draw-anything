@@ -1,4 +1,4 @@
-import type { Bounds } from "@/features/whiteboard/types/whiteboard.types";
+import type { Bounds } from "@/core/model";
 
 /**
  * Smart-guide geometry for moving a box among others: which lines it aligns with, which spacing it

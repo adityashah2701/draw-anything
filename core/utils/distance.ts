@@ -1,4 +1,4 @@
-import { Point } from "@/features/whiteboard/types/whiteboard.types";
+import { Point } from "@/core/model";
 
 export const squaredDistance = (a: Point, b: Point): number => {
   const dx = a.x - b.x;

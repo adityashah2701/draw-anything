@@ -1,4 +1,4 @@
-import type { Point } from "@/features/whiteboard/types/whiteboard.types";
+import type { Point } from "@/core/model";
 import type { Aabb } from "@/core/collision/aabb";
 import { compressOrthogonalPath } from "@/core/routing/routing-utils";
 

@@ -3,7 +3,7 @@ import {
   ArrowRoutingMode,
   ConnectionHandle,
   Point,
-} from "@/features/whiteboard/types/whiteboard.types";
+} from "@/core/model";
 import type { Aabb } from "@/core/collision/aabb";
 
 export interface RoutingObstacle {
